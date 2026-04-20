@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>本地合规检测系统</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="ambient ambient-a"></div>
+    <div class="ambient ambient-b"></div>
+    <main class="shell">
+      <section class="hero panel">
+        <div class="hero-copy">
+          <p class="eyebrow">本地审核台</p>
+          <h1>小红书两性敏感合规检测系统</h1>
+          <p class="lede">
+            面向两性、身体探索、自我愉悦等高敏话题的本地检测面板。重点不是“猜隐藏词”，而是把风险词、违规原因、组合场景和人工复核流程一起沉淀下来。
+          </p>
+        </div>
+        <div class="summary-grid" id="summary-grid"></div>
+      </section>
+
+      <section class="workspace workspace-main">
+        <article class="panel analyzer-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">内容检测台</p>
+              <h2>内容检测与改写</h2>
+            </div>
+            <p class="section-note">先检测，再决定是否改写或交叉复判。</p>
+          </div>
+          <form id="analyze-form" class="stack form-grid">
+            <label class="field-wide">
+              <span>标题</span>
+              <input type="text" name="title" placeholder="输入标题" />
+            </label>
+            <label class="field-wide">
+              <span>正文</span>
+              <textarea name="body" rows="8" placeholder="输入正文"></textarea>
+            </label>
+            <label>
+              <span>封面文案</span>
+              <input type="text" name="coverText" placeholder="输入封面文案" />
+            </label>
+            <label>
+              <span>标签（逗号分隔）</span>
+              <input type="text" name="tags" placeholder="两性, 身体探索, 关系沟通" />
+            </label>
+            <div class="inline-actions inline-actions-row">
+              <button type="submit" class="button" id="analyze-button" disabled>运行检测</button>
+              <button type="button" class="button button-ghost" id="rewrite-button" disabled>一键合规改写</button>
+              <button type="button" class="button button-ghost" id="cross-review-button" disabled>模型交叉复判</button>
+            </div>
+          </form>
+          <div class="results-stack">
+            <section class="result-section">
+              <div class="result-heading">
+                <strong>规则检测</strong>
+                <span>先看命中项和建议</span>
+              </div>
+              <div id="analysis-result" class="result-card muted">等待检测</div>
+            </section>
+            <section class="result-section">
+              <div class="result-heading">
+                <strong>合规改写</strong>
+                <span>生成更偏教育 / 沟通 / 科普语境的版本</span>
+              </div>
+              <div id="rewrite-result" class="result-card muted">等待改写</div>
+            </section>
+            <section class="result-section">
+              <div class="result-heading">
+                <strong>交叉复判</strong>
+                <span>查看不同模型是否给出一致判断</span>
+              </div>
+              <div id="cross-review-result" class="result-card muted">等待复判</div>
+            </section>
+          </div>
+        </article>
+
+        <article class="panel feedback-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">反馈回流</p>
+              <h2>违规原因回流</h2>
+            </div>
+            <p class="section-note">用“笔记内容 + 平台原因”联合复盘，规则优先，再由模型顺序兜底补充精确词候选和语境候选，最后交给人工复核。</p>
+          </div>
+          <form id="feedback-form" class="stack form-grid compact-feedback">
+            <label class="field-wide">
+              <span>对应笔记内容</span>
+              <textarea
+                name="noteContent"
+                rows="5"
+                placeholder="输入被判违规的笔记正文、标题摘要，或你想回流给系统的原始内容"
+              ></textarea>
+            </label>
+            <label class="field-wide">
+              <span>违规截图</span>
+              <input type="file" name="screenshot" id="feedback-screenshot" accept="image/*" />
+            </label>
+            <div class="inline-actions field-wide">
+              <button type="button" class="button button-ghost" id="feedback-recognize">
+                识别截图并回填
+              </button>
+              <p class="helper-text">只写入文件元信息和识别摘要，不会把整张图片保存到日志。</p>
+            </div>
+            <label class="field-wide">
+              <span>平台违规原因</span>
+              <input type="text" name="platformReason" placeholder="例如：疑似低俗或导流" />
+            </label>
+            <label class="field-wide">
+              <span>候选词/短语（逗号分隔）</span>
+              <input type="text" name="suspiciousPhrases" placeholder="例如：加我, 完整版, 二维码；系统也会补充语境候选" />
+            </label>
+            <div id="feedback-screenshot-result" class="result-card muted field-wide">等待截图识别</div>
+            <button type="submit" class="button button-alt field-wide">写入反馈日志</button>
+          </form>
+          <div id="feedback-result" class="result-card muted">等待回流</div>
+        </article>
+      </section>
+
+      <section class="workspace workspace-support">
+        <article class="panel queue-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">人工复核</p>
+              <h2>候选词 / 语境人工复核队列</h2>
+            </div>
+            <p class="section-note">直接在这里完成填表、按建议入库或删除，不再来回滚动切换。</p>
+          </div>
+          <div id="review-queue" class="queue"></div>
+        </article>
+
+        <article class="panel data-panel panel-sticky">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">数据维护台</p>
+              <h2>词库与日志</h2>
+            </div>
+            <p class="section-note">把低频维护收进单面板，当前只展示一个分区，减少页面高度。</p>
+          </div>
+          <div class="tab-strip" role="tablist" aria-label="数据维护分区">
+            <button type="button" class="tab-button" data-tab-target="custom-lexicon-pane">自定义词库</button>
+            <button type="button" class="tab-button" data-tab-target="seed-lexicon-pane">种子词库</button>
+            <button type="button" class="tab-button" data-tab-target="feedback-log-pane">反馈日志</button>
+            <button type="button" class="tab-button" data-tab-target="rewrite-pairs-pane">改写样本</button>
+          </div>
+          <div class="tab-panels">
+            <section class="tab-panel" id="custom-lexicon-pane">
+              <div class="tab-panel-head">
+                <strong>自定义词库</strong>
+                <span>从复核队列填入草稿后，可以在这里微调再保存。</span>
+              </div>
+              <div class="admin-panel-block">
+                <div class="admin-panel-body">
+                  <form id="custom-lexicon-form" class="stack compact-form">
+                    <label>
+                      <span>匹配类型</span>
+                      <select name="match">
+                        <option value="exact">精确词</option>
+                        <option value="regex">正则</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>词 / 模式</span>
+                      <input type="text" name="source" placeholder="例如：小窗我" required />
+                    </label>
+                    <label>
+                      <span>分类</span>
+                      <input type="text" name="category" placeholder="例如：导流与私域" required />
+                    </label>
+                    <label>
+                      <span>风险等级</span>
+                      <select name="riskLevel">
+                        <option value="manual_review">人工复核</option>
+                        <option value="hard_block">高风险拦截</option>
+                        <option value="observe">观察通过</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>词库级别</span>
+                      <select name="lexiconLevel">
+                        <option value="l1">一级词库</option>
+                        <option value="l2" selected>二级词库</option>
+                        <option value="l3">三级词库</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>平台原因</span>
+                      <input type="text" name="xhsReason" placeholder="例如：账号专属高风险短语" />
+                    </label>
+                    <p class="helper-text">一级更偏核心拦截，二级更偏重点复核，三级更偏观察沉淀。</p>
+                    <button type="submit" class="button button-alt">新增自定义词</button>
+                  </form>
+                </div>
+                <div id="custom-lexicon-result" class="result-card muted">等待操作</div>
+                <div id="custom-lexicon-list" class="admin-list"></div>
+              </div>
+            </section>
+
+            <section class="tab-panel" id="seed-lexicon-pane">
+              <div class="tab-panel-head">
+                <strong>种子词库</strong>
+                <span>管理全局基础规则，适合较稳定的高频风险表达。</span>
+              </div>
+              <div class="admin-panel-block">
+                <div class="admin-panel-body">
+                <form id="seed-lexicon-form" class="stack compact-form">
+                  <label>
+                    <span>匹配类型</span>
+                    <select name="match">
+                      <option value="exact">精确词</option>
+                      <option value="regex">正则</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>词 / 模式</span>
+                    <input type="text" name="source" placeholder="例如：私信我 或 (vx|微.?信)" required />
+                  </label>
+                  <label>
+                    <span>分类</span>
+                    <input type="text" name="category" placeholder="例如：导流与私域" required />
+                  </label>
+                  <label>
+                    <span>风险等级</span>
+                    <select name="riskLevel">
+                      <option value="hard_block">高风险拦截</option>
+                      <option value="manual_review">人工复核</option>
+                      <option value="observe">观察通过</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>词库级别</span>
+                    <select name="lexiconLevel">
+                      <option value="l1" selected>一级词库</option>
+                      <option value="l2">二级词库</option>
+                      <option value="l3">三级词库</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>平台原因</span>
+                    <input type="text" name="xhsReason" placeholder="例如：交易导流/站外引流" />
+                  </label>
+                  <p class="helper-text">建议把高频稳定高风险规则放一级，把需要继续观察的规则放二级或三级。</p>
+                  <button type="submit" class="button">新增种子词</button>
+                </form>
+                </div>
+                <div id="seed-lexicon-result" class="result-card muted">等待操作</div>
+                <div id="seed-lexicon-list" class="admin-list"></div>
+              </div>
+            </section>
+
+            <section class="tab-panel" id="feedback-log-pane">
+              <div class="tab-panel-head">
+                <strong>反馈日志</strong>
+                <span>查看真实违规反馈、规则复盘信号与命中摘要。</span>
+              </div>
+              <div class="admin-panel-block">
+                <div id="feedback-log-list" class="admin-list"></div>
+              </div>
+            </section>
+
+            <section class="tab-panel" id="rewrite-pairs-pane">
+              <div class="tab-panel-head">
+                <strong>改写前后样本</strong>
+                <span>记录修改前后对照样本，沉淀哪些改动真的能让内容更稳。</span>
+              </div>
+              <div class="admin-panel-block">
+                <div class="admin-panel-body">
+                  <form id="rewrite-pair-form" class="stack">
+                    <label>
+                      <span>样本名称</span>
+                      <input type="text" name="name" placeholder="例如：导流文案改写通过样本" />
+                    </label>
+                    <label>
+                      <span>修改前平台原因</span>
+                      <input type="text" name="beforePlatformReason" placeholder="例如：疑似导流 / 涉及低俗暗示" />
+                    </label>
+                    <label>
+                      <span>改写策略</span>
+                      <input type="text" name="rewriteStrategy" placeholder="例如：删除导流动作词，改为科普表达" />
+                    </label>
+                    <label>
+                      <span>哪些修改最有效</span>
+                      <textarea
+                        name="effectiveChanges"
+                        rows="3"
+                        placeholder="例如：去掉“私信我/完整版”，弱化刺激性描述，标题改成关系教育语境"
+                      ></textarea>
+                    </label>
+                    <div class="columns">
+                      <div class="rewrite-sample-column">
+                        <h3>修改前</h3>
+                        <label>
+                          <span>标题</span>
+                          <input type="text" name="beforeTitle" placeholder="修改前标题" />
+                        </label>
+                        <label>
+                          <span>正文</span>
+                          <textarea name="beforeBody" rows="8" placeholder="修改前正文"></textarea>
+                        </label>
+                        <label>
+                          <span>封面文案</span>
+                          <input type="text" name="beforeCoverText" placeholder="修改前封面文案" />
+                        </label>
+                        <label>
+                          <span>标签</span>
+                          <input type="text" name="beforeTags" placeholder="标签1, 标签2" />
+                        </label>
+                      </div>
+                      <div class="rewrite-sample-column">
+                        <h3>修改后</h3>
+                        <label>
+                          <span>标题</span>
+                          <input type="text" name="afterTitle" placeholder="修改后标题" />
+                        </label>
+                        <label>
+                          <span>正文</span>
+                          <textarea name="afterBody" rows="8" placeholder="修改后正文"></textarea>
+                        </label>
+                        <label>
+                          <span>封面文案</span>
+                          <input type="text" name="afterCoverText" placeholder="修改后封面文案" />
+                        </label>
+                        <label>
+                          <span>标签</span>
+                          <input type="text" name="afterTags" placeholder="标签1, 标签2" />
+                        </label>
+                      </div>
+                    </div>
+                    <div class="inline-actions inline-actions-row">
+                      <button type="button" class="button button-ghost" id="rewrite-pair-prefill" disabled>
+                        从当前改写结果填充
+                      </button>
+                      <button type="submit" class="button button-alt">保存改写样本</button>
+                    </div>
+                  </form>
+                </div>
+                <div id="rewrite-pair-result" class="result-card muted">等待操作</div>
+                <div id="rewrite-pair-list" class="admin-list"></div>
+              </div>
+            </section>
+          </div>
+        </article>
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+  </html>

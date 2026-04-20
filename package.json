@@ -1,0 +1,15 @@
+{
+  "name": "xhs-sex-compliance-local",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local compliance detection system for Xiaohongshu-sensitive topic notes",
+  "scripts": {
+    "analyze": "node src/cli.js analyze",
+    "eval:feedback": "node src/cli.js eval-feedback",
+    "eval:rewrite-pairs": "node src/cli.js eval-rewrite-pairs",
+    "ingest-feedback": "node src/cli.js ingest-feedback",
+    "summary": "node src/cli.js summary",
+    "server": "node src/server.js"
+  }
+}

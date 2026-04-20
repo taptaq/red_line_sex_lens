@@ -1,0 +1,123 @@
+[
+  {
+    "id": "lead-wechat",
+    "term": "微信",
+    "match": "exact",
+    "category": "导流与私域",
+    "riskLevel": "hard_block",
+    "fields": ["title", "body", "coverText", "comments"],
+    "xhsReason": "交易导流/站外引流",
+    "sourceUrl": "https://finance.sina.cn/2025-03-12/detail-inepkkxp4622323.d.html",
+    "sourceDate": "2025-03-12",
+    "notes": "与加我、私信、二维码等联用时风险更高",
+    "enabled": true
+  },
+  {
+    "id": "lead-contact-regex",
+    "pattern": "(vx|v信|微.?信|加.{0,2}我|私信我|小窗我|主页.{0,3}(联系|获取)|二维码)",
+    "match": "regex",
+    "category": "导流与私域",
+    "riskLevel": "hard_block",
+    "fields": ["title", "body", "coverText"],
+    "xhsReason": "交易导流/站外引流",
+    "sourceUrl": "https://finance.sina.cn/2025-03-12/detail-inepkkxp4622323.d.html",
+    "sourceDate": "2025-03-12",
+    "enabled": true
+  },
+  {
+    "id": "minor-general",
+    "pattern": "(未成年|18岁以下|初中生|高中生|小学生)",
+    "match": "regex",
+    "category": "未成年人边界",
+    "riskLevel": "hard_block",
+    "fields": ["title", "body", "coverText", "comments"],
+    "xhsReason": "未成年人相关高风险内容",
+    "sourceUrl": "https://www.cac.gov.cn/2019-12/20/c_1578375159509309.htm",
+    "sourceDate": "2019-12-20",
+    "enabled": true
+  },
+  {
+    "id": "extreme-claim",
+    "pattern": "(最好|最佳|最有效|永久|根治|立刻见效|百分百|100%有效|绝对安全)",
+    "match": "regex",
+    "category": "绝对化与功效承诺",
+    "riskLevel": "manual_review",
+    "fields": ["title", "body", "coverText"],
+    "xhsReason": "夸大宣传/绝对化用语",
+    "sourceUrl": "https://www.wxlx.gov.cn/doc/2023/05/18/3960629.shtml",
+    "sourceDate": "2023-05-18",
+    "enabled": true
+  },
+  {
+    "id": "medical-claim",
+    "pattern": "(治疗|治好|康复|改善障碍|修复功能|专业处方)",
+    "match": "regex",
+    "category": "医疗健康风险",
+    "riskLevel": "manual_review",
+    "fields": ["title", "body"],
+    "xhsReason": "医疗健康功效风险",
+    "sourceUrl": "https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/ggjgs/art/2023/art_6584dc1c94c2408db7c73f0b5e3d225a.html",
+    "sourceDate": "2023-11-01",
+    "enabled": true
+  },
+  {
+    "id": "provocative-clickbait",
+    "pattern": "(看完脸红|太刺激|欲罢不能|让人上头|越看越想|深夜慎点)",
+    "match": "regex",
+    "category": "低俗挑逗与擦边",
+    "riskLevel": "manual_review",
+    "fields": ["title", "coverText"],
+    "xhsReason": "低俗/性暗示风险",
+    "sourceUrl": "https://www.cac.gov.cn/2019-12/20/c_1578375159509309.htm",
+    "sourceDate": "2019-12-20",
+    "enabled": true
+  },
+  {
+    "id": "process-teaching",
+    "pattern": "(教程|步骤|实操|怎么做|手把手|完整流程|亲测过程)",
+    "match": "regex",
+    "category": "步骤化内容",
+    "riskLevel": "manual_review",
+    "fields": ["title", "body"],
+    "xhsReason": "敏感内容步骤化传播风险",
+    "sourceUrl": "https://school.xiaohongshu.com/rule",
+    "sourceDate": "2026-04-18",
+    "enabled": true
+  },
+  {
+    "id": "sexualized-context",
+    "pattern": "(撩|暧昧拉满|荷尔蒙|羞羞|不可描述)",
+    "match": "regex",
+    "category": "低俗挑逗与擦边",
+    "riskLevel": "manual_review",
+    "fields": ["title", "body", "coverText"],
+    "xhsReason": "性暗示/低俗风险",
+    "sourceUrl": "https://www.cac.gov.cn/2019-12/20/c_1578375159509309.htm",
+    "sourceDate": "2019-12-20",
+    "enabled": true
+  },
+  {
+    "id": "adult-goods-softsell",
+    "pattern": "(私密好物|成人好物|夜间神器|提升亲密体验)",
+    "match": "regex",
+    "category": "成人用品软广",
+    "riskLevel": "manual_review",
+    "fields": ["title", "body", "coverText"],
+    "xhsReason": "成人用品相关高风险营销",
+    "sourceUrl": "https://school.xiaohongshu.com/rule",
+    "sourceDate": "2026-04-18",
+    "enabled": true
+  },
+  {
+    "id": "science-education",
+    "pattern": "(同意|边界感|关系沟通|身体认知|健康科普|医学科普|心理教育)",
+    "match": "regex",
+    "category": "教育语境",
+    "riskLevel": "observe",
+    "fields": ["title", "body"],
+    "xhsReason": "教育科普语境",
+    "sourceUrl": "https://www.cac.gov.cn/2019-12/20/c_1578375159509309.htm",
+    "sourceDate": "2019-12-20",
+    "enabled": true
+  }
+]

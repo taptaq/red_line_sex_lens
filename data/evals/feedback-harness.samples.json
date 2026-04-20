@@ -1,0 +1,32 @@
+[
+  {
+    "id": "reason-labels-should-be-blocked",
+    "name": "平台原因标签不应直接入库",
+    "noteContent": "这条内容包含两性用品历史、低俗夸张描述与违规宣传说明，平台已明确提示相关问题。",
+    "platformReason": "笔记含有违规宣传两性用品的内容",
+    "suspiciousPhrases": ["两性用品", "不当两性联想", "低俗夸张描述", "低俗情景演绎"],
+    "expectedAllowedCandidates": ["两性用品宣传/展示语境"],
+    "expectedBlockedCandidates": ["两性用品", "不当两性联想", "低俗夸张描述", "低俗情景演绎"],
+    "expectedAuditSignal": "rule_gap"
+  },
+  {
+    "id": "traffic-phrases-should-survive",
+    "name": "导流短语应该保留为候选词",
+    "noteContent": "想要完整版内容可以私信我，我把领取方式发你。",
+    "platformReason": "疑似导流",
+    "suspiciousPhrases": ["私信我", "完整版", "领取方式"],
+    "expectedAllowedCandidates": ["私信我", "完整版", "领取方式"],
+    "expectedBlockedCandidates": [],
+    "expectedAuditSignal": "aligned"
+  },
+  {
+    "id": "mixed-phrases-only-actionable",
+    "name": "混合短语里只保留可执行风险表达",
+    "noteContent": "这条内容引导用户私信获取完整版，也出现了两性用品等平台原因描述。",
+    "platformReason": "笔记含有违规宣传两性用品的内容",
+    "suspiciousPhrases": ["两性用品", "完整版", "私信获取"],
+    "expectedAllowedCandidates": ["完整版", "私信获取"],
+    "expectedBlockedCandidates": ["两性用品"],
+    "expectedAuditSignal": "rule_strict"
+  }
+]
