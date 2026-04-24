@@ -12,6 +12,7 @@
 如果你想快速看懂整套链路，可以先看：
 
 - [SYSTEM_FLOW.md](./SYSTEM_FLOW.md)
+- [docs/seed-lexicon-tiered-checklist.md](./docs/seed-lexicon-tiered-checklist.md)
 
 ## 项目结构
 
@@ -21,6 +22,7 @@ data/
   lexicon.custom.json     你手动维护的账号专属词库
   whitelist.json          合规科普与教育语境白名单
   feedback.log.json       违规反馈回流日志
+  false-positive-log.json 误报样本回流日志
   review-queue.json       待人工复核的候选词
 src/
   analyzer.js             核心检测引擎
@@ -42,6 +44,10 @@ web/
 ```bash
 npm run summary
 ```
+
+如果你想先按“硬拦截 / 人工复核 / 观察项”三层快速看当前种子词库，可以直接看：
+
+- [docs/seed-lexicon-tiered-checklist.md](./docs/seed-lexicon-tiered-checklist.md)
 
 ### 2. 检测一段文本
 
@@ -171,6 +177,36 @@ npm run eval:rewrite-pairs -- --file ./your-rewrite-pairs.json
 - 风险分变化
 - 结论是否从更高风险降到更低风险
 
+### 6. 记录误报样本
+
+当系统给出 `manual_review` 或 `hard_block`，但内容实际发到小红书后仍然正常时，可以在“规则检测”或“合规改写”结果区点击“记录为误报样本”。
+
+系统会自动带入当前：
+
+- 标题 / 正文 / 封面文案 / 标签
+- 当前规则结论与风险分
+- 当前样本来自规则检测结果还是改写结果
+
+你可以先记录为：
+
+- `已发出，目前正常`
+  对应内部状态 `platform_passed_pending`，表示刚发布或仍在观察期
+- `观察期后仍正常`
+  对应内部状态 `platform_passed_confirmed`，表示经过观察期后仍正常，是更强的偏严证据
+
+这些样本会保存到：
+
+```text
+data/false-positive-log.json
+```
+
+在页面下方“数据维护”里的“误报样本”分区，可以继续做这几件事：
+
+- 查看状态、规则结论和误报复盘结论
+- 展开查看正文 / 封面 / 备注全文
+- 将待观察样本标记为已确认
+- 删除明显无效的样本
+
 ## 本地网页面板
 
 如果要启用违规截图识别，先设置 GLM 密钥：
@@ -182,7 +218,7 @@ export GLM_API_KEY="你的密钥"
 当前默认模型分工如下：
 
 - 截图识别默认使用 `glm-4.6v`
-- 文本改写默认使用 `GLM_TEXT_MODEL`，未设置时回退到 `glm-4.6v`
+- 文本改写默认使用 `REWRITE_PROVIDER=glm`，对应模型为 `GLM_TEXT_MODEL`，未设置时回退到 `glm-4.6v`
 - 交叉复判默认使用 `glm-4-flash`
 
 如果你想覆盖，可以额外设置：
@@ -193,6 +229,22 @@ export GLM_TEXT_MODEL="glm-4.6v"
 export GLM_CROSS_REVIEW_MODEL="glm-4-flash"
 ```
 
+如果你想把“改写 + 人味化”切到 Kimi，而不影响截图识别和交叉复判，可以这样配：
+
+```bash
+export REWRITE_PROVIDER="kimi"
+export KIMI_API_KEY="你的密钥"
+export KIMI_BASE_URL="https://api.moonshot.cn/v1/chat/completions"
+export KIMI_TEXT_MODEL="moonshot-v1-8k"
+```
+
+补充说明：
+
+- `REWRITE_PROVIDER` 目前支持 `glm` 和 `kimi`，默认值是 `glm`
+- 只会影响“一键合规改写”与改写后的 humanizer 二次润色
+- `KIMI_BASE_URL` 不填时会默认走 Moonshot 兼容接口
+- 如果你本地已经使用 `MOONSHOT_API_KEY`，系统会自动兼容映射到 `KIMI_API_KEY`
+
 ```bash
 npm run server
 ```
@@ -201,7 +253,7 @@ npm run server
 
 [http://127.0.0.1:3030](http://127.0.0.1:3030)
 
-在“内容检测”里可以直接运行检测，或点击“一键合规改写”，系统会结合当前命中项和建议，用 GLM 生成更偏教育 / 沟通 / 科普语境的改写版本。
+在“内容检测”里可以直接运行检测，或点击“一键合规改写”，系统会结合当前命中项和建议，用当前配置的改写模型生成更偏教育 / 沟通 / 科普语境的改写版本。
 
 在“违规原因回流”里可以直接填写对应笔记内容并上传截图，点击“识别截图并回填”，系统会用 GLM 读取截图中的违规原因和候选词，并把识别摘要写入反馈日志。
 
@@ -210,6 +262,7 @@ npm run server
 - 新增 / 删除种子词库
 - 新增 / 删除自定义词库
 - 删除反馈日志
+- 查看 / 确认 / 删除误报样本
 - 将复核队列一键转入自定义词库，或直接删除
 
 ## 截图回流 JSON 导入

@@ -1,3 +1,10 @@
+import {
+  buildFalsePositiveActionMarkup,
+  buildFalsePositiveCaptureSources,
+  buildFalsePositiveEntryMarkup
+} from "./false-positive-view.js";
+import { buildRewriteBodyMarkup } from "./rewrite-result-view.js";
+
 function byId(id) {
   return document.getElementById(id);
 }
@@ -11,6 +18,31 @@ function splitCSV(value) {
 
 function joinCSV(items = []) {
   return Array.isArray(items) ? items.join(", ") : "";
+}
+
+function uniqueStrings(items = []) {
+  return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
+function buildAnalyzeTagSelectionMarkup(tags = []) {
+  const normalized = uniqueStrings(tags);
+
+  if (!normalized.length) {
+    return '<span class="tag-picker-empty">尚未选择标签</span>';
+  }
+
+  return normalized
+    .map(
+      (tag) => `
+        <span class="tag-chip">
+          <span>${escapeHtml(tag)}</span>
+          <button type="button" class="tag-chip-remove" data-remove-tag="${escapeHtml(tag)}" aria-label="移除标签 ${escapeHtml(
+            tag
+          )}">×</button>
+        </span>
+      `
+    )
+    .join("");
 }
 
 function verdictLabel(verdict) {
@@ -67,6 +99,12 @@ function reviewAuditLabel(audit) {
   return String(audit?.label || "").trim() || "未完成规则复盘";
 }
 
+function falsePositiveStatusLabel(status) {
+  if (status === "platform_passed_confirmed") return "观察期后仍正常";
+  if (status === "platform_passed_pending") return "已发出，目前正常";
+  return String(status || "").trim() || "待观察";
+}
+
 function compactText(value, maxLength = 80) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
 
@@ -90,8 +128,49 @@ function activateTab(targetId) {
 const appState = {
   latestAnalyzePayload: null,
   latestAnalysis: null,
-  latestRewrite: null
+  latestRewrite: null,
+  latestAnalysisFalsePositiveSource: null,
+  latestRewriteFalsePositiveSource: null
 };
+
+const presetAnalyzeTags = [
+  "两性",
+  "身体探索",
+  "关系沟通",
+  "亲密关系",
+  "性教育",
+  "健康科普",
+  "女性成长",
+  "男性成长",
+  "婚恋关系",
+  "伴侣沟通",
+  "边界感",
+  "情绪价值",
+  "安全提醒",
+  "科普",
+  "经验分享"
+];
+let analyzeTagOptions = [...presetAnalyzeTags];
+const analyzeTagOptionsApi = "/api/analyze-tag-options";
+
+async function loadAnalyzeCustomTagOptions() {
+  try {
+    const payload = await apiJson(analyzeTagOptionsApi);
+    return uniqueStrings(Array.isArray(payload?.options) ? payload.options : []);
+  } catch {
+    return [];
+  }
+}
+
+async function saveAnalyzeCustomTagOptions(options = []) {
+  const customOnly = uniqueStrings(options).filter((tag) => !presetAnalyzeTags.includes(tag));
+  await apiJson(analyzeTagOptionsApi, {
+    method: "POST",
+    body: JSON.stringify({
+      options: customOnly
+    })
+  });
+}
 
 async function readJson(response) {
   const payload = await response.json();
@@ -130,7 +209,145 @@ function formatConfidence(value) {
   return `${Math.round(value * 100)}%`;
 }
 
+function renderInfoPills(items = [], emptyText = "未提供", extraClass = "") {
+  const tokens = Array.isArray(items) ? items.filter(Boolean) : [];
+
+  if (!tokens.length) {
+    return `<span class="meta-pill ${extraClass}">${escapeHtml(emptyText)}</span>`;
+  }
+
+  return tokens
+    .map((item) => `<span class="meta-pill ${extraClass}">${escapeHtml(item)}</span>`)
+    .join("");
+}
+
+function normalizeTextValue(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => normalizeTextValue(item))
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+  }
+
+  if (!value || typeof value !== "object") {
+    return String(value || "").trim();
+  }
+
+  return String(value.text || value.content || value.output_text || "").trim();
+}
+
+function normalizeTagListValue(value) {
+  if (Array.isArray(value)) {
+    return [...new Set(value.map((item) => normalizeTextValue(item)).filter(Boolean))];
+  }
+
+  return String(value || "")
+    .split(/[\n,，、]/)
+    .map((item) => item.replace(/^[-*•#\s]+/, "").trim())
+    .filter(Boolean);
+}
+
+function pickFirstDefined(source, keys = []) {
+  if (!source || typeof source !== "object") {
+    return undefined;
+  }
+
+  for (const key of keys) {
+    if (source[key] !== undefined && source[key] !== null) {
+      return source[key];
+    }
+  }
+
+  return undefined;
+}
+
+function unwrapRewritePayload(payload) {
+  let current = payload;
+  const candidateKeys = ["rewrite", "result", "data", "content", "output", "post"];
+
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (!current || typeof current !== "object" || Array.isArray(current)) {
+      break;
+    }
+
+    if (pickFirstDefined(current, ["title", "body", "content", "text", "正文", "改写正文"]) !== undefined) {
+      return current;
+    }
+
+    const nestedKey = candidateKeys.find((key) => current[key] && typeof current[key] === "object");
+    if (!nestedKey) {
+      break;
+    }
+
+    current = current[nestedKey];
+  }
+
+  return current || payload;
+}
+
+function normalizeRewritePayload(payload) {
+  const source = unwrapRewritePayload(payload);
+  const provider = normalizeTextValue(pickFirstDefined(source, ["provider", "rewriteProvider"])).toLowerCase();
+
+  return {
+    provider,
+    model: normalizeTextValue(pickFirstDefined(source, ["model", "modelName", "rewriteModel"])) || "GLM",
+    title: normalizeTextValue(pickFirstDefined(source, ["title", "headline", "heading", "标题", "改写标题"])),
+    body: normalizeTextValue(
+      pickFirstDefined(source, ["body", "content", "text", "正文", "改写正文", "正文内容", "mainText", "bodyText"])
+    ),
+    coverText: normalizeTextValue(
+      pickFirstDefined(source, ["coverText", "cover", "cover_text", "coverCopy", "封面文案", "改写封面文案", "封面"])
+    ),
+    tags: normalizeTagListValue(
+      pickFirstDefined(source, ["tags", "tagList", "hashtags", "labels", "keywords", "recommendedTags", "推荐标签", "标签"])
+    ),
+    rewriteNotes: normalizeTextValue(
+      pickFirstDefined(source, ["rewriteNotes", "notes", "rewriteReason", "rewriteSummary", "改写说明", "润色说明", "修改说明", "说明"])
+    ),
+    safetyNotes: normalizeTextValue(
+      pickFirstDefined(source, ["safetyNotes", "riskNotes", "warnings", "attention", "人工留意", "安全提示", "注意事项", "风险提示"])
+    ),
+    patches: normalizePatchEntries(pickFirstDefined(source, ["patches", "rewritePatches", "patchPlan", "modifications"])),
+    appliedPatches: normalizePatchEntries(
+      pickFirstDefined(source, ["appliedPatches", "effectivePatches", "executedPatches"])
+    ),
+    rewriteMode: normalizeTextValue(pickFirstDefined(source, ["rewriteMode", "mode", "strategy"])),
+    humanized: source?.humanized === true
+  };
+}
+
+function normalizePatchEntries(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+
+      const field = normalizeTextValue(item.field || item.path || item.key);
+
+      if (!field) {
+        return null;
+      }
+
+      return {
+        field,
+        target: normalizeTextValue(item.target || item.before || item.source || item.original),
+        replaceWith: normalizeTextValue(item.replaceWith || item.after || item.replacement || item.value),
+        reason: normalizeTextValue(item.reason || item.notes || item.summary),
+        addresses: normalizeTextValue(item.addresses || item.addressedPoint || item.guidance || item.focusPoint)
+      };
+    })
+    .filter(Boolean);
+}
+
 function providerLabel(provider) {
+  if (provider === "kimi") return "Kimi";
   if (provider === "glm") return "智谱 GLM";
   if (provider === "qwen") return "通义千问";
   if (provider === "deepseek") return "深度求索";
@@ -186,6 +403,149 @@ function syncAnalyzeActions() {
   }
 }
 
+function getAnalyzeTagInput() {
+  return byId("analyze-tags-value");
+}
+
+function getAnalyzeTagSelection() {
+  return byId("analyze-tag-selected");
+}
+
+function renderAnalyzeTagOptions() {
+  const select = byId("analyze-tag-select");
+
+  if (!select) {
+    return;
+  }
+
+  select.innerHTML = [
+    '<option value="">选择标签</option>',
+    ...uniqueStrings(analyzeTagOptions).map((tag) => `<option value="${escapeHtml(tag)}">${escapeHtml(tag)}</option>`)
+  ].join("");
+}
+
+function readAnalyzeTags() {
+  return uniqueStrings(splitCSV(getAnalyzeTagInput()?.value || ""));
+}
+
+function writeAnalyzeTags(tags = []) {
+  const normalized = uniqueStrings(tags);
+  const hiddenInput = getAnalyzeTagInput();
+
+  if (hiddenInput) {
+    hiddenInput.value = joinCSV(normalized);
+  }
+
+  const selected = getAnalyzeTagSelection();
+  if (selected) {
+    selected.innerHTML = buildAnalyzeTagSelectionMarkup(normalized);
+  }
+
+  analyzeForm.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function addAnalyzeTag(tag) {
+  const nextTag = String(tag || "").trim();
+
+  if (!nextTag) {
+    return;
+  }
+
+  writeAnalyzeTags([...readAnalyzeTags(), nextTag]);
+}
+
+function addAnalyzeTagOption(tag) {
+  const nextTag = String(tag || "").trim();
+
+  if (!nextTag) {
+    return;
+  }
+
+  const nextOptions = uniqueStrings([...analyzeTagOptions, nextTag]);
+  const changed = nextOptions.length !== analyzeTagOptions.length;
+  analyzeTagOptions = nextOptions;
+  renderAnalyzeTagOptions();
+
+  if (changed) {
+    saveAnalyzeCustomTagOptions(analyzeTagOptions).catch(() => {});
+  }
+}
+
+function initializeAnalyzeTagPicker() {
+  const select = byId("analyze-tag-select");
+  const customInput = byId("analyze-tag-custom");
+  const addButton = byId("analyze-tag-add");
+  const picker = byId("analyze-tag-picker");
+
+  if (!select || !customInput || !addButton) {
+    return;
+  }
+
+  analyzeTagOptions = [...presetAnalyzeTags];
+  renderAnalyzeTagOptions();
+  loadAnalyzeCustomTagOptions()
+    .then((customOptions) => {
+      analyzeTagOptions = uniqueStrings([...presetAnalyzeTags, ...customOptions]);
+      renderAnalyzeTagOptions();
+    })
+    .catch(() => {});
+
+  select.addEventListener("change", () => {
+    if (!select.value) {
+      return;
+    }
+
+    addAnalyzeTag(select.value);
+    select.value = "";
+  });
+
+  addButton.addEventListener("click", () => {
+    addAnalyzeTagOption(customInput.value);
+    addAnalyzeTag(customInput.value);
+    customInput.value = "";
+    customInput.focus();
+  });
+
+  customInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== ",") {
+      return;
+    }
+
+    event.preventDefault();
+    addAnalyzeTagOption(customInput.value);
+    addAnalyzeTag(customInput.value);
+    customInput.value = "";
+  });
+
+  customInput.addEventListener("blur", () => {
+    const value = String(customInput.value || "").trim();
+
+    if (!value) {
+      return;
+    }
+
+    addAnalyzeTagOption(value);
+    addAnalyzeTag(value);
+    customInput.value = "";
+  });
+
+  picker?.addEventListener("click", (event) => {
+    const trigger = event.target.closest("[data-remove-tag]");
+    if (!trigger) {
+      return;
+    }
+
+    const removeTag = String(trigger.dataset.removeTag || "").trim();
+    if (!removeTag) {
+      return;
+    }
+
+    writeAnalyzeTags(readAnalyzeTags().filter((item) => item !== removeTag));
+  });
+
+  writeAnalyzeTags(readAnalyzeTags());
+}
+
 function renderSummary(summary) {
   const cards = [
     ["种子词库", summary.seedLexiconCount],
@@ -206,7 +566,10 @@ function renderSummary(summary) {
     .join("");
 }
 
-function renderAnalysis(result) {
+function renderAnalysis(result, falsePositiveSource = null) {
+  const falsePositiveMarkup = falsePositiveSource
+    ? buildFalsePositiveActionMarkup(falsePositiveSource)
+    : "";
   const hits = result.hits.length
     ? result.hits
         .map(
@@ -269,6 +632,7 @@ function renderAnalysis(result) {
     <p class="helper-text">语义摘要：${escapeHtml(semantic?.summary || "当前未返回语义摘要")}</p>
     <p class="helper-text">语义改写建议：${escapeHtml(semantic?.suggestion || "暂无补充建议")}</p>
     ${semanticFooter}
+    ${falsePositiveMarkup}
   `;
 }
 
@@ -278,49 +642,172 @@ function renderRewriteResult(result) {
     return;
   }
 
+  const rewrite = normalizeRewritePayload(result.rewrite);
   const before = result.beforeAnalysis || result.analysis || {};
   const after = result.afterAnalysis || {};
-  const tags = result.rewrite.tags.length
-    ? result.rewrite.tags.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
+  const tags = rewrite.tags.length
+    ? rewrite.tags.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
     : "<li>未生成标签</li>";
+  const embeddedCrossReview = result.afterCrossReview
+    ? `
+        <section class="rewrite-followup">
+          <div class="rewrite-followup-head">
+            <strong>改写后交叉复判</strong>
+            <span>自动对改写后的版本再次做多模型复判，方便直接看最终一致性。</span>
+          </div>
+          ${buildCrossReviewMarkup(result.afterCrossReview, { embedded: true })}
+        </section>
+      `
+    : "";
+  const rewriteSummary = result.rewriteAccepted
+    ? `本次自动改写 ${result.rewriteAttempts || 1} 轮，复判结果已达到通过区间。`
+    : `本次已自动改写 ${result.rewriteAttempts || 1} 轮，但结果仍需人工复核，建议继续人工改写。`;
+  const rewriteProviderName = providerLabel(rewrite.provider);
+  const retryRounds = (Array.isArray(result.rounds) ? result.rounds : []).filter(
+    (round) => round?.guidance && Array.isArray(round.guidance.focusPoints) && round.guidance.focusPoints.length
+  );
+  const retryGuidanceMarkup = retryRounds.length
+    ? `
+        <section class="rewrite-followup">
+          <div class="rewrite-followup-head">
+            <strong>逐轮修正建议</strong>
+            <span>每轮没过的时候，系统会把当轮复判暴露出来的风险点整理成下一轮改写提示，避免盲目重复改写。</span>
+          </div>
+          <div class="rewrite-iteration-grid">
+            ${retryRounds
+              .map((round) => {
+                const normalizedRoundRewrite = normalizeRewritePayload(round.rewrite);
+                const focusPoints = round.guidance.focusPoints
+                  .map((item) => `<li>${escapeHtml(item)}</li>`)
+                  .join("");
+                const actualChanges = (
+                  normalizedRoundRewrite.appliedPatches.length
+                    ? normalizedRoundRewrite.appliedPatches.map((patch) => {
+                        const changeSummary = patch.target && patch.replaceWith ? `${patch.target} -> ${patch.replaceWith}` : patch.replaceWith;
+                        const meta = uniqueStrings([patch.addresses, patch.reason]).join("；");
+
+                        return `<li><strong>${escapeHtml(patch.field)}</strong>：${escapeHtml(changeSummary || "已做局部修补")}${
+                          meta ? `（${escapeHtml(meta)}）` : ""
+                        }</li>`;
+                      })
+                    : [
+                        `<li>${escapeHtml(
+                          normalizedRoundRewrite.rewriteNotes ||
+                            (normalizedRoundRewrite.rewriteMode === "field_fallback"
+                              ? "本轮改为字段级兜底重写"
+                              : "本轮未返回可展示的局部 patch")
+                        )}</li>`
+                      ]
+                ).join("");
+                const remainingRisks = uniqueStrings([
+                  ...(round.afterAnalysis?.suggestions || []),
+                  ...(round.afterAnalysis?.semanticReview?.status === "ok"
+                    ? round.afterAnalysis.semanticReview.review?.reasons || []
+                    : []),
+                  ...(round.afterCrossReview?.aggregate?.reasons || []),
+                  ...(round.afterCrossReview?.aggregate?.falseNegativeSignals || [])
+                ])
+                  .slice(0, 5)
+                  .map((item) => `<li>${escapeHtml(item)}</li>`)
+                  .join("");
+
+                return `
+                  <article class="rewrite-iteration-card">
+                    <div class="rewrite-iteration-head">
+                      <strong>第 ${escapeHtml(String(round.attempt || 0))} 轮复盘</strong>
+                      <span>${escapeHtml(
+                        `${verdictLabel(round.guidance.mergedVerdict || "manual_review")} / ${verdictLabel(
+                          round.guidance.reviewVerdict || "manual_review"
+                        )}`
+                      )}</span>
+                    </div>
+                    <p>${escapeHtml(round.guidance.summary || "未提供摘要")}</p>
+                    <div class="rewrite-iteration-section">
+                      <strong>系统建议</strong>
+                      <ul>${focusPoints}</ul>
+                    </div>
+                    <div class="rewrite-iteration-section">
+                      <strong>实际修改</strong>
+                      <ul>${actualChanges}</ul>
+                    </div>
+                    <div class="rewrite-iteration-section">
+                      <strong>剩余风险</strong>
+                      <ul>${remainingRisks || "<li>本轮未返回额外剩余风险</li>"}</ul>
+                    </div>
+                  </article>
+                `;
+              })
+              .join("")}
+          </div>
+        </section>
+      `
+    : "";
 
   byId("rewrite-result").innerHTML = `
-    <div class="verdict verdict-${escapeHtml(after.finalVerdict || after.verdict || "observe")}">
-      <span>改写完成</span>
-      <strong>${escapeHtml(result.rewrite.model || "GLM")}</strong>
-      <em>${escapeHtml(verdictLabel(after.finalVerdict || after.verdict || "observe"))}</em>
-    </div>
-    <p class="helper-text">人味化处理：${escapeHtml(result.rewrite.humanized ? "已启用 humanizer 二次润色" : "未启用或本轮回退到基础改写")}</p>
-    <p class="helper-text">综合结论：${escapeHtml(
-      verdictLabel(before.finalVerdict || before.verdict || "observe")
-    )} -> ${escapeHtml(verdictLabel(after.finalVerdict || after.verdict || "observe"))}</p>
-    <p class="helper-text">规则结论：${escapeHtml(verdictLabel(before.verdict || "observe"))} -> ${escapeHtml(
+    <div class="rewrite-hero">
+      <div class="verdict verdict-${escapeHtml(after.finalVerdict || after.verdict || "observe")}">
+        <span>改写完成</span>
+        <strong>${escapeHtml(rewrite.model || "GLM")}</strong>
+        <em>${escapeHtml(verdictLabel(after.finalVerdict || after.verdict || "observe"))}</em>
+      </div>
+      <div class="rewrite-meta-grid">
+        <article class="rewrite-meta-card">
+          <span>改写模型来源</span>
+          <strong>${escapeHtml(rewriteProviderName)}</strong>
+        </article>
+        <article class="rewrite-meta-card">
+          <span>人味化处理</span>
+          <strong>${escapeHtml(rewrite.humanized ? "已启用 humanizer 二次润色" : "未启用或本轮回退到基础改写")}</strong>
+        </article>
+        <article class="rewrite-meta-card">
+          <span>综合结论</span>
+          <strong>${escapeHtml(verdictLabel(before.finalVerdict || before.verdict || "observe"))} -> ${escapeHtml(
+      verdictLabel(after.finalVerdict || after.verdict || "observe")
+    )}</strong>
+        </article>
+        <article class="rewrite-meta-card">
+          <span>规则结论</span>
+          <strong>${escapeHtml(verdictLabel(before.verdict || "observe"))} -> ${escapeHtml(
       verdictLabel(after.verdict || "observe")
-    )}</p>
-    <p class="helper-text">风险分：${escapeHtml(String(before.score ?? 0))} -> ${escapeHtml(String(after.score ?? 0))}</p>
+    )}</strong>
+        </article>
+        <article class="rewrite-meta-card">
+          <span>风险分</span>
+          <strong>${escapeHtml(String(before.score ?? 0))} -> ${escapeHtml(String(after.score ?? 0))}</strong>
+        </article>
+      </div>
+    </div>
+    <div class="model-scope-banner model-scope-banner-rewrite">
+      <span class="model-scope-kicker">改写模型来源</span>
+      <strong>${escapeHtml(rewriteProviderName)}</strong>
+      <p>本区只展示改写模型输出。交叉复判始终使用独立复判模型，不会复用当前改写模型。</p>
+    </div>
+    <p class="helper-text">${escapeHtml(rewriteSummary)}</p>
+    ${retryGuidanceMarkup}
     <div class="rewrite-grid">
       <div class="rewrite-block">
         <strong>改写标题</strong>
-        <p>${escapeHtml(result.rewrite.title || "未生成")}</p>
+        <p>${escapeHtml(rewrite.title || "未生成")}</p>
       </div>
       <div class="rewrite-block">
         <strong>改写封面文案</strong>
-        <p>${escapeHtml(result.rewrite.coverText || "未生成")}</p>
+        <p>${escapeHtml(rewrite.coverText || "未生成")}</p>
       </div>
-      <div class="rewrite-block">
+      <div class="rewrite-block rewrite-block-body">
         <strong>改写正文</strong>
-        <p>${escapeHtml(result.rewrite.body || "未生成")}</p>
+        ${buildRewriteBodyMarkup(rewrite.body)}
       </div>
       <div class="rewrite-block">
         <strong>推荐标签</strong>
         <ul>${tags}</ul>
       </div>
     </div>
-    <p class="helper-text">改写说明：${escapeHtml(result.rewrite.rewriteNotes || "未提供")}</p>
-    <p class="helper-text">人工留意：${escapeHtml(result.rewrite.safetyNotes || "暂无")}</p>
+    <p class="helper-text">改写说明：${escapeHtml(rewrite.rewriteNotes || "未提供")}</p>
+    <p class="helper-text">人工留意：${escapeHtml(rewrite.safetyNotes || "暂无")}</p>
     <p class="helper-text">改写后语义摘要：${escapeHtml(
       after.semanticReview?.status === "ok" ? after.semanticReview.review?.summary || "未提供" : after.semanticReview?.message || "未返回"
     )}</p>
+    ${embeddedCrossReview}
     <div class="item-actions">
       <button type="button" class="button button-small" data-action="prefill-rewrite-pair-current">
         记为前后对照样本
@@ -329,50 +816,156 @@ function renderRewriteResult(result) {
   `;
 }
 
-function renderCrossReviewResult(result) {
-  if (!result?.review) {
-    byId("cross-review-result").innerHTML = '<div class="muted">等待复判</div>';
-    return;
+function buildCrossReviewMarkup(review, { embedded = false } = {}) {
+  if (!review) {
+    return '<div class="muted">等待复判</div>';
   }
 
-  const providerCards = result.review.providers
+  const aggregate = review.aggregate || {};
+  const recommendedVerdict = aggregate.recommendedVerdict || "manual_review";
+  const analysisVerdict = aggregate.analysisVerdict || "pass";
+  const consensus = aggregate.consensus || "unavailable";
+  const availableReviews = Number(aggregate.availableReviews || 0);
+  const configuredProviders = Number(aggregate.configuredProviders || 0);
+  const providerCards = (review.providers || [])
     .map((item) => {
       if (item.status === "ok") {
         return `
-          <div class="review-provider-card">
-            <strong>${escapeHtml(item.label)}</strong>
-            <p>模型：${escapeHtml(item.review.model)}</p>
-            <p>结论：${escapeHtml(verdictLabel(item.review.verdict))}</p>
-            <p>分类：${escapeHtml(joinCSV(item.review.categories) || "未提供")}</p>
-            <p>原因：${escapeHtml(joinCSV(item.review.reasons) || item.review.summary || "未提供")}</p>
-          </div>
+          <article class="review-provider-card review-provider-card-ok">
+            <div class="review-provider-head">
+              <div>
+                <strong>${escapeHtml(item.label)}</strong>
+                <p class="review-provider-model">${escapeHtml(item.review.model || "未标记模型")}</p>
+              </div>
+              <span class="review-status-pill review-status-pill-ok">已返回</span>
+            </div>
+            <div class="meta-row">
+              <span class="meta-pill review-pill-strong">${escapeHtml(verdictLabel(item.review.verdict))}</span>
+              <span class="meta-pill">置信度 ${escapeHtml(formatConfidence(item.review.confidence))}</span>
+            </div>
+            <div class="review-provider-summary">
+              <span>一句话总结</span>
+              <p>${escapeHtml(item.review.summary || "当前模型未补充摘要")}</p>
+            </div>
+            <div class="review-provider-block">
+              <span>风险类别</span>
+              <div class="meta-row">${renderInfoPills(item.review.categories, "未提供", "meta-pill-soft")}</div>
+            </div>
+            <div class="review-provider-block">
+              <span>复判原因</span>
+              <p>${escapeHtml(joinCSV(item.review.reasons) || "未提供")}</p>
+            </div>
+            <div class="review-provider-split">
+              <div class="review-provider-block">
+                <span>误杀提示</span>
+                <p>${escapeHtml(item.review.falsePositiveRisk || "未发现明显信号")}</p>
+              </div>
+              <div class="review-provider-block">
+                <span>漏判提示</span>
+                <p>${escapeHtml(item.review.falseNegativeRisk || "未发现明显信号")}</p>
+              </div>
+            </div>
+          </article>
         `;
       }
 
       return `
-        <div class="review-provider-card">
-          <strong>${escapeHtml(item.label)}</strong>
-          <p>状态：${escapeHtml(item.status === "unconfigured" ? "未配置" : "不可用")}</p>
-          <p>${escapeHtml(item.message || "暂无信息")}</p>
-        </div>
+        <article class="review-provider-card review-provider-card-muted">
+          <div class="review-provider-head">
+            <div>
+              <strong>${escapeHtml(item.label)}</strong>
+              <p class="review-provider-model">${escapeHtml(item.model || "未标记模型")}</p>
+            </div>
+            <span class="review-status-pill ${
+              item.status === "unconfigured" ? "review-status-pill-muted" : "review-status-pill-warn"
+            }">${escapeHtml(item.status === "unconfigured" ? "未配置" : "不可用")}</span>
+          </div>
+          <div class="review-provider-block">
+            <span>状态说明</span>
+            <p>${escapeHtml(item.message || "暂无信息")}</p>
+          </div>
+        </article>
       `;
     })
     .join("");
 
-  byId("cross-review-result").innerHTML = `
-    <div class="verdict verdict-${result.review.aggregate.recommendedVerdict}">
-      <span>交叉复判</span>
-      <strong>${escapeHtml(verdictLabel(result.review.aggregate.recommendedVerdict))}</strong>
-      <em>${escapeHtml(consensusLabel(result.review.aggregate.consensus))}</em>
-    </div>
-    <p class="helper-text">${result.review.aggregate.availableReviews ? "以下是各模型的复判意见汇总。" : "当前还没有成功返回的复判结果，请先检查模型密钥、权限或超时设置。"}</p>
-    <p class="helper-text">规则检测：${escapeHtml(verdictLabel(result.review.aggregate.analysisVerdict || "pass"))}；复判建议：${escapeHtml(verdictLabel(result.review.aggregate.recommendedVerdict))}</p>
-    <p class="helper-text">当前可用复判模型：${escapeHtml(String(result.review.aggregate.availableReviews))} / 已配置提供方：${escapeHtml(String(result.review.aggregate.configuredProviders))}</p>
-    <p class="helper-text">风险类别：${escapeHtml(joinCSV(result.review.aggregate.categories) || "未提供")}</p>
-    <p class="helper-text">误杀信号：${escapeHtml(joinCSV(result.review.aggregate.falsePositiveSignals) || "未发现明显信号")}</p>
-    <p class="helper-text">漏判信号：${escapeHtml(joinCSV(result.review.aggregate.falseNegativeSignals) || "未发现明显信号")}</p>
-    <div class="review-provider-grid">${providerCards}</div>
+  return `
+    <section class="cross-review-shell${embedded ? " is-embedded" : ""}">
+      <div class="cross-review-top">
+        <div class="verdict verdict-${recommendedVerdict}">
+          <span>交叉复判</span>
+          <strong>${escapeHtml(verdictLabel(recommendedVerdict))}</strong>
+          <em>${escapeHtml(consensusLabel(consensus))}</em>
+        </div>
+        <div class="cross-review-intro">
+          <strong>${availableReviews ? "多模型复判已完成" : "当前暂无成功复判结果"}</strong>
+          <p class="helper-text">${
+            availableReviews
+              ? "下面按总览、风险信号、模型意见三个层次展示，方便你快速判断是否需要人工复核。"
+              : "请先检查模型密钥、权限或超时设置，当前还没有可用的复判返回。"
+          }</p>
+        </div>
+      </div>
+
+      <div class="model-scope-banner model-scope-banner-review">
+        <span class="model-scope-kicker">复判模型组</span>
+        <strong>GLM / 通义千问 / 深度求索</strong>
+        <p>当前交叉复判固定使用独立复判模型逐个比对，不含 Kimi，避免改写模型自己给自己复判。</p>
+      </div>
+
+      <div class="cross-review-stats">
+        <article class="cross-review-stat">
+          <span>规则检测</span>
+          <strong>${escapeHtml(verdictLabel(analysisVerdict))}</strong>
+        </article>
+        <article class="cross-review-stat">
+          <span>复判建议</span>
+          <strong>${escapeHtml(verdictLabel(recommendedVerdict))}</strong>
+        </article>
+        <article class="cross-review-stat">
+          <span>共识状态</span>
+          <strong>${escapeHtml(consensusLabel(consensus))}</strong>
+        </article>
+        <article class="cross-review-stat">
+          <span>模型可用数</span>
+          <strong>${escapeHtml(String(availableReviews))} / ${escapeHtml(String(configuredProviders))}</strong>
+        </article>
+      </div>
+
+      <div class="cross-review-signals">
+        <article class="cross-review-signal-card">
+          <span class="cross-review-signal-label">风险类别</span>
+          <div class="meta-row">${renderInfoPills(aggregate.categories, "未提供", "meta-pill-soft")}</div>
+        </article>
+        <article class="cross-review-signal-card">
+          <span class="cross-review-signal-label">误杀信号</span>
+          <div class="meta-row">${renderInfoPills(
+            aggregate.falsePositiveSignals,
+            "未发现明显信号",
+            "meta-pill-soft"
+          )}</div>
+        </article>
+        <article class="cross-review-signal-card">
+          <span class="cross-review-signal-label">漏判信号</span>
+          <div class="meta-row">${renderInfoPills(
+            aggregate.falseNegativeSignals,
+            "未发现明显信号",
+            "meta-pill-soft"
+          )}</div>
+        </article>
+      </div>
+
+      <div class="cross-review-models-head">
+        <strong>模型意见对比</strong>
+        <span>逐个查看每个复判模型给出的结论、摘要和风险提示。</span>
+      </div>
+      <div class="review-provider-grid">${providerCards}</div>
+    </section>
   `;
+}
+
+function renderCrossReviewResult(result) {
+  byId("cross-review-result").innerHTML = buildCrossReviewMarkup(result?.review);
 }
 
 function renderQueue(items) {
@@ -605,6 +1198,19 @@ function renderFeedbackLog(items) {
     : '<div class="result-card muted">当前没有反馈日志</div>';
 }
 
+function renderFalsePositiveLog(items) {
+  byId("false-positive-log-list").innerHTML = items.length
+    ? items
+        .slice()
+        .reverse()
+        .map((item) => buildFalsePositiveEntryMarkup({
+          ...item,
+          updatedAt: formatDate(item.updatedAt || item.createdAt)
+        }))
+        .join("")
+    : '<div class="result-card muted">当前没有误报样本</div>';
+}
+
 function renderRewritePairList(items) {
   byId("rewrite-pair-list").innerHTML = items.length
     ? items
@@ -727,6 +1333,7 @@ function renderAdminData(data) {
   renderLexiconList("seed-lexicon-list", data.seedLexicon, "seed");
   renderLexiconList("custom-lexicon-list", data.customLexicon, "custom");
   renderFeedbackLog(data.feedbackLog);
+  renderFalsePositiveLog(data.falsePositiveLog || []);
   renderRewritePairList(data.rewritePairs || []);
 }
 
@@ -782,7 +1389,8 @@ function fillRewritePairFormFromCurrent() {
 
   const form = byId("rewrite-pair-form");
   const before = appState.latestAnalyzePayload;
-  const after = appState.latestRewrite;
+  const after = normalizeRewritePayload(appState.latestRewrite);
+  const pane = byId("rewrite-pairs-pane");
 
   form.elements.name.value = form.elements.name.value || "当前改写对照样本";
   form.elements.beforeTitle.value = before.title || "";
@@ -796,6 +1404,10 @@ function fillRewritePairFormFromCurrent() {
   form.elements.rewriteStrategy.value = after.rewriteNotes || form.elements.rewriteStrategy.value;
   form.elements.effectiveChanges.value = after.safetyNotes || form.elements.effectiveChanges.value;
   activateTab("rewrite-pairs-pane");
+  pane?.scrollIntoView({ behavior: "smooth", block: "start" });
+  window.setTimeout(() => {
+    form.elements.name?.focus();
+  }, 120);
   byId("rewrite-pair-result").innerHTML =
     '<div class="result-card-shell">已用当前改写结果填充前后样本，可补充平台原因或改写策略后保存。</div>';
 }
@@ -803,6 +1415,7 @@ function fillRewritePairFormFromCurrent() {
 const analyzeForm = byId("analyze-form");
 analyzeForm.addEventListener("input", syncAnalyzeActions);
 analyzeForm.addEventListener("change", syncAnalyzeActions);
+initializeAnalyzeTagPicker();
 
 function buildLexiconEntry(form) {
   const source = String(form.get("source") || "").trim();
@@ -876,7 +1489,13 @@ byId("analyze-form").addEventListener("submit", async (event) => {
     appState.latestAnalyzePayload = getAnalyzePayload();
     appState.latestAnalysis = result;
     appState.latestRewrite = null;
-    renderAnalysis(result);
+    const falsePositiveSources = buildFalsePositiveCaptureSources({
+      analyzePayload: appState.latestAnalyzePayload,
+      analysisSnapshot: result
+    });
+    appState.latestAnalysisFalsePositiveSource = falsePositiveSources.analysis;
+    appState.latestRewriteFalsePositiveSource = null;
+    renderAnalysis(result, appState.latestAnalysisFalsePositiveSource);
   } catch (error) {
     byId("analysis-result").innerHTML = `
       <div class="result-card-shell muted">${escapeHtml(error.message || "检测失败")}</div>
@@ -898,7 +1517,7 @@ byId("rewrite-button").addEventListener("click", async () => {
 
   setButtonBusy(rewriteButton, true, "改写中...");
   byId("rewrite-result").innerHTML =
-    '<div class="result-card-shell muted">正在调用 GLM 生成合规改写...</div>';
+    '<div class="result-card-shell muted">正在生成合规改写；如果复判还没过，会继续自动改写，直到通过或达到最大轮次...</div>';
 
   try {
     const result = await apiJson("/api/rewrite", {
@@ -908,9 +1527,19 @@ byId("rewrite-button").addEventListener("click", async () => {
 
     appState.latestAnalyzePayload = getAnalyzePayload();
     appState.latestAnalysis = result.analysis;
-    appState.latestRewrite = result.rewrite;
-    renderAnalysis(result.analysis);
-    renderRewriteResult(result);
+    appState.latestRewrite = normalizeRewritePayload(result.rewrite);
+    const falsePositiveSources = buildFalsePositiveCaptureSources({
+      analyzePayload: appState.latestAnalyzePayload,
+      analysisSnapshot: result.analysis,
+      rewriteSnapshot: appState.latestRewrite
+    });
+    appState.latestAnalysisFalsePositiveSource = falsePositiveSources.analysis;
+    appState.latestRewriteFalsePositiveSource = null;
+    renderAnalysis(result.analysis, appState.latestAnalysisFalsePositiveSource);
+    renderRewriteResult({
+      ...result,
+      rewrite: appState.latestRewrite
+    });
   } catch (error) {
     byId("rewrite-result").innerHTML = `
       <div class="result-card-shell muted">${escapeHtml(error.message || "改写失败")}</div>
@@ -984,6 +1613,64 @@ byId("feedback-recognize").addEventListener("click", async () => {
     `;
   } finally {
     setButtonBusy(recognizeButton, false);
+  }
+});
+
+document.addEventListener("submit", async (event) => {
+  const form = event.target.closest(".false-positive-capture-form");
+
+  if (!form) {
+    return;
+  }
+
+  event.preventDefault();
+
+  const capture = form.closest(".false-positive-capture");
+  const payloadSource = capture?.dataset.falsePositiveSource;
+  const resultNode = capture?.querySelector(".false-positive-capture-result");
+  const submitButton = form.querySelector('button[type="submit"]');
+
+  if (!payloadSource) {
+    if (resultNode) {
+      resultNode.innerHTML = '<div class="result-card-shell muted">当前没有可记录的样本。</div>';
+    }
+    return;
+  }
+
+  setButtonBusy(submitButton, true, "记录中...");
+
+  try {
+    const source = JSON.parse(payloadSource);
+    const status = String(new FormData(form).get("status") || "platform_passed_pending").trim();
+    const response = await apiJson("/api/false-positive-log", {
+      method: "POST",
+      body: JSON.stringify({
+        title: source.title,
+        body: source.body,
+        coverText: source.coverText,
+        tags: source.tags,
+        status,
+        analysis: source.analysisSnapshot || undefined
+      })
+    });
+
+    if (resultNode) {
+      resultNode.innerHTML = `
+        <div class="result-card-shell">
+          已记录为 ${escapeHtml(falsePositiveStatusLabel(status))}，当前样本数 ${escapeHtml(
+            String(response.items?.length ?? 0)
+          )}。
+        </div>
+      `;
+    }
+  } catch (error) {
+    if (resultNode) {
+      resultNode.innerHTML = `
+        <div class="result-card-shell muted">${escapeHtml(error.message || "记录误报样本失败")}</div>
+      `;
+    }
+  } finally {
+    setButtonBusy(submitButton, false);
   }
 });
 
@@ -1216,6 +1903,25 @@ document.addEventListener("click", async (event) => {
     if (action === "promote-review") {
       await apiJson("/api/admin/review-queue/promote", {
         method: "POST",
+        body: JSON.stringify({
+          id: button.dataset.id
+        })
+      });
+    }
+
+    if (action === "confirm-false-positive") {
+      await apiJson("/api/admin/false-positive-log", {
+        method: "PATCH",
+        body: JSON.stringify({
+          id: button.dataset.id,
+          status: "platform_passed_confirmed"
+        })
+      });
+    }
+
+    if (action === "delete-false-positive") {
+      await apiJson("/api/admin/false-positive-log", {
+        method: "DELETE",
         body: JSON.stringify({
           id: button.dataset.id
         })

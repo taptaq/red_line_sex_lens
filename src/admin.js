@@ -1,16 +1,18 @@
 import {
   loadCustomLexicon,
   loadFeedbackLog,
+  loadFalsePositiveLog,
   loadReviewQueue,
   loadRewritePairs,
   loadSeedLexicon,
   saveCustomLexicon,
   saveFeedbackLog,
+  saveFalsePositiveLog,
   saveReviewQueue,
   saveRewritePairs,
   saveSeedLexicon
 } from "./data-store.js";
-import { getCandidatePhraseIssue, isValidLexiconCandidatePhrase } from "./feedback.js";
+import { buildFalsePositiveAudit, getCandidatePhraseIssue, isValidLexiconCandidatePhrase } from "./feedback.js";
 
 export function normalizeLexiconLevel(value = "", riskLevel = "manual_review") {
   const text = String(value || "").trim().toLowerCase();
@@ -93,6 +95,23 @@ function buildReviewReasonText(item) {
   return "来自违规原因回流复核队列";
 }
 
+function enrichFalsePositiveLogItem(item) {
+  const status = String(item.status || "platform_passed_pending").trim() || "platform_passed_pending";
+  const audit = item.falsePositiveAudit || {};
+
+  return {
+    ...item,
+    status,
+    falsePositiveAudit: {
+      ...audit,
+      label: String(audit.label || "").trim(),
+      signal: String(audit.signal || "").trim(),
+      analyzerVerdict: String(audit.analyzerVerdict || "").trim(),
+      notes: String(audit.notes || "").trim()
+    }
+  };
+}
+
 export function buildLexiconDraftFromReviewItem(item) {
   const sourceHint = String(item.sourceNoteExcerpt || item.sourceNoteId || "未标记").trim();
   const reviewLabel = String(item.reviewAuditSignal || "").trim();
@@ -137,12 +156,13 @@ function enrichReviewQueueItem(item) {
 }
 
 export async function loadAdminData() {
-  const [seedLexicon, customLexicon, feedbackLog, reviewQueue, rewritePairs] = await Promise.all([
+  const [seedLexicon, customLexicon, feedbackLog, reviewQueue, rewritePairs, falsePositiveLog] = await Promise.all([
     loadSeedLexicon(),
     loadCustomLexicon(),
     loadFeedbackLog(),
     loadReviewQueue(),
-    loadRewritePairs()
+    loadRewritePairs(),
+    loadFalsePositiveLog()
   ]);
 
   return {
@@ -156,8 +176,48 @@ export async function loadAdminData() {
     })),
     feedbackLog,
     reviewQueue: reviewQueue.map(enrichReviewQueueItem),
-    rewritePairs
+    rewritePairs,
+    falsePositiveLog: falsePositiveLog.map(enrichFalsePositiveLogItem)
   };
+}
+
+export async function confirmFalsePositiveLogEntry(id, userNotes = "") {
+  const current = await loadFalsePositiveLog();
+  const index = current.findIndex((item) => String(item.id || "").trim() === String(id || "").trim());
+
+  if (index === -1) {
+    throw createError("未找到要确认的误报样本。", 404);
+  }
+
+  const existing = current[index];
+  const now = new Date().toISOString();
+  const nextItem = enrichFalsePositiveLogItem({
+    ...existing,
+    status: "platform_passed_confirmed",
+    updatedAt: now,
+    userNotes: String(userNotes || "").trim() || existing.userNotes,
+    falsePositiveAudit: buildFalsePositiveAudit({
+      status: "platform_passed_confirmed",
+      analysisSnapshot: existing.analysisSnapshot
+    })
+  });
+
+  const next = [...current];
+  next[index] = nextItem;
+  await saveFalsePositiveLog(next);
+
+  return nextItem;
+}
+
+export async function deleteFalsePositiveLogEntry(id) {
+  const current = await loadFalsePositiveLog();
+  const next = current.filter((item) => String(item.id || "").trim() !== String(id || "").trim());
+
+  if (next.length === current.length) {
+    throw createError("未找到要删除的误报样本。", 404);
+  }
+
+  await saveFalsePositiveLog(next);
 }
 
 export async function addLexiconEntry(scope, entry) {

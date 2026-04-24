@@ -50,6 +50,10 @@ function loadDotEnv() {
   if (!process.env.DASHSCOPE_API_KEY && process.env.QWEN_API_KEY) {
     process.env.DASHSCOPE_API_KEY = process.env.QWEN_API_KEY;
   }
+
+  if (!process.env.KIMI_API_KEY && process.env.MOONSHOT_API_KEY) {
+    process.env.KIMI_API_KEY = process.env.MOONSHOT_API_KEY;
+  }
 }
 
 loadDotEnv();

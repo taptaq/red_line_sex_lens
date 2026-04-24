@@ -312,6 +312,41 @@ export function buildReviewAudit({ platformReason = "", analysisSnapshot = null 
   };
 }
 
+export function buildFalsePositiveAudit({ status = "", analysisSnapshot = null }) {
+  const normalizedStatus = String(status || "").trim();
+  const analyzerVerdict = String(analysisSnapshot?.verdict || "").trim() || "pass";
+  const analyzerRank = severityRank[analyzerVerdict] ?? severityRank.pass;
+  const isKnownStatus =
+    normalizedStatus === "platform_passed_pending" || normalizedStatus === "platform_passed_confirmed";
+
+  if (!analysisSnapshot || analyzerRank < severityRank.manual_review || !isKnownStatus) {
+    return {
+      signal: "not_enough_evidence",
+      label: "证据不足",
+      analyzerVerdict,
+      notes: isKnownStatus
+        ? "当前样本缺少足够的观察期或复盘证据，暂不能判断为规则偏严。"
+        : "当前样本状态不明确，暂不能判断为规则偏严。"
+    };
+  }
+
+  if (normalizedStatus === "platform_passed_confirmed") {
+    return {
+      signal: "strict_confirmed",
+      label: "规则偏严已确认",
+      analyzerVerdict,
+      notes: "该样本已通过观察期并保持正常，是已确认的误报证据。"
+    };
+  }
+
+  return {
+    signal: "strict_pending",
+    label: "规则偏严待确认",
+    analyzerVerdict,
+    notes: "该样本已记录为放行，但仍处于观察期，尚未完成确认。"
+  };
+}
+
 function sanitizeAnalysisSnapshot(snapshot) {
   if (!snapshot || typeof snapshot !== "object") {
     return null;

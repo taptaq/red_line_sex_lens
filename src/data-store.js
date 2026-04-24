@@ -20,6 +20,38 @@ async function writeJson(filePath, value) {
   await fs.writeFile(filePath, `${serialized}\n`, "utf8");
 }
 
+function uniqueStrings(items = []) {
+  return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
+function normalizeString(value) {
+  return String(value || "").trim();
+}
+
+function normalizeNumber(value, fallback = 0) {
+  const normalized = Number(String(value || "").trim());
+  return Number.isFinite(normalized) ? normalized : fallback;
+}
+
+function normalizeFalsePositiveEntry(entry = {}) {
+  const status = normalizeString(entry.status) || "platform_passed_pending";
+
+  return {
+    ...entry,
+    id: normalizeString(entry.id),
+    status,
+    createdAt: normalizeString(entry.createdAt),
+    updatedAt: normalizeString(entry.updatedAt),
+    observedAt: normalizeString(entry.observedAt),
+    observationWindowHours: normalizeNumber(entry.observationWindowHours, 0),
+    title: normalizeString(entry.title),
+    body: normalizeString(entry.body),
+    coverText: normalizeString(entry.coverText),
+    tags: uniqueStrings(entry.tags),
+    userNotes: normalizeString(entry.userNotes)
+  };
+}
+
 export async function loadLexicon() {
   const [seed, custom] = await Promise.all([
     readJson(paths.lexiconSeed, []),
@@ -89,6 +121,16 @@ export async function saveFeedbackLog(items) {
   await writeJson(paths.feedbackLog, items);
 }
 
+export async function loadFalsePositiveLog() {
+  const items = await readJson(paths.falsePositiveLog, []);
+  return items.map((entry) => normalizeFalsePositiveEntry(entry));
+}
+
+export async function saveFalsePositiveLog(items) {
+  const normalized = (Array.isArray(items) ? items : []).map((entry) => normalizeFalsePositiveEntry(entry));
+  await writeJson(paths.falsePositiveLog, normalized);
+}
+
 export async function loadSummary() {
   const [seed, custom, feedback, reviewQueue] = await Promise.all([
     readJson(paths.lexiconSeed, []),
@@ -107,4 +149,12 @@ export async function loadSummary() {
 
 export async function readImportFile(filePath) {
   return readJson(filePath, null);
+}
+
+export async function loadAnalyzeTagOptions() {
+  return uniqueStrings(await readJson(paths.analyzeTagOptions, []));
+}
+
+export async function saveAnalyzeTagOptions(items) {
+  await writeJson(paths.analyzeTagOptions, uniqueStrings(items));
 }

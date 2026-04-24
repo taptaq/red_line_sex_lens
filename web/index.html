@@ -13,7 +13,7 @@
       <section class="hero panel">
         <div class="hero-copy">
           <p class="eyebrow">本地审核台</p>
-          <h1>小红书两性敏感合规检测系统</h1>
+          <h1>小红书两性敏感合规检测改写系统</h1>
           <p class="lede">
             面向两性、身体探索、自我愉悦等高敏话题的本地检测面板。重点不是“猜隐藏词”，而是把风险词、违规原因、组合场景和人工复核流程一起沉淀下来。
           </p>
@@ -44,8 +44,22 @@
               <input type="text" name="coverText" placeholder="输入封面文案" />
             </label>
             <label>
-              <span>标签（逗号分隔）</span>
-              <input type="text" name="tags" placeholder="两性, 身体探索, 关系沟通" />
+              <span>标签</span>
+              <div class="tag-picker" id="analyze-tag-picker">
+                <input type="hidden" name="tags" id="analyze-tags-value" />
+                <div class="tag-picker-controls">
+                  <select id="analyze-tag-select">
+                    <option value="">选择预置标签</option>
+                  </select>
+                  <div class="tag-picker-custom">
+                    <input type="text" id="analyze-tag-custom" placeholder="输入自定义标签" />
+                    <button type="button" class="button button-ghost button-small" id="analyze-tag-add">添加</button>
+                  </div>
+                </div>
+                <div id="analyze-tag-selected" class="tag-picker-selected">
+                  <span class="tag-picker-empty">尚未选择标签</span>
+                </div>
+              </div>
             </label>
             <div class="inline-actions inline-actions-row">
               <button type="submit" class="button" id="analyze-button" disabled>运行检测</button>
@@ -57,14 +71,14 @@
             <section class="result-section">
               <div class="result-heading">
                 <strong>规则检测</strong>
-                <span>先看命中项和建议</span>
+                <span>先看命中项和建议，顺手可记录误报样本</span>
               </div>
               <div id="analysis-result" class="result-card muted">等待检测</div>
             </section>
             <section class="result-section">
               <div class="result-heading">
                 <strong>合规改写</strong>
-                <span>生成更偏教育 / 沟通 / 科普语境的版本</span>
+                <span>生成更偏教育 / 沟通 / 科普语境的版本，也可顺手记录误报样本</span>
               </div>
               <div id="rewrite-result" class="result-card muted">等待改写</div>
             </section>
@@ -144,6 +158,7 @@
             <button type="button" class="tab-button" data-tab-target="custom-lexicon-pane">自定义词库</button>
             <button type="button" class="tab-button" data-tab-target="seed-lexicon-pane">种子词库</button>
             <button type="button" class="tab-button" data-tab-target="feedback-log-pane">反馈日志</button>
+            <button type="button" class="tab-button" data-tab-target="false-positive-log-pane">误报样本</button>
             <button type="button" class="tab-button" data-tab-target="rewrite-pairs-pane">改写样本</button>
           </div>
           <div class="tab-panels">
@@ -258,6 +273,16 @@
               </div>
               <div class="admin-panel-block">
                 <div id="feedback-log-list" class="admin-list"></div>
+              </div>
+            </section>
+
+            <section class="tab-panel" id="false-positive-log-pane">
+              <div class="tab-panel-head">
+                <strong>误报样本</strong>
+                <span>查看 false-positive-log 列表，确认待观察样本或清理明显无效记录。</span>
+              </div>
+              <div class="admin-panel-block">
+                <div id="false-positive-log-list" class="admin-list"></div>
               </div>
             </section>
 

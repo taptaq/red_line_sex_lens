@@ -13,6 +13,8 @@ export const paths = {
   lexiconCustom: path.join(dataDir, "lexicon.custom.json"),
   whitelist: path.join(dataDir, "whitelist.json"),
   feedbackLog: path.join(dataDir, "feedback.log.json"),
+  falsePositiveLog: path.join(dataDir, "false-positive-log.json"),
   reviewQueue: path.join(dataDir, "review-queue.json"),
-  rewritePairs: path.join(dataDir, "rewrite-pairs.json")
+  rewritePairs: path.join(dataDir, "rewrite-pairs.json"),
+  analyzeTagOptions: path.join(dataDir, "analyze-tag-options.json")
 };

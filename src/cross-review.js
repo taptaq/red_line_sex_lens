@@ -27,7 +27,7 @@ const providerConfigs = [
     label: "深度求索",
     envKey: "DEEPSEEK_API_KEY",
     endpoint: "https://api.deepseek.com/chat/completions",
-    model: process.env.DEEPSEEK_CROSS_REVIEW_MODEL || "deepseek-chat"
+    model: process.env.DEEPSEEK_CROSS_REVIEW_MODEL || "DeepSeek-V4-Flash"
   }
 ];
 const providerTimeoutMs = Number(process.env.CROSS_REVIEW_TIMEOUT_MS || 15000);

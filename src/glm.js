@@ -4,16 +4,14 @@ import path from "node:path";
 import { abstractReasonPhraseLabels, feedbackContextCategories } from "./feedback.js";
 
 const glmEndpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
+const defaultKimiEndpoint = "https://api.moonshot.cn/v1/chat/completions";
 const defaultVisionModel = process.env.GLM_VISION_MODEL || "glm-4.6v";
 const defaultTextModel = process.env.GLM_TEXT_MODEL || "glm-4.6v";
+const defaultKimiTextModel = process.env.KIMI_TEXT_MODEL || "moonshot-v1-8k";
 const defaultFeedbackModel = process.env.GLM_FEEDBACK_MODEL || defaultTextModel || "glm-4.6v";
 const defaultQwenFeedbackModel = process.env.QWEN_FEEDBACK_MODEL || "qwen-plus";
-const defaultDeepSeekFeedbackModel = process.env.DEEPSEEK_FEEDBACK_MODEL || "deepseek-chat";
+const defaultDeepSeekFeedbackModel = process.env.DEEPSEEK_FEEDBACK_MODEL || "DeepSeek-V4-Flash";
 const humanizerPassEnabled = process.env.HUMANIZER_PASS_ENABLED !== "false";
-const textModelCandidates = [
-  defaultTextModel,
-  "glm-4.7",
-].filter((item, index, list) => item && list.indexOf(item) === index);
 const feedbackModelCandidates = [defaultFeedbackModel, "glm-4.6-flashX"].filter(
   (item, index, list) => item && list.indexOf(item) === index
 );
@@ -41,6 +39,60 @@ const feedbackProviderConfigs = [
     models: [defaultDeepSeekFeedbackModel]
   }
 ];
+
+export const rewriteGenerationConfig = {
+  baseMaxTokens: Number(process.env.REWRITE_MAX_TOKENS || 3200),
+  patchMaxTokens: Number(process.env.REWRITE_PATCH_MAX_TOKENS || 1400),
+  humanizerMaxTokens: Number(process.env.REWRITE_HUMANIZER_MAX_TOKENS || 3000),
+  maxAttempts: Number(process.env.REWRITE_MAX_ATTEMPTS || 3),
+  retryHistoryLimit: Math.max(1, Number(process.env.REWRITE_RETRY_HISTORY_LIMIT || 1))
+};
+
+function uniqueNonEmpty(items = []) {
+  return items.filter((item, index, list) => item && list.indexOf(item) === index);
+}
+
+function getDefaultTextModel() {
+  return String(process.env.GLM_TEXT_MODEL || defaultTextModel || "glm-4.6v").trim();
+}
+
+function getGlmTextModelCandidates() {
+  return uniqueNonEmpty([getDefaultTextModel(), "glm-4.7"]);
+}
+
+function getKimiEndpoint() {
+  return String(process.env.KIMI_BASE_URL || defaultKimiEndpoint).trim();
+}
+
+function getDefaultKimiTextModel() {
+  return String(process.env.KIMI_TEXT_MODEL || defaultKimiTextModel || "moonshot-v1-8k").trim();
+}
+
+function getRewriteProviderPreference() {
+  const provider = String(process.env.REWRITE_PROVIDER || "glm").trim().toLowerCase();
+
+  return provider === "kimi" ? "kimi" : "glm";
+}
+
+export function getRewriteProviderConfig() {
+  if (getRewriteProviderPreference() === "kimi") {
+    return {
+      provider: "kimi",
+      label: "Kimi",
+      envKey: "KIMI_API_KEY",
+      endpoint: getKimiEndpoint(),
+      models: uniqueNonEmpty([getDefaultKimiTextModel()])
+    };
+  }
+
+  return {
+    provider: "glm",
+    label: "智谱 GLM",
+    envKey: "GLM_API_KEY",
+    endpoint: glmEndpoint,
+    models: getGlmTextModelCandidates()
+  };
+}
 
 function createGlmError(message, statusCode = 500) {
   const error = new Error(message);
@@ -105,6 +157,22 @@ function flattenContent(content) {
     return content.content;
   }
 
+  if (typeof content.arguments === "string") {
+    return content.arguments;
+  }
+
+  if (typeof content.reasoning_content === "string") {
+    return content.reasoning_content;
+  }
+
+  if (typeof content.reasoning === "string") {
+    return content.reasoning;
+  }
+
+  if (typeof content.message === "string") {
+    return content.message;
+  }
+
   if (Array.isArray(content.content)) {
     return flattenContent(content.content);
   }
@@ -115,6 +183,34 @@ function flattenContent(content) {
 
   if (Array.isArray(content.items)) {
     return flattenContent(content.items);
+  }
+
+  if (Array.isArray(content.tool_calls)) {
+    return flattenContent(content.tool_calls);
+  }
+
+  if (content.function_call) {
+    return flattenContent(content.function_call);
+  }
+
+  if (content.delta) {
+    return flattenContent(content.delta);
+  }
+
+  if (content.message && typeof content.message === "object") {
+    return flattenContent(content.message);
+  }
+
+  if (content.output && typeof content.output === "object") {
+    return flattenContent(content.output);
+  }
+
+  if (content.response && typeof content.response === "object") {
+    return flattenContent(content.response);
+  }
+
+  if (content.data && typeof content.data === "object") {
+    return flattenContent(content.data);
   }
 
   return "";
@@ -325,19 +421,469 @@ function tryParseJson(text) {
   return null;
 }
 
-async function callGlmJson({
+const jsonShapeHintKeys = new Set([
+  "title",
+  "body",
+  "coverText",
+  "tags",
+  "rewriteNotes",
+  "safetyNotes",
+  "platformReason",
+  "suspiciousPhrases",
+  "extractedText",
+  "summary",
+  "confidence",
+  "verdict",
+  "categories",
+  "reasons",
+  "implicitSignals",
+  "safeSignals",
+  "falsePositiveRisk",
+  "falseNegativeRisk",
+  "contextCategories"
+]);
+
+function looksLikeJsonPayload(value) {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      Object.keys(value).some((key) => jsonShapeHintKeys.has(key))
+  );
+}
+
+function tryParseJsonFromUnknown(value) {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    return tryParseJson(value);
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const parsed = tryParseJsonFromUnknown(item);
+
+      if (parsed) {
+        return parsed;
+      }
+    }
+
+    const flattened = flattenContent(value);
+    return flattened ? tryParseJson(flattened) : null;
+  }
+
+  if (typeof value !== "object") {
+    return null;
+  }
+
+  if (looksLikeJsonPayload(value)) {
+    return value;
+  }
+
+  const directCandidates = [
+    value.parsed,
+    value.json,
+    value.result,
+    value.output,
+    value.response,
+    value.data,
+    value.message,
+    value.delta
+  ];
+
+  for (const candidate of directCandidates) {
+    const parsed = tryParseJsonFromUnknown(candidate);
+
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  if (typeof value.arguments === "string") {
+    const parsed = tryParseJson(value.arguments);
+
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  if (value.function_call?.arguments) {
+    const parsed = tryParseJsonFromUnknown(value.function_call.arguments);
+
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  if (Array.isArray(value.tool_calls)) {
+    for (const call of value.tool_calls) {
+      const parsed = tryParseJsonFromUnknown(call?.function?.arguments || call?.arguments || call);
+
+      if (parsed) {
+        return parsed;
+      }
+    }
+  }
+
+  const flattened = flattenContent(value);
+  return flattened ? tryParseJson(flattened) : null;
+}
+
+function buildPreviewText(value, maxLength = 240) {
+  if (typeof value === "string") {
+    return sanitizeJsonLikeText(value).slice(0, maxLength);
+  }
+
+  if (!value) {
+    return "";
+  }
+
+  try {
+    return sanitizeJsonLikeText(JSON.stringify(value)).slice(0, maxLength);
+  } catch {
+    return sanitizeJsonLikeText(String(value)).slice(0, maxLength);
+  }
+}
+
+export function buildRewriteMessages({ input = {}, analysis = {}, semantic = null } = {}) {
+  const retryGuidance = analysis?.retryGuidance && typeof analysis.retryGuidance === "object" ? analysis.retryGuidance : null;
+  const retryHistory = Array.isArray(analysis?.retryHistory)
+    ? analysis.retryHistory.slice(-rewriteGenerationConfig.retryHistoryLimit)
+    : [];
+
+  return [
+    {
+      role: "system",
+      content: [
+        "你是小红书内容安全团队中的中文合规编辑与改写助手。",
+        "目标是帮助用户在尽量保留原笔记风格、人设、语气、节奏、表达习惯的前提下，把内容改写得更安全，而不是把原文改成模板化科普文，也不是帮助规避审核。",
+        "改写风格要自然、幽默风趣、说人话，像朋友聊天式分享，像真实的人在轻松交流，而不是模板化生成。",
+        "请优先按小红书内容审核语境理解风险，尤其关注导流、低俗擦边、未成年人、教程化敏感内容、夸大承诺。",
+        "你需要同时参考规则层风险和语义层风险，尤其关注隐晦导流、暗示性表达、擦边氛围、角色扮演、人设诱导、场景化刺激、两性用品宣传展示语境。",
+        "不得输出导流、站外联系方式、夸大承诺、挑逗化标题、未成年人敏感组合、教程化敏感步骤。",
+        "如果原文是口语化、分享感、经验感、轻松语气、种草语气，请尽量保留这种风格；只修改真正有风险的部分。",
+        "改写应遵循最小必要改动原则：能局部替换就不要整段重写，能弱化就不要彻底改风格。",
+        "请只返回 JSON。"
+      ].join("\n")
+    },
+    {
+      role: "user",
+      content: [
+        "请根据下面的原始内容和检测结果，输出一个更稳妥的改写版本。",
+        "要求：",
+        "1. 尽量保留原本想表达的核心主题。",
+        "2. 尽量保持原文的说话方式、句子长短、口吻、轻重节奏、分享感和人设，不要偏离原笔记风格。",
+        "3. 如果原文有高风险点，优先做最小必要改写：删掉、替换、弱化、改写局部表达，而不是整体换一种文风。",
+        "4. 只有在原风格本身明显过于擦边、过于交易化、过于教程化时，才允许适度往教育、沟通、健康表达上收。",
+        "5. 不要编造医疗功效、绝对化承诺或联系方式。",
+        "6. tags 给 0-5 个更稳妥、但仍然贴近原内容风格的标签。",
+        "7. body 必须尽量保留原文的信息量和段落结构，不要把正文缩成摘要、提纲或短版。",
+        "8. 除非为删除高风险内容所必需，不要明显缩短正文篇幅；如果原文有三段，改写后也应尽量保持接近的段落数量。",
+        "9. 语言风格要自然、幽默风趣、说人话，有真实分享感，更像朋友聊天式分享，但不要低俗、油腻、浮夸。",
+        "10. 读起来要像朋友之间顺手分享经验、感受和观察，不要像上课、不要像培训、不要像公号文章。",
+        "输出格式：",
+        "{",
+        '  "title": "改写后的标题",',
+        '  "body": "改写后的正文",',
+        '  "coverText": "改写后的封面文案",',
+        '  "tags": ["标签1", "标签2"],',
+        '  "rewriteNotes": "一句话说明主要改写了什么",',
+        '  "safetyNotes": "一句话提示仍需人工留意的点，没有就给空字符串"',
+        "}",
+        "",
+        `原始标题：${String(input.title || "")}`,
+        `原始正文：${String(input.body || "")}`,
+        `原始封面文案：${String(input.coverText || "")}`,
+        `原始标签：${Array.isArray(input.tags) ? input.tags.join("、") : String(input.tags || "")}`,
+        `规则检测结论：${String(analysis.verdict || "")}`,
+        `综合检测结论：${String(analysis.finalVerdict || analysis.verdict || "")}`,
+        `命中项：${JSON.stringify(analysis.hits || [], null, 2)}`,
+        `建议：${JSON.stringify(analysis.suggestions || [], null, 2)}`,
+        `语义风险分类：${JSON.stringify(semantic?.categories || [])}`,
+        `语义风险原因：${JSON.stringify(semantic?.reasons || [])}`,
+        `语义隐含信号：${JSON.stringify(semantic?.implicitSignals || [])}`,
+        `语义正向信号：${JSON.stringify(semantic?.safeSignals || [])}`,
+        `语义摘要：${JSON.stringify(semantic?.summary || "")}`,
+        `语义改写建议：${JSON.stringify(semantic?.suggestion || "")}`,
+        retryGuidance ? `当前是第 ${Number(retryGuidance.attempt || 0) + 1} 轮自动改写。` : "",
+        retryGuidance ? `上一轮复判摘要：${String(retryGuidance.summary || "")}` : "",
+        retryGuidance ? `上一轮优先修正点：${JSON.stringify(retryGuidance.focusPoints || [])}` : "",
+        retryHistory.length
+          ? `最近几轮复盘轨迹：${JSON.stringify(
+              retryHistory.map((item) => ({
+                attempt: item.attempt,
+                summary: item.summary,
+                focusPoints: item.focusPoints
+              }))
+            )}`
+          : "",
+        "",
+        "改写偏好补充：",
+        "1. 不要把所有内容都改成统一的官方科普腔。",
+        "2. 不要无故拔高措辞，不要写得太像说明书。",
+        "3. 能保留原来的分享感、口语感、记录感，就尽量保留。",
+        "4. rewriteNotes 请说明你主要改掉了哪些风险点；如果保留了原风格，也请点明。",
+        retryGuidance ? "5. 这次不要泛泛重写，请优先针对上一轮复判指出的问题做定向修改。" : ""
+      ].join("\n")
+    }
+  ];
+}
+
+export function buildPatchMessages({ input = {}, analysis = {}, semantic = null } = {}) {
+  const retryGuidance = analysis?.retryGuidance && typeof analysis.retryGuidance === "object" ? analysis.retryGuidance : null;
+  const retryHistory = Array.isArray(analysis?.retryHistory)
+    ? analysis.retryHistory.slice(-rewriteGenerationConfig.retryHistoryLimit)
+    : [];
+  const compactHits = Array.isArray(analysis?.hits)
+    ? analysis.hits.slice(0, 4).map((item) => ({
+        category: String(item?.category || "").trim(),
+        reason: String(item?.reason || "").trim()
+      }))
+    : [];
+
+  return [
+    {
+      role: "system",
+      content: [
+        "你是小红书内容安全团队中的中文合规编辑助手。",
+        "这一次不要整稿重写，优先输出局部 patch，用最小必要修改消除上一轮暴露出来的风险点。",
+        "patch 必须能直接映射到当前文本中的具体片段，target 必须是当前字段里能精确找到的原文。",
+        "只有当局部 patch 无法解决问题时，才允许对单个字段给出完整兜底重写。",
+        "请只返回 JSON。"
+      ].join("\n")
+    },
+    {
+      role: "user",
+      content: [
+        "请根据上一轮复判建议，对当前版本做定向修补。",
+        "输出格式：",
+        "{",
+        '  "patches": [',
+        "    {",
+        '      "field": "title | body | coverText",',
+        '      "target": "当前文本里要替换的原句或短语",',
+        '      "replaceWith": "替换后的文本",',
+        '      "reason": "为什么这么改",',
+        '      "addresses": "对应解决的建议点"',
+        "    }",
+        "  ],",
+        '  "title": "如果必须整段重写标题，这里给完整标题；否则留空",',
+        '  "body": "如果必须整段重写正文，这里给完整正文；否则留空",',
+        '  "coverText": "如果必须整段重写封面文案，这里给完整文案；否则留空",',
+        '  "tags": ["需要更新时再给标签"],',
+        '  "rewriteNotes": "一句话说明本轮主要修了哪些点",',
+        '  "safetyNotes": "一句话提示仍需人工留意的点，没有就给空字符串"',
+        "}",
+        "要求：",
+        "1. 优先输出局部 patch，不要无故整稿重写。",
+        "2. 每个 patch 都要明确对应一条建议点，addresses 直接写对应建议。",
+        "3. 如果只需要改 1-3 处，就不要改更多地方。",
+        "4. body 除非必须，不要整体改写，不要明显缩短信息量。",
+        "5. 保留原本分享感、口语感和节奏，不要改成统一科普腔。",
+        "",
+        `当前标题：${String(input.title || "")}`,
+        `当前正文：${String(input.body || "")}`,
+        `当前封面文案：${String(input.coverText || "")}`,
+        `当前标签：${Array.isArray(input.tags) ? input.tags.join("、") : String(input.tags || "")}`,
+        `规则检测结论：${String(analysis.verdict || "")}`,
+        `综合检测结论：${String(analysis.finalVerdict || analysis.verdict || "")}`,
+        `精简命中摘要：${JSON.stringify(compactHits)}`,
+        `精简规则建议：${JSON.stringify((analysis.suggestions || []).slice(0, 3))}`,
+        `语义摘要：${JSON.stringify(semantic?.summary || "")}`,
+        `语义原因：${JSON.stringify((semantic?.reasons || []).slice(0, 3))}`,
+        `当前是第 ${Number(retryGuidance?.attempt || 0) + 1} 轮自动改写。`,
+        `上一轮复判摘要：${String(retryGuidance?.summary || "")}`,
+        `上一轮优先修正点：${JSON.stringify(retryGuidance?.focusPoints || [])}`,
+        retryHistory.length
+          ? `最近一轮复盘轨迹：${JSON.stringify(
+              retryHistory.map((item) => ({
+                attempt: item.attempt,
+                summary: item.summary,
+                focusPoints: item.focusPoints
+              }))
+            )}`
+          : ""
+      ].join("\n")
+    }
+  ];
+}
+
+function buildHumanizerMessages({ input = {}, analysis = {}, semantic = null, baseRewrite = {} } = {}) {
+  return [
+    {
+      role: "system",
+      content: [
+        "你现在执行 humanizer 技能，对中文文本做去 AI 腔润色。",
+        "你的任务不是改意思，也不是重新创作，而是去掉明显的 AI 写作痕迹，让文字更像真人写的。",
+        "最终风格要自然、幽默风趣、说人话，读起来像真实的人在表达，像朋友聊天式分享。",
+        "重点处理这些问题：过度拔高意义、假大空、宣传腔、过于整齐的排比、僵硬的提纲感、过量 AI 常用词、套话、空洞总结、无聊的安全说明、过分平均的句式。",
+        "保留作者原本的语气、分享感、口语感、节奏、人设和情绪。",
+        "原始笔记就是你的风格样本，必须向它靠拢，不要把文本润色成统一模板腔。",
+        "不要引入新的风险内容，不要恢复已经删掉的高风险表达。",
+        "不要把已经写好的正文缩成短版，不要删掉大段信息量，不要把全文改成摘要。",
+        "请做一次 final anti-AI pass：先在心里判断哪里还像 AI 文，再把它改得更自然，但不要把这个思考过程写出来。",
+        "输出必须是 JSON。"
+      ].join("\n")
+    },
+    {
+      role: "user",
+      content: [
+        "请把下面已经合规改写过的版本，再做一轮人味化处理。",
+        "要求：",
+        "1. 保留内容含义和合规方向，不要把风险点写回去。",
+        "2. 尽量贴近原笔记的表达习惯，让它像同一个人写的。",
+        "3. 去掉明显 AI 味，包括模板化科普腔、说明书腔、假大空总结、过于工整的排比。",
+        "4. 可以让句子更自然、更口语一点，但不要油腻，不要过度发挥。",
+        "5. 如果某一段已经自然，就尽量少改。",
+        "6. 不要明显缩短正文篇幅，尽量保留当前正文的段落数和信息量。",
+        "7. 风格上要自然、幽默风趣、说人话，更像朋友聊天式分享，但不要刻意抖机灵，更不要浮夸尬聊。",
+        "8. 不要写成老师讲课、编辑发稿或品牌官号的口气，要保留真人聊天感和轻松分享感。",
+        "输出格式：",
+        "{",
+        '  "title": "润色后的标题",',
+        '  "body": "润色后的正文",',
+        '  "coverText": "润色后的封面文案",',
+        '  "tags": ["标签1", "标签2"],',
+        '  "rewriteNotes": "一句话说明在人味化阶段主要做了什么",',
+        '  "safetyNotes": "一句话提示仍需人工留意的点，没有就给空字符串"',
+        "}",
+        "",
+        `原始标题（风格样本）：${String(input.title || "")}`,
+        `原始正文（风格样本）：${String(input.body || "")}`,
+        `原始封面文案（风格样本）：${String(input.coverText || "")}`,
+        `原始标签（风格样本）：${Array.isArray(input.tags) ? input.tags.join("、") : String(input.tags || "")}`,
+        "",
+        `当前合规改写标题：${String(baseRewrite.title || "")}`,
+        `当前合规改写正文：${String(baseRewrite.body || "")}`,
+        `当前合规改写封面文案：${String(baseRewrite.coverText || "")}`,
+        `当前合规改写标签：${Array.isArray(baseRewrite.tags) ? baseRewrite.tags.join("、") : ""}`,
+        `上一轮改写说明：${String(baseRewrite.rewriteNotes || "")}`,
+        `当前风险结论：${String(analysis.finalVerdict || analysis.verdict || "")}`,
+        `语义风险摘要：${String(semantic?.summary || "")}`,
+        `语义风险原因：${JSON.stringify(semantic?.reasons || [])}`
+      ].join("\n")
+    }
+  ];
+}
+
+function normalizePatchArray(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+
+      const field = String(item.field || item.path || item.key || "").trim();
+
+      if (!["title", "body", "coverText"].includes(field)) {
+        return null;
+      }
+
+      return {
+        field,
+        target: normalizeTextField(item.target || item.before || item.source || item.original),
+        replaceWith: normalizeTextField(item.replaceWith || item.after || item.replacement || item.value),
+        reason: normalizeTextField(item.reason || item.notes || item.summary),
+        addresses: normalizeTextField(item.addresses || item.addressedPoint || item.guidance || item.focusPoint)
+      };
+    })
+    .filter((item) => item && item.target && item.replaceWith);
+}
+
+function applyStringPatch(sourceText, patch) {
+  const source = String(sourceText || "");
+  const target = String(patch?.target || "");
+  const replacement = String(patch?.replaceWith || "");
+
+  if (!source || !target || source === replacement) {
+    return { applied: false, value: source };
+  }
+
+  const index = source.indexOf(target);
+
+  if (index === -1) {
+    return { applied: false, value: source };
+  }
+
+  return {
+    applied: true,
+    value: `${source.slice(0, index)}${replacement}${source.slice(index + target.length)}`
+  };
+}
+
+function applyRewritePatchPlan({ input = {}, rewrite = {} } = {}) {
+  const next = {
+    title: String(input.title || "").trim(),
+    body: String(input.body || "").trim(),
+    coverText: String(input.coverText || "").trim(),
+    tags: normalizeTagArray(input.tags)
+  };
+  const appliedPatches = [];
+
+  for (const patch of normalizePatchArray(rewrite.patches)) {
+    const currentValue = String(next[patch.field] || "");
+    const result = applyStringPatch(currentValue, patch);
+
+    if (!result.applied) {
+      continue;
+    }
+
+    next[patch.field] = result.value;
+    appliedPatches.push(patch);
+  }
+
+  let rewriteMode = appliedPatches.length ? "patch" : "";
+
+  for (const field of ["title", "body", "coverText"]) {
+    const candidate = normalizeTextField(rewrite[field]);
+
+    if (!candidate || candidate === next[field]) {
+      continue;
+    }
+
+    next[field] = candidate;
+    rewriteMode = rewriteMode || "field_fallback";
+  }
+
+  const nextTags = Array.isArray(rewrite.tags) && rewrite.tags.length ? rewrite.tags : next.tags;
+
+  return {
+    ...rewrite,
+    ...next,
+    tags: nextTags,
+    patches: normalizePatchArray(rewrite.patches),
+    appliedPatches,
+    rewriteMode: rewriteMode || rewrite.rewriteMode || "full"
+  };
+}
+
+async function callChatJson({
+  providerConfig,
   model,
   models,
   temperature = 0.2,
+  maxTokens = 700,
   messages,
   missingKeyMessage,
   responseFormat = "json_object",
   fallbackParser = null
 }) {
-  const apiKey = String(process.env.GLM_API_KEY || "").trim();
+  const apiKey = String(process.env[providerConfig?.envKey] || "").trim();
+  const providerLabel = String(providerConfig?.label || "模型").trim() || "模型";
+  const providerEndpoint = String(providerConfig?.endpoint || "").trim();
 
   if (!apiKey) {
-    throw createGlmError(missingKeyMessage || "缺少 GLM_API_KEY 环境变量。", 400);
+    throw createGlmError(missingKeyMessage || `缺少 ${providerConfig?.envKey || "API_KEY"} 环境变量。`, 400);
+  }
+
+  if (!providerEndpoint) {
+    throw createGlmError(`${providerLabel} 缺少可用 endpoint 配置。`, 500);
   }
 
   const candidates = (Array.isArray(models) && models.length ? models : [model]).filter(Boolean);
@@ -347,7 +893,7 @@ async function callGlmJson({
     const baseRequestBody = {
       model: candidate,
       temperature,
-      max_tokens: 700,
+      max_tokens: maxTokens,
       messages
     };
     const requestBodies = responseFormat
@@ -362,7 +908,7 @@ async function callGlmJson({
 
     for (const requestBody of requestBodies) {
       for (let attempt = 0; attempt < 2; attempt += 1) {
-        const response = await fetch(glmEndpoint, {
+        const response = await fetch(providerEndpoint, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${apiKey}`,
@@ -374,7 +920,7 @@ async function callGlmJson({
 
       if (!response.ok) {
         const message =
-          data?.error?.message || data?.msg || data?.message || `GLM 请求失败，状态码 ${response.status}`;
+          data?.error?.message || data?.msg || data?.message || `${providerLabel} 请求失败，状态码 ${response.status}`;
         const isBusy = response.status === 429 || /访问量过大|rate limit|too many/i.test(message);
         const isForbidden = response.status === 403 || /无权访问|forbidden|permission/i.test(message);
         const isMissingModel = /模型不存在|model.+not found|unknown model/i.test(message);
@@ -400,12 +946,19 @@ async function callGlmJson({
         throw lastError;
       }
 
-      const rawContent = data?.choices?.[0]?.message?.content;
-      const message = flattenContent(rawContent);
-      const parsed = tryParseJson(message);
+      const choice = data?.choices?.[0] || null;
+      const rawMessage = choice?.message || choice || null;
+      const rawContent = rawMessage?.content ?? choice?.text ?? data?.output_text ?? "";
+      const message = flattenContent(rawMessage || rawContent);
+      const reasoningText = flattenContent(rawMessage?.reasoning_content || rawMessage?.reasoning || "");
+      const parsed =
+        tryParseJsonFromUnknown(rawMessage) ||
+        tryParseJsonFromUnknown(rawContent) ||
+        tryParseJsonFromUnknown(choice?.text) ||
+        tryParseJsonFromUnknown(data?.output_text);
 
       if (!parsed && typeof fallbackParser === "function") {
-        const fallbackParsed = fallbackParser(message, rawContent);
+        const fallbackParsed = fallbackParser(message, rawMessage || rawContent);
 
         if (fallbackParsed) {
           return {
@@ -421,12 +974,22 @@ async function callGlmJson({
           continue;
         }
 
-        const previewSource = message || JSON.stringify(rawContent || "").slice(0, 240);
-        const preview = sanitizeJsonLikeText(previewSource).slice(0, 180);
-        throw createGlmError(
-          preview ? `GLM 返回的结果不是有效 JSON。原始片段：${preview}` : "GLM 返回的结果不是有效 JSON。",
+        const preview =
+          buildPreviewText(message, 180) ||
+          buildPreviewText(rawMessage, 180) ||
+          buildPreviewText(rawContent, 180) ||
+          buildPreviewText(choice, 180) ||
+          buildPreviewText(data, 180);
+        const onlyReasoningNoAnswer = !String(message || "").trim() && Boolean(String(reasoningText || "").trim());
+        lastError = createGlmError(
+          onlyReasoningNoAnswer
+            ? `${providerLabel} 只返回了思考过程，没有输出最终改写结果 JSON。`
+            : preview
+              ? `${providerLabel} 返回的结果不是有效 JSON。原始片段：${preview}`
+              : `${providerLabel} 返回的结果不是有效 JSON。`,
           502
         );
+        break;
       }
 
       return {
@@ -441,7 +1004,7 @@ async function callGlmJson({
     throw lastError;
   }
 
-  throw createGlmError("GLM 暂时不可用，请稍后再试。", 503);
+  throw createGlmError(`${providerLabel} 暂时不可用，请稍后再试。`, 503);
 }
 
 function normalizeRecognitionResult(payload, fallbackModel) {
@@ -477,7 +1040,13 @@ export async function screenshotFileToDataUrl(filePath) {
 }
 
 export async function recognizeFeedbackScreenshot({ imageDataUrl, mimeType, fileName = "" }) {
-  const { parsed, model } = await callGlmJson({
+  const { parsed, model } = await callChatJson({
+    providerConfig: {
+      provider: "glm",
+      label: "智谱 GLM",
+      envKey: "GLM_API_KEY",
+      endpoint: glmEndpoint
+    },
     model: defaultVisionModel,
     temperature: 0.1,
     missingKeyMessage: "截图识别缺少 GLM_API_KEY 环境变量。",
@@ -533,20 +1102,173 @@ export async function recognizeFeedbackScreenshot({ imageDataUrl, mimeType, file
 }
 
 function normalizeRewriteResult(payload, fallbackModel) {
-  const tags = Array.isArray(payload?.tags)
-    ? [...new Set(payload.tags.map((item) => String(item || "").trim()).filter(Boolean))]
-    : [];
+  const source = unwrapRewritePayload(payload);
+  const tags = normalizeTagArray(
+    pickRewriteValue(source, [
+      "tags",
+      "tagList",
+      "hashtags",
+      "labels",
+      "keywords",
+      "recommendedTags",
+      "推荐标签",
+      "标签",
+      "改写标签"
+    ])
+  );
 
   return {
-    model: String(payload?.model || fallbackModel || defaultTextModel).trim(),
-    title: String(payload?.title || "").trim(),
-    body: String(payload?.body || "").trim(),
-    coverText: String(payload?.coverText || "").trim(),
+    provider: String(pickRewriteValue(source, ["provider", "rewriteProvider"]) || "").trim(),
+    model: String(
+      pickRewriteValue(source, ["model", "modelName", "rewriteModel"]) || fallbackModel || getDefaultTextModel()
+    ).trim(),
+    title: normalizeTextField(
+      pickRewriteValue(source, ["title", "headline", "heading", "标题", "改写标题", "titleText"])
+    ),
+    body: normalizeTextField(
+      pickRewriteValue(source, ["body", "content", "text", "正文", "改写正文", "正文内容", "mainText", "bodyText"])
+    ),
+    coverText: normalizeTextField(
+      pickRewriteValue(source, [
+        "coverText",
+        "cover",
+        "cover_text",
+        "coverCopy",
+        "封面文案",
+        "改写封面文案",
+        "封面"
+      ])
+    ),
     tags,
-    rewriteNotes: String(payload?.rewriteNotes || "").trim(),
-    safetyNotes: String(payload?.safetyNotes || "").trim(),
-    humanized: payload?.humanized === true
+    rewriteNotes: normalizeTextField(
+      pickRewriteValue(source, [
+        "rewriteNotes",
+        "notes",
+        "rewriteReason",
+        "rewriteSummary",
+        "modificationNotes",
+        "改写说明",
+        "润色说明",
+        "修改说明",
+        "说明"
+      ])
+    ),
+    safetyNotes: normalizeTextField(
+      pickRewriteValue(source, [
+        "safetyNotes",
+        "riskNotes",
+        "warnings",
+        "attention",
+        "人工留意",
+        "安全提示",
+        "注意事项",
+        "风险提示"
+      ])
+    ),
+    patches: normalizePatchArray(pickRewriteValue(source, ["patches", "rewritePatches", "patchPlan", "modifications"])),
+    appliedPatches: normalizePatchArray(
+      pickRewriteValue(source, ["appliedPatches", "effectivePatches", "executedPatches"])
+    ),
+    rewriteMode: normalizeTextField(pickRewriteValue(source, ["rewriteMode", "mode", "strategy"])),
+    humanized: source?.humanized === true
   };
+}
+
+function countParagraphs(text = "") {
+  const normalized = String(text || "").trim();
+
+  if (!normalized) {
+    return 0;
+  }
+
+  return normalized.split(/\n\s*\n/).filter(Boolean).length || 1;
+}
+
+export function shouldPreferBaseRewriteBody(baseBody = "", candidateBody = "") {
+  const base = String(baseBody || "").trim();
+  const candidate = String(candidateBody || "").trim();
+
+  if (!base || !candidate) {
+    return false;
+  }
+
+  const baseParagraphs = countParagraphs(base);
+  const candidateParagraphs = countParagraphs(candidate);
+  const lengthRatio = candidate.length / Math.max(base.length, 1);
+
+  return candidateParagraphs < baseParagraphs || lengthRatio < 0.72;
+}
+
+function normalizeTextField(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => normalizeTextField(item))
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+  }
+
+  if (!value || typeof value !== "object") {
+    return String(value || "").trim();
+  }
+
+  return flattenContent(value).trim();
+}
+
+function normalizeTagArray(value) {
+  if (Array.isArray(value)) {
+    return [...new Set(value.map((item) => normalizeTextField(item)).filter(Boolean))];
+  }
+
+  if (typeof value === "string") {
+    return [...new Set(
+      value
+        .split(/[\n,，、]/)
+        .map((item) => item.replace(/^[-*•#\s]+/, "").trim())
+        .filter(Boolean)
+    )];
+  }
+
+  return [];
+}
+
+function pickRewriteValue(source, keys = []) {
+  if (!source || typeof source !== "object") {
+    return undefined;
+  }
+
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(source, key) && source[key] !== undefined && source[key] !== null) {
+      return source[key];
+    }
+  }
+
+  return undefined;
+}
+
+function unwrapRewritePayload(payload) {
+  let current = payload;
+  const candidateKeys = ["rewrite", "result", "data", "content", "output", "post"];
+
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (!current || typeof current !== "object" || Array.isArray(current)) {
+      break;
+    }
+
+    const directContent = pickRewriteValue(current, ["title", "body", "content", "text", "正文", "改写正文"]);
+    if (directContent !== undefined) {
+      return current;
+    }
+
+    const nestedKey = candidateKeys.find((key) => current[key] && typeof current[key] === "object");
+    if (!nestedKey) {
+      break;
+    }
+
+    current = current[nestedKey];
+  }
+
+  return current || payload;
 }
 
 function escapeRegex(text) {
@@ -586,25 +1308,31 @@ function salvageRewritePayload(text, rawContent) {
     "改写标题",
     "正文",
     "改写正文",
+    "正文内容",
     "封面文案",
     "改写封面文案",
+    "封面",
     "标签",
     "推荐标签",
     "改写标签",
     "改写说明",
     "润色说明",
+    "修改说明",
+    "说明",
     "rewriteNotes",
     "人工留意",
     "安全提示",
+    "注意事项",
+    "风险提示",
     "safetyNotes"
   ];
 
   const title = extractLabeledSection(source, ["标题", "改写标题"], allLabels);
-  const body = extractLabeledSection(source, ["正文", "改写正文"], allLabels);
-  const coverText = extractLabeledSection(source, ["封面文案", "改写封面文案"], allLabels);
+  const body = extractLabeledSection(source, ["正文", "改写正文", "正文内容"], allLabels);
+  const coverText = extractLabeledSection(source, ["封面文案", "改写封面文案", "封面"], allLabels);
   const tags = parseTagList(extractLabeledSection(source, ["标签", "推荐标签", "改写标签"], allLabels));
-  const rewriteNotes = extractLabeledSection(source, ["改写说明", "润色说明", "rewriteNotes"], allLabels);
-  const safetyNotes = extractLabeledSection(source, ["人工留意", "安全提示", "safetyNotes"], allLabels);
+  const rewriteNotes = extractLabeledSection(source, ["改写说明", "润色说明", "修改说明", "说明", "rewriteNotes"], allLabels);
+  const safetyNotes = extractLabeledSection(source, ["人工留意", "安全提示", "注意事项", "风险提示", "safetyNotes"], allLabels);
 
   if (!title && !body && !coverText) {
     return null;
@@ -836,149 +1564,69 @@ export async function suggestFeedbackCandidates({
 
 export async function rewritePostForCompliance({ input = {}, analysis = {} }) {
   const semantic = analysis?.semanticReview?.status === "ok" ? analysis.semanticReview.review : null;
-  const { parsed, model } = await callGlmJson({
-    models: textModelCandidates,
+  const rewriteProviderConfig = getRewriteProviderConfig();
+  const rewriteFallbackModel = rewriteProviderConfig.models[0] || getDefaultTextModel();
+  const usePatchMode = Boolean(analysis?.retryGuidance);
+  const { parsed, model } = await callChatJson({
+    providerConfig: rewriteProviderConfig,
+    models: rewriteProviderConfig.models,
     temperature: 0.5,
-    missingKeyMessage: "改写功能缺少 GLM_API_KEY 环境变量。",
+    maxTokens: usePatchMode ? rewriteGenerationConfig.patchMaxTokens : rewriteGenerationConfig.baseMaxTokens,
+    missingKeyMessage: `改写功能缺少 ${rewriteProviderConfig.envKey} 环境变量。`,
     fallbackParser: salvageRewritePayload,
-    messages: [
-      {
-        role: "system",
-        content: [
-          "你是小红书内容安全团队中的中文合规编辑与改写助手。",
-          "目标是帮助用户在尽量保留原笔记风格、人设、语气、节奏、表达习惯的前提下，把内容改写得更安全，而不是把原文改成模板化科普文，也不是帮助规避审核。",
-          "请优先按小红书内容审核语境理解风险，尤其关注导流、低俗擦边、未成年人、教程化敏感内容、夸大承诺。",
-          "你需要同时参考规则层风险和语义层风险，尤其关注隐晦导流、暗示性表达、擦边氛围、角色扮演、人设诱导、场景化刺激、两性用品宣传展示语境。",
-          "不得输出导流、站外联系方式、夸大承诺、挑逗化标题、未成年人敏感组合、教程化敏感步骤。",
-          "如果原文是口语化、分享感、经验感、轻松语气、种草语气，请尽量保留这种风格；只修改真正有风险的部分。",
-          "改写应遵循最小必要改动原则：能局部替换就不要整段重写，能弱化就不要彻底改风格。",
-          "请只返回 JSON。"
-        ].join("\n")
-      },
-      {
-        role: "user",
-        content: [
-          "请根据下面的原始内容和检测结果，输出一个更稳妥的改写版本。",
-          "要求：",
-          "1. 尽量保留原本想表达的核心主题。",
-          "2. 尽量保持原文的说话方式、句子长短、口吻、轻重节奏、分享感和人设，不要偏离原笔记风格。",
-          "3. 如果原文有高风险点，优先做最小必要改写：删掉、替换、弱化、改写局部表达，而不是整体换一种文风。",
-          "4. 只有在原风格本身明显过于擦边、过于交易化、过于教程化时，才允许适度往教育、沟通、健康表达上收。",
-          "5. 不要编造医疗功效、绝对化承诺或联系方式。",
-          "6. tags 给 0-5 个更稳妥、但仍然贴近原内容风格的标签。",
-          "输出格式：",
-          "{",
-          '  "title": "改写后的标题",',
-          '  "body": "改写后的正文",',
-          '  "coverText": "改写后的封面文案",',
-          '  "tags": ["标签1", "标签2"],',
-          '  "rewriteNotes": "一句话说明主要改写了什么",',
-          '  "safetyNotes": "一句话提示仍需人工留意的点，没有就给空字符串"',
-          "}",
-          "",
-          `原始标题：${String(input.title || "")}`,
-          `原始正文：${String(input.body || "")}`,
-          `原始封面文案：${String(input.coverText || "")}`,
-          `原始标签：${Array.isArray(input.tags) ? input.tags.join("、") : String(input.tags || "")}`,
-          `规则检测结论：${String(analysis.verdict || "")}`,
-          `综合检测结论：${String(analysis.finalVerdict || analysis.verdict || "")}`,
-          `命中项：${JSON.stringify(analysis.hits || [], null, 2)}`,
-          `建议：${JSON.stringify(analysis.suggestions || [], null, 2)}`,
-          `语义风险分类：${JSON.stringify(semantic?.categories || [])}`,
-          `语义风险原因：${JSON.stringify(semantic?.reasons || [])}`,
-          `语义隐含信号：${JSON.stringify(semantic?.implicitSignals || [])}`,
-          `语义正向信号：${JSON.stringify(semantic?.safeSignals || [])}`,
-          `语义摘要：${JSON.stringify(semantic?.summary || "")}`,
-          `语义改写建议：${JSON.stringify(semantic?.suggestion || "")}`,
-          "",
-          "改写偏好补充：",
-          "1. 不要把所有内容都改成统一的官方科普腔。",
-          "2. 不要无故拔高措辞，不要写得太像说明书。",
-          "3. 能保留原来的分享感、口语感、记录感，就尽量保留。",
-          "4. rewriteNotes 请说明你主要改掉了哪些风险点；如果保留了原风格，也请点明。"
-        ].join("\n")
-      }
-    ]
+    messages: usePatchMode ? buildPatchMessages({ input, analysis, semantic }) : buildRewriteMessages({ input, analysis, semantic })
   });
 
-  const baseRewrite = normalizeRewriteResult(
+  const normalizedRewrite = normalizeRewriteResult(
     {
       ...parsed,
-      model: parsed.model || model || defaultTextModel
+      provider: rewriteProviderConfig.provider,
+      model: parsed.model || model || rewriteFallbackModel,
+      rewriteMode: parsed?.rewriteMode || (usePatchMode ? "patch" : "full")
     },
-    model || defaultTextModel
+    model || rewriteFallbackModel
   );
+  const baseRewrite = usePatchMode ? applyRewritePatchPlan({ input, rewrite: normalizedRewrite }) : normalizedRewrite;
 
-  if (!humanizerPassEnabled) {
+  if (!humanizerPassEnabled || usePatchMode) {
     return baseRewrite;
   }
 
   try {
-    const { parsed: humanizedParsed, model: humanizedModel } = await callGlmJson({
-      models: textModelCandidates,
+    const { parsed: humanizedParsed, model: humanizedModel } = await callChatJson({
+      providerConfig: rewriteProviderConfig,
+      models: rewriteProviderConfig.models,
       temperature: 0.45,
-      missingKeyMessage: "改写后人味化缺少 GLM_API_KEY 环境变量。",
+      maxTokens: rewriteGenerationConfig.humanizerMaxTokens,
+      missingKeyMessage: `改写后人味化缺少 ${rewriteProviderConfig.envKey} 环境变量。`,
       fallbackParser: salvageRewritePayload,
-      messages: [
-        {
-          role: "system",
-          content: [
-            "你现在执行 humanizer 技能，对中文文本做去 AI 腔润色。",
-            "你的任务不是改意思，也不是重新创作，而是去掉明显的 AI 写作痕迹，让文字更像真人写的。",
-            "重点处理这些问题：过度拔高意义、假大空、宣传腔、过于整齐的排比、僵硬的提纲感、过量 AI 常用词、套话、空洞总结、无聊的安全说明、过分平均的句式。",
-            "保留作者原本的语气、分享感、口语感、节奏、人设和情绪。",
-            "原始笔记就是你的风格样本，必须向它靠拢，不要把文本润色成统一模板腔。",
-            "不要引入新的风险内容，不要恢复已经删掉的高风险表达。",
-            "请做一次 final anti-AI pass：先在心里判断哪里还像 AI 文，再把它改得更自然，但不要把这个思考过程写出来。",
-            "输出必须是 JSON。"
-          ].join("\n")
-        },
-        {
-          role: "user",
-          content: [
-            "请把下面已经合规改写过的版本，再做一轮人味化处理。",
-            "要求：",
-            "1. 保留内容含义和合规方向，不要把风险点写回去。",
-            "2. 尽量贴近原笔记的表达习惯，让它像同一个人写的。",
-            "3. 去掉明显 AI 味，包括模板化科普腔、说明书腔、假大空总结、过于工整的排比。",
-            "4. 可以让句子更自然、更口语一点，但不要油腻，不要过度发挥。",
-            "5. 如果某一段已经自然，就尽量少改。",
-            "输出格式：",
-            "{",
-            '  "title": "润色后的标题",',
-            '  "body": "润色后的正文",',
-            '  "coverText": "润色后的封面文案",',
-            '  "tags": ["标签1", "标签2"],',
-            '  "rewriteNotes": "一句话说明在人味化阶段主要做了什么",',
-            '  "safetyNotes": "一句话提示仍需人工留意的点，没有就给空字符串"',
-            "}",
-            "",
-            `原始标题（风格样本）：${String(input.title || "")}`,
-            `原始正文（风格样本）：${String(input.body || "")}`,
-            `原始封面文案（风格样本）：${String(input.coverText || "")}`,
-            `原始标签（风格样本）：${Array.isArray(input.tags) ? input.tags.join("、") : String(input.tags || "")}`,
-            "",
-            `当前合规改写标题：${String(baseRewrite.title || "")}`,
-            `当前合规改写正文：${String(baseRewrite.body || "")}`,
-            `当前合规改写封面文案：${String(baseRewrite.coverText || "")}`,
-            `当前合规改写标签：${Array.isArray(baseRewrite.tags) ? baseRewrite.tags.join("、") : ""}`,
-            `上一轮改写说明：${String(baseRewrite.rewriteNotes || "")}`,
-            `当前风险结论：${String(analysis.finalVerdict || analysis.verdict || "")}`,
-            `语义风险摘要：${String(semantic?.summary || "")}`,
-            `语义风险原因：${JSON.stringify(semantic?.reasons || [])}`
-          ].join("\n")
-        }
-      ]
+      messages: buildHumanizerMessages({ input, analysis, semantic, baseRewrite })
     });
 
-    return normalizeRewriteResult(
+    const humanizedRewrite = normalizeRewriteResult(
       {
         ...humanizedParsed,
+        provider: rewriteProviderConfig.provider,
         model: `${humanizedParsed.model || humanizedModel || baseRewrite.model} + humanizer`,
         humanized: true
       },
       humanizedModel || baseRewrite.model
     );
+
+    return {
+      ...baseRewrite,
+      ...humanizedRewrite,
+      title: humanizedRewrite.title || baseRewrite.title,
+      body:
+        !humanizedRewrite.body || shouldPreferBaseRewriteBody(baseRewrite.body, humanizedRewrite.body)
+          ? baseRewrite.body
+          : humanizedRewrite.body,
+      coverText: humanizedRewrite.coverText || baseRewrite.coverText,
+      tags: humanizedRewrite.tags.length ? humanizedRewrite.tags : baseRewrite.tags,
+      rewriteNotes: humanizedRewrite.rewriteNotes || baseRewrite.rewriteNotes,
+      safetyNotes: humanizedRewrite.safetyNotes || baseRewrite.safetyNotes,
+      humanized: true
+    };
   } catch {
     return baseRewrite;
   }

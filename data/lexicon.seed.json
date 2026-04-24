@@ -38,7 +38,7 @@
   },
   {
     "id": "extreme-claim",
-    "pattern": "(最好|最佳|最有效|永久|根治|立刻见效|百分百|100%有效|绝对安全)",
+    "pattern": "(NO\\.?1|Top1|销量冠军|全网第一|全球第一|行业第一|第一名|第一位|唯一|独家|独一无二|绝无仅有|史无前例|首家|首个|最好|最佳|最高(?:级)?|最低|最大|最小|最多|最先进|最便宜|最受欢迎|国家级|世界级|顶级|旗舰级|金牌|王牌|极致|永久|万能|超强|无敌|完美|神奇|绝对|百分百|100%有效|100%正品|质量免检|免抽检|无需检测|绝对安全)",
     "match": "regex",
     "category": "绝对化与功效承诺",
     "riskLevel": "manual_review",
@@ -50,7 +50,7 @@
   },
   {
     "id": "medical-claim",
-    "pattern": "(治疗|治好|康复|改善障碍|修复功能|专业处方)",
+    "pattern": "(治疗|治好|根治|治愈|康复|医治|改善障碍|修复功能|专业处方|处方|药方|诊断|临床有效|防癌|抗癌|防治高血压|消炎|抗炎|杀菌|抗菌|除菌|灭菌|消毒|解毒|排毒|去除体内毒素|清热解毒|溶脂|吸脂|燃烧脂肪|\\d+天瘦\\d+斤|不反弹|祛疤|丰胸|毛囊激活|破坏黑色素细胞|脱敏|改善过敏|雌激素|雄激素|荷尔蒙|抗生素|治疗糖尿病|降血糖|补肾壮阳|活血化瘀|排毒养颜|净化血液|延年益寿|调节免疫力|改善睡眠)",
     "match": "regex",
     "category": "医疗健康风险",
     "riskLevel": "manual_review",
@@ -118,6 +118,105 @@
     "xhsReason": "教育科普语境",
     "sourceUrl": "https://www.cac.gov.cn/2019-12/20/c_1578375159509309.htm",
     "sourceDate": "2019-12-20",
+    "enabled": true
+  },
+  {
+    "id": "lead-contact-expanded",
+    "pattern": "(加薇|加微|加v|加V|某信|评论区留号|留号|私我发你|私发你|私信发你|关注后私信|加我好友|外部平台二维码|评论接龙|店铺链接在简介里|v我\\S{0,4}元)",
+    "match": "regex",
+    "category": "导流与私域",
+    "riskLevel": "hard_block",
+    "fields": ["title", "body", "coverText", "comments"],
+    "xhsReason": "交易导流/站外引流",
+    "sourceUrl": "用户提供截图（小红书敏感词说明）",
+    "sourceDate": "2026-04-22",
+    "notes": "补充微信私域导流变体和评论区留号等导流话术",
+    "enabled": true
+  },
+  {
+    "id": "platform-alias-diversion",
+    "pattern": "(淘口令|T宝|宝贝链接|猫店(?:链接)?|某东|TikTok|某音|音儿|KS|某手|某多多|W博|围脖|某博|小破站|BB站)",
+    "match": "regex",
+    "category": "导流与私域",
+    "riskLevel": "manual_review",
+    "fields": ["title", "body", "coverText", "comments"],
+    "xhsReason": "竞品平台导流/站外转化风险",
+    "sourceUrl": "用户提供截图（小红书敏感词说明）",
+    "sourceDate": "2026-04-22",
+    "notes": "采用中间版策略，只保留相对稳定的多字别称，不纳入单字缩写",
+    "enabled": true
+  },
+  {
+    "id": "government-endorsement-claim",
+    "pattern": "(国家机关推荐|国家机关专供|领导人推荐|特供)",
+    "match": "regex",
+    "category": "权威背书与认证宣称",
+    "riskLevel": "hard_block",
+    "fields": ["title", "body", "coverText"],
+    "xhsReason": "政府机关关联/特供宣称高风险",
+    "sourceUrl": "用户提供截图（小红书敏感词说明）",
+    "sourceDate": "2026-04-22",
+    "notes": "政府机关关联、领导人推荐、特供类宣称按更严层级处理",
+    "enabled": true
+  },
+  {
+    "id": "authority-endorsement-claim",
+    "pattern": "(免检产品|中国驰名商标|人民币图样)",
+    "match": "regex",
+    "category": "权威背书与认证宣称",
+    "riskLevel": "manual_review",
+    "fields": ["title", "body", "coverText"],
+    "xhsReason": "权威背书/认证宣称风险",
+    "sourceUrl": "用户提供截图（小红书敏感词说明）",
+    "sourceDate": "2026-04-22",
+    "enabled": true
+  },
+  {
+    "id": "cosmetics-exaggeration",
+    "pattern": "(特效|高效|全效|速白|一洗白|一抹白|零刺激|100%温和|彻底解决|永不复发|永不褪色|丰乳|彻底美白|彻底消除斑点|逆龄|永葆青春|100%修复|彻底愈合)",
+    "match": "regex",
+    "category": "化妆品虚假宣传",
+    "riskLevel": "manual_review",
+    "fields": ["title", "body", "coverText"],
+    "xhsReason": "化妆品功效夸大/虚假宣传",
+    "sourceUrl": "用户提供截图（小红书敏感词说明）",
+    "sourceDate": "2026-04-22",
+    "enabled": true
+  },
+  {
+    "id": "superstition-pseudoscience",
+    "pattern": "(带来好运气|增强第六感|化解小人|增加事业运|招财进宝|护身符|平衡正负能量|逢凶化吉|旺人旺财|转富招福)",
+    "match": "regex",
+    "category": "迷信与伪科学",
+    "riskLevel": "manual_review",
+    "fields": ["title", "body", "coverText"],
+    "xhsReason": "迷信/伪科学宣传风险",
+    "sourceUrl": "用户提供截图（小红书敏感词说明）",
+    "sourceDate": "2026-04-22",
+    "enabled": true
+  },
+  {
+    "id": "impulse-purchase-bait",
+    "pattern": "(秒杀(?:价)?|抢爆了|再不抢就没了|史上最低价|错过就没机会了|万人疯抢|抢疯了|恭喜获奖|领取奖品|一键三连|想要扣1|扣[\"“”']?是[\"“”']?)",
+    "match": "regex",
+    "category": "刺激消费与互动诱导",
+    "riskLevel": "manual_review",
+    "fields": ["title", "body", "coverText", "comments"],
+    "xhsReason": "刺激消费/平台禁止互动诱导",
+    "sourceUrl": "用户提供截图（小红书敏感词说明）",
+    "sourceDate": "2026-04-22",
+    "enabled": true
+  },
+  {
+    "id": "livestream-prohibited-scripts",
+    "pattern": "(全网最低价|买到就是赚到|效果立竿见影|私信我拿折扣|私信我拿优惠|秒杀价)",
+    "match": "regex",
+    "category": "直播营销禁语",
+    "riskLevel": "manual_review",
+    "fields": ["title", "body", "coverText", "comments"],
+    "xhsReason": "直播口播禁语/夸张促销",
+    "sourceUrl": "用户提供截图（小红书敏感词说明）",
+    "sourceDate": "2026-04-22",
     "enabled": true
   }
 ]
