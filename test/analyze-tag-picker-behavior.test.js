@@ -5,11 +5,16 @@ import path from "node:path";
 
 test("analyze tag picker source includes dropdown state and preset tag toggle helpers", async () => {
   const source = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
-  const helperStart = source.indexOf("function setAnalyzeTagDropdownOpen(");
-  const helperEnd = source.indexOf("\nfunction ", helperStart + 1);
-  const helperSource = helperStart === -1
-    ? ""
-    : source.slice(helperStart, helperEnd === -1 ? source.length : helperEnd);
+  const helperStartAnchor = "function setAnalyzeTagDropdownOpen(";
+  const helperEndAnchor = "function toggleAnalyzePresetTag(";
+  const helperStart = source.indexOf(helperStartAnchor);
+  const helperEnd = source.indexOf(helperEndAnchor);
+
+  assert.notEqual(helperStart, -1, "expected setAnalyzeTagDropdownOpen helper to exist");
+  assert.notEqual(helperEnd, -1, "expected toggleAnalyzePresetTag helper to exist");
+  assert.ok(helperStart < helperEnd, "expected helper slice to run from dropdown setter to preset toggle");
+
+  const helperSource = source.slice(helperStart, helperEnd);
 
   assert.match(source, /function setAnalyzeTagDropdownOpen\(/);
   assert.match(source, /function toggleAnalyzePresetTag\(/);
