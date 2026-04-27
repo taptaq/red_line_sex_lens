@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>本地合规检测系统</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=20260427-tag-picker-fix" />
   </head>
   <body>
     <div class="ambient ambient-a"></div>
@@ -47,18 +47,28 @@
               <span>标签</span>
               <div class="tag-picker" id="analyze-tag-picker">
                 <input type="hidden" name="tags" id="analyze-tags-value" />
-                <button
-                  type="button"
-                  class="tag-picker-trigger"
-                  id="analyze-tag-trigger"
-                  aria-expanded="false"
-                  aria-controls="analyze-tag-dropdown"
-                >
-                  <span class="tag-picker-trigger-label">标签</span>
-                  <span class="tag-picker-trigger-caret" aria-hidden="true">▾</span>
-                </button>
-                <div id="analyze-tag-selected" class="tag-picker-selected">
-                  <span class="tag-picker-empty">尚未选择标签</span>
+                <div class="tag-picker-trigger-shell">
+                  <button
+                    type="button"
+                    class="tag-picker-trigger"
+                    id="analyze-tag-trigger"
+                    aria-expanded="false"
+                    aria-controls="analyze-tag-dropdown"
+                  >
+                    <span class="tag-picker-trigger-head">
+                      <span class="tag-picker-trigger-label">标签</span>
+                      <span class="tag-picker-trigger-caret" aria-hidden="true">▾</span>
+                    </span>
+                    <span
+                      id="analyze-tag-selected"
+                      class="tag-picker-selected"
+                      role="group"
+                      aria-label="已选标签"
+                      aria-live="polite"
+                    >
+                      <span class="tag-picker-empty">尚未选择标签</span>
+                    </span>
+                  </button>
                 </div>
                 <div class="tag-picker-dropdown" id="analyze-tag-dropdown" hidden>
                   <div class="tag-picker-dropdown-head">
@@ -73,10 +83,40 @@
                 </div>
               </div>
             </div>
-            <div class="inline-actions inline-actions-row">
-              <button type="submit" class="button" id="analyze-button" disabled>运行检测</button>
-              <button type="button" class="button button-ghost" id="rewrite-button" disabled>一键合规改写</button>
-              <button type="button" class="button button-ghost" id="cross-review-button" disabled>模型交叉复判</button>
+            <div class="field-wide model-action-grid">
+              <div class="model-action-card">
+                <label for="semantic-model-selection" class="model-action-label">
+                  <span>语义复判模型</span>
+                </label>
+                <div class="model-action-control">
+                  <select id="semantic-model-selection" name="semanticModelSelection" class="model-action-select">
+                    <option value="auto">默认自动 / 加载中...</option>
+                  </select>
+                  <button type="submit" class="button" id="analyze-button" disabled>运行检测</button>
+                </div>
+              </div>
+              <div class="model-action-card">
+                <label for="rewrite-model-selection" class="model-action-label">
+                  <span>改写模型</span>
+                </label>
+                <div class="model-action-control">
+                  <select id="rewrite-model-selection" name="rewriteModelSelection" class="model-action-select">
+                    <option value="auto">默认自动 / 加载中...</option>
+                  </select>
+                  <button type="button" class="button button-ghost" id="rewrite-button" disabled>一键合规改写</button>
+                </div>
+              </div>
+              <div class="model-action-card">
+                <label for="cross-review-model-selection" class="model-action-label">
+                  <span>交叉复判模型</span>
+                </label>
+                <div class="model-action-control">
+                  <select id="cross-review-model-selection" name="crossReviewModelSelection" class="model-action-select">
+                    <option value="group">默认模型组 / 加载中...</option>
+                  </select>
+                  <button type="button" class="button button-ghost" id="cross-review-button" disabled>模型交叉复判</button>
+                </div>
+              </div>
             </div>
           </form>
           <div class="results-stack">
@@ -125,11 +165,39 @@
               <span>违规截图</span>
               <input type="file" name="screenshot" id="feedback-screenshot" accept="image/*" />
             </label>
-            <div class="inline-actions field-wide">
-              <button type="button" class="button button-ghost" id="feedback-recognize">
-                识别截图并回填
-              </button>
-              <p class="helper-text">只写入文件元信息和识别摘要，不会把整张图片保存到日志。</p>
+            <div class="field-wide feedback-model-grid">
+              <div class="model-action-card">
+                <label for="feedback-screenshot-model-selection" class="model-action-label">
+                  <span>截图识别模型</span>
+                </label>
+                <div class="model-action-control">
+                  <select
+                    id="feedback-screenshot-model-selection"
+                    name="feedbackScreenshotModelSelection"
+                    class="model-action-select"
+                  >
+                    <option value="auto">默认自动 / 加载中...</option>
+                  </select>
+                  <button type="button" class="button button-ghost" id="feedback-recognize">
+                    识别截图并回填
+                  </button>
+                </div>
+              </div>
+              <div class="model-action-card">
+                <label for="feedback-suggestion-model-selection" class="model-action-label">
+                  <span>候选补充模型</span>
+                </label>
+                <div class="model-action-control">
+                  <select
+                    id="feedback-suggestion-model-selection"
+                    name="feedbackSuggestionModelSelection"
+                    class="model-action-select"
+                  >
+                    <option value="auto">默认自动 / 加载中...</option>
+                  </select>
+                  <p class="helper-text">只写入文件元信息和识别摘要，不会把整张图片保存到日志。</p>
+                </div>
+              </div>
             </div>
             <label class="field-wide">
               <span>平台违规原因</span>
@@ -382,6 +450,6 @@
         </article>
       </section>
     </main>
-    <script type="module" src="/app.js"></script>
+    <script type="module" src="/app.js?v=20260427-tag-picker-fix"></script>
   </body>
   </html>

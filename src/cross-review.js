@@ -1,4 +1,7 @@
 import "./env.js";
+import { callDeepSeekJson, callGlmJson, callMiniMaxJson, callQwenJson } from "./glm.js";
+import { filterProviderConfigsBySelection } from "./model-selection.js";
+import { resolveDisplayProvider, splitProviderResultForDisplay } from "./provider-display.js";
 
 const severityRank = {
   pass: 0,
@@ -23,14 +26,22 @@ const providerConfigs = [
     model: process.env.QWEN_CROSS_REVIEW_MODEL || "qwen-plus"
   },
   {
+    provider: "minimax",
+    label: "MiniMax",
+    envKey: "DMXAPI_API_KEY",
+    endpoint: "https://www.dmxapi.cn/v1/chat/completions",
+    model: process.env.MINIMAX_DMXAPI_MODEL || "MiniMax-M2.7-free"
+  },
+  {
     provider: "deepseek",
     label: "深度求索",
     envKey: "DEEPSEEK_API_KEY",
     endpoint: "https://api.deepseek.com/chat/completions",
-    model: process.env.DEEPSEEK_CROSS_REVIEW_MODEL || "DeepSeek-V4-Flash"
+    model: process.env.DEEPSEEK_CROSS_REVIEW_MODEL || "deepseek-v4-flash"
   }
 ];
 const providerTimeoutMs = Number(process.env.CROSS_REVIEW_TIMEOUT_MS || 15000);
+const crossReviewMaxTokens = Number(process.env.CROSS_REVIEW_MAX_TOKENS || 900);
 
 function summarizeAnalysis(analysis = {}) {
   const hits = Array.isArray(analysis.hits) ? analysis.hits : [];
@@ -179,6 +190,53 @@ function buildMessages(input, analysis) {
 }
 
 async function callProvider(config, input, analysis) {
+  if (config.provider === "glm" || config.provider === "qwen" || config.provider === "minimax" || config.provider === "deepseek") {
+    try {
+      const routedCall =
+        config.provider === "glm"
+          ? callGlmJson
+          : config.provider === "qwen"
+            ? callQwenJson
+            : config.provider === "minimax"
+              ? callMiniMaxJson
+              : callDeepSeekJson;
+      const { parsed, model, route, routeLabel, attemptedRoutes } = await routedCall({
+        model: config.model,
+        temperature: 0.1,
+        maxTokens: crossReviewMaxTokens,
+        messages: buildMessages(input, analysis),
+        timeoutMs: providerTimeoutMs,
+        missingKeyMessage: `缺少 ${config.envKey}`,
+        fallbackParser: (message) => extractJsonBlock(message)
+      });
+      const displayProvider = resolveDisplayProvider({
+        provider: config.provider,
+        route,
+        model: model || config.model
+      });
+
+      return {
+        provider: displayProvider.provider,
+        label: displayProvider.label,
+        status: "ok",
+        attemptedRoutes: Array.isArray(attemptedRoutes) ? attemptedRoutes : [],
+        review: {
+          ...normalizeReviewPayload(parsed, displayProvider.provider, model || config.model),
+          route,
+          routeLabel
+        }
+      };
+    } catch (error) {
+      return {
+        provider: config.provider,
+        label: config.label,
+        status: "error",
+        model: config.model,
+        message: error instanceof Error ? error.message : `${config.label} 请求失败`
+      };
+    }
+  }
+
   const apiKey = String(process.env[config.envKey] || "").trim();
 
   if (!apiKey) {
@@ -194,7 +252,7 @@ async function callProvider(config, input, analysis) {
   const requestBody = {
     model: config.model,
     temperature: 0.1,
-    max_tokens: config.provider === "glm" ? 360 : 500,
+    max_tokens: crossReviewMaxTokens,
     messages: buildMessages(input, analysis)
   };
 
@@ -350,9 +408,15 @@ function aggregateReviews(providerResults, analysisVerdict) {
   };
 }
 
-export async function runCrossModelReview({ input = {}, analysis = {} }) {
-  const providerResults = await Promise.all(
-    providerConfigs.map((config) => callProvider(config, input, analysis))
+export async function runCrossModelReview({ input = {}, analysis = {}, modelSelection = "group" }) {
+  const activeProviderConfigs = filterProviderConfigsBySelection(providerConfigs, modelSelection);
+  const rawProviderResults = await Promise.all(activeProviderConfigs.map((config) => callProvider(config, input, analysis)));
+  const providerResults = rawProviderResults.flatMap((result, index) =>
+    splitProviderResultForDisplay(result, {
+      provider: activeProviderConfigs[index]?.provider,
+      label: activeProviderConfigs[index]?.label,
+      model: activeProviderConfigs[index]?.model
+    })
   );
 
   return {

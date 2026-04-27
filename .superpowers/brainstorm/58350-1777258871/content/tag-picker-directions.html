@@ -1,0 +1,124 @@
+<h2>标签选择多选方案</h2>
+<p class="subtitle">推荐 A。它最适合“点一点就选中/取消”，视觉反馈也最清楚。</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">A · 分组标签云（推荐）</div>
+        <div class="mockup-body" style="display:grid;gap:14px;background:linear-gradient(180deg,#fffaf5 0%,#fff 100%);">
+          <div style="display:grid;gap:8px;">
+            <div class="label">已选标签</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+              <span style="padding:8px 14px;border-radius:999px;background:#d66347;color:#fff;font-weight:600;">关系沟通</span>
+              <span style="padding:8px 14px;border-radius:999px;background:#d66347;color:#fff;font-weight:600;">两性</span>
+              <span style="padding:8px 14px;border-radius:999px;background:#ffd7c8;color:#7a2d18;">睡前话题</span>
+            </div>
+          </div>
+          <div style="display:grid;gap:8px;">
+            <div class="label">点击选择预置标签</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+              <span style="padding:8px 14px;border-radius:999px;background:#fff;border:1px solid #efc3b4;">关系沟通</span>
+              <span style="padding:8px 14px;border-radius:999px;background:#fff;border:1px solid #efc3b4;">两性</span>
+              <span style="padding:8px 14px;border-radius:999px;background:#fff;border:1px solid #efc3b4;">亲密关系</span>
+              <span style="padding:8px 14px;border-radius:999px;background:#fff;border:1px solid #efc3b4;">情感修复</span>
+              <span style="padding:8px 14px;border-radius:999px;background:#fff;border:1px solid #efc3b4;">边界感</span>
+              <span style="padding:8px 14px;border-radius:999px;background:#fff;border:1px solid #efc3b4;">夫妻沟通</span>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;">
+            <input class="mock-input" value="输入自定义标签" />
+            <button class="mock-button">添加</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · 标签云卡片</h3>
+      <p>预置标签直接点选，选中态像成品标签，适合快速多选和取消。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">B · 扁平工具栏</div>
+        <div class="mockup-body" style="display:grid;gap:14px;background:#fff;">
+          <div style="display:flex;flex-wrap:wrap;gap:8px;padding:10px;border:1px solid #e9ddd8;border-radius:14px;background:#faf8f6;">
+            <span style="padding:7px 12px;border-radius:10px;background:#1f2937;color:#fff;">关系沟通</span>
+            <span style="padding:7px 12px;border-radius:10px;background:#1f2937;color:#fff;">两性</span>
+            <span style="padding:7px 12px;border-radius:10px;background:#fff;border:1px solid #d8ccc6;">亲密关系</span>
+            <span style="padding:7px 12px;border-radius:10px;background:#fff;border:1px solid #d8ccc6;">暧昧边界</span>
+            <span style="padding:7px 12px;border-radius:10px;background:#fff;border:1px solid #d8ccc6;">约会表达</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px dashed #d8ccc6;border-radius:12px;">
+            <span style="color:#6b7280;">已选 2 个标签</span>
+            <span style="color:#d66347;font-weight:600;">清空</span>
+          </div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;">
+            <input class="mock-input" value="输入自定义标签" />
+            <button class="mock-button">新增</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · 简洁后台感</h3>
+      <p>更克制、更像运营后台工具，信息清楚，但少一点“点击即有反馈”的趣味。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">C · 紧凑分栏</div>
+        <div class="mockup-body" style="display:grid;gap:12px;background:#fcfcfb;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div style="padding:12px;border:1px solid #ebe4dd;border-radius:14px;background:#fff;">
+              <div class="label">预置标签</div>
+              <div style="display:grid;gap:6px;margin-top:8px;color:#444;">
+                <div>☑ 关系沟通</div>
+                <div>☑ 两性</div>
+                <div>☐ 亲密关系</div>
+                <div>☐ 夫妻相处</div>
+                <div>☐ 暧昧聊天</div>
+              </div>
+            </div>
+            <div style="padding:12px;border:1px solid #ebe4dd;border-radius:14px;background:#fff;">
+              <div class="label">已选标签</div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
+                <span style="padding:6px 10px;border-radius:999px;background:#f1ebe6;">关系沟通</span>
+                <span style="padding:6px 10px;border-radius:999px;background:#f1ebe6;">两性</span>
+              </div>
+            </div>
+          </div>
+          <input class="mock-input" value="输入自定义标签后回车" />
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C · 紧凑信息型</h3>
+      <p>占空间最稳，适合很多标签，但视觉感染力和点击效率都一般。</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>我推荐 A 的原因</h4>
+      <ul>
+        <li>多选最直观，点一次选中，再点一次取消</li>
+        <li>已选和未选态差异足够大，误操作少</li>
+        <li>做成现在页面风格会更精致，不像原生表单</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>需要注意</h4>
+      <ul>
+        <li>标签多时要控制换行和密度</li>
+        <li>移动端需要保证触控区域足够大</li>
+      </ul>
+    </div>
+  </div>
+</div>

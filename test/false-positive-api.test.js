@@ -11,11 +11,22 @@ import { handleRequest, buildFalsePositivePayload } from "../src/server.js";
 async function withTempFalsePositiveLog(t, run) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "false-positive-api-"));
   const tempFile = path.join(tempDir, "false-positive-log.json");
-  const originalPath = paths.falsePositiveLog;
+  const originalPaths = {
+    falsePositiveLog: paths.falsePositiveLog,
+    reviewQueue: paths.reviewQueue,
+    whitelist: paths.whitelist
+  };
   paths.falsePositiveLog = tempFile;
+  paths.reviewQueue = path.join(tempDir, "review-queue.json");
+  paths.whitelist = path.join(tempDir, "whitelist.json");
+
+  await Promise.all([
+    fs.writeFile(paths.reviewQueue, "[]\n", "utf8"),
+    fs.writeFile(paths.whitelist, "[]\n", "utf8")
+  ]);
 
   t.after(async () => {
-    paths.falsePositiveLog = originalPath;
+    Object.assign(paths, originalPaths);
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -158,6 +169,99 @@ test("false positive log patch updates only one matching duplicate record", asyn
     const listed = await invokeRoute("GET", "/api/false-positive-log");
     assert.equal(listed.items.filter((item) => item.status === "platform_passed_confirmed").length, 1);
     assert.equal(listed.items.filter((item) => item.status === "platform_passed_pending").length, 1);
+  });
+});
+
+test("false positive log create upserts the same note instead of appending a duplicate sample", async (t) => {
+  await withTempFalsePositiveLog(t, async () => {
+    const firstCreate = await invokeRoute("POST", "/api/false-positive-log", {
+      title: "同一篇笔记",
+      body: "同一段正文",
+      coverText: "同一条封面",
+      tags: ["关系沟通", "两性"],
+      status: "platform_passed_pending",
+      analysis: { verdict: "manual_review", score: 40, hits: [], suggestions: [] }
+    });
+
+    const secondCreate = await invokeRoute("POST", "/api/false-positive-log", {
+      title: "同一篇笔记",
+      body: "同一段正文",
+      coverText: "同一条封面",
+      tags: ["两性", "关系沟通"],
+      status: "platform_passed_confirmed"
+    });
+
+    assert.equal(firstCreate.status, 200);
+    assert.equal(firstCreate.items.length, 1);
+    assert.equal(secondCreate.status, 200);
+    assert.equal(secondCreate.items.length, 1);
+    assert.equal(secondCreate.items[0].status, "platform_passed_confirmed");
+    assert.equal(secondCreate.items[0].title, "同一篇笔记");
+    assert.equal(secondCreate.items[0].body, "同一段正文");
+    assert.deepEqual(secondCreate.items[0].tags, ["两性", "关系沟通"]);
+    assert.equal(secondCreate.items[0].analysisSnapshot.verdict, "manual_review");
+
+    const listed = await invokeRoute("GET", "/api/false-positive-log");
+    assert.equal(listed.items.length, 1);
+    assert.equal(listed.items[0].status, "platform_passed_confirmed");
+  });
+});
+
+test("false positive log create overwrites status for the same note even if cover text and tags change", async (t) => {
+  await withTempFalsePositiveLog(t, async () => {
+    const firstCreate = await invokeRoute("POST", "/api/false-positive-log", {
+      title: "同一篇规则检测笔记",
+      body: "同一段规则检测正文",
+      coverText: "第一次封面文案",
+      tags: ["关系沟通", "亲密关系"],
+      status: "platform_passed_pending",
+      analysis: { verdict: "manual_review", score: 40, hits: [], suggestions: [] }
+    });
+
+    const secondCreate = await invokeRoute("POST", "/api/false-positive-log", {
+      title: "同一篇规则检测笔记",
+      body: "同一段规则检测正文",
+      coverText: "第二次封面文案",
+      tags: ["关系沟通", "科普"],
+      status: "platform_passed_confirmed"
+    });
+
+    assert.equal(firstCreate.status, 200);
+    assert.equal(firstCreate.items.length, 1);
+    assert.equal(secondCreate.status, 200);
+    assert.equal(secondCreate.items.length, 1);
+    assert.equal(secondCreate.items[0].status, "platform_passed_confirmed");
+    assert.equal(secondCreate.items[0].coverText, "第二次封面文案");
+    assert.deepEqual(secondCreate.items[0].tags, ["关系沟通", "科普"]);
+    assert.equal(secondCreate.items[0].analysisSnapshot.verdict, "manual_review");
+
+    const listed = await invokeRoute("GET", "/api/false-positive-log");
+    assert.equal(listed.items.length, 1);
+    assert.equal(listed.items[0].status, "platform_passed_confirmed");
+    assert.equal(listed.items[0].coverText, "第二次封面文案");
+    assert.deepEqual(listed.items[0].tags, ["关系沟通", "科普"]);
+  });
+});
+
+test("false positive log create generates whitelist candidates when a sample is confirmed directly", async (t) => {
+  await withTempFalsePositiveLog(t, async () => {
+    const created = await invokeRoute("POST", "/api/false-positive-log", {
+      title: "直接确认误报",
+      body: "这是一条直接从规则检测台确认的误报。",
+      coverText: "健康科普封面",
+      tags: ["健康科普"],
+      status: "platform_passed_confirmed",
+      analysis: { verdict: "manual_review", score: 40, categories: ["教育语境"], hits: [], suggestions: [] }
+    });
+
+    assert.equal(created.status, 200);
+    assert.equal(created.items.length, 1);
+    assert.equal(created.items[0].status, "platform_passed_confirmed");
+
+    const reviewQueue = JSON.parse(await fs.readFile(paths.reviewQueue, "utf8"));
+
+    assert.ok(reviewQueue.some((item) => item.candidateType === "whitelist" && item.phrase === "健康科普"));
+    assert.ok(reviewQueue.some((item) => item.candidateType === "whitelist" && item.phrase === "教育语境"));
   });
 });
 

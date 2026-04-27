@@ -221,6 +221,60 @@ test("rewriteUntilAccepted skips cross review on intermediate rounds that are st
   assert.equal(result.rounds?.[1]?.afterCrossReview?.aggregate?.recommendedVerdict, "pass");
 });
 
+test("rewriteUntilAccepted forwards the selected semantic, rewrite, and cross-review models to each model step", async () => {
+  const seenSelections = {
+    semantic: [],
+    rewrite: [],
+    crossReview: []
+  };
+
+  const result = await rewriteUntilAccepted({
+    input: {
+      title: "原标题",
+      body: "原正文",
+      coverText: "原封面"
+    },
+    beforeAnalysis: { verdict: "manual_review", finalVerdict: "manual_review", score: 44 },
+    modelSelection: {
+      semantic: "qwen",
+      rewrite: "kimi",
+      crossReview: "deepseek"
+    },
+    maxAttempts: 2,
+    rewritePost: async ({ modelSelection }) => {
+      seenSelections.rewrite.push(modelSelection);
+      return {
+        title: "改写标题",
+        body: "改写正文",
+        coverText: "改写封面",
+        tags: []
+      };
+    },
+    analyzeMerged: async (_, options = {}) => {
+      seenSelections.semantic.push(options.modelSelection);
+      return {
+        verdict: "observe",
+        finalVerdict: "observe",
+        score: 8,
+        semanticReview: { status: "ok", review: {} }
+      };
+    },
+    crossReview: async ({ modelSelection }) => {
+      seenSelections.crossReview.push(modelSelection);
+      return {
+        aggregate: {
+          recommendedVerdict: "pass"
+        }
+      };
+    }
+  });
+
+  assert.equal(result.accepted, true);
+  assert.deepEqual(seenSelections.rewrite, ["kimi"]);
+  assert.deepEqual(seenSelections.semantic, ["qwen"]);
+  assert.deepEqual(seenSelections.crossReview, ["deepseek"]);
+});
+
 test("rewriteUntilAccepted feeds structured retry guidance into the next rewrite round", async () => {
   const rewriteCalls = [];
   const analyses = [

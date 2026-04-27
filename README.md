@@ -207,6 +207,13 @@ data/false-positive-log.json
 - 将待观察样本标记为已确认
 - 删除明显无效的样本
 
+误报样本现在也会参与后续检测：
+
+- 已确认误报样本再次匹配到同一篇内容时，会在规则检测结果中显示“降权提示”，并把非硬拦截的 `manual_review` 降为 `observe`
+- 已确认误报样本会自动生成“宽松白名单”候选，进入人工复核队列；人工点击“加入白名单”后会写入 `data/whitelist.json`
+- 命中白名单语境时，系统会显示白名单证据，并对非硬拦截的 `manual_review` 做降权
+- `hard_block` 不会被误报样本或白名单直接放行，只会保留提示，仍需要人工判断
+
 ## 本地网页面板
 
 如果要启用违规截图识别，先设置 GLM 密钥：
@@ -215,11 +222,22 @@ data/false-positive-log.json
 export GLM_API_KEY="你的密钥"
 ```
 
+如果你想启用当前默认的文本模型路由，建议再补上 DMXAPI 密钥：
+
+```bash
+export DMXAPI_API_KEY="你的 DMXAPI 密钥"
+```
+
 当前默认模型分工如下：
 
 - 截图识别默认使用 `glm-4.6v`
 - 文本改写默认使用 `REWRITE_PROVIDER=glm`，对应模型为 `GLM_TEXT_MODEL`，未设置时回退到 `glm-4.6v`
 - 交叉复判默认使用 `glm-4-flash`
+- `glm / kimi / qwen / deepseek` 文本 helper 默认按 `DMXAPI -> 官方接口` 顺序调用
+- `minimax` 当前作为 `DMXAPI-only` 文本 provider 使用，不走单独官方接口
+- `mimo-v2.5-free` 会以独立的 `mimo` provider 展示；官方 `deepseek-v4-flash` 仍单独展示为 `deepseek`
+- 如果没有设置 `DMXAPI_API_KEY`，会自动跳过 DMXAPI，直接走各自官方接口
+- 当前 DMXAPI 文本请求全部使用非流式模式，不会设置 `stream: true`
 
 如果你想覆盖，可以额外设置：
 
@@ -227,7 +245,31 @@ export GLM_API_KEY="你的密钥"
 export GLM_VISION_MODEL="glm-4.6v"
 export GLM_TEXT_MODEL="glm-4.6v"
 export GLM_CROSS_REVIEW_MODEL="glm-4-flash"
+export GLM_DMXAPI_MODEL="glm-5.1-free"
+export KIMI_DMXAPI_MODEL="kimi-k2.6-free"
+export QWEN_DMXAPI_MODEL="qwen3.5-plus-free"
+export MINIMAX_DMXAPI_MODEL="MiniMax-M2.7-free"
+export MIMO_DMXAPI_MODEL="mimo-v2.5-free"
 ```
+
+如果你还想分别覆盖官方文本模型，也可以按 provider 单独设置：
+
+```bash
+export QWEN_FEEDBACK_MODEL="qwen-plus"
+export QWEN_CROSS_REVIEW_MODEL="qwen-plus"
+export QWEN_SEMANTIC_MODEL="qwen-plus"
+
+export DEEPSEEK_FEEDBACK_MODEL="deepseek-v4-flash"
+export DEEPSEEK_CROSS_REVIEW_MODEL="deepseek-v4-flash"
+export DEEPSEEK_SEMANTIC_MODEL="deepseek-v4-flash"
+```
+
+补充说明：
+
+- `MIMO_DMXAPI_MODEL` 默认值是 `mimo-v2.5-free`，所以在页面和返回结构里会单独显示为 `mimo`
+- `MINIMAX_DMXAPI_MODEL` 默认值是 `MiniMax-M2.7-free`，会作为独立 `MiniMax` provider 参与文本复判链路
+- 历史上的 `DEEPSEEK_DMXAPI_MODEL` 仍然兼容，但现在更推荐改用 `MIMO_DMXAPI_MODEL`
+- 语义复判默认超时当前为 `60000ms`，可以用 `SEMANTIC_REVIEW_TIMEOUT_MS` 覆盖
 
 如果你想把“改写 + 人味化”切到 Kimi，而不影响截图识别和交叉复判，可以这样配：
 

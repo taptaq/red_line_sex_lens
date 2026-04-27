@@ -5,12 +5,14 @@ import {
   loadReviewQueue,
   loadRewritePairs,
   loadSeedLexicon,
+  loadWhitelist,
   saveCustomLexicon,
   saveFeedbackLog,
   saveFalsePositiveLog,
   saveReviewQueue,
   saveRewritePairs,
-  saveSeedLexicon
+  saveSeedLexicon,
+  saveWhitelist
 } from "./data-store.js";
 import { buildFalsePositiveAudit, getCandidatePhraseIssue, isValidLexiconCandidatePhrase } from "./feedback.js";
 
@@ -54,6 +56,11 @@ function slugify(value = "") {
 
 function uniqueStrings(items = []) {
   return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
+function summarizeText(value = "", limit = 96) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  return text.length > limit ? `${text.slice(0, limit)}...` : text;
 }
 
 function sanitizeLexiconEntry(entry = {}) {
@@ -113,6 +120,18 @@ function enrichFalsePositiveLogItem(item) {
 }
 
 export function buildLexiconDraftFromReviewItem(item) {
+  if (item.candidateType === "whitelist") {
+    const phrase = String(item.phrase || "").trim();
+
+    return {
+      targetScope: "whitelist",
+      phrase,
+      blocked: !phrase,
+      blockedReason: phrase ? "" : "白名单候选为空",
+      xhsReason: buildReviewReasonText(item)
+    };
+  }
+
   const sourceHint = String(item.sourceNoteExcerpt || item.sourceNoteId || "未标记").trim();
   const reviewLabel = String(item.reviewAuditSignal || "").trim();
   const hitCount = Math.max(1, Number(item.hitCount) || 1);
@@ -205,8 +224,71 @@ export async function confirmFalsePositiveLogEntry(id, userNotes = "") {
   const next = [...current];
   next[index] = nextItem;
   await saveFalsePositiveLog(next);
+  await createWhitelistCandidatesFromFalsePositive(nextItem);
 
   return nextItem;
+}
+
+export async function createWhitelistCandidatesFromFalsePositive(item) {
+  if (String(item?.status || "").trim() !== "platform_passed_confirmed") {
+    return [];
+  }
+
+  const [reviewQueue, whitelist] = await Promise.all([loadReviewQueue(), loadWhitelist()]);
+  const existingKeys = new Set(
+    [
+      ...reviewQueue
+        .filter((entry) => entry.candidateType === "whitelist")
+        .map((entry) => entry.canonicalPhrase || entry.phrase),
+      ...whitelist
+    ].map((entry) => String(entry || "").trim().toLowerCase())
+  );
+  const phrases = uniqueStrings([
+    ...(Array.isArray(item.tags) ? item.tags : []),
+    ...(Array.isArray(item.analysisSnapshot?.categories) ? item.analysisSnapshot.categories : []),
+    item.coverText
+  ]).filter((phrase) => phrase.length >= 2);
+  const createdAt = new Date().toISOString();
+  const nextItems = [];
+
+  for (const phrase of phrases.slice(0, 4)) {
+    const canonical = phrase.trim().toLowerCase();
+
+    if (!canonical || existingKeys.has(canonical)) {
+      continue;
+    }
+
+    existingKeys.add(canonical);
+    nextItems.push({
+      id: `whitelist-candidate-${Date.now()}-${nextItems.length + 1}`,
+      candidateType: "whitelist",
+      phrase,
+      canonicalPhrase: canonical,
+      match: "exact",
+      pattern: "",
+      sourceNoteId: item.id,
+      sourceNoteExcerpt: summarizeText(item.body || item.title || item.coverText),
+      platformReason: "来自已确认误报样本",
+      platformReasons: ["来自已确认误报样本"],
+      status: "pending_review",
+      createdAt,
+      lastSeenAt: createdAt,
+      hitCount: 1,
+      sourceCount: 1,
+      reviewAuditSignal: "false_positive_whitelist",
+      suggestedCategory: "宽松白名单",
+      suggestedRiskLevel: "observe",
+      priorityScore: 72,
+      priorityLabel: "高优先",
+      notes: "已确认误报样本自动生成的宽松白名单候选，人工确认后会参与后续检测降权。"
+    });
+  }
+
+  if (nextItems.length) {
+    await saveReviewQueue([...reviewQueue, ...nextItems]);
+  }
+
+  return nextItems;
 }
 
 export async function deleteFalsePositiveLogEntry(id) {
@@ -292,7 +374,11 @@ export async function deleteReviewQueueItem(id) {
 }
 
 export async function promoteReviewQueueItem(id) {
-  const [reviewQueue, customLexicon] = await Promise.all([loadReviewQueue(), loadCustomLexicon()]);
+  const [reviewQueue, customLexicon, whitelist] = await Promise.all([
+    loadReviewQueue(),
+    loadCustomLexicon(),
+    loadWhitelist()
+  ]);
   const item = reviewQueue.find((entry) => entry.id === id);
 
   if (!item) {
@@ -303,6 +389,13 @@ export async function promoteReviewQueueItem(id) {
 
   if (lexiconEntry?.blocked) {
     throw createError(lexiconEntry.blockedReason || "该候选词当前不适合直接入库。");
+  }
+
+  if (lexiconEntry?.targetScope === "whitelist") {
+    const nextWhitelist = uniqueStrings([...whitelist, lexiconEntry.phrase]);
+    await saveWhitelist(nextWhitelist);
+    await saveReviewQueue(reviewQueue.filter((entry) => entry.id !== id));
+    return lexiconEntry;
   }
 
   if (customLexicon.some((entry) => entry.id === lexiconEntry.id)) {

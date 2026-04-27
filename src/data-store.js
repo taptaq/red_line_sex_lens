@@ -65,6 +65,10 @@ export async function loadWhitelist() {
   return readJson(paths.whitelist, []);
 }
 
+export async function saveWhitelist(items) {
+  await writeJson(paths.whitelist, uniqueStrings(items));
+}
+
 export async function loadFeedbackLog() {
   return readJson(paths.feedbackLog, []);
 }

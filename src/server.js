@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   addLexiconEntry,
   confirmFalsePositiveLogEntry,
+  createWhitelistCandidatesFromFalsePositive,
   deleteFeedbackEntry,
   deleteFalsePositiveLogEntry,
   deleteLexiconEntry,
@@ -35,6 +36,13 @@ import {
   sanitizeScreenshotMeta,
   sanitizeScreenshotRecognition
 } from "./feedback.js";
+import { isSameFeedbackNote } from "./feedback-identity.js";
+import {
+  buildFeedbackModelSelectionOptionsPayload,
+  buildModelSelectionOptionsPayload,
+  normalizeFeedbackModelSelectionState,
+  normalizeModelSelectionState
+} from "./model-selection.js";
 import { runCrossModelReview } from "./cross-review.js";
 import { recognizeFeedbackScreenshot, rewritePostForCompliance, suggestFeedbackCandidates } from "./glm.js";
 import { buildRewritePairRecord } from "./rewrite-pairs.js";
@@ -90,7 +98,10 @@ function uniqueStrings(items = []) {
 }
 
 function sendJson(response, statusCode, payload) {
-  response.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
+  response.writeHead(statusCode, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store"
+  });
   response.end(JSON.stringify(payload, null, 2));
 }
 
@@ -98,7 +109,10 @@ function sendFile(response, filePath, contentType) {
   return fs
     .readFile(filePath)
     .then((buffer) => {
-      response.writeHead(200, { "Content-Type": contentType });
+      response.writeHead(200, {
+        "Content-Type": contentType,
+        "Cache-Control": "no-store"
+      });
       response.end(buffer);
     })
     .catch(() => {
@@ -136,11 +150,12 @@ function withErrorHandling(handler) {
   };
 }
 
-async function buildMergedAnalysis(input) {
+async function buildMergedAnalysis(input, { modelSelection = "auto" } = {}) {
   const analysis = await analyzePost(input);
   const semanticReview = await runSemanticReview({
     input,
-    analysis
+    analysis,
+    modelSelection
   });
 
   return mergeRuleAndSemanticAnalysis(analysis, semanticReview);
@@ -205,6 +220,7 @@ function buildRetryGuidance({
 export async function rewriteUntilAccepted({
   input = {},
   beforeAnalysis = {},
+  modelSelection = {},
   maxAttempts = 3,
   rewritePost = rewritePostForCompliance,
   analyzeMerged = buildMergedAnalysis,
@@ -223,11 +239,14 @@ export async function rewriteUntilAccepted({
     const sourceInput = { ...currentInput };
     latestRewrite = await rewritePost({
       input: currentInput,
-      analysis: currentAnalysis
+      analysis: currentAnalysis,
+      modelSelection: modelSelection.rewrite
     });
 
     const rewrittenInput = buildRewriteInputFromPayload(latestRewrite);
-    latestAfterAnalysis = await analyzeMerged(rewrittenInput);
+    latestAfterAnalysis = await analyzeMerged(rewrittenInput, {
+      modelSelection: modelSelection.semantic
+    });
 
     const mergedVerdict = latestAfterAnalysis?.finalVerdict || latestAfterAnalysis?.verdict || "manual_review";
     const shouldRunCrossReview = attempt === maxAttempts || isAcceptedRewriteVerdict(mergedVerdict);
@@ -235,7 +254,8 @@ export async function rewriteUntilAccepted({
     latestAfterCrossReview = shouldRunCrossReview
       ? await crossReview({
           input: rewrittenInput,
-          analysis: latestAfterAnalysis
+          analysis: latestAfterAnalysis,
+          modelSelection: modelSelection.crossReview
         })
       : null;
 
@@ -329,7 +349,7 @@ export function buildFalsePositivePayload({ analysis = null, analysisSnapshot: i
   };
 }
 
-async function recognizeScreenshotPayload(screenshot) {
+async function recognizeScreenshotPayload(screenshot, { modelSelection = "auto" } = {}) {
   if (!screenshot?.dataUrl) {
     const error = new Error("请先上传一张可识别的截图。");
     error.statusCode = 400;
@@ -340,7 +360,8 @@ async function recognizeScreenshotPayload(screenshot) {
   const recognition = await recognizeFeedbackScreenshot({
     imageDataUrl: screenshot?.dataUrl,
     mimeType: meta?.type,
-    fileName: meta?.name
+    fileName: meta?.name,
+    modelSelection
   });
 
   return {
@@ -349,7 +370,7 @@ async function recognizeScreenshotPayload(screenshot) {
   };
 }
 
-async function enrichFeedbackItems(items) {
+async function enrichFeedbackItems(items, { modelSelection = {} } = {}) {
   const enrichedItems = [];
 
   for (const item of items) {
@@ -359,7 +380,9 @@ async function enrichFeedbackItems(items) {
     const noteContent = String(item?.noteContent || item?.body || "").trim();
 
     if (screenshot?.dataUrl && !recognition) {
-      const extracted = await recognizeScreenshotPayload(screenshot);
+      const extracted = await recognizeScreenshotPayload(screenshot, {
+        modelSelection: modelSelection.feedbackScreenshot
+      });
       recognition = extracted.recognition;
     }
 
@@ -376,7 +399,6 @@ async function enrichFeedbackItems(items) {
     });
     const shouldUseModelSuggestion =
       !feedbackModelSuggestion &&
-      Boolean(process.env.GLM_API_KEY) &&
       Boolean(noteContent || mergedPlatformReason || recognition?.summary || recognition?.extractedText);
 
     if (shouldUseModelSuggestion) {
@@ -388,7 +410,8 @@ async function enrichFeedbackItems(items) {
             suspiciousPhrases: mergeSuspiciousPhrases(item.suspiciousPhrases, recognition?.suspiciousPhrases),
             screenshotRecognition: recognition,
             analysisSnapshot,
-            reviewAudit
+            reviewAudit,
+            modelSelection: modelSelection.feedbackSuggestion
           })
         );
       } catch {}
@@ -410,8 +433,10 @@ async function enrichFeedbackItems(items) {
   return normalizeFeedbackItems(enrichedItems);
 }
 
-async function appendFeedbackAndQueue(payload) {
-  const enrichedItems = await enrichFeedbackItems(Array.isArray(payload) ? payload : [payload]);
+async function appendFeedbackAndQueue(payload, { modelSelection = {} } = {}) {
+  const enrichedItems = await enrichFeedbackItems(Array.isArray(payload) ? payload : [payload], {
+    modelSelection
+  });
   const feedbackLog = await upsertFeedbackEntries(enrichedItems);
   const reviewQueue = await createReviewCandidates(feedbackLog, { reset: true });
   const sourceNoteIds = new Set(enrichedItems.map((item) => item.noteId));
@@ -531,18 +556,33 @@ async function handleRequest(request, response) {
     });
   }
 
+  if (request.method === "GET" && url.pathname === "/api/model-options") {
+    return sendJson(response, 200, {
+      ok: true,
+      ...buildModelSelectionOptionsPayload(),
+      ...buildFeedbackModelSelectionOptionsPayload()
+    });
+  }
+
   if (request.method === "POST" && url.pathname === "/api/analyze") {
     const payload = await readBody(request);
-    const result = await buildMergedAnalysis(payload);
+    const modelSelection = normalizeModelSelectionState(payload?.modelSelection);
+    const result = await buildMergedAnalysis(payload, {
+      modelSelection: modelSelection.semantic
+    });
     return sendJson(response, 200, result);
   }
 
   if (request.method === "POST" && url.pathname === "/api/rewrite") {
     const payload = await readBody(request);
-    const beforeAnalysis = await buildMergedAnalysis(payload);
+    const modelSelection = normalizeModelSelectionState(payload?.modelSelection);
+    const beforeAnalysis = await buildMergedAnalysis(payload, {
+      modelSelection: modelSelection.semantic
+    });
     const rewriteResult = await rewriteUntilAccepted({
       input: payload,
       beforeAnalysis,
+      modelSelection,
       maxAttempts: 3
     });
 
@@ -562,10 +602,12 @@ async function handleRequest(request, response) {
 
   if (request.method === "POST" && url.pathname === "/api/cross-review") {
     const payload = await readBody(request);
+    const modelSelection = normalizeModelSelectionState(payload?.modelSelection);
     const analysis = await analyzePost(payload);
     const review = await runCrossModelReview({
       input: payload,
-      analysis
+      analysis,
+      modelSelection: modelSelection.crossReview
     });
 
     return sendJson(response, 200, {
@@ -577,7 +619,10 @@ async function handleRequest(request, response) {
 
   if (request.method === "POST" && url.pathname === "/api/feedback/extract-screenshot") {
     const payload = await readBody(request);
-    const extracted = await recognizeScreenshotPayload(payload?.screenshot);
+    const modelSelection = normalizeFeedbackModelSelectionState(payload?.modelSelection);
+    const extracted = await recognizeScreenshotPayload(payload?.screenshot, {
+      modelSelection: modelSelection.feedbackScreenshot
+    });
     return sendJson(response, 200, {
       ok: true,
       screenshot: extracted.screenshot,
@@ -587,7 +632,10 @@ async function handleRequest(request, response) {
 
   if (request.method === "POST" && url.pathname === "/api/feedback") {
     const payload = await readBody(request);
-    const result = await appendFeedbackAndQueue(payload);
+    const modelSelection = normalizeFeedbackModelSelectionState(payload?.modelSelection);
+    const result = await appendFeedbackAndQueue(payload, {
+      modelSelection
+    });
     return sendJson(response, 200, {
       ok: true,
       reviewQueueCount: result.reviewQueue.length,
@@ -601,7 +649,26 @@ async function handleRequest(request, response) {
     const payload = await readBody(request);
     const current = await loadFalsePositiveLog();
     const nextEntry = buildFalsePositivePayload(payload);
+    const sameNoteIndex = current.findIndex((item) => isSameFeedbackNote(item, nextEntry));
     const duplicate = current.some((item) => String(item.id || "").trim() === nextEntry.id);
+
+    if (sameNoteIndex >= 0) {
+      const existing = current[sameNoteIndex];
+      const mergedEntry = buildFalsePositivePayload({
+        ...existing,
+        ...payload,
+        id: existing.id,
+        createdAt: existing.createdAt,
+        analysisSnapshot: payload.analysis || payload.analysisSnapshot ? undefined : existing.analysisSnapshot
+      });
+      const next = current.map((item, index) => (index === sameNoteIndex ? mergedEntry : item));
+      await saveFalsePositiveLog(next);
+      await createWhitelistCandidatesFromFalsePositive(mergedEntry);
+      return sendJson(response, 200, {
+        ok: true,
+        items: next
+      });
+    }
 
     if (duplicate) {
       const error = new Error("误报样本 ID 已存在。");
@@ -611,6 +678,7 @@ async function handleRequest(request, response) {
 
     const next = [...current, nextEntry];
     await saveFalsePositiveLog(next);
+    await createWhitelistCandidatesFromFalsePositive(nextEntry);
     return sendJson(response, 200, {
       ok: true,
       items: next
@@ -645,6 +713,7 @@ async function handleRequest(request, response) {
       });
     });
     await saveFalsePositiveLog(next);
+    await createWhitelistCandidatesFromFalsePositive(next[index]);
     return sendJson(response, 200, {
       ok: true,
       items: next
@@ -729,7 +798,7 @@ async function handleRequest(request, response) {
   if (request.method === "POST" && url.pathname === "/api/admin/review-queue/promote") {
     const payload = await readBody(request);
     const entry = await promoteReviewQueueItem(payload.id);
-    return sendJson(response, 200, { ok: true, entry });
+    return sendJson(response, 200, { ok: true, entry, item: entry });
   }
 
   response.writeHead(404);

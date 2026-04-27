@@ -29,3 +29,10 @@ test("analyze tag picker source still serializes tags through the hidden input",
   assert.match(source, /buildAnalyzeTagSelectionMarkup\(normalized\)/);
   assert.match(source, /addAnalyzeTagOption\(customInput\.value\)/);
 });
+
+test("analyze tag picker source supports deleting custom dropdown tag options", async () => {
+  const source = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+
+  assert.match(source, /function removeAnalyzeTagOption\(/);
+  assert.match(source, /data-tag-delete=/);
+});

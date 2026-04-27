@@ -36,9 +36,6 @@ function buildAnalyzeTagSelectionMarkup(tags = []) {
       (tag) => `
         <span class="tag-chip">
           <span>${escapeHtml(tag)}</span>
-          <button type="button" class="tag-chip-remove" data-remove-tag="${escapeHtml(tag)}" aria-label="移除标签 ${escapeHtml(
-            tag
-          )}">×</button>
         </span>
       `
     )
@@ -125,12 +122,18 @@ function activateTab(targetId) {
   });
 }
 
+function revealFalsePositiveLogPane() {
+  activateTab("false-positive-log-pane");
+  byId("false-positive-log-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 const appState = {
   latestAnalyzePayload: null,
   latestAnalysis: null,
   latestRewrite: null,
   latestAnalysisFalsePositiveSource: null,
-  latestRewriteFalsePositiveSource: null
+  latestRewriteFalsePositiveSource: null,
+  modelOptions: null
 };
 
 const presetAnalyzeTags = [
@@ -152,6 +155,41 @@ const presetAnalyzeTags = [
 ];
 let analyzeTagOptions = [...presetAnalyzeTags];
 const analyzeTagOptionsApi = "/api/analyze-tag-options";
+const modelOptionsApi = "/api/model-options";
+const defaultModelSelectionOptions = {
+  semantic: [
+    { value: "auto", label: "默认自动 / 依次尝试当前语义复判模型" },
+    { value: "glm", label: "智谱 GLM" },
+    { value: "qwen", label: "通义千问" },
+    { value: "minimax", label: "MiniMax" },
+    { value: "deepseek", label: "深度求索" }
+  ],
+  rewrite: [
+    { value: "auto", label: "默认自动 / 使用当前默认改写模型" },
+    { value: "glm", label: "智谱 GLM" },
+    { value: "kimi", label: "Kimi" },
+    { value: "qwen", label: "通义千问" },
+    { value: "minimax", label: "MiniMax" },
+    { value: "deepseek", label: "深度求索" }
+  ],
+  crossReview: [
+    { value: "group", label: "默认模型组 / 并行调用全部交叉复判模型" },
+    { value: "glm", label: "智谱 GLM" },
+    { value: "qwen", label: "通义千问" },
+    { value: "minimax", label: "MiniMax" },
+    { value: "deepseek", label: "深度求索" }
+  ],
+  feedbackScreenshot: [
+    { value: "auto", label: "默认自动 / 当前视觉识别模型" },
+    { value: "glm", label: "智谱 GLM" }
+  ],
+  feedbackSuggestion: [
+    { value: "auto", label: "默认自动 / 顺序尝试候选补充模型" },
+    { value: "glm", label: "智谱 GLM" },
+    { value: "qwen", label: "通义千问" },
+    { value: "deepseek", label: "深度求索" }
+  ]
+};
 
 async function loadAnalyzeCustomTagOptions() {
   try {
@@ -190,6 +228,83 @@ async function apiJson(url, options = {}) {
   }
 
   return fetch(url, { ...options, headers }).then(readJson);
+}
+
+function normalizeModelSelectionOptions(items = [], fallbackItems = []) {
+  const source = Array.isArray(items) && items.length ? items : fallbackItems;
+
+  return source
+    .map((item) => ({
+      value: String(item?.value || "").trim(),
+      label: String(item?.label || item?.value || "").trim()
+    }))
+    .filter((item) => item.value && item.label);
+}
+
+function populateModelSelectionControl(selectId, items = [], fallbackValue = "") {
+  const select = byId(selectId);
+
+  if (!(select instanceof HTMLSelectElement)) {
+    return;
+  }
+
+  const previousValue = String(select.value || fallbackValue || "").trim();
+  select.innerHTML = items
+    .map((item) => `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`)
+    .join("");
+
+  const nextValue = items.some((item) => item.value === previousValue) ? previousValue : fallbackValue || items[0]?.value || "";
+
+  if (nextValue) {
+    select.value = nextValue;
+  }
+}
+
+function renderModelSelectionControls(options = defaultModelSelectionOptions) {
+  const normalizedOptions = {
+    semantic: normalizeModelSelectionOptions(options?.semantic, defaultModelSelectionOptions.semantic),
+    rewrite: normalizeModelSelectionOptions(options?.rewrite, defaultModelSelectionOptions.rewrite),
+    crossReview: normalizeModelSelectionOptions(options?.crossReview, defaultModelSelectionOptions.crossReview),
+    feedbackScreenshot: normalizeModelSelectionOptions(
+      options?.feedbackScreenshot,
+      defaultModelSelectionOptions.feedbackScreenshot
+    ),
+    feedbackSuggestion: normalizeModelSelectionOptions(
+      options?.feedbackSuggestion,
+      defaultModelSelectionOptions.feedbackSuggestion
+    )
+  };
+
+  appState.modelOptions = normalizedOptions;
+  populateModelSelectionControl("semantic-model-selection", normalizedOptions.semantic, "auto");
+  populateModelSelectionControl("rewrite-model-selection", normalizedOptions.rewrite, "auto");
+  populateModelSelectionControl("cross-review-model-selection", normalizedOptions.crossReview, "group");
+  populateModelSelectionControl("feedback-screenshot-model-selection", normalizedOptions.feedbackScreenshot, "auto");
+  populateModelSelectionControl("feedback-suggestion-model-selection", normalizedOptions.feedbackSuggestion, "auto");
+}
+
+async function loadModelSelectionOptions() {
+  try {
+    const payload = await apiJson(modelOptionsApi);
+    renderModelSelectionControls(payload);
+  } catch {
+    renderModelSelectionControls(defaultModelSelectionOptions);
+  }
+}
+
+function getSelectedModelSelections() {
+  return {
+    semantic: String(byId("semantic-model-selection")?.value || "auto").trim() || "auto",
+    rewrite: String(byId("rewrite-model-selection")?.value || "auto").trim() || "auto",
+    crossReview: String(byId("cross-review-model-selection")?.value || "group").trim() || "group"
+  };
+}
+
+function getSelectedFeedbackModelSelections() {
+  return {
+    feedbackScreenshot: String(byId("feedback-screenshot-model-selection")?.value || "auto").trim() || "auto",
+    feedbackSuggestion: String(byId("feedback-suggestion-model-selection")?.value || "auto").trim() || "auto"
+  };
 }
 
 function escapeHtml(value) {
@@ -350,6 +465,8 @@ function providerLabel(provider) {
   if (provider === "kimi") return "Kimi";
   if (provider === "glm") return "智谱 GLM";
   if (provider === "qwen") return "通义千问";
+  if (provider === "minimax") return "MiniMax";
+  if (provider === "mimo") return "Mimo";
   if (provider === "deepseek") return "深度求索";
   return String(provider || "").trim() || "未标记模型";
 }
@@ -407,21 +524,128 @@ function getAnalyzeTagInput() {
   return byId("analyze-tags-value");
 }
 
+function getAnalyzeTagTrigger() {
+  return byId("analyze-tag-trigger");
+}
+
+function getAnalyzeTagDropdown() {
+  return byId("analyze-tag-dropdown");
+}
+
+function getAnalyzeTagOptionsContainer() {
+  return byId("analyze-tag-options");
+}
+
+function focusFirstAnalyzeTagOption() {
+  const firstOption = getAnalyzeTagOptionsContainer()?.querySelector("[data-tag-option]");
+  if (firstOption instanceof HTMLElement) {
+    firstOption.focus();
+  }
+}
+
 function getAnalyzeTagSelection() {
   return byId("analyze-tag-selected");
 }
 
-function renderAnalyzeTagOptions() {
-  const select = byId("analyze-tag-select");
+function isAnalyzeTagDropdownOpen() {
+  return getAnalyzeTagTrigger()?.getAttribute("aria-expanded") === "true";
+}
 
-  if (!select) {
+function isPresetAnalyzeTag(tag) {
+  return presetAnalyzeTags.includes(String(tag || "").trim());
+}
+
+function eventTargetsAnalyzeTagPicker(event, picker) {
+  if (!picker || !event) {
+    return false;
+  }
+
+  if (typeof event.composedPath === "function") {
+    return event.composedPath().includes(picker);
+  }
+
+  return picker.contains(event.target);
+}
+
+function setAnalyzeTagDropdownOpen(isOpen) {
+  const trigger = getAnalyzeTagTrigger();
+  const dropdown = getAnalyzeTagDropdown();
+
+  if (!trigger || !dropdown) {
     return;
   }
 
-  select.innerHTML = [
-    '<option value="">选择标签</option>',
-    ...uniqueStrings(analyzeTagOptions).map((tag) => `<option value="${escapeHtml(tag)}">${escapeHtml(tag)}</option>`)
-  ].join("");
+  trigger.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  dropdown.hidden = !isOpen;
+  byId("analyze-tag-picker")?.classList.toggle("is-open", isOpen);
+}
+
+function toggleAnalyzePresetTag(tag) {
+  const current = readAnalyzeTags();
+  const normalizedTag = String(tag || "").trim();
+
+  if (!normalizedTag) {
+    return;
+  }
+
+  writeAnalyzeTags(
+    current.includes(normalizedTag) ? current.filter((item) => item !== normalizedTag) : [...current, normalizedTag]
+  );
+}
+
+function removeAnalyzeTagOption(tag) {
+  const normalizedTag = String(tag || "").trim();
+
+  if (!normalizedTag || isPresetAnalyzeTag(normalizedTag)) {
+    return;
+  }
+
+  analyzeTagOptions = analyzeTagOptions.filter((item) => item !== normalizedTag);
+  writeAnalyzeTags(readAnalyzeTags().filter((item) => item !== normalizedTag));
+  saveAnalyzeCustomTagOptions(analyzeTagOptions).catch(() => {});
+}
+
+function renderAnalyzeTagOptions() {
+  const container = getAnalyzeTagOptionsContainer();
+
+  if (!container) {
+    return;
+  }
+
+  const selectedTags = readAnalyzeTags();
+  container.innerHTML = uniqueStrings(analyzeTagOptions)
+    .map((tag) => {
+      const selected = selectedTags.includes(tag);
+      const isCustom = !isPresetAnalyzeTag(tag);
+      return `
+        <span class="tag-picker-option-row${isCustom ? " is-custom" : ""}">
+          <button
+            type="button"
+            class="tag-picker-option${selected ? " is-selected" : ""}"
+            data-tag-option="${escapeHtml(tag)}"
+            aria-pressed="${selected ? "true" : "false"}"
+          >
+            <span>${escapeHtml(tag)}</span>
+            <span class="tag-picker-option-check" aria-hidden="true">${selected ? "✓" : ""}</span>
+          </button>
+          ${
+            isCustom
+              ? `
+                <button
+                  type="button"
+                  class="tag-picker-option-delete"
+                  data-tag-delete="${escapeHtml(tag)}"
+                  aria-label="删除自定义标签 ${escapeHtml(tag)}"
+                >
+                  ×
+                </button>
+              `
+              : ""
+          }
+        </span>
+      `;
+    })
+    .join("");
 }
 
 function readAnalyzeTags() {
@@ -440,6 +664,8 @@ function writeAnalyzeTags(tags = []) {
   if (selected) {
     selected.innerHTML = buildAnalyzeTagSelectionMarkup(normalized);
   }
+
+  renderAnalyzeTagOptions();
 
   analyzeForm.dispatchEvent(new Event("input", { bubbles: true }));
 }
@@ -472,38 +698,81 @@ function addAnalyzeTagOption(tag) {
 }
 
 function initializeAnalyzeTagPicker() {
-  const select = byId("analyze-tag-select");
+  const trigger = getAnalyzeTagTrigger();
+  const dropdown = getAnalyzeTagDropdown();
+  const optionsContainer = getAnalyzeTagOptionsContainer();
   const customInput = byId("analyze-tag-custom");
   const addButton = byId("analyze-tag-add");
+  const clearButton = byId("analyze-tag-clear");
   const picker = byId("analyze-tag-picker");
 
-  if (!select || !customInput || !addButton) {
+  if (!trigger || !dropdown || !optionsContainer || !customInput || !addButton || !picker) {
     return;
   }
 
+  customInput.setAttribute("aria-label", customInput.getAttribute("aria-label") || customInput.placeholder || "输入自定义标签");
+
   analyzeTagOptions = [...presetAnalyzeTags];
+  setAnalyzeTagDropdownOpen(false);
   renderAnalyzeTagOptions();
   loadAnalyzeCustomTagOptions()
     .then((customOptions) => {
-      analyzeTagOptions = uniqueStrings([...presetAnalyzeTags, ...customOptions]);
+      analyzeTagOptions = uniqueStrings([...presetAnalyzeTags, ...analyzeTagOptions, ...customOptions]);
       renderAnalyzeTagOptions();
     })
     .catch(() => {});
 
-  select.addEventListener("change", () => {
-    if (!select.value) {
+  trigger.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setAnalyzeTagDropdownOpen(!isAnalyzeTagDropdownOpen());
+  });
+
+  trigger.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowDown") {
       return;
     }
 
-    addAnalyzeTag(select.value);
-    select.value = "";
+    event.preventDefault();
+    setAnalyzeTagDropdownOpen(true);
+    focusFirstAnalyzeTagOption();
   });
 
-  addButton.addEventListener("click", () => {
+  optionsContainer.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const deleteButton = event.target instanceof Element ? event.target.closest("[data-tag-delete]") : null;
+    if (deleteButton) {
+      removeAnalyzeTagOption(deleteButton.dataset.tagDelete);
+      return;
+    }
+
+    const option = event.target instanceof Element ? event.target.closest("[data-tag-option]") : null;
+    if (!option) {
+      return;
+    }
+
+    toggleAnalyzePresetTag(option.dataset.tagOption);
+  });
+
+  clearButton?.addEventListener("click", () => {
+    writeAnalyzeTags([]);
+  });
+
+  clearButton?.addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
+
+  addButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const shouldRefocus = Boolean(String(customInput.value || "").trim());
     addAnalyzeTagOption(customInput.value);
     addAnalyzeTag(customInput.value);
     customInput.value = "";
-    customInput.focus();
+
+    if (shouldRefocus) {
+      renderAnalyzeTagOptions();
+      customInput.focus();
+    }
   });
 
   customInput.addEventListener("keydown", (event) => {
@@ -515,9 +784,14 @@ function initializeAnalyzeTagPicker() {
     addAnalyzeTagOption(customInput.value);
     addAnalyzeTag(customInput.value);
     customInput.value = "";
+    renderAnalyzeTagOptions();
   });
 
-  customInput.addEventListener("blur", () => {
+  customInput.addEventListener("blur", (event) => {
+    if (event.relatedTarget === addButton) {
+      return;
+    }
+
     const value = String(customInput.value || "").trim();
 
     if (!value) {
@@ -527,20 +801,31 @@ function initializeAnalyzeTagPicker() {
     addAnalyzeTagOption(value);
     addAnalyzeTag(value);
     customInput.value = "";
+    renderAnalyzeTagOptions();
   });
 
-  picker?.addEventListener("click", (event) => {
-    const trigger = event.target.closest("[data-remove-tag]");
-    if (!trigger) {
+  customInput.addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
+
+  document.addEventListener("click", (event) => {
+    if (eventTargetsAnalyzeTagPicker(event, picker)) {
       return;
     }
 
-    const removeTag = String(trigger.dataset.removeTag || "").trim();
-    if (!removeTag) {
+    setAnalyzeTagDropdownOpen(false);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") {
       return;
     }
 
-    writeAnalyzeTags(readAnalyzeTags().filter((item) => item !== removeTag));
+    setAnalyzeTagDropdownOpen(false);
+
+    if (picker.contains(document.activeElement)) {
+      trigger.focus();
+    }
   });
 
   writeAnalyzeTags(readAnalyzeTags());
@@ -585,6 +870,30 @@ function renderAnalysis(result, falsePositiveSource = null) {
 
   const suggestions = result.suggestions.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
   const semantic = result.semanticReview?.status === "ok" ? result.semanticReview.review : null;
+  const ruleModelLabel = escapeHtml(
+    result.modelTrace?.label || "本地规则引擎 / 规则词库 + 组合规则"
+  );
+  const semanticAttemptLabels = (Array.isArray(result.semanticReview?.providersTried) ? result.semanticReview.providersTried : [])
+    .flatMap((item) => {
+      const attempts = Array.isArray(item.attemptedRoutes) && item.attemptedRoutes.length
+        ? item.attemptedRoutes
+        : [
+            {
+              routeLabel: item.routeLabel || "",
+              model: item.model || ""
+            }
+          ];
+
+      return attempts
+        .map((attempt) => [attempt.routeLabel || "", providerLabel(item.provider), attempt.model || ""].filter(Boolean).join(" / "))
+        .filter(Boolean);
+    });
+  const semanticModelLabel = semantic
+    ? escapeHtml(
+        semantic.modelTrace?.label ||
+          [semantic.routeLabel || "", providerLabel(semantic.provider), semantic.model || "未标记模型"].filter(Boolean).join(" / ")
+      )
+    : "";
   const semanticReasons = semantic?.reasons?.length
     ? semantic.reasons.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
     : "<li>当前未返回明确语义原因</li>";
@@ -593,12 +902,31 @@ function renderAnalysis(result, falsePositiveSource = null) {
     : "<li>未检测到明显隐含风险信号</li>";
   const semanticFooter =
     result.semanticReview?.status === "ok"
-      ? `<p class="helper-text">语义模型：${escapeHtml(
-          `${providerLabel(semantic.provider)} / ${semantic.model || "未标记模型"}`
-        )}；置信度：${escapeHtml(formatConfidence(semantic.confidence))}</p>`
+      ? `<p class="helper-text">语义复判模型：${semanticModelLabel}；置信度：${escapeHtml(
+          formatConfidence(semantic.confidence)
+        )}</p>`
+      : semanticAttemptLabels.length
+        ? `<p class="helper-text">语义复判模型：${escapeHtml(`已尝试 ${semanticAttemptLabels.join("；")}`)}</p>`
       : `<p class="helper-text">${escapeHtml(
-          result.semanticReview?.message || "当前未启用语义复判，先展示规则检测结果。"
+          result.semanticReview?.message
+            ? `语义复判模型：本地检测（未调用模型）。${result.semanticReview.message}`
+            : "语义复判模型：本地检测（未调用模型）"
         )}</p>`;
+  const falsePositiveHints = Array.isArray(result.falsePositiveHints) ? result.falsePositiveHints : [];
+  const whitelistHits = Array.isArray(result.whitelistHits) ? result.whitelistHits : [];
+  const downgradeEvidence = [
+    ...falsePositiveHints.map((item) => `规则偏严反例：${item.title || item.sourceId || "已确认误报样本"}`),
+    ...whitelistHits.map((item) => `宽松白名单：${item.phrase || item}`)
+  ];
+  const downgradeMarkup = downgradeEvidence.length
+    ? `
+      <div class="model-scope-banner">
+        <span class="model-scope-kicker">降权提示</span>
+        <strong>${escapeHtml(result.softenedByFalsePositive ? "已按反例信号降为观察" : "发现可参考的反例信号")}</strong>
+        <p>${escapeHtml(downgradeEvidence.join("；"))}</p>
+      </div>
+    `
+    : "";
 
   byId("analysis-result").innerHTML = `
     <div class="verdict verdict-${result.finalVerdict || result.verdict}">
@@ -609,6 +937,7 @@ function renderAnalysis(result, falsePositiveSource = null) {
     <p class="helper-text">规则检测：${escapeHtml(verdictLabel(result.verdict))}；语义复判：${escapeHtml(
       semantic ? verdictLabel(semantic.verdict) : "未启用/未返回"
     )}</p>
+    <p class="helper-text">规则检测模型：${ruleModelLabel}</p>
     <div class="columns">
       <div>
         <h3>规则命中</h3>
@@ -632,6 +961,7 @@ function renderAnalysis(result, falsePositiveSource = null) {
     <p class="helper-text">语义摘要：${escapeHtml(semantic?.summary || "当前未返回语义摘要")}</p>
     <p class="helper-text">语义改写建议：${escapeHtml(semantic?.suggestion || "暂无补充建议")}</p>
     ${semanticFooter}
+    ${downgradeMarkup}
     ${falsePositiveMarkup}
   `;
 }
@@ -981,6 +1311,7 @@ function renderQueue(items) {
                 <span class="meta-pill">${escapeHtml(matchLabel(item.match || "exact"))}</span>
                 <span class="meta-pill">${escapeHtml(item.suggestedCategory || "待人工判断")}</span>
                 <span class="meta-pill">${escapeHtml(verdictLabel(item.suggestedRiskLevel || "manual_review"))}</span>
+                ${item.candidateType === "whitelist" ? '<span class="meta-pill">宽松白名单</span>' : ""}
               </div>
               <p>${escapeHtml(item.platformReason || "待补充原因")}</p>
               ${
@@ -992,7 +1323,9 @@ function renderQueue(items) {
               <p>${
                 item.recommendedLexiconDraft?.blocked
                   ? `当前不建议直接入库：${escapeHtml(item.recommendedLexiconDraft.blockedReason || "更像平台原因标签")}`
-                  : `建议入库：${escapeHtml(matchLabel(item.recommendedLexiconDraft?.match || "exact"))} /
+                  : item.recommendedLexiconDraft?.targetScope === "whitelist"
+                    ? `建议加入宽松白名单：${escapeHtml(item.recommendedLexiconDraft.phrase || item.phrase || "")}`
+                    : `建议入库：${escapeHtml(matchLabel(item.recommendedLexiconDraft?.match || "exact"))} /
                 ${escapeHtml(lexiconLevelLabel(inferLexiconLevel(item.recommendedLexiconDraft?.lexiconLevel, item.recommendedLexiconDraft?.riskLevel || item.suggestedRiskLevel)))} /
                 ${escapeHtml(item.recommendedLexiconDraft?.category || item.suggestedCategory || "待人工判断")} /
                 ${escapeHtml(verdictLabel(item.recommendedLexiconDraft?.riskLevel || item.suggestedRiskLevel || "manual_review"))}`
@@ -1017,7 +1350,7 @@ function renderQueue(items) {
                     )
                   )}"
                   data-xhs-reason="${escapeHtml(item.recommendedLexiconDraft?.xhsReason || item.platformReason || "")}"
-                  ${item.recommendedLexiconDraft?.blocked ? "disabled" : ""}
+                  ${item.recommendedLexiconDraft?.blocked || item.recommendedLexiconDraft?.targetScope === "whitelist" ? "disabled" : ""}
                 >
                   填入右侧表单
                 </button>
@@ -1028,7 +1361,7 @@ function renderQueue(items) {
                   data-id="${escapeHtml(item.id)}"
                   ${item.recommendedLexiconDraft?.blocked ? "disabled" : ""}
                 >
-                  按建议入库
+                  ${item.recommendedLexiconDraft?.targetScope === "whitelist" ? "加入白名单" : "按建议入库"}
                 </button>
                 <button
                   type="button"
@@ -1262,6 +1595,7 @@ function renderReviewQueueAdmin(items) {
                 <span class="meta-pill">${escapeHtml(item.suggestedCategory || "待人工判断")}</span>
                 <span class="meta-pill">${escapeHtml(verdictLabel(item.suggestedRiskLevel || "manual_review"))}</span>
                 <span class="meta-pill">${escapeHtml(reviewStatusLabel(item.status || "pending_review"))}</span>
+                ${item.candidateType === "whitelist" ? '<span class="meta-pill">宽松白名单</span>' : ""}
               </div>
               <p>${escapeHtml(item.platformReason || "待补充平台原因")}</p>
               <p>优先级分数：${escapeHtml(String(item.priorityScore || 0))}</p>
@@ -1274,7 +1608,9 @@ function renderReviewQueueAdmin(items) {
               <p>${
                 item.recommendedLexiconDraft?.blocked
                   ? `当前不建议直接入库：${escapeHtml(item.recommendedLexiconDraft.blockedReason || "更像平台原因标签")}`
-                  : `建议入库：${escapeHtml(matchLabel(item.recommendedLexiconDraft?.match || "exact"))} /
+                  : item.recommendedLexiconDraft?.targetScope === "whitelist"
+                    ? `建议加入宽松白名单：${escapeHtml(item.recommendedLexiconDraft.phrase || item.phrase || "")}`
+                    : `建议入库：${escapeHtml(matchLabel(item.recommendedLexiconDraft?.match || "exact"))} /
                 ${escapeHtml(lexiconLevelLabel(inferLexiconLevel(item.recommendedLexiconDraft?.lexiconLevel, item.recommendedLexiconDraft?.riskLevel || item.suggestedRiskLevel)))} /
                 ${escapeHtml(item.recommendedLexiconDraft?.category || item.suggestedCategory || "待人工判断")} /
                 ${escapeHtml(verdictLabel(item.recommendedLexiconDraft?.riskLevel || item.suggestedRiskLevel || "manual_review"))}`
@@ -1300,7 +1636,7 @@ function renderReviewQueueAdmin(items) {
                     )
                   )}"
                   data-xhs-reason="${escapeHtml(item.recommendedLexiconDraft?.xhsReason || item.platformReason || "")}"
-                  ${item.recommendedLexiconDraft?.blocked ? "disabled" : ""}
+                  ${item.recommendedLexiconDraft?.blocked || item.recommendedLexiconDraft?.targetScope === "whitelist" ? "disabled" : ""}
                 >
                   填入表单
                 </button>
@@ -1311,7 +1647,7 @@ function renderReviewQueueAdmin(items) {
                   data-id="${escapeHtml(item.id)}"
                   ${item.recommendedLexiconDraft?.blocked ? "disabled" : ""}
                 >
-                  按建议入库
+                  ${item.recommendedLexiconDraft?.targetScope === "whitelist" ? "加入白名单" : "按建议入库"}
                 </button>
                 <button
                   type="button"
@@ -1483,7 +1819,10 @@ byId("analyze-form").addEventListener("submit", async (event) => {
   try {
     const result = await apiJson("/api/analyze", {
       method: "POST",
-      body: JSON.stringify(getAnalyzePayload())
+      body: JSON.stringify({
+        ...getAnalyzePayload(),
+        modelSelection: getSelectedModelSelections()
+      })
     });
 
     appState.latestAnalyzePayload = getAnalyzePayload();
@@ -1522,7 +1861,10 @@ byId("rewrite-button").addEventListener("click", async () => {
   try {
     const result = await apiJson("/api/rewrite", {
       method: "POST",
-      body: JSON.stringify(getAnalyzePayload())
+      body: JSON.stringify({
+        ...getAnalyzePayload(),
+        modelSelection: getSelectedModelSelections()
+      })
     });
 
     appState.latestAnalyzePayload = getAnalyzePayload();
@@ -1566,7 +1908,10 @@ byId("cross-review-button").addEventListener("click", async () => {
   try {
     const result = await apiJson("/api/cross-review", {
       method: "POST",
-      body: JSON.stringify(getAnalyzePayload())
+      body: JSON.stringify({
+        ...getAnalyzePayload(),
+        modelSelection: getSelectedModelSelections()
+      })
     });
 
     renderAnalysis(result.analysis);
@@ -1591,13 +1936,16 @@ byId("feedback-recognize").addEventListener("click", async () => {
   }
 
   byId("feedback-screenshot-result").innerHTML =
-    '<div class="result-card-shell muted">正在调用 GLM 识别截图...</div>';
+    '<div class="result-card-shell muted">正在调用所选模型识别截图...</div>';
   setButtonBusy(recognizeButton, true, "识别中...");
 
   try {
     const result = await apiJson("/api/feedback/extract-screenshot", {
       method: "POST",
-      body: JSON.stringify({ screenshot: feedbackState.screenshot })
+      body: JSON.stringify({
+        screenshot: feedbackState.screenshot,
+        modelSelection: getSelectedFeedbackModelSelections()
+      })
     });
 
     feedbackState.recognition = result.recognition;
@@ -1663,6 +2011,9 @@ document.addEventListener("submit", async (event) => {
         </div>
       `;
     }
+
+    renderFalsePositiveLog(response.items || []);
+    revealFalsePositiveLogPane();
   } catch (error) {
     if (resultNode) {
       resultNode.innerHTML = `
@@ -1689,7 +2040,8 @@ byId("feedback-form").addEventListener("submit", async (event) => {
         platformReason: form.get("platformReason"),
         suspiciousPhrases: splitCSV(form.get("suspiciousPhrases")),
         screenshot: feedbackState.screenshot,
-        screenshotRecognition: feedbackState.recognition
+        screenshotRecognition: feedbackState.recognition,
+        modelSelection: getSelectedFeedbackModelSelections()
       })
     });
 
@@ -1941,7 +2293,9 @@ document.addEventListener("click", async (event) => {
   }
 });
 
-refreshAll().catch((error) => {
+renderModelSelectionControls(defaultModelSelectionOptions);
+
+Promise.all([refreshAll(), loadModelSelectionOptions()]).catch((error) => {
   byId("analysis-result").innerHTML = `
     <div class="result-card-shell muted">${escapeHtml(error.message || "初始化失败")}</div>
   `;

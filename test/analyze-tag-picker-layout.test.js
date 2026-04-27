@@ -20,4 +20,14 @@ test("analyze tag picker styles bound the closed trigger and dropdown overflow",
   assert.match(source, /\.tag-picker-trigger \{[^}]*overflow: hidden;/);
   assert.match(source, /\.tag-picker-dropdown \{[^}]*max-height:/);
   assert.match(source, /\.tag-picker-dropdown \{[^}]*overflow: auto;/);
+  assert.match(source, /\.tag-picker-dropdown\[hidden\] \{[^}]*display: none;/);
+});
+
+test("custom tag delete affordance only appears on hover or focus", async () => {
+  const source = await fs.readFile(path.join(process.cwd(), "web/styles.css"), "utf8");
+
+  assert.match(source, /\.tag-picker-option-delete \{[^}]*opacity: 0;/);
+  assert.match(source, /\.tag-picker-option-delete \{[^}]*pointer-events: none;/);
+  assert.match(source, /\.tag-picker-option-row\.is-custom:hover \.tag-picker-option-delete/);
+  assert.match(source, /\.tag-picker-option-row\.is-custom:focus-within \.tag-picker-option-delete/);
 });

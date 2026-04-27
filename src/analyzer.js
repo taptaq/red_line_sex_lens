@@ -1,4 +1,5 @@
-import { loadLexicon, loadWhitelist } from "./data-store.js";
+import { loadFalsePositiveLog, loadLexicon, loadWhitelist } from "./data-store.js";
+import { isSameFeedbackNote } from "./feedback-identity.js";
 import { evaluateContextRules } from "./risk-rules.js";
 import { ensureArray, flattenPost, normalizeText } from "./normalizer.js";
 
@@ -79,10 +80,60 @@ function buildSuggestions(verdict, categories) {
   return ["当前未命中明显高风险规则，仍建议人工复核标题与封面文案"];
 }
 
+function normalizeWhitelistItem(item = "") {
+  if (item && typeof item === "object") {
+    return {
+      phrase: String(item.phrase || item.term || item.label || "").trim(),
+      source: String(item.source || "whitelist").trim()
+    };
+  }
+
+  return {
+    phrase: String(item || "").trim(),
+    source: "whitelist"
+  };
+}
+
+function findWhitelistHits(whitelist = [], post = {}) {
+  const sourceText = normalizeText([post.title, post.body, post.coverText, ensureArray(post.tags).join(" ")].join(" "));
+
+  return whitelist
+    .map(normalizeWhitelistItem)
+    .filter((item) => item.phrase && sourceText.includes(normalizeText(item.phrase)));
+}
+
+function findFalsePositiveHints(falsePositiveLog = [], input = {}) {
+  return falsePositiveLog
+    .filter((item) => String(item.status || "").trim() === "platform_passed_confirmed")
+    .filter((item) => isSameFeedbackNote(item, input))
+    .map((item) => ({
+      sourceId: String(item.id || "").trim(),
+      status: String(item.status || "").trim(),
+      title: String(item.title || "").trim(),
+      auditSignal: String(item.falsePositiveAudit?.signal || "").trim(),
+      reason: "已确认误报样本与当前内容匹配，建议降低非硬拦截判断权重。"
+    }));
+}
+
+function shouldSoftenVerdict(verdict, hits = [], whitelistHits = [], falsePositiveHints = []) {
+  if (verdict !== "manual_review") {
+    return false;
+  }
+
+  if (hits.some((hit) => hit.riskLevel === "hard_block")) {
+    return false;
+  }
+
+  return whitelistHits.length > 0 || falsePositiveHints.length > 0;
+}
+
 export async function analyzePost(input = {}) {
   const post = flattenPost(input);
-  const whitelist = await loadWhitelist();
-  const lexicon = await loadLexicon();
+  const [whitelist, lexicon, falsePositiveLog] = await Promise.all([
+    loadWhitelist(),
+    loadLexicon(),
+    loadFalsePositiveLog()
+  ]);
 
   const normalizedByField = Object.fromEntries(
     Object.entries(post).map(([key, value]) => [key, normalizeText(value)])
@@ -96,9 +147,12 @@ export async function analyzePost(input = {}) {
   const hits = [...lexiconHits, ...contextHits];
 
   const categorySet = new Set(hits.map((hit) => hit.category));
-  const whitelistHits = whitelist.filter((item) =>
-    normalizeText([post.title, post.body, post.coverText].join(" ")).includes(normalizeText(item))
-  );
+  const whitelistHits = findWhitelistHits(whitelist, post);
+  const falsePositiveHints = findFalsePositiveHints(falsePositiveLog, {
+    ...post,
+    tags: ensureArray(input.tags),
+    comments: ensureArray(input.comments)
+  });
 
   const score = hits.reduce((total, hit) => total + (riskWeights[hit.riskLevel] || 0), 0);
 
@@ -110,6 +164,22 @@ export async function analyzePost(input = {}) {
   } else if (hits.some((hit) => hit.riskLevel === "observe")) {
     verdict = "observe";
   }
+  const originalVerdict = verdict;
+  const softenedByFalsePositive = shouldSoftenVerdict(verdict, hits, whitelistHits, falsePositiveHints);
+
+  if (softenedByFalsePositive) {
+    verdict = "observe";
+  }
+
+  const suggestions = buildSuggestions(verdict, categorySet);
+
+  if (softenedByFalsePositive) {
+    suggestions.unshift(
+      falsePositiveHints.length
+        ? "命中已确认误报样本，建议按规则偏严反例降低人工复核权重"
+        : "命中宽松白名单，建议按合规语境反例降低人工复核权重"
+    );
+  }
 
   return {
     input: {
@@ -117,11 +187,21 @@ export async function analyzePost(input = {}) {
       tags: ensureArray(input.tags),
       comments: ensureArray(input.comments)
     },
+    modelTrace: {
+      provider: "rules",
+      route: "local",
+      routeLabel: "本地规则引擎",
+      model: "规则词库 + 组合规则",
+      label: "本地规则引擎 / 规则词库 + 组合规则"
+    },
     verdict,
+    originalVerdict,
     score,
     hits,
     whitelistHits,
+    falsePositiveHints,
+    softenedByFalsePositive,
     categories: [...categorySet],
-    suggestions: buildSuggestions(verdict, categorySet)
+    suggestions
   };
 }

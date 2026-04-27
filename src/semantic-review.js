@@ -1,4 +1,7 @@
 import "./env.js";
+import { callDeepSeekJson, callGlmJson, callMiniMaxJson, callQwenJson } from "./glm.js";
+import { filterProviderConfigsBySelection } from "./model-selection.js";
+import { resolveDisplayProvider, splitProviderResultForDisplay } from "./provider-display.js";
 
 const severityRank = {
   pass: 0,
@@ -24,15 +27,23 @@ const providerConfigs = [
     model: process.env.QWEN_SEMANTIC_MODEL || process.env.QWEN_CROSS_REVIEW_MODEL || "qwen-plus"
   },
   {
+    provider: "minimax",
+    label: "MiniMax",
+    envKey: "DMXAPI_API_KEY",
+    endpoint: "https://www.dmxapi.cn/v1/chat/completions",
+    model: process.env.MINIMAX_DMXAPI_MODEL || "MiniMax-M2.7-free"
+  },
+  {
     provider: "deepseek",
     label: "深度求索",
     envKey: "DEEPSEEK_API_KEY",
     endpoint: "https://api.deepseek.com/chat/completions",
-    model: process.env.DEEPSEEK_SEMANTIC_MODEL || process.env.DEEPSEEK_CROSS_REVIEW_MODEL || "DeepSeek-V4-Flash"
+    model: process.env.DEEPSEEK_SEMANTIC_MODEL || process.env.DEEPSEEK_CROSS_REVIEW_MODEL || "deepseek-v4-flash"
   }
 ];
 
-const semanticTimeoutMs = Number(process.env.SEMANTIC_REVIEW_TIMEOUT_MS || 12000);
+const semanticTimeoutMs = Number(process.env.SEMANTIC_REVIEW_TIMEOUT_MS || 60000);
+const semanticMaxTokens = Number(process.env.SEMANTIC_REVIEW_MAX_TOKENS || 900);
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -176,7 +187,76 @@ function normalizeSemanticPayload(payload, provider, model) {
   };
 }
 
+function withReviewModelTrace(review = {}, providerLabelText = "") {
+  const routeLabel = String(review.routeLabel || "").trim();
+  const model = String(review.model || "").trim();
+
+  return {
+    ...review,
+    modelTrace: {
+      provider: review.provider,
+      route: review.route || "",
+      routeLabel,
+      model,
+      label: [routeLabel, providerLabelText, model].filter(Boolean).join(" / ")
+    }
+  };
+}
+
 async function callProvider(config, input, analysis) {
+  if (config.provider === "glm" || config.provider === "qwen" || config.provider === "minimax" || config.provider === "deepseek") {
+    try {
+      const routedCall =
+        config.provider === "glm"
+          ? callGlmJson
+          : config.provider === "qwen"
+            ? callQwenJson
+            : config.provider === "minimax"
+              ? callMiniMaxJson
+              : callDeepSeekJson;
+      const { parsed, model, route, routeLabel, attemptedRoutes } = await routedCall({
+        model: config.model,
+        temperature: 0.1,
+        maxTokens: semanticMaxTokens,
+        messages: buildMessages(input, analysis),
+        timeoutMs: semanticTimeoutMs,
+        missingKeyMessage: `缺少 ${config.envKey}`,
+        fallbackParser: (message) => extractJsonBlock(message)
+      });
+      const displayProvider = resolveDisplayProvider({
+        provider: config.provider,
+        route,
+        model: model || config.model
+      });
+
+      return {
+        provider: displayProvider.provider,
+        label: displayProvider.label,
+        status: "ok",
+        attemptedRoutes: Array.isArray(attemptedRoutes) ? attemptedRoutes : [],
+        review: withReviewModelTrace(
+          {
+            ...normalizeSemanticPayload(parsed, displayProvider.provider, model || config.model),
+            route,
+            routeLabel
+          },
+          displayProvider.label
+        )
+      };
+    } catch (error) {
+      return {
+        provider: config.provider,
+        label: config.label,
+        status: "error",
+        model: String(error?.model || config.model || "").trim(),
+        route: String(error?.route || "").trim(),
+        routeLabel: String(error?.routeLabel || "").trim(),
+        attemptedRoutes: Array.isArray(error?.attemptedRoutes) ? error.attemptedRoutes : [],
+        message: error instanceof Error ? error.message : `${config.label} 请求失败`
+      };
+    }
+  }
+
   const apiKey = String(process.env[config.envKey] || "").trim();
 
   if (!apiKey) {
@@ -192,7 +272,7 @@ async function callProvider(config, input, analysis) {
   const requestBody = {
     model: config.model,
     temperature: 0.1,
-    max_tokens: config.provider === "glm" ? 420 : 560,
+    max_tokens: semanticMaxTokens,
     messages: buildMessages(input, analysis)
   };
 
@@ -272,7 +352,14 @@ async function callProvider(config, input, analysis) {
       provider: config.provider,
       label: config.label,
       status: "ok",
-      review: normalizeSemanticPayload(parsed, config.provider, data?.model || config.model)
+      review: withReviewModelTrace(
+        {
+          ...normalizeSemanticPayload(parsed, config.provider, data?.model || config.model),
+          route: "official",
+          routeLabel: "官方"
+        },
+        config.label
+      )
     };
   }
 
@@ -308,7 +395,7 @@ export function mergeRuleAndSemanticAnalysis(analysis = {}, semanticReview = nul
   };
 }
 
-export async function runSemanticReview({ input = {}, analysis = {} }) {
+export async function runSemanticReview({ input = {}, analysis = {}, modelSelection = "auto" }) {
   const hasContent = Boolean(
     String(input.title || "").trim() ||
       String(input.body || "").trim() ||
@@ -324,17 +411,39 @@ export async function runSemanticReview({ input = {}, analysis = {} }) {
     };
   }
 
+  const activeProviderConfigs = filterProviderConfigsBySelection(providerConfigs, modelSelection);
   const providersTried = [];
 
-  for (const config of providerConfigs) {
+  for (const config of activeProviderConfigs) {
     const result = await callProvider(config, input, analysis);
-    providersTried.push({
-      provider: result.provider,
-      label: result.label,
-      status: result.status,
-      model: result.model || config.model,
-      message: result.message || ""
-    });
+    providersTried.push(
+      ...splitProviderResultForDisplay(result, {
+        provider: config.provider,
+        label: config.label,
+        model: config.model
+      }).map((item) => ({
+        provider: item.provider,
+        label: item.label,
+        status: item.status,
+        model: item.review?.model || item.model || config.model,
+        route: item.review?.route || item.route || "",
+        routeLabel: item.review?.routeLabel || item.routeLabel || "",
+        attemptedRoutes: Array.isArray(item.attemptedRoutes)
+          ? item.attemptedRoutes
+          : item.review?.route
+            ? [
+                {
+                  route: item.review.route,
+                  routeLabel: item.review.routeLabel || "",
+                  model: item.review.model || "",
+                  status: item.status,
+                  message: item.message || ""
+                }
+              ]
+            : [],
+        message: item.message || ""
+      }))
+    );
 
     if (result.status === "ok") {
       return {

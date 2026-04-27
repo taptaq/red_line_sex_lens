@@ -12,11 +12,24 @@ import { handleRequest } from "../src/server.js";
 async function withTempFalsePositiveLog(t, run) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "false-positive-admin-"));
   const tempFile = path.join(tempDir, "false-positive-log.json");
-  const originalPath = paths.falsePositiveLog;
+  const originalPaths = {
+    falsePositiveLog: paths.falsePositiveLog,
+    reviewQueue: paths.reviewQueue,
+    whitelist: paths.whitelist,
+    lexiconCustom: paths.lexiconCustom
+  };
   paths.falsePositiveLog = tempFile;
+  paths.reviewQueue = path.join(tempDir, "review-queue.json");
+  paths.whitelist = path.join(tempDir, "whitelist.json");
+  paths.lexiconCustom = path.join(tempDir, "lexicon.custom.json");
+  await Promise.all([
+    fs.writeFile(paths.reviewQueue, "[]\n", "utf8"),
+    fs.writeFile(paths.whitelist, "[]\n", "utf8"),
+    fs.writeFile(paths.lexiconCustom, "[]\n", "utf8")
+  ]);
 
   t.after(async () => {
-    paths.falsePositiveLog = originalPath;
+    Object.assign(paths, originalPaths);
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -128,6 +141,47 @@ test("admin false positive endpoints confirm and delete samples", async (t) => {
   });
 });
 
+test("confirming a false positive sample creates a whitelist counterexample candidate that can be promoted", async (t) => {
+  await withTempFalsePositiveLog(t, async () => {
+    const seeded = [
+      {
+        id: "fp-whitelist-1",
+        createdAt: "2026-04-20T00:00:00.000Z",
+        updatedAt: "2026-04-20T00:00:00.000Z",
+        status: "platform_passed_pending",
+        title: "健康表达误报",
+        body: "这是一条健康表达误报样本。",
+        coverText: "",
+        tags: ["健康表达"],
+        userNotes: "待观察",
+        analysisSnapshot: { verdict: "manual_review", score: 41, categories: ["健康表达"], suggestions: [] },
+        falsePositiveAudit: { signal: "strict_pending", label: "规则偏严待确认", analyzerVerdict: "manual_review", notes: "先观察" }
+      }
+    ];
+    await fs.writeFile(paths.falsePositiveLog, `${JSON.stringify(seeded, null, 2)}\n`, "utf8");
+
+    const patched = await invokeRoute("PATCH", "/api/admin/false-positive-log", {
+      id: "fp-whitelist-1",
+      status: "platform_passed_confirmed"
+    });
+
+    assert.equal(patched.status, 200);
+    const adminData = await loadAdminData();
+    const candidate = adminData.reviewQueue.find((item) => item.candidateType === "whitelist");
+    assert.equal(candidate.phrase, "健康表达");
+    assert.equal(candidate.recommendedLexiconDraft.targetScope, "whitelist");
+
+    const promoted = await invokeRoute("POST", "/api/admin/review-queue/promote", {
+      id: candidate.id
+    });
+
+    assert.equal(promoted.status, 200);
+    assert.equal(promoted.ok, true);
+    assert.equal(promoted.item.targetScope, "whitelist");
+    assert.deepEqual(JSON.parse(await fs.readFile(paths.whitelist, "utf8")), ["健康表达"]);
+  });
+});
+
 test("admin page exposes a false positive samples tab and pane", async () => {
   const [indexHtml, appJs] = await Promise.all([
     fs.readFile(path.join(process.cwd(), "web/index.html"), "utf8"),
@@ -137,6 +191,15 @@ test("admin page exposes a false positive samples tab and pane", async () => {
   assert.match(indexHtml, /data-tab-target="false-positive-log-pane"/);
   assert.match(indexHtml, /id="false-positive-log-list"/);
   assert.match(appJs, /renderFalsePositiveLog|false-positive-log-list/);
+});
+
+test("recording a false positive sample refreshes the false positive log list in the UI", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+
+  assert.match(appJs, /apiJson\("\/api\/false-positive-log"/);
+  assert.match(appJs, /renderFalsePositiveLog\(response\.items \|\| \[\]\)/);
+  assert.match(appJs, /activateTab\("false-positive-log-pane"\)/);
+  assert.match(appJs, /false-positive-log-pane"\)\?\.scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
 });
 
 async function invokeRoute(method, pathname, body = null) {

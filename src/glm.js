@@ -2,15 +2,23 @@ import "./env.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { abstractReasonPhraseLabels, feedbackContextCategories } from "./feedback.js";
+import { filterProviderConfigsBySelection, getRewriteProviderSelection } from "./model-selection.js";
 
 const glmEndpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
 const defaultKimiEndpoint = "https://api.moonshot.cn/v1/chat/completions";
+const defaultQwenEndpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
+const defaultDmxapiEndpoint = "https://www.dmxapi.cn/v1/chat/completions";
 const defaultVisionModel = process.env.GLM_VISION_MODEL || "glm-4.6v";
 const defaultTextModel = process.env.GLM_TEXT_MODEL || "glm-4.6v";
 const defaultKimiTextModel = process.env.KIMI_TEXT_MODEL || "moonshot-v1-8k";
 const defaultFeedbackModel = process.env.GLM_FEEDBACK_MODEL || defaultTextModel || "glm-4.6v";
 const defaultQwenFeedbackModel = process.env.QWEN_FEEDBACK_MODEL || "qwen-plus";
-const defaultDeepSeekFeedbackModel = process.env.DEEPSEEK_FEEDBACK_MODEL || "DeepSeek-V4-Flash";
+const defaultMiniMaxDmxapiModel = process.env.MINIMAX_DMXAPI_MODEL || "MiniMax-M2.7-free";
+const defaultGlmDmxapiModel = process.env.GLM_DMXAPI_MODEL || "glm-5.1-free";
+const defaultKimiDmxapiModel = process.env.KIMI_DMXAPI_MODEL || "kimi-k2.6-free";
+const defaultQwenDmxapiModel = process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus-free";
+const defaultMimoDmxapiModel = process.env.MIMO_DMXAPI_MODEL || process.env.DEEPSEEK_DMXAPI_MODEL || "mimo-v2.5-free";
+const defaultDeepSeekFeedbackModel = process.env.DEEPSEEK_FEEDBACK_MODEL || "deepseek-v4-flash";
 const humanizerPassEnabled = process.env.HUMANIZER_PASS_ENABLED !== "false";
 const feedbackModelCandidates = [defaultFeedbackModel, "glm-4.6-flashX"].filter(
   (item, index, list) => item && list.indexOf(item) === index
@@ -28,7 +36,7 @@ const feedbackProviderConfigs = [
     provider: "qwen",
     label: "通义千问",
     envKey: "DASHSCOPE_API_KEY",
-    endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+    endpoint: defaultQwenEndpoint,
     models: [defaultQwenFeedbackModel]
   },
   {
@@ -68,20 +76,72 @@ function getDefaultKimiTextModel() {
   return String(process.env.KIMI_TEXT_MODEL || defaultKimiTextModel || "moonshot-v1-8k").trim();
 }
 
+function getDefaultQwenDmxapiModel() {
+  return String(process.env.QWEN_DMXAPI_MODEL || defaultQwenDmxapiModel || "qwen3.5-plus-free").trim();
+}
+
+function getDefaultMiniMaxDmxapiModel() {
+  return String(process.env.MINIMAX_DMXAPI_MODEL || defaultMiniMaxDmxapiModel || "MiniMax-M2.7-free").trim();
+}
+
+function getDefaultGlmDmxapiModel() {
+  return String(process.env.GLM_DMXAPI_MODEL || defaultGlmDmxapiModel || "glm-5.1-free").trim();
+}
+
+function getDefaultKimiDmxapiModel() {
+  return String(process.env.KIMI_DMXAPI_MODEL || defaultKimiDmxapiModel || "kimi-k2.6-free").trim();
+}
+
+function getDefaultMimoDmxapiModel() {
+  return String(process.env.MIMO_DMXAPI_MODEL || process.env.DEEPSEEK_DMXAPI_MODEL || defaultMimoDmxapiModel || "mimo-v2.5-free").trim();
+}
+
 function getRewriteProviderPreference() {
   const provider = String(process.env.REWRITE_PROVIDER || "glm").trim().toLowerCase();
 
   return provider === "kimi" ? "kimi" : "glm";
 }
 
-export function getRewriteProviderConfig() {
-  if (getRewriteProviderPreference() === "kimi") {
+export function getRewriteProviderConfig(modelSelection = "auto") {
+  const provider = String(modelSelection || "").trim() ? getRewriteProviderSelection(modelSelection) : getRewriteProviderPreference();
+
+  if (provider === "kimi") {
     return {
       provider: "kimi",
       label: "Kimi",
       envKey: "KIMI_API_KEY",
       endpoint: getKimiEndpoint(),
       models: uniqueNonEmpty([getDefaultKimiTextModel()])
+    };
+  }
+
+  if (provider === "qwen") {
+    return {
+      provider: "qwen",
+      label: "通义千问",
+      envKey: "DASHSCOPE_API_KEY",
+      endpoint: defaultQwenEndpoint,
+      models: uniqueNonEmpty([defaultQwenFeedbackModel])
+    };
+  }
+
+  if (provider === "minimax") {
+    return {
+      provider: "minimax",
+      label: "MiniMax",
+      envKey: "DMXAPI_API_KEY",
+      endpoint: defaultDmxapiEndpoint,
+      models: uniqueNonEmpty([defaultMiniMaxDmxapiModel])
+    };
+  }
+
+  if (provider === "deepseek") {
+    return {
+      provider: "deepseek",
+      label: "深度求索",
+      envKey: "DEEPSEEK_API_KEY",
+      endpoint: "https://api.deepseek.com/chat/completions",
+      models: uniqueNonEmpty([defaultDeepSeekFeedbackModel])
     };
   }
 
@@ -387,6 +447,71 @@ function stripTrailingCommas(text) {
   return String(text || "").replace(/,\s*([}\]])/g, "$1");
 }
 
+function closeIncompleteJsonStructure(text) {
+  const source = String(text || "").trim();
+
+  if (!source) {
+    return "";
+  }
+
+  const stack = [];
+  let inString = false;
+  let escaped = false;
+  let result = source;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+
+      if (char === '"') {
+        inString = false;
+      }
+
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{" || char === "[") {
+      stack.push(char);
+      continue;
+    }
+
+    if (char === "}" || char === "]") {
+      const open = stack[stack.length - 1];
+      const matched = (open === "{" && char === "}") || (open === "[" && char === "]");
+
+      if (matched) {
+        stack.pop();
+      }
+    }
+  }
+
+  if (inString) {
+    result += '"';
+  }
+
+  while (stack.length) {
+    const open = stack.pop();
+    result += open === "{" ? "}" : "]";
+  }
+
+  return result;
+}
+
 function tryParseJson(text) {
   const direct = extractJsonBlock(text);
 
@@ -408,6 +533,16 @@ function tryParseJson(text) {
 
   if (repaired && repaired !== sanitized) {
     return extractJsonBlock(repaired);
+  }
+
+  const closed = closeIncompleteJsonStructure(repaired || sanitized);
+
+  if (closed && closed !== repaired && closed !== sanitized) {
+    const reparsedClosed = extractJsonBlock(closed);
+
+    if (reparsedClosed) {
+      return reparsedClosed;
+    }
   }
 
   const repairedBalanced = extractBalancedJsonSegment(repaired);
@@ -863,6 +998,503 @@ function applyRewritePatchPlan({ input = {}, rewrite = {} } = {}) {
   };
 }
 
+function extractProviderMessage(data, fallbackMessage) {
+  return data?.error?.message || data?.msg || data?.message || fallbackMessage;
+}
+
+function attachRouteMetadata(error, { route = "", routeLabel = "", model = "" } = {}) {
+  if (!error || typeof error !== "object") {
+    return error;
+  }
+
+  error.route = route;
+  error.routeLabel = routeLabel;
+  error.model = model;
+  return error;
+}
+
+function attachAttemptedRoutes(target, attemptedRoutes = []) {
+  if (!target || typeof target !== "object") {
+    return target;
+  }
+
+  target.attemptedRoutes = attemptedRoutes;
+  return target;
+}
+
+const routedTextProviderConfigs = {
+  glm: {
+    provider: "glm",
+    label: "智谱 GLM",
+    officialEndpoint: glmEndpoint,
+    officialEnvKey: "GLM_API_KEY",
+    getOfficialModel: (model) => String(model || process.env.GLM_TEXT_MODEL || "glm-4.6v").trim(),
+    getDmxapiModel: () => getDefaultGlmDmxapiModel(),
+    dmxapiLabel: "智谱 GLM DMXAPI"
+  },
+  kimi: {
+    provider: "kimi",
+    label: "Kimi",
+    officialEndpoint: getKimiEndpoint(),
+    officialEnvKey: "KIMI_API_KEY",
+    getOfficialModel: (model) => String(model || process.env.KIMI_TEXT_MODEL || "moonshot-v1-8k").trim(),
+    getDmxapiModel: () => getDefaultKimiDmxapiModel(),
+    dmxapiLabel: "Kimi DMXAPI"
+  },
+  qwen: {
+    provider: "qwen",
+    label: "通义千问",
+    officialEndpoint: defaultQwenEndpoint,
+    officialEnvKey: "DASHSCOPE_API_KEY",
+    getOfficialModel: (model) => String(model || process.env.QWEN_FEEDBACK_MODEL || "qwen-plus").trim(),
+    getDmxapiModel: () => getDefaultQwenDmxapiModel(),
+    dmxapiLabel: "通义千问 DMXAPI"
+  },
+  minimax: {
+    provider: "minimax",
+    label: "MiniMax",
+    officialEndpoint: "",
+    officialEnvKey: "",
+    getOfficialModel: (model) => String(model || "").trim(),
+    getDmxapiModel: () => getDefaultMiniMaxDmxapiModel(),
+    dmxapiLabel: "MiniMax DMXAPI"
+  },
+  deepseek: {
+    provider: "deepseek",
+    label: "深度求索",
+    officialEndpoint: "https://api.deepseek.com/chat/completions",
+    officialEnvKey: "DEEPSEEK_API_KEY",
+    getOfficialModel: (model) => String(model || process.env.DEEPSEEK_FEEDBACK_MODEL || "deepseek-v4-flash").trim(),
+    getDmxapiModel: () => getDefaultMimoDmxapiModel(),
+    dmxapiLabel: "深度求索 DMXAPI"
+  }
+};
+
+function buildRoutedRequestBodies({ model, temperature, maxTokens, messages, responseFormat, useDmxapi }) {
+  const baseRequestBody = {
+    model,
+    temperature,
+    max_tokens: maxTokens,
+    messages
+  };
+
+  if (useDmxapi) {
+    return responseFormat
+      ? [
+          {
+            ...baseRequestBody,
+            response_format: { type: responseFormat },
+            stream: false
+          },
+          {
+            ...baseRequestBody,
+            stream: false
+          }
+        ]
+      : [
+          {
+            ...baseRequestBody,
+            stream: false
+          }
+        ];
+  }
+
+  return responseFormat
+    ? [
+        {
+          ...baseRequestBody,
+          response_format: { type: responseFormat }
+        },
+        baseRequestBody
+      ]
+    : [baseRequestBody];
+}
+
+function parseJsonChatResult({ data, candidate, fallbackParser, providerLabel }) {
+  const choice = data?.choices?.[0] || null;
+  const rawMessage = choice?.message || choice || null;
+  const rawContent = rawMessage?.content ?? choice?.text ?? data?.output_text ?? "";
+  const message = flattenContent(rawMessage || rawContent);
+  const reasoningText = flattenContent(rawMessage?.reasoning_content || rawMessage?.reasoning || "");
+  const parsed =
+    tryParseJsonFromUnknown(rawMessage) ||
+    tryParseJsonFromUnknown(rawContent) ||
+    tryParseJsonFromUnknown(choice?.text) ||
+    tryParseJsonFromUnknown(data?.output_text);
+
+  if (!parsed && typeof fallbackParser === "function") {
+    const fallbackParsed = fallbackParser(message, rawMessage || rawContent);
+
+    if (fallbackParsed) {
+      return {
+        parsed: fallbackParsed,
+        model: data?.model || candidate
+      };
+    }
+  }
+
+  if (!parsed) {
+    const preview =
+      buildPreviewText(message, 180) ||
+      buildPreviewText(rawMessage, 180) ||
+      buildPreviewText(rawContent, 180) ||
+      buildPreviewText(choice, 180) ||
+      buildPreviewText(data, 180);
+    const onlyReasoningNoAnswer = !String(message || "").trim() && Boolean(String(reasoningText || "").trim());
+    throw createGlmError(
+      onlyReasoningNoAnswer
+        ? `${providerLabel} 只返回了思考过程，没有输出最终结果 JSON。`
+        : preview
+          ? `${providerLabel} 返回的结果不是有效 JSON。原始片段：${preview}`
+          : `${providerLabel} 返回的结果不是有效 JSON。`,
+      502
+    );
+  }
+
+  return {
+    parsed,
+    model: data?.model || candidate
+  };
+}
+
+function isRoutedProviderRecoverableFailure(statusCode, message, error) {
+  if (error?.name === "AbortError") {
+    return true;
+  }
+
+  const messageText = String(message || "").trim();
+
+  if (statusCode === 400 || statusCode === 429 || statusCode >= 500) {
+    return true;
+  }
+
+  if (statusCode === 403 && /无权访问|forbidden|permission|access denied|denied/i.test(messageText)) {
+    return true;
+  }
+
+  return /模型不存在|model.+not found|unknown model|no access to model|model access/i.test(messageText);
+}
+
+async function executeChatRequest({ endpoint, apiKey, requestBody, timeoutMs }) {
+  const controller = timeoutMs ? new AbortController() : null;
+  const timeoutId = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null;
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(requestBody),
+      signal: controller?.signal
+    });
+    const data = await response.json().catch(() => ({}));
+
+    return { response, data };
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+async function attemptRoutedProviderRoute({
+  provider,
+  label,
+  endpoint,
+  apiKey,
+  model,
+  temperature,
+  maxTokens,
+  messages,
+  responseFormat,
+  fallbackParser,
+  timeoutMs,
+  allowRecoverableFallback,
+  useDmxapi
+}) {
+  const requestBodies = buildRoutedRequestBodies({
+    model,
+    temperature,
+    maxTokens,
+    messages,
+    responseFormat,
+    useDmxapi
+  });
+  let lastError = null;
+  let shouldFallback = false;
+
+  requestBodyLoop: for (const requestBody of requestBodies) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let response;
+      let data;
+
+      try {
+        ({ response, data } = await executeChatRequest({
+          endpoint,
+          apiKey,
+          requestBody,
+          timeoutMs
+        }));
+      } catch (error) {
+        const timeoutMessage = timeoutMs ? `${label} 请求超时（>${timeoutMs}ms）` : `${label} 请求超时`;
+        lastError = attachRouteMetadata(
+          createGlmError(
+          error?.name === "AbortError"
+            ? timeoutMessage
+            : error instanceof Error
+              ? error.message
+              : `${label} 请求失败`,
+          error?.name === "AbortError" ? 504 : 502
+          ),
+          { route: useDmxapi ? "dmxapi" : "official", routeLabel: useDmxapi ? "DMXAPI" : "官方", model }
+        );
+        shouldFallback = allowRecoverableFallback && isRoutedProviderRecoverableFailure(0, lastError.message, error);
+        break requestBodyLoop;
+      }
+
+      if (!response.ok) {
+        const message = extractProviderMessage(data, `${label} 请求失败，状态码 ${response.status}`);
+        const isBusy = response.status === 429 || /访问量过大|rate limit|too many|余额不足|resource/i.test(message);
+        const isUnsupportedResponseFormat =
+          Boolean(requestBody.response_format) &&
+          /response_format|json_object|json schema|structured output|unsupported.+response|不支持.+(?:json|结构化|response_format)/i.test(
+            message
+          );
+
+        if (isBusy && attempt === 0) {
+          await sleep(900);
+          continue;
+        }
+
+        lastError = attachRouteMetadata(createGlmError(message, isBusy ? 503 : response.status || 500), {
+          route: useDmxapi ? "dmxapi" : "official",
+          routeLabel: useDmxapi ? "DMXAPI" : "官方",
+          model
+        });
+
+        if (isUnsupportedResponseFormat) {
+          continue requestBodyLoop;
+        }
+
+        shouldFallback = allowRecoverableFallback && isRoutedProviderRecoverableFailure(response.status, message);
+        break requestBodyLoop;
+      }
+
+      try {
+        return {
+          ok: true,
+          route: useDmxapi ? "dmxapi" : "official",
+          routeLabel: useDmxapi ? "DMXAPI" : "官方",
+          ...parseJsonChatResult({
+            data,
+            candidate: model,
+            fallbackParser,
+            providerLabel: label
+          })
+        };
+      } catch (error) {
+        lastError = attachRouteMetadata(error, {
+          route: useDmxapi ? "dmxapi" : "official",
+          routeLabel: useDmxapi ? "DMXAPI" : "官方",
+          model
+        });
+
+        if (attempt === 0) {
+          await sleep(250);
+          continue;
+        }
+
+        shouldFallback = allowRecoverableFallback && isRoutedProviderRecoverableFailure(
+          error?.statusCode || 0,
+          error?.message || "",
+          error
+        );
+        break requestBodyLoop;
+      }
+    }
+  }
+
+  return {
+    ok: false,
+    error: lastError || createGlmError(`${label} 暂时不可用，请稍后再试。`, 503),
+    shouldFallback
+  };
+}
+
+export async function callRoutedTextProviderJson({
+  provider,
+  model,
+  temperature = 0.2,
+  maxTokens = 700,
+  messages,
+  missingKeyMessage,
+  responseFormat = "json_object",
+  fallbackParser = null,
+  timeoutMs = 0
+}) {
+  const config = routedTextProviderConfigs[String(provider || "").trim()];
+
+  if (!config) {
+    throw createGlmError(`未知文本 provider：${String(provider || "") || "empty"}`, 500);
+  }
+
+  const officialModel = config.getOfficialModel(model);
+  const dmxapiApiKey = String(process.env.DMXAPI_API_KEY || "").trim();
+  const attemptedRoutes = [];
+
+  if (dmxapiApiKey) {
+    const dmxapiModel = config.getDmxapiModel();
+    const dmxapiResult = await attemptRoutedProviderRoute({
+      provider: config.provider,
+      label: config.dmxapiLabel,
+      endpoint: defaultDmxapiEndpoint,
+      apiKey: dmxapiApiKey,
+      model: dmxapiModel,
+      temperature,
+      maxTokens,
+      messages,
+      responseFormat,
+      fallbackParser,
+      timeoutMs,
+      allowRecoverableFallback: true,
+      useDmxapi: true
+    });
+
+    if (dmxapiResult.ok) {
+      attemptedRoutes.push({
+        route: "dmxapi",
+        routeLabel: "DMXAPI",
+        model: dmxapiResult.model || dmxapiModel,
+        status: "ok",
+        message: ""
+      });
+      return attachAttemptedRoutes(dmxapiResult, attemptedRoutes);
+    }
+
+    attemptedRoutes.push({
+      route: "dmxapi",
+      routeLabel: "DMXAPI",
+      model: String(dmxapiResult.error?.model || dmxapiModel || "").trim(),
+      status: "error",
+      message: dmxapiResult.error?.message || ""
+    });
+
+    const officialApiKey = String(process.env[config.officialEnvKey] || "").trim();
+
+    if (dmxapiResult.shouldFallback && officialApiKey) {
+      const officialResult = await attemptRoutedProviderRoute({
+        provider: config.provider,
+        label: config.label,
+        endpoint: config.officialEndpoint,
+        apiKey: officialApiKey,
+        model: officialModel,
+        temperature,
+        maxTokens,
+        messages,
+        responseFormat,
+        fallbackParser,
+        timeoutMs,
+        allowRecoverableFallback: false,
+        useDmxapi: false
+      });
+
+      if (officialResult.ok) {
+        attemptedRoutes.push({
+          route: "official",
+          routeLabel: "官方",
+          model: officialResult.model || officialModel,
+          status: "ok",
+          message: ""
+        });
+        return attachAttemptedRoutes(officialResult, attemptedRoutes);
+      }
+
+      attemptedRoutes.push({
+        route: "official",
+        routeLabel: "官方",
+        model: String(officialResult.error?.model || officialModel || "").trim(),
+        status: "error",
+        message: officialResult.error?.message || ""
+      });
+      throw attachAttemptedRoutes(officialResult.error, attemptedRoutes);
+    }
+
+    throw attachAttemptedRoutes(dmxapiResult.error, attemptedRoutes);
+  }
+
+  const officialApiKey = String(process.env[config.officialEnvKey] || "").trim();
+
+  if (!officialApiKey) {
+    throw createGlmError(missingKeyMessage || `缺少 ${config.officialEnvKey} 环境变量。`, 400);
+  }
+
+  const officialResult = await attemptRoutedProviderRoute({
+    provider: config.provider,
+    label: config.label,
+    endpoint: config.officialEndpoint,
+    apiKey: officialApiKey,
+    model: officialModel,
+    temperature,
+    maxTokens,
+    messages,
+    responseFormat,
+    fallbackParser,
+    timeoutMs,
+    allowRecoverableFallback: false,
+    useDmxapi: false
+  });
+
+  if (officialResult.ok) {
+    attemptedRoutes.push({
+      route: "official",
+      routeLabel: "官方",
+      model: officialResult.model || officialModel,
+      status: "ok",
+      message: ""
+    });
+    return attachAttemptedRoutes(officialResult, attemptedRoutes);
+  }
+
+  attemptedRoutes.push({
+    route: "official",
+    routeLabel: "官方",
+    model: String(officialResult.error?.model || officialModel || "").trim(),
+    status: "error",
+    message: officialResult.error?.message || ""
+  });
+  throw attachAttemptedRoutes(officialResult.error, attemptedRoutes);
+}
+
+export async function callQwenJson(options = {}) {
+  return callRoutedTextProviderJson({
+    provider: "qwen",
+    ...options
+  });
+}
+
+export async function callDeepSeekJson(options = {}) {
+  return callRoutedTextProviderJson({
+    provider: "deepseek",
+    ...options
+  });
+}
+
+export async function callMiniMaxJson(options = {}) {
+  return callRoutedTextProviderJson({
+    provider: "minimax",
+    ...options
+  });
+}
+
+export async function callGlmJson(options = {}) {
+  return callRoutedTextProviderJson({
+    provider: "glm",
+    ...options
+  });
+}
+
 async function callChatJson({
   providerConfig,
   model,
@@ -874,6 +1506,32 @@ async function callChatJson({
   responseFormat = "json_object",
   fallbackParser = null
 }) {
+  if (providerConfig?.provider && routedTextProviderConfigs[providerConfig.provider]) {
+    const officialModels = (Array.isArray(models) && models.length ? models : [model]).filter(Boolean);
+    let lastError = null;
+
+    for (const candidate of officialModels) {
+      try {
+        return await callRoutedTextProviderJson({
+          provider: providerConfig.provider,
+          model: candidate,
+          temperature,
+          maxTokens,
+          messages,
+          missingKeyMessage,
+          responseFormat,
+          fallbackParser
+        });
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    if (lastError) {
+      throw lastError;
+    }
+  }
+
   const apiKey = String(process.env[providerConfig?.envKey] || "").trim();
   const providerLabel = String(providerConfig?.label || "模型").trim() || "模型";
   const providerEndpoint = String(providerConfig?.endpoint || "").trim();
@@ -1039,11 +1697,13 @@ export async function screenshotFileToDataUrl(filePath) {
   };
 }
 
-export async function recognizeFeedbackScreenshot({ imageDataUrl, mimeType, fileName = "" }) {
+export async function recognizeFeedbackScreenshot({ imageDataUrl, mimeType, fileName = "", modelSelection = "auto" }) {
+  const provider = String(modelSelection || "").trim().toLowerCase();
+  const providerLabelText = provider === "glm" || provider === "auto" || !provider ? "智谱 GLM" : "智谱 GLM";
   const { parsed, model } = await callChatJson({
     providerConfig: {
       provider: "glm",
-      label: "智谱 GLM",
+      label: providerLabelText,
       envKey: "GLM_API_KEY",
       endpoint: glmEndpoint
     },
@@ -1428,6 +2088,45 @@ function buildFeedbackSuggestionMessages({
 }
 
 async function callFeedbackSuggestionProvider(config, messages) {
+  if (config.provider === "qwen" || config.provider === "deepseek") {
+    try {
+      const routedCall = config.provider === "qwen" ? callQwenJson : callDeepSeekJson;
+      const defaultModel =
+        config.provider === "qwen" ? defaultQwenFeedbackModel : defaultDeepSeekFeedbackModel;
+      const { parsed, model } = await routedCall({
+        model: (Array.isArray(config.models) ? config.models[0] : config.model) || defaultModel,
+        temperature: 0.1,
+        maxTokens: 560,
+        messages,
+        timeoutMs: feedbackSuggestTimeoutMs,
+        missingKeyMessage: `缺少 ${config.envKey}`,
+        fallbackParser: (message, rawContent) =>
+          tryParseJsonFromUnknown(rawContent) || tryParseJsonFromUnknown(message)
+      });
+
+      return {
+        status: "ok",
+        provider: config.provider,
+        label: config.label,
+        suggestion: normalizeFeedbackSuggestionResult(
+          {
+            ...parsed,
+            provider: config.provider,
+            model: parsed.model || model
+          },
+          model
+        )
+      };
+    } catch (error) {
+      return {
+        status: "error",
+        provider: config.provider,
+        label: config.label,
+        message: error instanceof Error ? error.message : `${config.label} 暂时不可用`
+      };
+    }
+  }
+
   const apiKey = String(process.env[config.envKey] || "").trim();
 
   if (!apiKey) {
@@ -1531,7 +2230,8 @@ export async function suggestFeedbackCandidates({
   suspiciousPhrases = [],
   screenshotRecognition = null,
   analysisSnapshot = null,
-  reviewAudit = null
+  reviewAudit = null,
+  modelSelection = "auto"
 }) {
   const messages = buildFeedbackSuggestionMessages({
     noteContent,
@@ -1543,7 +2243,9 @@ export async function suggestFeedbackCandidates({
   });
   const errors = [];
 
-  for (const config of feedbackProviderConfigs) {
+  const activeProviderConfigs = filterProviderConfigsBySelection(feedbackProviderConfigs, modelSelection);
+
+  for (const config of activeProviderConfigs) {
     const result = await callFeedbackSuggestionProvider(config, messages);
 
     if (result.status === "ok") {
@@ -1562,9 +2264,9 @@ export async function suggestFeedbackCandidates({
   throw createGlmError("候选补充缺少可用模型配置。", 400);
 }
 
-export async function rewritePostForCompliance({ input = {}, analysis = {} }) {
+export async function rewritePostForCompliance({ input = {}, analysis = {}, modelSelection = "auto" }) {
   const semantic = analysis?.semanticReview?.status === "ok" ? analysis.semanticReview.review : null;
-  const rewriteProviderConfig = getRewriteProviderConfig();
+  const rewriteProviderConfig = getRewriteProviderConfig(modelSelection);
   const rewriteFallbackModel = rewriteProviderConfig.models[0] || getDefaultTextModel();
   const usePatchMode = Boolean(analysis?.retryGuidance);
   const { parsed, model } = await callChatJson({
