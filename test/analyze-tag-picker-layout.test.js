@@ -16,8 +16,8 @@ test("analyze tag picker styles bound the closed trigger and dropdown overflow",
   const source = await fs.readFile(path.join(process.cwd(), "web/styles.css"), "utf8");
 
   assert.match(source, /\.tag-picker-trigger \{/);
-  assert.match(source, /\.tag-picker-trigger \{[\s\S]*max-height:/);
-  assert.match(source, /\.tag-picker-trigger \{[\s\S]*overflow: hidden;/);
-  assert.match(source, /\.tag-picker-dropdown \{[\s\S]*max-height:/);
-  assert.match(source, /\.tag-picker-dropdown \{[\s\S]*overflow: auto;/);
+  assert.match(source, /\.tag-picker-trigger \{[^}]*max-height:/);
+  assert.match(source, /\.tag-picker-trigger \{[^}]*overflow: hidden;/);
+  assert.match(source, /\.tag-picker-dropdown \{[^}]*max-height:/);
+  assert.match(source, /\.tag-picker-dropdown \{[^}]*overflow: auto;/);
 });
