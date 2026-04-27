@@ -47,17 +47,29 @@
               <span>标签</span>
               <div class="tag-picker" id="analyze-tag-picker">
                 <input type="hidden" name="tags" id="analyze-tags-value" />
-                <div class="tag-picker-controls">
-                  <select id="analyze-tag-select">
-                    <option value="">选择预置标签</option>
-                  </select>
+                <button
+                  type="button"
+                  class="tag-picker-trigger"
+                  id="analyze-tag-trigger"
+                  aria-expanded="false"
+                  aria-controls="analyze-tag-dropdown"
+                >
+                  <span class="tag-picker-trigger-label">标签</span>
+                  <span id="analyze-tag-selected" class="tag-picker-selected">
+                    <span class="tag-picker-empty">尚未选择标签</span>
+                  </span>
+                  <span class="tag-picker-trigger-caret" aria-hidden="true">▾</span>
+                </button>
+                <div class="tag-picker-dropdown" id="analyze-tag-dropdown" hidden>
+                  <div class="tag-picker-dropdown-head">
+                    <strong>选择预置标签</strong>
+                    <button type="button" class="tag-picker-clear" id="analyze-tag-clear">清空</button>
+                  </div>
+                  <div class="tag-picker-options" id="analyze-tag-options"></div>
                   <div class="tag-picker-custom">
                     <input type="text" id="analyze-tag-custom" placeholder="输入自定义标签" />
                     <button type="button" class="button button-ghost button-small" id="analyze-tag-add">添加</button>
                   </div>
-                </div>
-                <div id="analyze-tag-selected" class="tag-picker-selected">
-                  <span class="tag-picker-empty">尚未选择标签</span>
                 </div>
               </div>
             </label>
