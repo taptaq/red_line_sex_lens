@@ -1,0 +1,21 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import path from "node:path";
+
+test("analyze tag picker source includes dropdown toggle and preset tag toggle helpers", async () => {
+  const source = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+
+  assert.match(source, /function setAnalyzeTagDropdownOpen\(/);
+  assert.match(source, /function toggleAnalyzePresetTag\(/);
+  assert.match(source, /function renderAnalyzeTagOptions\(/);
+  assert.match(source, /aria-expanded/);
+});
+
+test("analyze tag picker source still serializes tags through the hidden input", async () => {
+  const source = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+
+  assert.match(source, /hiddenInput\.value = joinCSV\(normalized\)/);
+  assert.match(source, /buildAnalyzeTagSelectionMarkup\(normalized\)/);
+  assert.match(source, /addAnalyzeTagOption\(customInput\.value\)/);
+});
