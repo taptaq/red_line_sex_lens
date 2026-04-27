@@ -18,5 +18,6 @@ test("analyze tag picker styles bound the closed trigger and dropdown overflow",
   assert.match(source, /\.tag-picker-trigger \{/);
   assert.match(source, /\.tag-picker-trigger \{[\s\S]*max-height:/);
   assert.match(source, /\.tag-picker-trigger \{[\s\S]*overflow: hidden;/);
+  assert.match(source, /\.tag-picker-dropdown \{[\s\S]*max-height:/);
   assert.match(source, /\.tag-picker-dropdown \{[\s\S]*overflow: auto;/);
 });
