@@ -96,10 +96,36 @@ function reviewAuditLabel(audit) {
   return String(audit?.label || "").trim() || "未完成规则复盘";
 }
 
+function rulePreviewRiskLabel(riskLevel) {
+  if (riskLevel === "high") return "高风险预演";
+  if (riskLevel === "medium") return "中风险预演";
+  if (riskLevel === "low") return "低风险预演";
+  if (riskLevel === "none") return "暂无影响";
+  return "影响预演";
+}
+
 function falsePositiveStatusLabel(status) {
   if (status === "platform_passed_confirmed") return "观察期后仍正常";
   if (status === "platform_passed_pending") return "已发出，目前正常";
   return String(status || "").trim() || "待观察";
+}
+
+function publishStatusLabel(status) {
+  if (status === "published_passed") return "已发布通过";
+  if (status === "limited") return "疑似限流";
+  if (status === "violation") return "平台判违规";
+  if (status === "false_positive") return "系统误报 / 平台放行";
+  if (status === "positive_performance") return "过审且表现好";
+  return "未发布";
+}
+
+function lifecycleSourceLabel(source) {
+  if (source === "generation_final") return "最终推荐稿";
+  if (source === "generation_candidate") return "生成候选稿";
+  if (source === "generation") return "生成稿";
+  if (source === "rewrite") return "改写稿";
+  if (source === "analysis") return "检测记录";
+  return String(source || "").trim() || "manual";
 }
 
 function compactText(value, maxLength = 80) {
@@ -110,6 +136,48 @@ function compactText(value, maxLength = 80) {
   }
 
   return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+function buildRuleChangePreviewMarkup(preview = null) {
+  if (!preview) {
+    return "";
+  }
+
+  const impactedSamples = Array.isArray(preview.impactedSamples) ? preview.impactedSamples : [];
+  const sampleMarkup = impactedSamples.length
+    ? impactedSamples
+        .slice(0, 3)
+        .map(
+          (item) => `
+            <li>
+              <strong>${escapeHtml(item.title || "未命名样本")}</strong>
+              <span>${escapeHtml(item.kind || "sample")} / 权重 ${escapeHtml(String(item.sampleWeight ?? 0))} / ${escapeHtml(
+                item.previewEffect || "可能受影响"
+              )}</span>
+            </li>
+          `
+        )
+        .join("")
+    : "<li><strong>未命中历史样本</strong><span>当前影响面较小</span></li>";
+  const warnings = Array.isArray(preview.warnings) && preview.warnings.length
+    ? `<p class="rule-preview-warning">${escapeHtml(preview.warnings.join("；"))}</p>`
+    : "";
+
+  return `
+    <div class="rule-preview-card rule-preview-${escapeHtml(preview.riskLevel || "none")}">
+      <div class="rule-preview-head">
+        <span>${escapeHtml(rulePreviewRiskLabel(preview.riskLevel))}</span>
+        <strong>${escapeHtml(preview.changeType === "whitelist" ? "白名单生效预演" : "规则入库预演")}</strong>
+      </div>
+      <p>${escapeHtml(preview.summary || "暂无预演摘要")}</p>
+      <div class="meta-row">
+        <span class="meta-pill">影响 ${escapeHtml(String(preview.impactedCount || 0))} 条</span>
+        <span class="meta-pill">影响权重 ${escapeHtml(String(preview.totalImpactWeight || 0))}</span>
+      </div>
+      ${warnings}
+      <ul>${sampleMarkup}</ul>
+    </div>
+  `;
 }
 
 function activateTab(targetId) {
@@ -131,9 +199,11 @@ const appState = {
   latestAnalyzePayload: null,
   latestAnalysis: null,
   latestRewrite: null,
+  latestGeneration: null,
   latestAnalysisFalsePositiveSource: null,
   latestRewriteFalsePositiveSource: null,
-  modelOptions: null
+  modelOptions: null,
+  modelRecommendations: {}
 };
 
 const presetAnalyzeTags = [
@@ -836,7 +906,8 @@ function renderSummary(summary) {
     ["种子词库", summary.seedLexiconCount],
     ["自定义词库", summary.customLexiconCount],
     ["反馈日志", summary.feedbackCount],
-    ["复核队列", summary.reviewQueueCount]
+    ["复核队列", summary.reviewQueueCount],
+    ["生命周期", summary.noteLifecycleCount || 0]
   ];
 
   byId("summary-grid").innerHTML = cards
@@ -963,6 +1034,11 @@ function renderAnalysis(result, falsePositiveSource = null) {
     ${semanticFooter}
     ${downgradeMarkup}
     ${falsePositiveMarkup}
+    <div class="item-actions">
+      <button type="button" class="button button-small" data-action="save-lifecycle-analysis">
+        保存为生命周期记录
+      </button>
+    </div>
   `;
 }
 
@@ -1139,6 +1215,9 @@ function renderRewriteResult(result) {
     )}</p>
     ${embeddedCrossReview}
     <div class="item-actions">
+      <button type="button" class="button button-small" data-action="save-lifecycle-rewrite">
+        保存改写稿生命周期
+      </button>
       <button type="button" class="button button-small" data-action="prefill-rewrite-pair-current">
         记为前后对照样本
       </button>
@@ -1330,6 +1409,7 @@ function renderQueue(items) {
                 ${escapeHtml(item.recommendedLexiconDraft?.category || item.suggestedCategory || "待人工判断")} /
                 ${escapeHtml(verdictLabel(item.recommendedLexiconDraft?.riskLevel || item.suggestedRiskLevel || "manual_review"))}`
               }</p>
+              ${buildRuleChangePreviewMarkup(item.ruleChangePreview)}
               <div class="item-actions">
                 <button
                   type="button"
@@ -1598,6 +1678,7 @@ function renderSuccessSamples(items = []) {
               <strong>${escapeHtml(item.title || "未命名成功样本")}</strong>
               <div class="meta-row">
                 <span class="meta-pill">${escapeHtml(successTierLabel(item.tier))}</span>
+                <span class="meta-pill">权重 ${escapeHtml(String(item.sampleWeight ?? "-"))}</span>
                 <span class="meta-pill">赞 ${escapeHtml(String(item.metrics?.likes || 0))}</span>
                 <span class="meta-pill">藏 ${escapeHtml(String(item.metrics?.favorites || 0))}</span>
                 <span class="meta-pill">评 ${escapeHtml(String(item.metrics?.comments || 0))}</span>
@@ -1612,16 +1693,144 @@ function renderSuccessSamples(items = []) {
     : '<div class="result-card muted">当前没有成功样本</div>';
 }
 
+function renderNoteLifecycle(items = []) {
+  const statusOptions = [
+    "not_published",
+    "published_passed",
+    "limited",
+    "violation",
+    "false_positive",
+    "positive_performance"
+  ];
+
+  byId("note-lifecycle-list").innerHTML = items.length
+    ? items
+        .slice()
+        .reverse()
+        .map((item) => {
+          const status = item.publishResult?.status || item.status || "not_published";
+
+          return `
+            <article class="admin-item lifecycle-item">
+              <strong>${escapeHtml(item.name || item.note?.title || "未命名笔记")}</strong>
+              <div class="meta-row">
+                <span class="meta-pill">${escapeHtml(publishStatusLabel(status))}</span>
+                <span class="meta-pill">权重 ${escapeHtml(String(item.sampleWeight ?? "-"))}</span>
+                <span class="meta-pill">${escapeHtml(lifecycleSourceLabel(item.source))}</span>
+                <span class="meta-pill">${escapeHtml(formatDate(item.updatedAt || item.createdAt))}</span>
+                <span class="meta-pill">赞 ${escapeHtml(String(item.publishResult?.metrics?.likes || 0))}</span>
+                <span class="meta-pill">藏 ${escapeHtml(String(item.publishResult?.metrics?.favorites || 0))}</span>
+                <span class="meta-pill">评 ${escapeHtml(String(item.publishResult?.metrics?.comments || 0))}</span>
+              </div>
+              <p>${escapeHtml(compactText(item.note?.body || item.note?.title || item.note?.coverText, 150) || "未填写正文")}</p>
+              <p>标签：${escapeHtml(joinCSV(item.note?.tags) || "未填写")}</p>
+              <div class="lifecycle-update-grid">
+                <label>
+                  <span>发布状态</span>
+                  <select name="publishStatus">
+                    ${statusOptions
+                      .map(
+                        (option) =>
+                          `<option value="${escapeHtml(option)}"${option === status ? " selected" : ""}>${escapeHtml(
+                            publishStatusLabel(option)
+                          )}</option>`
+                      )
+                      .join("")}
+                  </select>
+                </label>
+                <label>
+                  <span>点赞</span>
+                  <input name="likes" type="number" min="0" value="${escapeHtml(String(item.publishResult?.metrics?.likes || 0))}" />
+                </label>
+                <label>
+                  <span>收藏</span>
+                  <input name="favorites" type="number" min="0" value="${escapeHtml(
+                    String(item.publishResult?.metrics?.favorites || 0)
+                  )}" />
+                </label>
+                <label>
+                  <span>评论</span>
+                  <input name="comments" type="number" min="0" value="${escapeHtml(
+                    String(item.publishResult?.metrics?.comments || 0)
+                  )}" />
+                </label>
+                <label class="field-wide">
+                  <span>回填备注</span>
+                  <input name="notes" value="${escapeHtml(item.publishResult?.notes || "")}" placeholder="例如：发出 24h 后正常，互动稳定" />
+                </label>
+              </div>
+              <div class="item-actions">
+                <button type="button" class="button button-small" data-action="update-lifecycle-publish" data-id="${escapeHtml(item.id || "")}">
+                  更新发布结果
+                </button>
+                <button type="button" class="button button-danger button-small" data-action="delete-lifecycle" data-id="${escapeHtml(item.id || "")}">
+                  删除
+                </button>
+              </div>
+            </article>
+          `;
+        })
+        .join("")
+    : '<div class="result-card muted">当前没有笔记生命周期记录</div>';
+}
+
 function renderStyleProfile(profileState = {}) {
   const current = profileState?.current;
   const draft = profileState?.draft;
   const profile = draft || current;
+  const versions = Array.isArray(profileState?.versions) ? profileState.versions : [];
+  const options = [
+    '<option value="">当前默认画像</option>',
+    ...versions.map(
+      (item) =>
+        `<option value="${escapeHtml(item.id || "")}"${current?.id === item.id ? " selected" : ""}>${escapeHtml(
+          `${item.status === "active" ? "当前 / " : ""}${item.topic || item.name || "通用风格"}`
+        )}</option>`
+    )
+  ].join("");
+  const generationSelect = byId("generation-style-profile-select");
+
+  if (generationSelect) {
+    generationSelect.innerHTML = options;
+  }
+  const versionsMarkup = versions.length
+    ? `
+      <div class="style-profile-version-list">
+        ${versions
+          .slice()
+          .reverse()
+          .map(
+            (item) => `
+              <article class="style-profile-version-card${item.status === "active" ? " is-active" : ""}">
+                <div>
+                  <strong>${escapeHtml(item.topic || item.name || "通用风格")}</strong>
+                  <p>${escapeHtml(item.tone || "未生成语气画像")}</p>
+                </div>
+                <div class="meta-row">
+                  <span class="meta-pill">${escapeHtml(item.status === "active" ? "当前生效" : "历史版本")}</span>
+                  <span class="meta-pill">引用 ${escapeHtml(String(item.sourceSampleIds?.length || 0))} 条</span>
+                </div>
+                ${
+                  item.status !== "active"
+                    ? `<button type="button" class="button button-small" data-action="activate-style-profile" data-id="${escapeHtml(
+                        item.id || ""
+                      )}">设为当前</button>`
+                    : ""
+                }
+              </article>
+            `
+          )
+          .join("")}
+      </div>
+    `
+    : "";
 
   byId("style-profile-result").innerHTML = profile
     ? `
       <article class="style-profile-card">
         <div class="meta-row">
           <span class="meta-pill">${escapeHtml(profile.status === "active" ? "已生效" : "待确认")}</span>
+          <span class="meta-pill">${escapeHtml(profile.topic || "通用风格")}</span>
           <span class="meta-pill">引用 ${escapeHtml(String(profile.sourceSampleIds?.length || 0))} 条样本</span>
         </div>
         <strong>${escapeHtml(profile.status === "active" ? "当前风格画像" : "待确认风格画像")}</strong>
@@ -1635,29 +1844,160 @@ function renderStyleProfile(profileState = {}) {
             : ""
         }
       </article>
+      ${versionsMarkup}
     `
     : '<div class="result-card muted">当前没有风格画像，请先积累成功样本。</div>';
+}
+
+function formatRate(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? `${Math.round(number * 100)}%` : "0%";
+}
+
+function sceneLabel(scene) {
+  const labels = {
+    semantic_review: "语义复判",
+    cross_review: "交叉复判",
+    generation: "生成",
+    rewrite: "改写",
+    rewrite_patch: "改写修补",
+    rewrite_humanizer: "人味化",
+    feedback_suggestion: "反馈建议",
+    feedback_screenshot: "截图识别"
+  };
+
+  return labels[scene] || scene || "未知场景";
+}
+
+function buildModelRecommendationText(item) {
+  if (!item || typeof item !== "object" || !item.model) {
+    return "暂无足够历史数据，先按当前选择执行";
+  }
+
+  const route = item.routeLabel || item.route || "未标记路线";
+  const provider = providerLabel(item.provider);
+  const score = Number.isFinite(Number(item.score)) ? `，稳定分 ${Number(item.score)}` : "";
+
+  return `建议：${route} / ${provider} / ${item.model}${score}`;
+}
+
+function renderMainModelRecommendations(recommendations = {}) {
+  const sceneMap = {
+    "semantic-model-recommendation": recommendations.semantic_review,
+    "rewrite-model-recommendation": recommendations.rewrite,
+    "cross-review-model-recommendation": recommendations.cross_review
+  };
+
+  for (const [id, item] of Object.entries(sceneMap)) {
+    const node = byId(id);
+
+    if (node) {
+      node.textContent = buildModelRecommendationText(item);
+      node.title = item?.reason || "根据模型调用表现生成，仅作提示，不自动改变路由";
+    }
+  }
+}
+
+function renderModelPerformance(summary = {}) {
+  const items = Array.isArray(summary.items) ? summary.items : [];
+  const recommendations = summary.recommendations || {};
+  appState.modelRecommendations = recommendations;
+  renderMainModelRecommendations(recommendations);
+  const cards = items.length
+    ? items
+        .map(
+          (item) => `
+            <article class="admin-item model-performance-card">
+              <strong>${escapeHtml([item.routeLabel || item.route, providerLabel(item.provider), item.model].filter(Boolean).join(" / "))}</strong>
+              <div class="model-performance-grid">
+                <div>
+                  <span>调用</span>
+                  <strong>${escapeHtml(String(item.totalCalls || 0))}</strong>
+                </div>
+                <div>
+                  <span>成功率</span>
+                  <strong>${escapeHtml(formatRate(item.successRate))}</strong>
+                </div>
+                <div>
+                  <span>超时率</span>
+                  <strong>${escapeHtml(formatRate(item.timeoutRate))}</strong>
+                </div>
+                <div>
+                  <span>JSON 错误</span>
+                  <strong>${escapeHtml(formatRate(item.jsonErrorRate))}</strong>
+                </div>
+                <div>
+                  <span>平均耗时</span>
+                  <strong>${escapeHtml(String(item.averageDurationMs || 0))}ms</strong>
+                </div>
+              </div>
+              <p>场景：${escapeHtml((item.scenes || []).map(sceneLabel).join("、") || "未记录")}</p>
+              ${item.lastError ? `<p class="helper-text">最近错误：${escapeHtml(item.lastError)}</p>` : ""}
+            </article>
+          `
+        )
+        .join("")
+    : '<div class="result-card muted">暂无模型调用记录。触发语义复判、改写、生成或反馈识别后会开始沉淀。</div>';
+
+  byId("model-performance-result").innerHTML = `
+    <div class="model-scope-banner">
+      <span class="model-scope-kicker">模型表现</span>
+      <strong>累计调用 ${escapeHtml(String(summary.totalCalls || 0))} 次</strong>
+      <p>当前只做观察统计和推荐提示，不会自动改变模型路由顺序。</p>
+    </div>
+    ${cards}
+  `;
 }
 
 function renderGenerationResult(result = {}) {
   const cards = (result.scoredCandidates || [])
     .map(
-      (item) => `
+      (item, index) => {
+        const finalDraft = item.finalDraft || item;
+        const repair = item.repair || {};
+        const repairMarkup = repair.attempted
+          ? `
+            <div class="generation-repair-banner${repair.applied ? "" : " is-muted"}">
+              <span>${repair.applied ? "已自动修复一次" : "已尝试自动修复"}</span>
+              <p>${escapeHtml(
+                repair.applied
+                  ? repair.rewrite?.rewriteNotes || repair.reason || "已根据风险点完成一次自动修复。"
+                  : repair.error || repair.reason || "本候选已尝试自动修复，但仍需人工确认。"
+              )}</p>
+            </div>
+          `
+          : "";
+
+        return `
         <article class="generation-candidate-card${item.id === result.recommendedCandidateId ? " is-recommended" : ""}">
           <div class="meta-row">
             <span class="meta-pill">${escapeHtml(item.variant || "candidate")}</span>
+            ${repair.attempted ? `<span class="meta-pill">${escapeHtml(repair.applied ? "修复后评分" : "修复未完成")}</span>` : ""}
             <span class="meta-pill">综合分 ${escapeHtml(String(item.scores?.total ?? 0))}</span>
             <span class="meta-pill">风格分 ${escapeHtml(String(item.style?.score ?? 0))}</span>
             <span class="meta-pill">${escapeHtml(verdictLabel(item.analysis?.finalVerdict || item.analysis?.verdict || "pass"))}</span>
           </div>
-          <strong>${escapeHtml(item.title || "未生成标题")}</strong>
-          <p>${escapeHtml(item.coverText || "未生成封面文案")}</p>
-          <div class="rewrite-body-reader">${escapeHtml(item.body || "未生成正文")}</div>
-          <p class="helper-text">标签：${escapeHtml(joinCSV(item.tags) || "未生成")}</p>
-          <p class="helper-text">${escapeHtml(item.generationNotes || "暂无生成说明")}</p>
-          <p class="helper-text">${escapeHtml(item.safetyNotes || "暂无安全注意点")}</p>
+          <strong>${escapeHtml(finalDraft.title || "未生成标题")}</strong>
+          <p>${escapeHtml(finalDraft.coverText || "未生成封面文案")}</p>
+          <div class="rewrite-body-reader">${escapeHtml(finalDraft.body || "未生成正文")}</div>
+          <p class="helper-text">标签：${escapeHtml(joinCSV(finalDraft.tags) || "未生成")}</p>
+          ${repairMarkup}
+          <p class="helper-text">${escapeHtml(finalDraft.generationNotes || item.generationNotes || "暂无生成说明")}</p>
+          <p class="helper-text">${escapeHtml(finalDraft.safetyNotes || item.safetyNotes || "暂无安全注意点")}</p>
+          <div class="item-actions">
+            <button
+              type="button"
+              class="button button-small"
+              data-action="save-lifecycle-generation"
+              data-candidate-id="${escapeHtml(item.id || "")}"
+              data-candidate-index="${escapeHtml(String(index))}"
+            >
+              ${item.id === result.recommendedCandidateId ? "最终推荐稿进入生命周期" : "保存候选稿生命周期"}
+            </button>
+          </div>
         </article>
-      `
+      `;
+      }
     )
     .join("");
 
@@ -1705,6 +2045,7 @@ function renderReviewQueueAdmin(items) {
                 ${escapeHtml(verdictLabel(item.recommendedLexiconDraft?.riskLevel || item.suggestedRiskLevel || "manual_review"))}`
               }</p>
               <p>建议原因：${escapeHtml(item.recommendedLexiconDraft?.xhsReason || "暂无建议原因")}</p>
+              ${buildRuleChangePreviewMarkup(item.ruleChangePreview)}
               <div class="item-actions">
                 <button
                   type="button"
@@ -1761,19 +2102,22 @@ function renderAdminData(data) {
   renderFalsePositiveLog(data.falsePositiveLog || []);
   renderRewritePairList(data.rewritePairs || []);
   renderSuccessSamples(data.successSamples || []);
+  renderNoteLifecycle(data.noteLifecycle || []);
 }
 
 async function refreshAll() {
-  const [summary, adminData, styleProfile] = await Promise.all([
+  const [summary, adminData, styleProfile, modelPerformance] = await Promise.all([
     apiJson("/api/summary"),
     apiJson("/api/admin/data"),
-    apiJson("/api/style-profile")
+    apiJson("/api/style-profile"),
+    apiJson("/api/model-performance")
   ]);
 
   renderSummary(summary);
   renderQueue(adminData.reviewQueue);
   renderAdminData(adminData);
   renderStyleProfile(styleProfile.profile || {});
+  renderModelPerformance(modelPerformance.summary || {});
 }
 
 async function fileToDataUrl(file) {
@@ -1811,6 +2155,7 @@ function getGenerationPayload() {
       title: String(form.get("draftTitle") || "").trim(),
       body: String(form.get("draftBody") || "").trim()
     },
+    styleProfileId: String(form.get("styleProfileId") || "").trim(),
     modelSelection: getSelectedModelSelections()
   };
 }
@@ -1878,6 +2223,63 @@ function fillSuccessSampleFormFromCurrent(source = "analysis") {
     '<div class="result-card-shell">已填充成功样本表单，可补充表现数据后保存。</div>';
 }
 
+function revealNoteLifecyclePane() {
+  activateTab("note-lifecycle-pane");
+  byId("note-lifecycle-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function saveLifecycleFromCurrent(source = "analysis", candidateId = "", candidateIndex = "") {
+  const payload = {
+    source,
+    note: appState.latestAnalyzePayload || {},
+    analysisSnapshot: appState.latestAnalysis || null
+  };
+
+  if (source === "rewrite") {
+    const rewrite = normalizeRewritePayload(appState.latestRewrite);
+    payload.note = {
+      title: rewrite.title,
+      body: rewrite.body,
+      coverText: rewrite.coverText,
+      tags: rewrite.tags
+    };
+    payload.rewriteSnapshot = rewrite;
+  }
+
+  if (source === "generation") {
+    const candidates = appState.latestGeneration?.scoredCandidates || [];
+    const candidate =
+      candidates.find((item) => String(item.id || "") === String(candidateId || "")) ||
+      candidates[Number(candidateIndex)];
+    const finalDraft = candidate?.finalDraft || candidate;
+    const isRecommended = String(candidate?.id || "") === String(appState.latestGeneration?.recommendedCandidateId || "");
+    payload.source = isRecommended ? "generation_final" : "generation_candidate";
+    payload.name = `${isRecommended ? "最终推荐稿" : "生成候选稿"} / ${finalDraft?.title || finalDraft?.variant || "未命名"}`;
+    payload.note = {
+      title: finalDraft?.title,
+      body: finalDraft?.body,
+      coverText: finalDraft?.coverText,
+      tags: finalDraft?.tags
+    };
+    payload.generationSnapshot = candidate
+      ? {
+          ...candidate,
+          lifecycleSource: payload.source,
+          savedDraft: finalDraft
+        }
+      : null;
+    payload.analysisSnapshot = candidate?.analysis || null;
+  }
+
+  const response = await apiJson("/api/note-lifecycle", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  renderNoteLifecycle(response.items || []);
+  revealNoteLifecyclePane();
+  return response;
+}
+
 const analyzeForm = byId("analyze-form");
 analyzeForm.addEventListener("input", syncAnalyzeActions);
 analyzeForm.addEventListener("change", syncAnalyzeActions);
@@ -1903,6 +2305,14 @@ const feedbackState = {
   screenshot: null,
   recognition: null
 };
+
+function openResultPanel(id) {
+  const panel = byId(id);
+
+  if (panel && "open" in panel) {
+    panel.open = true;
+  }
+}
 
 byId("feedback-screenshot").addEventListener("change", async (event) => {
   const file = event.currentTarget.files?.[0];
@@ -1945,6 +2355,7 @@ byId("analyze-form").addEventListener("submit", async (event) => {
   }
 
   setButtonBusy(analyzeButton, true, "检测中...");
+  openResultPanel("analysis-result-panel");
 
   try {
     const result = await apiJson("/api/analyze", {
@@ -1958,6 +2369,7 @@ byId("analyze-form").addEventListener("submit", async (event) => {
     appState.latestAnalyzePayload = getAnalyzePayload();
     appState.latestAnalysis = result;
     appState.latestRewrite = null;
+    appState.latestGeneration = null;
     const falsePositiveSources = buildFalsePositiveCaptureSources({
       analyzePayload: appState.latestAnalyzePayload,
       analysisSnapshot: result
@@ -1985,6 +2397,7 @@ byId("rewrite-button").addEventListener("click", async () => {
   }
 
   setButtonBusy(rewriteButton, true, "改写中...");
+  openResultPanel("rewrite-result-panel");
   byId("rewrite-result").innerHTML =
     '<div class="result-card-shell muted">正在生成合规改写；如果复判还没过，会继续自动改写，直到通过或达到最大轮次...</div>';
 
@@ -2000,6 +2413,7 @@ byId("rewrite-button").addEventListener("click", async () => {
     appState.latestAnalyzePayload = getAnalyzePayload();
     appState.latestAnalysis = result.analysis;
     appState.latestRewrite = normalizeRewritePayload(result.rewrite);
+    appState.latestGeneration = null;
     const falsePositiveSources = buildFalsePositiveCaptureSources({
       analyzePayload: appState.latestAnalyzePayload,
       analysisSnapshot: result.analysis,
@@ -2032,6 +2446,7 @@ byId("cross-review-button").addEventListener("click", async () => {
   }
 
   setButtonBusy(crossReviewButton, true, "复判中...");
+  openResultPanel("cross-review-result-panel");
   byId("cross-review-result").innerHTML =
     '<div class="result-card-shell muted">正在调用不同模型进行交叉复判...</div>';
 
@@ -2044,6 +2459,8 @@ byId("cross-review-button").addEventListener("click", async () => {
       })
     });
 
+    appState.latestAnalyzePayload = getAnalyzePayload();
+    appState.latestAnalysis = result.analysis;
     renderAnalysis(result.analysis);
     renderCrossReviewResult(result);
   } catch (error) {
@@ -2068,6 +2485,7 @@ byId("generation-workbench-form").addEventListener("submit", async (event) => {
       body: JSON.stringify(getGenerationPayload())
     });
 
+    appState.latestGeneration = result;
     renderGenerationResult(result);
   } catch (error) {
     byId("generation-result").innerHTML = `
@@ -2329,7 +2747,10 @@ byId("style-profile-draft-button").addEventListener("click", async () => {
 
   try {
     const response = await apiJson("/api/style-profile/draft", {
-      method: "POST"
+      method: "POST",
+      body: JSON.stringify({
+        topic: byId("style-profile-topic")?.value || ""
+      })
     });
     renderStyleProfile(response.profile || {});
   } catch (error) {
@@ -2499,10 +2920,61 @@ document.addEventListener("click", async (event) => {
       });
     }
 
+    if (action === "save-lifecycle-analysis") {
+      await saveLifecycleFromCurrent("analysis");
+    }
+
+    if (action === "save-lifecycle-rewrite") {
+      await saveLifecycleFromCurrent("rewrite");
+    }
+
+    if (action === "save-lifecycle-generation") {
+      await saveLifecycleFromCurrent("generation", button.dataset.candidateId, button.dataset.candidateIndex);
+    }
+
+    if (action === "update-lifecycle-publish") {
+      const container = button.closest(".admin-item")?.querySelector(".lifecycle-update-grid");
+      await apiJson("/api/note-lifecycle", {
+        method: "PATCH",
+        body: JSON.stringify({
+          id: button.dataset.id,
+          publishStatus: container?.querySelector('[name="publishStatus"]')?.value,
+          notes: container?.querySelector('[name="notes"]')?.value,
+          metrics: {
+            likes: container?.querySelector('[name="likes"]')?.value,
+            favorites: container?.querySelector('[name="favorites"]')?.value,
+            comments: container?.querySelector('[name="comments"]')?.value
+          }
+        })
+      });
+      revealNoteLifecyclePane();
+    }
+
+    if (action === "delete-lifecycle") {
+      await apiJson("/api/note-lifecycle", {
+        method: "DELETE",
+        body: JSON.stringify({
+          id: button.dataset.id
+        })
+      });
+      revealNoteLifecyclePane();
+    }
+
     if (action === "confirm-style-profile") {
       const response = await apiJson("/api/style-profile", {
         method: "PATCH",
         body: JSON.stringify({})
+      });
+      renderStyleProfile(response.profile || {});
+    }
+
+    if (action === "activate-style-profile") {
+      const response = await apiJson("/api/style-profile", {
+        method: "PATCH",
+        body: JSON.stringify({
+          action: "activate",
+          id: button.dataset.id
+        })
       });
       renderStyleProfile(response.profile || {});
     }

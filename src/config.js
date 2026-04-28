@@ -18,5 +18,7 @@ export const paths = {
   rewritePairs: path.join(dataDir, "rewrite-pairs.json"),
   successSamples: path.join(dataDir, "success-samples.json"),
   styleProfile: path.join(dataDir, "style-profile.json"),
+  noteLifecycle: path.join(dataDir, "note-lifecycle.json"),
+  modelPerformance: path.join(dataDir, "model-performance.json"),
   analyzeTagOptions: path.join(dataDir, "analyze-tag-options.json")
 };

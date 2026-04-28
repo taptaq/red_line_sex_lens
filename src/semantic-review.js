@@ -221,6 +221,7 @@ async function callProvider(config, input, analysis) {
         messages: buildMessages(input, analysis),
         timeoutMs: semanticTimeoutMs,
         missingKeyMessage: `缺少 ${config.envKey}`,
+        scene: "semantic_review",
         fallbackParser: (message) => extractJsonBlock(message)
       });
       const displayProvider = resolveDisplayProvider({

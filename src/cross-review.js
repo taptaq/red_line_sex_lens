@@ -207,6 +207,7 @@ async function callProvider(config, input, analysis) {
         messages: buildMessages(input, analysis),
         timeoutMs: providerTimeoutMs,
         missingKeyMessage: `缺少 ${config.envKey}`,
+        scene: "cross_review",
         fallbackParser: (message) => extractJsonBlock(message)
       });
       const displayProvider = resolveDisplayProvider({

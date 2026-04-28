@@ -2,6 +2,7 @@ import { loadFalsePositiveLog, loadLexicon, loadWhitelist } from "./data-store.j
 import { isSameFeedbackNote } from "./feedback-identity.js";
 import { evaluateContextRules } from "./risk-rules.js";
 import { ensureArray, flattenPost, normalizeText } from "./normalizer.js";
+import { calculateSampleWeight } from "./sample-weight.js";
 
 const riskWeights = {
   hard_block: 100,
@@ -104,15 +105,17 @@ function findWhitelistHits(whitelist = [], post = {}) {
 
 function findFalsePositiveHints(falsePositiveLog = [], input = {}) {
   return falsePositiveLog
-    .filter((item) => String(item.status || "").trim() === "platform_passed_confirmed")
+    .filter((item) => ["platform_passed_pending", "platform_passed_confirmed"].includes(String(item.status || "").trim()))
     .filter((item) => isSameFeedbackNote(item, input))
     .map((item) => ({
       sourceId: String(item.id || "").trim(),
       status: String(item.status || "").trim(),
       title: String(item.title || "").trim(),
       auditSignal: String(item.falsePositiveAudit?.signal || "").trim(),
+      sampleWeight: calculateSampleWeight(item, "false_positive"),
       reason: "已确认误报样本与当前内容匹配，建议降低非硬拦截判断权重。"
-    }));
+    }))
+    .sort((a, b) => b.sampleWeight - a.sampleWeight);
 }
 
 function shouldSoftenVerdict(verdict, hits = [], whitelistHits = [], falsePositiveHints = []) {
@@ -124,7 +127,7 @@ function shouldSoftenVerdict(verdict, hits = [], whitelistHits = [], falsePositi
     return false;
   }
 
-  return whitelistHits.length > 0 || falsePositiveHints.length > 0;
+  return whitelistHits.length > 0 || falsePositiveHints.some((item) => item.sampleWeight >= 2);
 }
 
 export async function analyzePost(input = {}) {

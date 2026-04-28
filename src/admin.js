@@ -2,6 +2,7 @@ import {
   loadCustomLexicon,
   loadFeedbackLog,
   loadFalsePositiveLog,
+  loadNoteLifecycle,
   loadReviewQueue,
   loadRewritePairs,
   loadSeedLexicon,
@@ -16,6 +17,7 @@ import {
   saveWhitelist
 } from "./data-store.js";
 import { buildFalsePositiveAudit, getCandidatePhraseIssue, isValidLexiconCandidatePhrase } from "./feedback.js";
+import { buildRuleChangePreview } from "./rule-preview.js";
 
 export function normalizeLexiconLevel(value = "", riskLevel = "manual_review") {
   const text = String(value || "").trim().toLowerCase();
@@ -167,23 +169,32 @@ export function buildLexiconDraftFromReviewItem(item) {
   });
 }
 
-function enrichReviewQueueItem(item) {
+function enrichReviewQueueItem(item, histories = {}) {
+  const recommendedLexiconDraft = buildLexiconDraftFromReviewItem(item);
+
   return {
     ...item,
     lexiconLevel: normalizeLexiconLevel(item.lexiconLevel, item.suggestedRiskLevel),
-    recommendedLexiconDraft: buildLexiconDraftFromReviewItem(item)
+    recommendedLexiconDraft,
+    ruleChangePreview: recommendedLexiconDraft?.blocked
+      ? null
+      : buildRuleChangePreview({
+          draft: recommendedLexiconDraft,
+          histories
+        })
   };
 }
 
 export async function loadAdminData() {
-  const [seedLexicon, customLexicon, feedbackLog, reviewQueue, rewritePairs, falsePositiveLog, successSamples] = await Promise.all([
+  const [seedLexicon, customLexicon, feedbackLog, reviewQueue, rewritePairs, falsePositiveLog, successSamples, noteLifecycle] = await Promise.all([
     loadSeedLexicon(),
     loadCustomLexicon(),
     loadFeedbackLog(),
     loadReviewQueue(),
     loadRewritePairs(),
     loadFalsePositiveLog(),
-    loadSuccessSamples()
+    loadSuccessSamples(),
+    loadNoteLifecycle()
   ]);
 
   return {
@@ -196,10 +207,19 @@ export async function loadAdminData() {
       lexiconLevel: normalizeLexiconLevel(item.lexiconLevel, item.riskLevel)
     })),
     feedbackLog,
-    reviewQueue: reviewQueue.map(enrichReviewQueueItem),
+    reviewQueue: reviewQueue.map((item) =>
+      enrichReviewQueueItem(item, {
+        feedbackLog,
+        falsePositiveLog,
+        rewritePairs,
+        successSamples,
+        noteLifecycle
+      })
+    ),
     rewritePairs,
     falsePositiveLog: falsePositiveLog.map(enrichFalsePositiveLogItem),
-    successSamples
+    successSamples,
+    noteLifecycle
   };
 }
 

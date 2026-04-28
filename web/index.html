@@ -4,23 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>本地合规检测系统</title>
-    <link rel="stylesheet" href="/styles.css?v=20260427-tag-picker-fix" />
+    <link rel="stylesheet" href="/styles.css?v=20260428-v2" />
   </head>
   <body>
     <div class="ambient ambient-a"></div>
     <div class="ambient ambient-b"></div>
     <main class="shell">
-      <section class="hero panel">
-        <div class="hero-copy">
+
+      <!-- ① 紧凑页头（原 hero 区缩减，直接露出工作区） -->
+      <header class="site-header panel">
+        <div class="header-brand">
           <p class="eyebrow">本地审核台</p>
-          <h1>小红书两性敏感合规检测改写系统</h1>
-          <p class="lede">
-            面向两性、身体探索、自我愉悦等高敏话题的本地检测面板。重点不是“猜隐藏词”，而是把风险词、违规原因、组合场景和人工复核流程一起沉淀下来。
-          </p>
+          <h1>小红书合规检测改写系统</h1>
         </div>
         <div class="summary-grid" id="summary-grid"></div>
-      </section>
+      </header>
 
+      <!-- ② 主工作区：检测台 + 反馈回流 -->
       <section class="workspace workspace-main">
         <article class="panel analyzer-panel">
           <div class="section-heading">
@@ -30,162 +30,149 @@
             </div>
             <p class="section-note">先检测，再决定是否改写或交叉复判。</p>
           </div>
-          <form id="analyze-form" class="stack form-grid">
-            <label class="field-wide">
-              <span>标题</span>
-              <input type="text" name="title" placeholder="输入标题" />
-            </label>
-            <label class="field-wide">
-              <span>正文</span>
-              <textarea name="body" rows="8" placeholder="输入正文"></textarea>
-            </label>
-            <label>
-              <span>封面文案</span>
-              <input type="text" name="coverText" placeholder="输入封面文案" />
-            </label>
-            <div>
-              <span>标签</span>
-              <div class="tag-picker" id="analyze-tag-picker">
-                <input type="hidden" name="tags" id="analyze-tags-value" />
-                <div class="tag-picker-trigger-shell">
-                  <button
-                    type="button"
-                    class="tag-picker-trigger"
-                    id="analyze-tag-trigger"
-                    aria-expanded="false"
-                    aria-controls="analyze-tag-dropdown"
-                  >
-                    <span class="tag-picker-trigger-head">
-                      <span class="tag-picker-trigger-label">标签</span>
-                      <span class="tag-picker-trigger-caret" aria-hidden="true">▾</span>
-                    </span>
-                    <span
-                      id="analyze-tag-selected"
-                      class="tag-picker-selected"
-                      role="group"
-                      aria-label="已选标签"
-                      aria-live="polite"
-                    >
-                      <span class="tag-picker-empty">尚未选择标签</span>
-                    </span>
-                  </button>
+          <form id="analyze-form" class="stack analyze-workflow">
+            <section class="workflow-card input-workflow-card">
+              <div class="workflow-card-head">
+                <span class="workflow-step">01</span>
+                <div>
+                  <strong>输入待检测内容</strong>
+                  <p>先把标题、正文、封面和标签放在一起，减少来回扫视。</p>
                 </div>
-                <div class="tag-picker-dropdown" id="analyze-tag-dropdown" hidden>
-                  <div class="tag-picker-dropdown-head">
-                    <strong>选择预置标签</strong>
-                    <button type="button" class="tag-picker-clear" id="analyze-tag-clear">清空</button>
+              </div>
+              <div class="form-grid">
+                <label class="field-wide">
+                  <span>标题</span>
+                  <input type="text" name="title" placeholder="输入标题" />
+                </label>
+                <label class="field-wide">
+                  <span>正文</span>
+                  <textarea name="body" rows="9" placeholder="输入正文"></textarea>
+                </label>
+                <label>
+                  <span>封面文案</span>
+                  <input type="text" name="coverText" placeholder="输入封面文案" />
+                </label>
+                <div>
+                  <span>标签</span>
+                  <div class="tag-picker" id="analyze-tag-picker">
+                    <input type="hidden" name="tags" id="analyze-tags-value" />
+                    <div class="tag-picker-trigger-shell">
+                      <button
+                        type="button"
+                        class="tag-picker-trigger"
+                        id="analyze-tag-trigger"
+                        aria-expanded="false"
+                        aria-controls="analyze-tag-dropdown"
+                      >
+                        <span class="tag-picker-trigger-head">
+                          <span class="tag-picker-trigger-label">标签</span>
+                          <span class="tag-picker-trigger-caret" aria-hidden="true">▾</span>
+                        </span>
+                        <span
+                          id="analyze-tag-selected"
+                          class="tag-picker-selected"
+                          role="group"
+                          aria-label="已选标签"
+                          aria-live="polite"
+                        >
+                          <span class="tag-picker-empty">尚未选择标签</span>
+                        </span>
+                      </button>
+                    </div>
+                    <div class="tag-picker-dropdown" id="analyze-tag-dropdown" hidden>
+                      <div class="tag-picker-dropdown-head">
+                        <strong>选择预置标签</strong>
+                        <button type="button" class="tag-picker-clear" id="analyze-tag-clear">清空</button>
+                      </div>
+                      <div class="tag-picker-options" id="analyze-tag-options"></div>
+                      <div class="tag-picker-custom">
+                        <input type="text" id="analyze-tag-custom" placeholder="输入自定义标签" />
+                        <button type="button" class="button button-ghost button-small" id="analyze-tag-add">添加</button>
+                      </div>
+                    </div>
                   </div>
-                  <div class="tag-picker-options" id="analyze-tag-options"></div>
-                  <div class="tag-picker-custom">
-                    <input type="text" id="analyze-tag-custom" placeholder="输入自定义标签" />
-                    <button type="button" class="button button-ghost button-small" id="analyze-tag-add">添加</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="workflow-card action-workflow-card">
+              <div class="workflow-card-head">
+                <span class="workflow-step">02</span>
+                <div>
+                  <strong>选择动作</strong>
+                  <p>常用操作直接点按钮，模型仍然可以按场景单独选择。</p>
+                </div>
+              </div>
+              <div class="model-action-grid">
+                <div class="model-action-card">
+                  <label for="semantic-model-selection" class="model-action-label">
+                    <span>语义复判模型</span>
+                  </label>
+                  <div class="model-action-control">
+                    <select id="semantic-model-selection" name="semanticModelSelection" class="model-action-select">
+                      <option value="auto">默认自动 / 加载中...</option>
+                    </select>
+                    <p class="model-recommendation-hint" id="semantic-model-recommendation">模型建议加载中</p>
+                    <button type="submit" class="button button-ghost" id="analyze-button" disabled>运行检测</button>
+                  </div>
+                </div>
+                <div class="model-action-card">
+                  <label for="rewrite-model-selection" class="model-action-label">
+                    <span>改写模型</span>
+                  </label>
+                  <div class="model-action-control">
+                    <select id="rewrite-model-selection" name="rewriteModelSelection" class="model-action-select">
+                      <option value="auto">默认自动 / 加载中...</option>
+                    </select>
+                    <p class="model-recommendation-hint" id="rewrite-model-recommendation">模型建议加载中</p>
+                    <button type="button" class="button button-ghost" id="rewrite-button" disabled>一键合规改写</button>
+                  </div>
+                </div>
+                <div class="model-action-card">
+                  <label for="cross-review-model-selection" class="model-action-label">
+                    <span>交叉复判模型</span>
+                  </label>
+                  <div class="model-action-control">
+                    <select id="cross-review-model-selection" name="crossReviewModelSelection" class="model-action-select">
+                      <option value="group">默认模型组 / 加载中...</option>
+                    </select>
+                    <p class="model-recommendation-hint" id="cross-review-model-recommendation">模型建议加载中</p>
+                    <button type="button" class="button button-ghost" id="cross-review-button" disabled>模型交叉复判</button>
                   </div>
                 </div>
               </div>
-            </div>
-            <div class="field-wide model-action-grid">
-              <div class="model-action-card">
-                <label for="semantic-model-selection" class="model-action-label">
-                  <span>语义复判模型</span>
-                </label>
-                <div class="model-action-control">
-                  <select id="semantic-model-selection" name="semanticModelSelection" class="model-action-select">
-                    <option value="auto">默认自动 / 加载中...</option>
-                  </select>
-                  <button type="submit" class="button" id="analyze-button" disabled>运行检测</button>
-                </div>
-              </div>
-              <div class="model-action-card">
-                <label for="rewrite-model-selection" class="model-action-label">
-                  <span>改写模型</span>
-                </label>
-                <div class="model-action-control">
-                  <select id="rewrite-model-selection" name="rewriteModelSelection" class="model-action-select">
-                    <option value="auto">默认自动 / 加载中...</option>
-                  </select>
-                  <button type="button" class="button button-ghost" id="rewrite-button" disabled>一键合规改写</button>
-                </div>
-              </div>
-              <div class="model-action-card">
-                <label for="cross-review-model-selection" class="model-action-label">
-                  <span>交叉复判模型</span>
-                </label>
-                <div class="model-action-control">
-                  <select id="cross-review-model-selection" name="crossReviewModelSelection" class="model-action-select">
-                    <option value="group">默认模型组 / 加载中...</option>
-                  </select>
-                  <button type="button" class="button button-ghost" id="cross-review-button" disabled>模型交叉复判</button>
-                </div>
-              </div>
-            </div>
+            </section>
           </form>
-          <div class="results-stack">
-            <section class="result-section">
-              <div class="result-heading">
+          <div class="results-stack workflow-card result-workflow-card">
+            <div class="workflow-card-head">
+              <span class="workflow-step">03</span>
+              <div>
+                <strong>查看检测报告</strong>
+                <p>默认先看结论，需要细节时再展开对应报告。</p>
+              </div>
+            </div>
+            <details class="result-section result-disclosure" id="analysis-result-panel" open>
+              <summary class="result-heading">
                 <strong>规则检测</strong>
                 <span>先看命中项和建议，顺手可记录误报样本</span>
-              </div>
+              </summary>
               <div id="analysis-result" class="result-card muted">等待检测</div>
-            </section>
-            <section class="result-section">
-              <div class="result-heading">
+            </details>
+            <details class="result-section result-disclosure" id="rewrite-result-panel">
+              <summary class="result-heading">
                 <strong>合规改写</strong>
                 <span>生成更偏教育 / 沟通 / 科普语境的版本，也可顺手记录误报样本</span>
-              </div>
+              </summary>
               <div id="rewrite-result" class="result-card muted">等待改写</div>
-            </section>
-            <section class="result-section">
-              <div class="result-heading">
+            </details>
+            <details class="result-section result-disclosure" id="cross-review-result-panel">
+              <summary class="result-heading">
                 <strong>交叉复判</strong>
                 <span>查看不同模型是否给出一致判断</span>
-              </div>
+              </summary>
               <div id="cross-review-result" class="result-card muted">等待复判</div>
-            </section>
+            </details>
           </div>
-          <section class="card generation-workbench">
-            <div class="section-heading">
-              <div>
-                <p class="eyebrow">自进化成稿</p>
-                <h2>生成候选小红书笔记</h2>
-              </div>
-              <p class="section-note">从零生成或基于草稿优化，自动参考成功样本和当前风格画像。</p>
-            </div>
-            <form id="generation-workbench-form" class="stacked-form form-grid">
-              <label>
-                <span>生成模式</span>
-                <select name="mode">
-                  <option value="from_scratch">从零生成</option>
-                  <option value="draft_optimize">草稿优化</option>
-                </select>
-              </label>
-              <label>
-                <span>主题</span>
-                <input name="topic" placeholder="例如：亲密关系沟通" />
-              </label>
-              <label class="field-wide">
-                <span>卖点 / 重点</span>
-                <textarea name="sellingPoints" rows="2" placeholder="例如：温和、科普、可执行"></textarea>
-              </label>
-              <label>
-                <span>目标人群</span>
-                <input name="audience" placeholder="例如：刚进入关系的人" />
-              </label>
-              <label>
-                <span>注意事项</span>
-                <input name="constraints" placeholder="例如：不要营销感，不要过度承诺" />
-              </label>
-              <label>
-                <span>草稿标题</span>
-                <input name="draftTitle" placeholder="已有草稿标题，可选" />
-              </label>
-              <label class="field-wide">
-                <span>草稿正文</span>
-                <textarea name="draftBody" rows="5" placeholder="已有草稿正文，可选"></textarea>
-              </label>
-              <button type="submit" class="button field-wide">生成候选稿</button>
-            </form>
-            <div id="generation-result" class="result-card-shell muted">等待生成</div>
-          </section>
         </article>
 
         <article class="panel feedback-panel">
@@ -194,7 +181,7 @@
               <p class="eyebrow">反馈回流</p>
               <h2>违规原因回流</h2>
             </div>
-            <p class="section-note">用“笔记内容 + 平台原因”联合复盘，规则优先，再由模型顺序兜底补充精确词候选和语境候选，最后交给人工复核。</p>
+            <p class="section-note">用"笔记内容 + 平台原因"联合复盘，规则优先，再由模型顺序兜底补充精确词候选和语境候选，最后交给人工复核。</p>
           </div>
           <form id="feedback-form" class="stack form-grid compact-feedback">
             <label class="field-wide">
@@ -258,6 +245,61 @@
         </article>
       </section>
 
+      <!-- ③ 生成工作台（独立提升，不再嵌套在检测台内） -->
+      <section class="workspace workspace-generation">
+        <article class="panel generation-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">自进化成稿</p>
+              <h2>生成候选小红书笔记</h2>
+            </div>
+            <p class="section-note">从零生成或基于草稿优化，自动参考成功样本和当前风格画像。</p>
+          </div>
+          <form id="generation-workbench-form" class="stacked-form form-grid">
+            <label class="field-wide">
+              <span>风格画像</span>
+              <select name="styleProfileId" id="generation-style-profile-select">
+                <option value="">当前默认画像</option>
+              </select>
+            </label>
+            <label>
+              <span>生成模式</span>
+              <select name="mode">
+                <option value="from_scratch">从零生成</option>
+                <option value="draft_optimize">草稿优化</option>
+              </select>
+            </label>
+            <label>
+              <span>主题</span>
+              <input name="topic" placeholder="例如：亲密关系沟通" />
+            </label>
+            <label class="field-wide">
+              <span>卖点 / 重点</span>
+              <textarea name="sellingPoints" rows="2" placeholder="例如：温和、科普、可执行"></textarea>
+            </label>
+            <label>
+              <span>目标人群</span>
+              <input name="audience" placeholder="例如：刚进入关系的人" />
+            </label>
+            <label>
+              <span>注意事项</span>
+              <input name="constraints" placeholder="例如：不要营销感，不要过度承诺" />
+            </label>
+            <label>
+              <span>草稿标题</span>
+              <input name="draftTitle" placeholder="已有草稿标题，可选" />
+            </label>
+            <label class="field-wide">
+              <span>草稿正文</span>
+              <textarea name="draftBody" rows="5" placeholder="已有草稿正文，可选"></textarea>
+            </label>
+            <button type="submit" class="button field-wide">生成候选稿</button>
+          </form>
+          <div id="generation-result" class="result-card-shell muted">等待生成</div>
+        </article>
+      </section>
+
+      <!-- ④ 支撑区：人工复核 + 数据维护 -->
       <section class="workspace workspace-support">
         <article class="panel queue-panel">
           <div class="section-heading">
@@ -278,13 +320,17 @@
             </div>
             <p class="section-note">把低频维护收进单面板，当前只展示一个分区，减少页面高度。</p>
           </div>
+          <!-- Tab 分组：词库/日志 ｜ 样本/画像 用分隔符隔开 -->
           <div class="tab-strip" role="tablist" aria-label="数据维护分区">
             <button type="button" class="tab-button" data-tab-target="custom-lexicon-pane">自定义词库</button>
             <button type="button" class="tab-button" data-tab-target="seed-lexicon-pane">种子词库</button>
             <button type="button" class="tab-button" data-tab-target="feedback-log-pane">反馈日志</button>
             <button type="button" class="tab-button" data-tab-target="false-positive-log-pane">误报样本</button>
+            <span class="tab-sep" role="separator" aria-hidden="true"></span>
             <button type="button" class="tab-button" data-tab-target="rewrite-pairs-pane">改写样本</button>
             <button type="button" class="tab-button" data-tab-target="success-samples-pane">成功样本</button>
+            <button type="button" class="tab-button" data-tab-target="note-lifecycle-pane">生命周期</button>
+            <button type="button" class="tab-button" data-tab-target="model-performance-pane">模型看板</button>
             <button type="button" class="tab-button" data-tab-target="style-profile-pane">风格画像</button>
           </div>
           <div class="tab-panels">
@@ -437,7 +483,7 @@
                       <textarea
                         name="effectiveChanges"
                         rows="3"
-                        placeholder="例如：去掉“私信我/完整版”，弱化刺激性描述，标题改成关系教育语境"
+                        placeholder="例如：去掉"私信我/完整版"，弱化刺激性描述，标题改成关系教育语境"
                       ></textarea>
                     </label>
                     <div class="columns">
@@ -561,15 +607,41 @@
               </div>
             </section>
 
+            <section class="tab-panel" id="note-lifecycle-pane">
+              <div class="tab-panel-head">
+                <strong>笔记生命周期</strong>
+                <span>记录从检测、改写、生成到发布后的结果，帮助系统学习哪些内容真正能稳定过审。</span>
+              </div>
+              <div class="admin-panel-block">
+                <div id="note-lifecycle-list" class="admin-list"></div>
+              </div>
+            </section>
+
+            <section class="tab-panel" id="model-performance-pane">
+              <div class="tab-panel-head">
+                <strong>模型表现看板</strong>
+                <span>统计每个模型路由的成功率、超时率、JSON 错误率和平均耗时。</span>
+              </div>
+              <div class="admin-panel-block">
+                <div id="model-performance-result" class="admin-list"></div>
+              </div>
+            </section>
+
             <section class="tab-panel" id="style-profile-pane">
               <div class="tab-panel-head">
                 <strong>风格画像</strong>
-                <span>从高权重成功样本生成画像草稿，人工确认后才参与正式生成。</span>
+                <span>从高权重成功样本生成画像草稿，按主题管理版本，人工确认后才参与正式生成。</span>
               </div>
               <div class="admin-panel-block">
-                <button type="button" class="button" id="style-profile-draft-button">
-                  从成功样本生成画像草稿
-                </button>
+                <div class="admin-panel-body">
+                  <label>
+                    <span>画像主题</span>
+                    <input id="style-profile-topic" placeholder="例如：亲密关系科普 / 产品软植入" />
+                  </label>
+                  <button type="button" class="button" id="style-profile-draft-button">
+                    从成功样本生成画像草稿
+                  </button>
+                </div>
                 <div id="style-profile-result" class="admin-list"></div>
               </div>
             </section>
@@ -577,6 +649,6 @@
         </article>
       </section>
     </main>
-    <script type="module" src="/app.js?v=20260427-tag-picker-fix"></script>
+    <script type="module" src="/app.js?v=20260428-workflow-layout"></script>
   </body>
-  </html>
+</html>

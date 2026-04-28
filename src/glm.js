@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { abstractReasonPhraseLabels, feedbackContextCategories } from "./feedback.js";
 import { filterProviderConfigsBySelection, getRewriteProviderSelection } from "./model-selection.js";
+import { recordModelCall } from "./model-performance.js";
 
 const glmEndpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
 const defaultKimiEndpoint = "https://api.moonshot.cn/v1/chat/completions";
@@ -162,6 +163,12 @@ function createGlmError(message, statusCode = 500) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function recordModelCallSafe(payload = {}) {
+  try {
+    await recordModelCall(payload);
+  } catch {}
 }
 
 function guessMimeType(filePath = "") {
@@ -1212,7 +1219,8 @@ async function attemptRoutedProviderRoute({
   fallbackParser,
   timeoutMs,
   allowRecoverableFallback,
-  useDmxapi
+  useDmxapi,
+  scene = "unknown"
 }) {
   const requestBodies = buildRoutedRequestBodies({
     model,
@@ -1224,6 +1232,9 @@ async function attemptRoutedProviderRoute({
   });
   let lastError = null;
   let shouldFallback = false;
+  const startedAt = Date.now();
+  const route = useDmxapi ? "dmxapi" : "official";
+  const routeLabel = useDmxapi ? "DMXAPI" : "官方";
 
   requestBodyLoop: for (const requestBody of requestBodies) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -1248,7 +1259,7 @@ async function attemptRoutedProviderRoute({
               : `${label} 请求失败`,
           error?.name === "AbortError" ? 504 : 502
           ),
-          { route: useDmxapi ? "dmxapi" : "official", routeLabel: useDmxapi ? "DMXAPI" : "官方", model }
+          { route, routeLabel, model }
         );
         shouldFallback = allowRecoverableFallback && isRoutedProviderRecoverableFailure(0, lastError.message, error);
         break requestBodyLoop;
@@ -1269,8 +1280,8 @@ async function attemptRoutedProviderRoute({
         }
 
         lastError = attachRouteMetadata(createGlmError(message, isBusy ? 503 : response.status || 500), {
-          route: useDmxapi ? "dmxapi" : "official",
-          routeLabel: useDmxapi ? "DMXAPI" : "官方",
+          route,
+          routeLabel,
           model
         });
 
@@ -1283,10 +1294,10 @@ async function attemptRoutedProviderRoute({
       }
 
       try {
-        return {
+        const parsedResult = {
           ok: true,
-          route: useDmxapi ? "dmxapi" : "official",
-          routeLabel: useDmxapi ? "DMXAPI" : "官方",
+          route,
+          routeLabel,
           ...parseJsonChatResult({
             data,
             candidate: model,
@@ -1294,10 +1305,20 @@ async function attemptRoutedProviderRoute({
             providerLabel: label
           })
         };
+        await recordModelCallSafe({
+          scene,
+          provider,
+          route,
+          routeLabel,
+          model: parsedResult.model || model,
+          status: "ok",
+          durationMs: Date.now() - startedAt
+        });
+        return parsedResult;
       } catch (error) {
         lastError = attachRouteMetadata(error, {
-          route: useDmxapi ? "dmxapi" : "official",
-          routeLabel: useDmxapi ? "DMXAPI" : "官方",
+          route,
+          routeLabel,
           model
         });
 
@@ -1316,6 +1337,19 @@ async function attemptRoutedProviderRoute({
     }
   }
 
+  await recordModelCallSafe({
+    scene,
+    provider,
+    route,
+    routeLabel,
+    model: String(lastError?.model || model || "").trim(),
+    status: "error",
+    errorType: "",
+    statusCode: lastError?.statusCode || 0,
+    message: lastError?.message || `${label} 暂时不可用，请稍后再试。`,
+    durationMs: Date.now() - startedAt
+  });
+
   return {
     ok: false,
     error: lastError || createGlmError(`${label} 暂时不可用，请稍后再试。`, 503),
@@ -1332,7 +1366,8 @@ export async function callRoutedTextProviderJson({
   missingKeyMessage,
   responseFormat = "json_object",
   fallbackParser = null,
-  timeoutMs = 0
+  timeoutMs = 0,
+  scene = "unknown"
 }) {
   const config = routedTextProviderConfigs[String(provider || "").trim()];
 
@@ -1359,7 +1394,8 @@ export async function callRoutedTextProviderJson({
       fallbackParser,
       timeoutMs,
       allowRecoverableFallback: true,
-      useDmxapi: true
+      useDmxapi: true,
+      scene
     });
 
     if (dmxapiResult.ok) {
@@ -1397,7 +1433,8 @@ export async function callRoutedTextProviderJson({
         fallbackParser,
         timeoutMs,
         allowRecoverableFallback: false,
-        useDmxapi: false
+        useDmxapi: false,
+        scene
       });
 
       if (officialResult.ok) {
@@ -1443,7 +1480,8 @@ export async function callRoutedTextProviderJson({
     fallbackParser,
     timeoutMs,
     allowRecoverableFallback: false,
-    useDmxapi: false
+    useDmxapi: false,
+    scene
   });
 
   if (officialResult.ok) {
@@ -1504,7 +1542,8 @@ async function callChatJson({
   messages,
   missingKeyMessage,
   responseFormat = "json_object",
-  fallbackParser = null
+  fallbackParser = null,
+  scene = "unknown"
 }) {
   if (providerConfig?.provider && routedTextProviderConfigs[providerConfig.provider]) {
     const officialModels = (Array.isArray(models) && models.length ? models : [model]).filter(Boolean);
@@ -1520,7 +1559,8 @@ async function callChatJson({
           messages,
           missingKeyMessage,
           responseFormat,
-          fallbackParser
+          fallbackParser,
+          scene
         });
       } catch (error) {
         lastError = error;
@@ -1710,6 +1750,7 @@ export async function recognizeFeedbackScreenshot({ imageDataUrl, mimeType, file
     model: defaultVisionModel,
     temperature: 0.1,
     missingKeyMessage: "截图识别缺少 GLM_API_KEY 环境变量。",
+    scene: "feedback_screenshot",
     messages: [
       {
         role: "system",
@@ -2096,13 +2137,14 @@ async function callFeedbackSuggestionProvider(config, messages) {
       const { parsed, model } = await routedCall({
         model: (Array.isArray(config.models) ? config.models[0] : config.model) || defaultModel,
         temperature: 0.1,
-        maxTokens: 560,
-        messages,
-        timeoutMs: feedbackSuggestTimeoutMs,
-        missingKeyMessage: `缺少 ${config.envKey}`,
-        fallbackParser: (message, rawContent) =>
-          tryParseJsonFromUnknown(rawContent) || tryParseJsonFromUnknown(message)
-      });
+    maxTokens: 560,
+    messages,
+    timeoutMs: feedbackSuggestTimeoutMs,
+    missingKeyMessage: `缺少 ${config.envKey}`,
+    scene: "feedback_suggestion",
+    fallbackParser: (message, rawContent) =>
+      tryParseJsonFromUnknown(rawContent) || tryParseJsonFromUnknown(message)
+  });
 
       return {
         status: "ok",
@@ -2276,6 +2318,7 @@ export async function rewritePostForCompliance({ input = {}, analysis = {}, mode
     maxTokens: usePatchMode ? rewriteGenerationConfig.patchMaxTokens : rewriteGenerationConfig.baseMaxTokens,
     missingKeyMessage: `改写功能缺少 ${rewriteProviderConfig.envKey} 环境变量。`,
     fallbackParser: salvageRewritePayload,
+    scene: usePatchMode ? "rewrite_patch" : "rewrite",
     messages: usePatchMode ? buildPatchMessages({ input, analysis, semantic }) : buildRewriteMessages({ input, analysis, semantic })
   });
 
@@ -2302,6 +2345,7 @@ export async function rewritePostForCompliance({ input = {}, analysis = {}, mode
       maxTokens: rewriteGenerationConfig.humanizerMaxTokens,
       missingKeyMessage: `改写后人味化缺少 ${rewriteProviderConfig.envKey} 环境变量。`,
       fallbackParser: salvageRewritePayload,
+      scene: "rewrite_humanizer",
       messages: buildHumanizerMessages({ input, analysis, semantic, baseRewrite })
     });
 

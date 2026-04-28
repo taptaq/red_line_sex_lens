@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { isSameFeedbackNote } from "./feedback-identity.js";
 import { paths } from "./config.js";
+import { withSampleWeight } from "./sample-weight.js";
 
 async function readJson(filePath, fallback) {
   try {
@@ -36,7 +37,7 @@ function normalizeNumber(value, fallback = 0) {
 function normalizeFalsePositiveEntry(entry = {}) {
   const status = normalizeString(entry.status) || "platform_passed_pending";
 
-  return {
+  return withSampleWeight({
     ...entry,
     id: normalizeString(entry.id),
     status,
@@ -49,7 +50,7 @@ function normalizeFalsePositiveEntry(entry = {}) {
     coverText: normalizeString(entry.coverText),
     tags: uniqueStrings(entry.tags),
     userNotes: normalizeString(entry.userNotes)
-  };
+  }, "false_positive");
 }
 
 export async function loadLexicon() {
@@ -95,7 +96,17 @@ export async function loadRewritePairs() {
 }
 
 export async function loadSuccessSamples() {
-  return readJson(paths.successSamples, []);
+  const items = await readJson(paths.successSamples, []);
+  return (Array.isArray(items) ? items : []).map((item) => withSampleWeight(item, "success"));
+}
+
+export async function loadNoteLifecycle() {
+  const items = await readJson(paths.noteLifecycle, []);
+  return (Array.isArray(items) ? items : []).map((item) => withSampleWeight(item, "lifecycle"));
+}
+
+export async function saveNoteLifecycle(items) {
+  await writeJson(paths.noteLifecycle, Array.isArray(items) ? items : []);
 }
 
 export async function saveSuccessSamples(items) {
@@ -152,18 +163,20 @@ export async function saveFalsePositiveLog(items) {
 }
 
 export async function loadSummary() {
-  const [seed, custom, feedback, reviewQueue] = await Promise.all([
+  const [seed, custom, feedback, reviewQueue, noteLifecycle] = await Promise.all([
     readJson(paths.lexiconSeed, []),
     readJson(paths.lexiconCustom, []),
     readJson(paths.feedbackLog, []),
-    readJson(paths.reviewQueue, [])
+    readJson(paths.reviewQueue, []),
+    readJson(paths.noteLifecycle, [])
   ]);
 
   return {
     seedLexiconCount: seed.length,
     customLexiconCount: custom.length,
     feedbackCount: feedback.length,
-    reviewQueueCount: reviewQueue.length
+    reviewQueueCount: reviewQueue.length,
+    noteLifecycleCount: noteLifecycle.length
   };
 }
 

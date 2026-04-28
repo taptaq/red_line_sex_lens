@@ -34,7 +34,29 @@ function averageLength(items = []) {
   return Math.round(values.reduce((total, value) => total + value, 0) / values.length);
 }
 
-export function buildStyleProfileDraft(successSamples = []) {
+function normalizeTopic(value = "") {
+  return String(value || "").trim() || "通用风格";
+}
+
+function normalizeVersions(profileState = {}) {
+  const versions = Array.isArray(profileState.versions) ? profileState.versions : [];
+  const current = profileState.current && typeof profileState.current === "object" ? profileState.current : null;
+  const byId = new Map();
+
+  for (const version of versions) {
+    if (version?.id) {
+      byId.set(String(version.id), version);
+    }
+  }
+
+  if (current?.id && !byId.has(String(current.id))) {
+    byId.set(String(current.id), current);
+  }
+
+  return [...byId.values()];
+}
+
+export function buildStyleProfileDraft(successSamples = [], options = {}) {
   const sourceSamples = (Array.isArray(successSamples) ? successSamples : [])
     .filter((item) => getSuccessSampleWeight(item) >= 2)
     .sort((a, b) => getSuccessSampleWeight(b) - getSuccessSampleWeight(a))
@@ -45,8 +67,10 @@ export function buildStyleProfileDraft(successSamples = []) {
   const now = new Date().toISOString();
 
   return {
-    id: `style-profile-draft-${Date.now()}`,
+    id: `style-profile-draft-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
     status: "draft",
+    topic: normalizeTopic(options.topic),
+    name: String(options.name || "").trim() || `${normalizeTopic(options.topic)}画像`,
     sourceSampleIds: sourceSamples.map((item) => String(item.id || "").trim()).filter(Boolean),
     titleStyle: titleLength
       ? `标题平均约 ${titleLength} 字，优先保持清晰、克制、带一点真实经验感。`
@@ -77,16 +101,69 @@ export function confirmStyleProfileDraft(profileState = {}, overrides = {}) {
   }
 
   const now = new Date().toISOString();
+  const current = {
+    ...draft,
+    ...overrides,
+    status: "active",
+    topic: normalizeTopic(overrides.topic || draft.topic),
+    name: String(overrides.name || draft.name || "").trim() || `${normalizeTopic(overrides.topic || draft.topic)}画像`,
+    confirmedAt: now,
+    updatedAt: now
+  };
+  const versions = normalizeVersions(profileState).map((item) => ({
+    ...item,
+    status: item.id === current.id ? "active" : "archived"
+  }));
+  const currentIndex = versions.findIndex((item) => item.id === current.id);
+
+  if (currentIndex >= 0) {
+    versions[currentIndex] = current;
+  } else {
+    versions.push(current);
+  }
 
   return {
     draft: null,
-    current: {
-      ...draft,
-      ...overrides,
-      status: "active",
-      confirmedAt: now,
-      updatedAt: now
-    }
+    current,
+    versions
+  };
+}
+
+export function getActiveStyleProfile(profileState = {}, profileId = "") {
+  const id = String(profileId || "").trim();
+  const versions = normalizeVersions(profileState);
+
+  if (id) {
+    const selected = versions.find((item) => String(item.id || "").trim() === id);
+    return selected ? { ...selected, status: "active" } : null;
+  }
+
+  return profileState.current || versions.find((item) => item.status === "active") || null;
+}
+
+export function setActiveStyleProfileVersion(profileState = {}, profileId = "") {
+  const id = String(profileId || "").trim();
+  const versions = normalizeVersions(profileState);
+  const target = versions.find((item) => String(item.id || "").trim() === id);
+
+  if (!target) {
+    const error = new Error("未找到要启用的风格画像版本。");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const now = new Date().toISOString();
+  const nextCurrent = {
+    ...target,
+    status: "active",
+    activatedAt: now,
+    updatedAt: now
+  };
+
+  return {
+    ...profileState,
+    current: nextCurrent,
+    versions: versions.map((item) => (item.id === id ? nextCurrent : { ...item, status: "archived" }))
   };
 }
 

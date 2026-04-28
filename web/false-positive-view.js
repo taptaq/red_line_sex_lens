@@ -149,6 +149,7 @@ export function buildFalsePositiveEntryMarkup(item = {}) {
       <strong>${escapeHtml(title)}</strong>
       <div class="meta-row">
         <span class="meta-pill">${escapeHtml(status)}</span>
+        <span class="meta-pill">权重 ${escapeHtml(String(item.sampleWeight ?? "-"))}</span>
         <span class="meta-pill">${escapeHtml(falsePositiveAuditLabel(audit))}</span>
         <span class="meta-pill">${escapeHtml(verdictLabel(analysisVerdict))}</span>
         ${updatedAt ? `<span class="meta-pill">${escapeHtml(updatedAt)}</span>` : ""}

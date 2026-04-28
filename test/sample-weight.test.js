@@ -1,0 +1,64 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import {
+  calculateSampleWeight,
+  rankSamplesByWeight,
+  withSampleWeight
+} from "../src/sample-weight.js";
+import { buildGenerationMessages } from "../src/generation-workbench.js";
+import { getSuccessSampleWeight } from "../src/success-samples.js";
+
+test("sample weights prefer stronger confirmed evidence over weaker samples", () => {
+  const passed = calculateSampleWeight({ tier: "passed" }, "success");
+  const featured = calculateSampleWeight({ tier: "featured" }, "success");
+  const pendingFalsePositive = calculateSampleWeight({ status: "platform_passed_pending" }, "false_positive");
+  const confirmedFalsePositive = calculateSampleWeight({ status: "platform_passed_confirmed" }, "false_positive");
+
+  assert.ok(featured > passed);
+  assert.ok(confirmedFalsePositive > pendingFalsePositive);
+  assert.equal(getSuccessSampleWeight({ tier: "featured" }), featured);
+});
+
+test("sample weights include lifecycle outcomes and engagement signals", () => {
+  const onlyPublished = calculateSampleWeight({ status: "published_passed" }, "lifecycle");
+  const performed = calculateSampleWeight(
+    {
+      status: "positive_performance",
+      publishResult: {
+        metrics: { likes: 120, favorites: 30, comments: 8 }
+      }
+    },
+    "lifecycle"
+  );
+  const violation = calculateSampleWeight({ status: "violation" }, "lifecycle");
+
+  assert.ok(performed > onlyPublished);
+  assert.ok(onlyPublished > violation);
+});
+
+test("weighted ranking sorts samples and exposes sampleWeight", () => {
+  const ranked = rankSamplesByWeight(
+    [
+      { id: "low", tier: "passed" },
+      { id: "high", tier: "featured" }
+    ],
+    "success"
+  );
+
+  assert.equal(ranked[0].id, "high");
+  assert.equal(ranked[0].sampleWeight, calculateSampleWeight({ tier: "featured" }, "success"));
+  assert.equal(withSampleWeight({ id: "fp", status: "platform_passed_confirmed" }, "false_positive").sampleWeight > 1, true);
+});
+
+test("generation prompt uses higher weighted reference samples first", () => {
+  const messages = buildGenerationMessages({
+    referenceSamples: [
+      { id: "passed", tier: "passed", title: "仅过审样本", body: "普通正文" },
+      { id: "featured", tier: "featured", title: "精选样本", body: "高质量正文" }
+    ]
+  });
+  const prompt = messages[1].content;
+
+  assert.ok(prompt.indexOf("精选样本") < prompt.indexOf("仅过审样本"));
+});

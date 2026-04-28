@@ -181,6 +181,52 @@ test("whitelist counterexample phrases soften matching manual-review results aft
   );
 });
 
+test("pending false positive samples are visible but weighted below confirmed samples", async (t) => {
+  await withTempAnalyzerData(
+    t,
+    {
+      seedLexicon: [
+        {
+          id: "manual-sensitive",
+          match: "exact",
+          term: "敏感短语",
+          category: "两性用品宣传与展示",
+          riskLevel: "manual_review",
+          fields: ["body"],
+          enabled: true
+        }
+      ],
+      falsePositiveLog: [
+        {
+          id: "fp-pending-1",
+          status: "platform_passed_pending",
+          title: "健康表达案例",
+          body: "这是一条包含敏感短语但刚发布正常的健康表达。",
+          falsePositiveAudit: { signal: "strict_pending" }
+        },
+        {
+          id: "fp-confirmed-1",
+          status: "platform_passed_confirmed",
+          title: "健康表达案例",
+          body: "这是一条包含敏感短语但刚发布正常的健康表达。",
+          falsePositiveAudit: { signal: "strict_confirmed" }
+        }
+      ]
+    },
+    async () => {
+      const result = await analyzePost({
+        title: "健康表达案例",
+        body: "这是一条包含敏感短语但刚发布正常的健康表达。"
+      });
+
+      assert.equal(result.falsePositiveHints.length, 2);
+      assert.equal(result.falsePositiveHints[0].sourceId, "fp-confirmed-1");
+      assert.ok(result.falsePositiveHints[0].sampleWeight > result.falsePositiveHints[1].sampleWeight);
+      assert.equal(result.verdict, "observe");
+    }
+  );
+});
+
 test("false-positive and whitelist signals do not soften hard-block results", async (t) => {
   await withTempAnalyzerData(
     t,

@@ -1,12 +1,8 @@
 import crypto from "node:crypto";
 import { ensureArray, normalizeText } from "./normalizer.js";
+import { calculateSampleWeight, withSampleWeight } from "./sample-weight.js";
 
 const allowedTiers = new Set(["passed", "performed", "featured"]);
-const tierWeights = {
-  passed: 1,
-  performed: 2,
-  featured: 3
-};
 
 function uniqueStrings(items = []) {
   return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
@@ -61,7 +57,7 @@ export function buildSuccessSampleRecord(input = {}) {
     String(input.id || "").trim() ||
     `success-${crypto.createHash("sha1").update(identityKey || `${Date.now()}`).digest("hex").slice(0, 16)}`;
 
-  return {
+  return withSampleWeight({
     id,
     tier: normalizeTier(input.tier),
     title: String(input.title || "").trim(),
@@ -77,11 +73,14 @@ export function buildSuccessSampleRecord(input = {}) {
     rewriteSnapshot: input.rewriteSnapshot || input.rewrite || null,
     createdAt: String(input.createdAt || now).trim(),
     updatedAt: now
-  };
+  }, "success");
 }
 
 export function getSuccessSampleWeight(item = {}) {
-  return tierWeights[normalizeTier(item.tier)] || 1;
+  return calculateSampleWeight({
+    ...item,
+    tier: normalizeTier(item.tier)
+  }, "success");
 }
 
 export function upsertSuccessSampleRecords(current = [], incoming = []) {

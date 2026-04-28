@@ -50,7 +50,8 @@ test("buildSuccessSampleRecord normalizes tiers, metrics, content, and snapshots
   assert.equal(record.source, "current_rewrite");
   assert.equal(record.analysisSnapshot.verdict, "pass");
   assert.equal(record.rewriteSnapshot.model, "glm-test");
-  assert.equal(getSuccessSampleWeight(record), 3);
+  assert.ok(getSuccessSampleWeight(record) > 3);
+  assert.equal(record.sampleWeight, getSuccessSampleWeight(record));
 });
 
 test("success sample store upserts the same note instead of appending duplicates", async (t) => {

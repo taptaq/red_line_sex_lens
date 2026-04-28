@@ -9,6 +9,8 @@ import { loadStyleProfile, saveStyleProfile } from "../src/data-store.js";
 import {
   buildStyleProfileDraft,
   confirmStyleProfileDraft,
+  getActiveStyleProfile,
+  setActiveStyleProfileVersion,
   scoreContentAgainstStyleProfile
 } from "../src/style-profile.js";
 
@@ -80,4 +82,26 @@ test("style profile can be saved as draft and confirmed", async (t) => {
     assert.ok(score.score >= 60);
     assert.ok(score.reasons.length >= 1);
   });
+});
+
+test("style profile supports versions and activating an older version", async () => {
+  const firstDraft = buildStyleProfileDraft(
+    [{ id: "sample-1", tier: "featured", title: "关系沟通", body: "温和正文", tags: ["沟通"] }],
+    { topic: "亲密关系科普" }
+  );
+  const firstState = confirmStyleProfileDraft({ draft: firstDraft, current: null, versions: [] });
+  const secondDraft = buildStyleProfileDraft(
+    [{ id: "sample-2", tier: "featured", title: "产品体验", body: "克制软植入", tags: ["体验"] }],
+    { topic: "产品软植入" }
+  );
+  const secondState = confirmStyleProfileDraft({ ...firstState, draft: secondDraft });
+
+  assert.equal(secondState.versions.length, 2);
+  assert.equal(secondState.current.topic, "产品软植入");
+  assert.equal(getActiveStyleProfile(secondState, firstState.current.id).topic, "亲密关系科普");
+
+  const reverted = setActiveStyleProfileVersion(secondState, firstState.current.id);
+  assert.equal(reverted.current.topic, "亲密关系科普");
+  assert.equal(reverted.versions.find((item) => item.id === firstState.current.id).status, "active");
+  assert.equal(reverted.versions.find((item) => item.id === secondState.current.id).status, "archived");
 });

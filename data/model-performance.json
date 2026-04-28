@@ -1,0 +1,76 @@
+[
+  {
+    "id": "model-call-1777367974507-9d3fd1",
+    "createdAt": "2026-04-28T09:19:34.507Z",
+    "scene": "semantic_review",
+    "provider": "glm",
+    "route": "dmxapi",
+    "routeLabel": "DMXAPI",
+    "model": "glm-5.1-free",
+    "status": "error",
+    "errorType": "server_error",
+    "statusCode": 502,
+    "durationMs": 105,
+    "message": "fetch failed"
+  },
+  {
+    "id": "model-call-1777367974514-75ac01",
+    "createdAt": "2026-04-28T09:19:34.514Z",
+    "scene": "semantic_review",
+    "provider": "qwen",
+    "route": "dmxapi",
+    "routeLabel": "DMXAPI",
+    "model": "qwen3.5-plus-free",
+    "status": "error",
+    "errorType": "server_error",
+    "statusCode": 502,
+    "durationMs": 4,
+    "message": "fetch failed"
+  },
+  {
+    "id": "model-call-1777367974519-69c21d",
+    "createdAt": "2026-04-28T09:19:34.519Z",
+    "scene": "semantic_review",
+    "provider": "minimax",
+    "route": "dmxapi",
+    "routeLabel": "DMXAPI",
+    "model": "MiniMax-M2.7-free",
+    "status": "error",
+    "errorType": "server_error",
+    "statusCode": 502,
+    "durationMs": 3,
+    "message": "fetch failed"
+  },
+  {
+    "id": "model-call-1777367974524-fc93a7",
+    "createdAt": "2026-04-28T09:19:34.524Z",
+    "scene": "semantic_review",
+    "provider": "deepseek",
+    "route": "dmxapi",
+    "routeLabel": "DMXAPI",
+    "model": "mimo-v2.5-free",
+    "status": "error",
+    "errorType": "server_error",
+    "statusCode": 502,
+    "durationMs": 4,
+    "message": "fetch failed"
+  },
+  {
+    "id": "model-call-1777367974545-6040f2",
+    "createdAt": "2026-04-28T09:19:34.545Z",
+    "scene": "cross_review",
+    "provider": "glm",
+    "route": "dmxapi",
+    "routeLabel": "DMXAPI",
+    "model": "glm-5.1-free",
+    "status": "error",
+    "errorType": "server_error",
+    "statusCode": 502,
+    "durationMs": 16,
+    "message": "fetch failed"
+  }
+]
+
+  }
+]
+]

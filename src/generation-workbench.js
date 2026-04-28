@@ -1,11 +1,11 @@
 import { analyzePost } from "./analyzer.js";
 import { runCrossModelReview } from "./cross-review.js";
-import { callRoutedTextProviderJson } from "./glm.js";
+import { callRoutedTextProviderJson, rewritePostForCompliance } from "./glm.js";
 import { getRewriteProviderSelection, getRewriteSelectionModel } from "./model-selection.js";
 import { ensureArray } from "./normalizer.js";
 import { runSemanticReview } from "./semantic-review.js";
 import { scoreContentAgainstStyleProfile } from "./style-profile.js";
-import { getSuccessSampleWeight } from "./success-samples.js";
+import { rankSamplesByWeight } from "./sample-weight.js";
 
 const variants = ["safe", "natural", "expressive"];
 const verdictPenalty = {
@@ -20,12 +20,11 @@ function uniqueStrings(items = []) {
 }
 
 function stringifyReferenceSamples(samples = []) {
-  return (Array.isArray(samples) ? samples : [])
-    .sort((a, b) => getSuccessSampleWeight(b) - getSuccessSampleWeight(a))
+  return rankSamplesByWeight(samples)
     .slice(0, 5)
     .map((sample, index) =>
       [
-        `参考样本 ${index + 1}（${sample.tier || "passed"}）：`,
+        `参考样本 ${index + 1}（${sample.tier || "passed"}，权重 ${sample.sampleWeight}）：`,
         `标题：${sample.title || ""}`,
         `正文摘要：${String(sample.body || "").slice(0, 220)}`,
         `标签：${ensureArray(sample.tags).join("、")}`
@@ -133,6 +132,7 @@ async function generateJsonWithModel({ messages, modelSelection = "auto" }) {
     maxTokens: Number(process.env.GENERATION_MAX_TOKENS || 1800),
     messages,
     missingKeyMessage: `生成工作台缺少 ${provider} 可用密钥。`,
+    scene: "generation",
     fallbackParser: extractJsonBlock
   });
 
@@ -177,6 +177,10 @@ function normalizeVerdict(value = "") {
   return ["pass", "observe", "manual_review", "hard_block"].includes(verdict) ? verdict : "manual_review";
 }
 
+function isAcceptedVerdict(value = "") {
+  return ["pass", "observe"].includes(normalizeVerdict(value));
+}
+
 function scoreCompleteness(candidate = {}, brief = {}) {
   const text = `${candidate.title || ""}\n${candidate.body || ""}\n${candidate.coverText || ""}\n${ensureArray(candidate.tags).join(" ")}`;
   const topic = String(brief.topic || "").trim();
@@ -207,6 +211,38 @@ function rankScoredCandidate(item) {
   };
 }
 
+function buildRepairReason(analysis = {}, crossReview = null) {
+  return uniqueStrings([
+    ...(analysis?.suggestions || []),
+    ...(analysis?.semanticReview?.status === "ok" ? analysis.semanticReview.review?.reasons || [] : []),
+    ...(crossReview?.aggregate?.reasons || [])
+  ])
+    .slice(0, 5)
+    .join("；");
+}
+
+function shouldRepairCandidate(analysis = {}, crossReview = null) {
+  const analysisVerdict = analysis?.finalVerdict || analysis?.verdict || "manual_review";
+  const reviewVerdict =
+    crossReview?.aggregate?.recommendedVerdict ||
+    crossReview?.aggregate?.analysisVerdict ||
+    analysisVerdict;
+
+  return !isAcceptedVerdict(analysisVerdict) || !isAcceptedVerdict(reviewVerdict);
+}
+
+export async function repairGenerationCandidate({
+  candidate = {},
+  analysis = {},
+  modelSelection = "auto"
+} = {}) {
+  return rewritePostForCompliance({
+    input: candidate,
+    analysis,
+    modelSelection
+  });
+}
+
 export async function scoreGenerationCandidates({
   candidates = [],
   styleProfile = null,
@@ -214,34 +250,94 @@ export async function scoreGenerationCandidates({
   modelSelection = {},
   analyzeCandidate = analyzePost,
   semanticReviewCandidate = runSemanticReview,
-  crossReviewCandidate = runCrossModelReview
+  crossReviewCandidate = runCrossModelReview,
+  repairCandidate = null
 } = {}) {
   const scoredCandidates = [];
 
   for (const candidate of candidates) {
-    const analysis = await analyzeCandidate(candidate);
-    const semanticReview = await semanticReviewCandidate({
+    const originalAnalysis = await analyzeCandidate(candidate);
+    const originalSemanticReview = await semanticReviewCandidate({
       input: candidate,
-      analysis,
+      analysis: originalAnalysis,
       modelSelection: modelSelection.semantic
     });
-    const mergedAnalysis = {
-      ...analysis,
-      semanticReview
+    let mergedAnalysis = {
+      ...originalAnalysis,
+      semanticReview: originalSemanticReview
     };
-    const crossReview = await crossReviewCandidate({
+    let crossReview = await crossReviewCandidate({
       input: candidate,
       analysis: mergedAnalysis,
       modelSelection: modelSelection.crossReview
     });
-    const style = scoreContentAgainstStyleProfile(candidate, styleProfile);
-    const completeness = scoreCompleteness(candidate, brief);
+    let finalDraft = candidate;
+    const repair = {
+      attempted: false,
+      applied: false,
+      reason: "",
+      error: "",
+      rewrite: null,
+      beforeAnalysis: mergedAnalysis,
+      beforeCrossReview: crossReview
+    };
+
+    if (repairCandidate && shouldRepairCandidate(mergedAnalysis, crossReview)) {
+      repair.attempted = true;
+      repair.reason = buildRepairReason(mergedAnalysis, crossReview) || "候选稿未达到直接推荐区间，自动修复一次。";
+
+      try {
+        const rewrite = await repairCandidate({
+          candidate,
+          analysis: mergedAnalysis,
+          crossReview,
+          modelSelection: modelSelection.rewrite
+        });
+        finalDraft = {
+          ...normalizeGenerationCandidate(
+            {
+              ...rewrite,
+              id: candidate.id,
+              variant: candidate.variant,
+              generationNotes: rewrite?.rewriteNotes || candidate.generationNotes,
+              safetyNotes: rewrite?.safetyNotes || candidate.safetyNotes
+            },
+            variants.indexOf(candidate.variant)
+          ),
+          repairedFromCandidateId: candidate.id
+        };
+        const repairedAnalysis = await analyzeCandidate(finalDraft);
+        const repairedSemanticReview = await semanticReviewCandidate({
+          input: finalDraft,
+          analysis: repairedAnalysis,
+          modelSelection: modelSelection.semantic
+        });
+        mergedAnalysis = {
+          ...repairedAnalysis,
+          semanticReview: repairedSemanticReview
+        };
+        crossReview = await crossReviewCandidate({
+          input: finalDraft,
+          analysis: mergedAnalysis,
+          modelSelection: modelSelection.crossReview
+        });
+        repair.applied = true;
+        repair.rewrite = rewrite;
+      } catch (error) {
+        repair.error = error?.message || "自动修复失败";
+      }
+    }
+
+    const style = scoreContentAgainstStyleProfile(finalDraft, styleProfile);
+    const completeness = scoreCompleteness(finalDraft, brief);
     const scores = rankScoredCandidate({ analysis: mergedAnalysis, style, completeness });
 
     scoredCandidates.push({
       ...candidate,
+      finalDraft,
       analysis: mergedAnalysis,
       crossReview,
+      repair,
       style,
       completeness,
       scores

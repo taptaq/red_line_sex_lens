@@ -19,12 +19,14 @@ import {
   appendRewritePairs,
   loadAnalyzeTagOptions,
   loadFalsePositiveLog,
+  loadNoteLifecycle,
   loadReviewQueue,
   loadSummary,
   loadStyleProfile,
   loadSuccessSamples,
   saveAnalyzeTagOptions,
   saveFalsePositiveLog,
+  saveNoteLifecycle,
   saveStyleProfile,
   saveSuccessSamples,
   upsertFeedbackEntries
@@ -48,12 +50,20 @@ import {
   normalizeModelSelectionState
 } from "./model-selection.js";
 import { runCrossModelReview } from "./cross-review.js";
-import { generateNoteCandidates, scoreGenerationCandidates } from "./generation-workbench.js";
+import { generateNoteCandidates, repairGenerationCandidate, scoreGenerationCandidates } from "./generation-workbench.js";
 import { recognizeFeedbackScreenshot, rewritePostForCompliance, suggestFeedbackCandidates } from "./glm.js";
 import { buildRewritePairRecord } from "./rewrite-pairs.js";
 import { mergeRuleAndSemanticAnalysis, runSemanticReview } from "./semantic-review.js";
-import { buildStyleProfileDraft, confirmStyleProfileDraft } from "./style-profile.js";
+import {
+  buildStyleProfileDraft,
+  confirmStyleProfileDraft,
+  getActiveStyleProfile,
+  setActiveStyleProfileVersion
+} from "./style-profile.js";
 import { buildSuccessSampleRecord, upsertSuccessSampleRecords } from "./success-samples.js";
+import { buildLifecycleRecord, updateLifecyclePublishResult, upsertLifecycleRecords } from "./note-lifecycle.js";
+import { rankSamplesByWeight, withSampleWeight } from "./sample-weight.js";
+import { buildModelPerformanceSummary } from "./model-performance.js";
 import { webDir } from "./config.js";
 
 const host = "127.0.0.1";
@@ -98,6 +108,42 @@ function sanitizeAnalyzeTagOptions(options) {
   }
 
   return normalized.slice(0, 200);
+}
+
+export function lifecycleRecordToReferenceSample(item = {}) {
+  const status = String(item.status || item.publishResult?.status || "").trim();
+
+  if (!["published_passed", "positive_performance"].includes(status)) {
+    return null;
+  }
+
+  const note = item.note || {};
+
+  return withSampleWeight({
+    id: item.id ? `lifecycle-${item.id}` : "",
+    status,
+    publishResult: item.publishResult || {},
+    tier: status === "positive_performance" ? "performed" : "passed",
+    title: note.title,
+    body: note.body,
+    coverText: note.coverText,
+    tags: note.tags,
+    source: item.source || "note_lifecycle",
+    lifecycleSource: item.source || "",
+    metrics: item.publishResult?.metrics || {},
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt
+  }, "lifecycle");
+}
+
+export function buildGenerationReferenceSamples({ successSamples = [], noteLifecycle = [] } = {}) {
+  return rankSamplesByWeight(
+    [
+      ...successSamples,
+      ...noteLifecycle.map(lifecycleRecordToReferenceSample).filter(Boolean)
+    ],
+    "auto"
+  );
 }
 
 function uniqueStrings(items = []) {
@@ -563,6 +609,14 @@ async function handleRequest(request, response) {
     });
   }
 
+  if (request.method === "GET" && url.pathname === "/api/note-lifecycle") {
+    const items = await loadNoteLifecycle();
+    return sendJson(response, 200, {
+      ok: true,
+      items
+    });
+  }
+
   if (request.method === "GET" && url.pathname === "/api/style-profile") {
     const profile = await loadStyleProfile();
     return sendJson(response, 200, {
@@ -584,6 +638,14 @@ async function handleRequest(request, response) {
       ok: true,
       ...buildModelSelectionOptionsPayload(),
       ...buildFeedbackModelSelectionOptionsPayload()
+    });
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/model-performance") {
+    const summary = await buildModelPerformanceSummary();
+    return sendJson(response, 200, {
+      ok: true,
+      summary
     });
   }
 
@@ -626,11 +688,9 @@ async function handleRequest(request, response) {
   if (request.method === "POST" && url.pathname === "/api/generate-note") {
     const payload = await readBody(request);
     const modelSelection = normalizeModelSelectionState(payload?.modelSelection);
-    const [profileState, successSamples] = await Promise.all([loadStyleProfile(), loadSuccessSamples()]);
-    const styleProfile = profileState?.current || null;
-    const referenceSamples = successSamples
-      .filter((item) => item.tier === "featured" || item.tier === "performed")
-      .slice(-12);
+    const [profileState, successSamples, noteLifecycle] = await Promise.all([loadStyleProfile(), loadSuccessSamples(), loadNoteLifecycle()]);
+    const styleProfile = getActiveStyleProfile(profileState, payload?.styleProfileId);
+    const referenceSamples = buildGenerationReferenceSamples({ successSamples, noteLifecycle }).slice(0, 12);
     const generation = await generateNoteCandidates({
       mode: payload?.mode,
       brief: payload?.brief,
@@ -646,7 +706,8 @@ async function handleRequest(request, response) {
       candidates: generation.candidates,
       styleProfile,
       brief: payload?.brief,
-      modelSelection
+      modelSelection,
+      repairCandidate: repairGenerationCandidate
     });
 
     return sendJson(response, 200, {
@@ -754,10 +815,28 @@ async function handleRequest(request, response) {
     });
   }
 
+  if (request.method === "POST" && url.pathname === "/api/note-lifecycle") {
+    const payload = await readBody(request);
+    const current = await loadNoteLifecycle();
+    const nextRecord = buildLifecycleRecord(payload);
+    const next = upsertLifecycleRecords(current, [nextRecord]);
+    const item = next.find((entry) => entry.id === nextRecord.id) || next[next.length - 1];
+    await saveNoteLifecycle(next);
+    return sendJson(response, 200, {
+      ok: true,
+      item,
+      items: next
+    });
+  }
+
   if (request.method === "POST" && url.pathname === "/api/style-profile/draft") {
+    const payload = await readBody(request);
     const samples = await loadSuccessSamples();
     const current = await loadStyleProfile();
-    const draft = buildStyleProfileDraft(samples);
+    const draft = buildStyleProfileDraft(samples, {
+      topic: payload?.topic,
+      name: payload?.name
+    });
     const profile = {
       ...current,
       draft
@@ -808,11 +887,36 @@ async function handleRequest(request, response) {
   if (request.method === "PATCH" && url.pathname === "/api/style-profile") {
     const payload = await readBody(request);
     const current = await loadStyleProfile();
-    const profile = confirmStyleProfileDraft(current, payload?.profile || payload || {});
+    const profile =
+      payload?.action === "activate"
+        ? setActiveStyleProfileVersion(current, payload?.id)
+        : confirmStyleProfileDraft(current, payload?.profile || payload || {});
     await saveStyleProfile(profile);
     return sendJson(response, 200, {
       ok: true,
       profile
+    });
+  }
+
+  if (request.method === "PATCH" && url.pathname === "/api/note-lifecycle") {
+    const payload = await readBody(request);
+    const current = await loadNoteLifecycle();
+    const id = String(payload?.id || "").trim();
+    const index = current.findIndex((item) => String(item.id || "").trim() === id);
+
+    if (index === -1) {
+      const error = new Error("未找到要更新的笔记生命周期记录。");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const next = [...current];
+    next[index] = updateLifecyclePublishResult(current[index], payload);
+    await saveNoteLifecycle(next);
+    return sendJson(response, 200, {
+      ok: true,
+      item: next[index],
+      items: next
     });
   }
 
@@ -903,6 +1007,24 @@ async function handleRequest(request, response) {
     }
 
     await saveSuccessSamples(next);
+    return sendJson(response, 200, {
+      ok: true,
+      items: next
+    });
+  }
+
+  if (request.method === "DELETE" && url.pathname === "/api/note-lifecycle") {
+    const payload = await readBody(request);
+    const current = await loadNoteLifecycle();
+    const next = current.filter((item) => String(item.id || "").trim() !== String(payload?.id || "").trim());
+
+    if (next.length === current.length) {
+      const error = new Error("未找到要删除的笔记生命周期记录。");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    await saveNoteLifecycle(next);
     return sendJson(response, 200, {
       ok: true,
       items: next
