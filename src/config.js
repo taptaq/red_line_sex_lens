@@ -16,5 +16,6 @@ export const paths = {
   falsePositiveLog: path.join(dataDir, "false-positive-log.json"),
   reviewQueue: path.join(dataDir, "review-queue.json"),
   rewritePairs: path.join(dataDir, "rewrite-pairs.json"),
+  successSamples: path.join(dataDir, "success-samples.json"),
   analyzeTagOptions: path.join(dataDir, "analyze-tag-options.json")
 };

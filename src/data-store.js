@@ -94,6 +94,14 @@ export async function loadRewritePairs() {
   return readJson(paths.rewritePairs, []);
 }
 
+export async function loadSuccessSamples() {
+  return readJson(paths.successSamples, []);
+}
+
+export async function saveSuccessSamples(items) {
+  await writeJson(paths.successSamples, Array.isArray(items) ? items : []);
+}
+
 export async function appendRewritePairs(entries) {
   const current = await loadRewritePairs();
   const next = [...current, ...entries];
