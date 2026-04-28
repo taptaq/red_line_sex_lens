@@ -1581,6 +1581,95 @@ function renderRewritePairList(items) {
     : '<div class="result-card muted">当前没有改写前后样本</div>';
 }
 
+function successTierLabel(tier) {
+  if (tier === "featured") return "人工精选标杆";
+  if (tier === "performed") return "过审且表现好";
+  return "仅过审";
+}
+
+function renderSuccessSamples(items = []) {
+  byId("success-sample-list").innerHTML = items.length
+    ? items
+        .slice()
+        .reverse()
+        .map(
+          (item) => `
+            <article class="admin-item">
+              <strong>${escapeHtml(item.title || "未命名成功样本")}</strong>
+              <div class="meta-row">
+                <span class="meta-pill">${escapeHtml(successTierLabel(item.tier))}</span>
+                <span class="meta-pill">赞 ${escapeHtml(String(item.metrics?.likes || 0))}</span>
+                <span class="meta-pill">藏 ${escapeHtml(String(item.metrics?.favorites || 0))}</span>
+                <span class="meta-pill">评 ${escapeHtml(String(item.metrics?.comments || 0))}</span>
+                <span class="meta-pill">${escapeHtml(formatDate(item.createdAt))}</span>
+              </div>
+              <p>${escapeHtml(compactText(item.body, 140) || "未填写正文")}</p>
+              <p>标签：${escapeHtml(joinCSV(item.tags) || "未填写")}</p>
+            </article>
+          `
+        )
+        .join("")
+    : '<div class="result-card muted">当前没有成功样本</div>';
+}
+
+function renderStyleProfile(profileState = {}) {
+  const current = profileState?.current;
+  const draft = profileState?.draft;
+  const profile = draft || current;
+
+  byId("style-profile-result").innerHTML = profile
+    ? `
+      <article class="style-profile-card">
+        <div class="meta-row">
+          <span class="meta-pill">${escapeHtml(profile.status === "active" ? "已生效" : "待确认")}</span>
+          <span class="meta-pill">引用 ${escapeHtml(String(profile.sourceSampleIds?.length || 0))} 条样本</span>
+        </div>
+        <strong>${escapeHtml(profile.status === "active" ? "当前风格画像" : "待确认风格画像")}</strong>
+        <p>${escapeHtml(profile.tone || "未生成语气画像")}</p>
+        <p>${escapeHtml(profile.titleStyle || "未生成标题画像")}</p>
+        <p>${escapeHtml(profile.bodyStructure || "未生成正文结构画像")}</p>
+        <p>偏好标签：${escapeHtml(joinCSV(profile.preferredTags) || "未总结")}</p>
+        ${
+          profile.status === "draft"
+            ? '<button type="button" class="button button-alt button-small" data-action="confirm-style-profile">确认生效</button>'
+            : ""
+        }
+      </article>
+    `
+    : '<div class="result-card muted">当前没有风格画像，请先积累成功样本。</div>';
+}
+
+function renderGenerationResult(result = {}) {
+  const cards = (result.scoredCandidates || [])
+    .map(
+      (item) => `
+        <article class="generation-candidate-card${item.id === result.recommendedCandidateId ? " is-recommended" : ""}">
+          <div class="meta-row">
+            <span class="meta-pill">${escapeHtml(item.variant || "candidate")}</span>
+            <span class="meta-pill">综合分 ${escapeHtml(String(item.scores?.total ?? 0))}</span>
+            <span class="meta-pill">风格分 ${escapeHtml(String(item.style?.score ?? 0))}</span>
+            <span class="meta-pill">${escapeHtml(verdictLabel(item.analysis?.finalVerdict || item.analysis?.verdict || "pass"))}</span>
+          </div>
+          <strong>${escapeHtml(item.title || "未生成标题")}</strong>
+          <p>${escapeHtml(item.coverText || "未生成封面文案")}</p>
+          <div class="rewrite-body-reader">${escapeHtml(item.body || "未生成正文")}</div>
+          <p class="helper-text">标签：${escapeHtml(joinCSV(item.tags) || "未生成")}</p>
+          <p class="helper-text">${escapeHtml(item.generationNotes || "暂无生成说明")}</p>
+          <p class="helper-text">${escapeHtml(item.safetyNotes || "暂无安全注意点")}</p>
+        </article>
+      `
+    )
+    .join("");
+
+  byId("generation-result").innerHTML = `
+    <div class="model-scope-banner">
+      <span class="model-scope-kicker">推荐结果</span>
+      <strong>${escapeHtml(result.recommendationReason || "暂无推荐")}</strong>
+    </div>
+    <div class="generation-candidate-grid">${cards || '<div class="muted">没有候选稿</div>'}</div>
+  `;
+}
+
 function renderReviewQueueAdmin(items) {
   byId("review-queue-admin-list").innerHTML = items.length
     ? items
@@ -1671,17 +1760,20 @@ function renderAdminData(data) {
   renderFeedbackLog(data.feedbackLog);
   renderFalsePositiveLog(data.falsePositiveLog || []);
   renderRewritePairList(data.rewritePairs || []);
+  renderSuccessSamples(data.successSamples || []);
 }
 
 async function refreshAll() {
-  const [summary, adminData] = await Promise.all([
+  const [summary, adminData, styleProfile] = await Promise.all([
     apiJson("/api/summary"),
-    apiJson("/api/admin/data")
+    apiJson("/api/admin/data"),
+    apiJson("/api/style-profile")
   ]);
 
   renderSummary(summary);
   renderQueue(adminData.reviewQueue);
   renderAdminData(adminData);
+  renderStyleProfile(styleProfile.profile || {});
 }
 
 async function fileToDataUrl(file) {
@@ -1701,6 +1793,25 @@ function getAnalyzePayload() {
     body: form.get("body"),
     coverText: form.get("coverText"),
     tags: splitCSV(form.get("tags"))
+  };
+}
+
+function getGenerationPayload() {
+  const form = new FormData(byId("generation-workbench-form"));
+
+  return {
+    mode: String(form.get("mode") || "from_scratch"),
+    brief: {
+      topic: String(form.get("topic") || "").trim(),
+      sellingPoints: String(form.get("sellingPoints") || "").trim(),
+      audience: String(form.get("audience") || "").trim(),
+      constraints: String(form.get("constraints") || "").trim()
+    },
+    draft: {
+      title: String(form.get("draftTitle") || "").trim(),
+      body: String(form.get("draftBody") || "").trim()
+    },
+    modelSelection: getSelectedModelSelections()
   };
 }
 
@@ -1746,6 +1857,25 @@ function fillRewritePairFormFromCurrent() {
   }, 120);
   byId("rewrite-pair-result").innerHTML =
     '<div class="result-card-shell">已用当前改写结果填充前后样本，可补充平台原因或改写策略后保存。</div>';
+}
+
+function fillSuccessSampleFormFromCurrent(source = "analysis") {
+  const form = byId("success-sample-form");
+  const payload = appState.latestAnalyzePayload || {};
+  const rewrite = source === "rewrite" && appState.latestRewrite ? normalizeRewritePayload(appState.latestRewrite) : null;
+
+  form.elements.title.value = rewrite?.title || payload.title || "";
+  form.elements.body.value = rewrite?.body || payload.body || "";
+  form.elements.coverText.value = rewrite?.coverText || payload.coverText || "";
+  form.elements.tags.value = joinCSV(rewrite?.tags?.length ? rewrite.tags : payload.tags || []);
+  form.elements.tier.value = form.elements.tier.value || "passed";
+  form.elements.notes.value =
+    form.elements.notes.value ||
+    (source === "rewrite" ? "从当前改写结果填充的成功样本" : "从当前检测内容填充的成功样本");
+  activateTab("success-samples-pane");
+  byId("success-samples-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  byId("success-sample-result").innerHTML =
+    '<div class="result-card-shell">已填充成功样本表单，可补充表现数据后保存。</div>';
 }
 
 const analyzeForm = byId("analyze-form");
@@ -1923,6 +2053,28 @@ byId("cross-review-button").addEventListener("click", async () => {
   } finally {
     setButtonBusy(crossReviewButton, false);
     syncAnalyzeActions();
+  }
+});
+
+byId("generation-workbench-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+  setButtonBusy(submitButton, true, "生成中...");
+  byId("generation-result").innerHTML = '<div class="result-card-shell muted">正在生成并评分候选稿...</div>';
+
+  try {
+    const result = await apiJson("/api/generate-note", {
+      method: "POST",
+      body: JSON.stringify(getGenerationPayload())
+    });
+
+    renderGenerationResult(result);
+  } catch (error) {
+    byId("generation-result").innerHTML = `
+      <div class="result-card-shell muted">${escapeHtml(error.message || "生成候选稿失败")}</div>
+    `;
+  } finally {
+    setButtonBusy(submitButton, false);
   }
 });
 
@@ -2122,6 +2274,73 @@ byId("rewrite-pair-prefill").addEventListener("click", () => {
   fillRewritePairFormFromCurrent();
 });
 
+byId("success-sample-prefill-analysis").addEventListener("click", () => {
+  fillSuccessSampleFormFromCurrent("analysis");
+});
+
+byId("success-sample-prefill-rewrite").addEventListener("click", () => {
+  fillSuccessSampleFormFromCurrent("rewrite");
+});
+
+byId("success-sample-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const formElement = event.currentTarget;
+  const submitButton = formElement.querySelector('button[type="submit"]');
+  const form = new FormData(formElement);
+  setButtonBusy(submitButton, true, "保存中...");
+
+  try {
+    const response = await apiJson("/api/success-samples", {
+      method: "POST",
+      body: JSON.stringify({
+        title: form.get("title"),
+        body: form.get("body"),
+        coverText: form.get("coverText"),
+        tags: splitCSV(form.get("tags")),
+        tier: form.get("tier"),
+        publishedAt: form.get("publishedAt"),
+        notes: form.get("notes"),
+        source: "manual",
+        metrics: {
+          likes: form.get("likes"),
+          favorites: form.get("favorites"),
+          comments: form.get("comments")
+        },
+        analysisSnapshot: appState.latestAnalysis,
+        rewriteSnapshot: appState.latestRewrite
+      })
+    });
+
+    byId("success-sample-result").innerHTML = '<div class="result-card-shell">成功样本已保存。</div>';
+    renderSuccessSamples(response.items || []);
+    formElement.reset();
+  } catch (error) {
+    byId("success-sample-result").innerHTML = `
+      <div class="result-card-shell muted">${escapeHtml(error.message || "保存成功样本失败")}</div>
+    `;
+  } finally {
+    setButtonBusy(submitButton, false);
+  }
+});
+
+byId("style-profile-draft-button").addEventListener("click", async () => {
+  const button = byId("style-profile-draft-button");
+  setButtonBusy(button, true, "生成中...");
+
+  try {
+    const response = await apiJson("/api/style-profile/draft", {
+      method: "POST"
+    });
+    renderStyleProfile(response.profile || {});
+  } catch (error) {
+    byId("style-profile-result").innerHTML = `
+      <div class="result-card-shell muted">${escapeHtml(error.message || "生成风格画像失败")}</div>
+    `;
+  } finally {
+    setButtonBusy(button, false);
+  }
+});
+
 byId("rewrite-pair-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const formElement = event.currentTarget;
@@ -2278,6 +2497,14 @@ document.addEventListener("click", async (event) => {
           id: button.dataset.id
         })
       });
+    }
+
+    if (action === "confirm-style-profile") {
+      const response = await apiJson("/api/style-profile", {
+        method: "PATCH",
+        body: JSON.stringify({})
+      });
+      renderStyleProfile(response.profile || {});
     }
 
     await refreshAll();
