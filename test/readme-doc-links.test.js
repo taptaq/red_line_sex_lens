@@ -8,4 +8,7 @@ test("README links to the system flow and seed lexicon tiered checklist docs", a
 
   assert.match(source, /\[SYSTEM_FLOW\.md\]\(\.\/SYSTEM_FLOW\.md\)/);
   assert.match(source, /\[docs\/seed-lexicon-tiered-checklist\.md\]\(\.\/docs\/seed-lexicon-tiered-checklist\.md\)/);
+  assert.match(source, /成功样本/);
+  assert.match(source, /风格画像/);
+  assert.match(source, /自进化成稿工作台/);
 });
