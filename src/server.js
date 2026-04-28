@@ -48,6 +48,7 @@ import {
   normalizeModelSelectionState
 } from "./model-selection.js";
 import { runCrossModelReview } from "./cross-review.js";
+import { generateNoteCandidates, scoreGenerationCandidates } from "./generation-workbench.js";
 import { recognizeFeedbackScreenshot, rewritePostForCompliance, suggestFeedbackCandidates } from "./glm.js";
 import { buildRewritePairRecord } from "./rewrite-pairs.js";
 import { mergeRuleAndSemanticAnalysis, runSemanticReview } from "./semantic-review.js";
@@ -619,6 +620,39 @@ async function handleRequest(request, response) {
       rewriteAttempts: rewriteResult.attempts,
       rewriteAccepted: rewriteResult.accepted,
       rewriteStopReason: rewriteResult.stopReason
+    });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/generate-note") {
+    const payload = await readBody(request);
+    const modelSelection = normalizeModelSelectionState(payload?.modelSelection);
+    const [profileState, successSamples] = await Promise.all([loadStyleProfile(), loadSuccessSamples()]);
+    const styleProfile = profileState?.current || null;
+    const referenceSamples = successSamples
+      .filter((item) => item.tier === "featured" || item.tier === "performed")
+      .slice(-12);
+    const generation = await generateNoteCandidates({
+      mode: payload?.mode,
+      brief: payload?.brief,
+      draft: payload?.draft,
+      styleProfile,
+      referenceSamples,
+      modelSelection: modelSelection.rewrite,
+      generateJson: Array.isArray(payload?.mockCandidates)
+        ? async () => ({ candidates: payload.mockCandidates, provider: "mock", model: "mock-generation" })
+        : undefined
+    });
+    const scored = await scoreGenerationCandidates({
+      candidates: generation.candidates,
+      styleProfile,
+      brief: payload?.brief,
+      modelSelection
+    });
+
+    return sendJson(response, 200, {
+      ok: true,
+      ...generation,
+      ...scored
     });
   }
 
