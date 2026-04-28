@@ -560,6 +560,102 @@ function setButtonBusy(button, isBusy, busyText) {
   button.textContent = isBusy ? busyText : button.dataset.label;
 }
 
+function workflowActionButton({ action, label, tone = "button" } = {}) {
+  return `<button type="button" class="button ${escapeHtml(tone)}" data-workflow-action="${escapeHtml(action)}">${escapeHtml(label)}</button>`;
+}
+
+function getWorkflowAssistantState() {
+  const hasInput = hasAnalyzeInput();
+  const analysis = appState.latestAnalysis;
+  const rewrite = appState.latestRewrite;
+  const generation = appState.latestGeneration;
+
+  if (generation?.recommendedCandidateId) {
+    return {
+      step: 3,
+      title: "推荐稿已生成，可以进入生命周期",
+      description: "建议先保存最终推荐稿，发布后回填表现。表现好的稿子会反向影响下一次生成。",
+      actions: [
+        { action: "save-generation-final", label: "最终推荐稿进入生命周期", tone: "button-alt" },
+        { action: "open-lifecycle", label: "查看生命周期", tone: "button-ghost" }
+      ]
+    };
+  }
+
+  if (rewrite) {
+    return {
+      step: 2,
+      title: "改写稿已生成，下一步做最终确认",
+      description: "如果改写后风险已经稳定，可以保存改写稿；如果还想更稳，建议再做一次交叉复判。",
+      actions: [
+        { action: "cross-review", label: "模型交叉复判", tone: "button-alt" },
+        { action: "save-rewrite", label: "保存改写稿生命周期", tone: "button-ghost" }
+      ]
+    };
+  }
+
+  if (analysis) {
+    const verdict = analysis.finalVerdict || analysis.verdict || "manual_review";
+    const safeEnough = verdict === "pass" || verdict === "observe";
+
+    return {
+      step: 1,
+      title: safeEnough ? "检测已完成，可以沉淀或继续复判" : "检测已完成，建议先改写",
+      description: safeEnough
+        ? "当前风险较低。你可以保存检测记录，也可以用交叉复判确认模型是否一致。"
+        : "当前仍有人工复核或高风险信号。建议先做合规改写，再看是否需要交叉复判。",
+      actions: safeEnough
+        ? [
+            { action: "cross-review", label: "模型交叉复判", tone: "button-alt" },
+            { action: "save-analysis", label: "保存检测记录", tone: "button-ghost" }
+          ]
+        : [
+            { action: "rewrite", label: "一键合规改写", tone: "button-alt" },
+            { action: "cross-review", label: "先交叉复判", tone: "button-ghost" }
+          ]
+    };
+  }
+
+  if (hasInput) {
+    return {
+      step: 0,
+      title: "内容已输入，先运行检测",
+      description: "先用规则和语义复判拿到基线结论，再决定是保存、改写还是交叉复判。",
+      actions: [{ action: "analyze", label: "运行检测", tone: "button-alt" }]
+    };
+  }
+
+  return {
+    step: 0,
+    title: "先输入一篇笔记",
+    description: "系统会根据当前结果推荐下一步，避免你在检测、改写、复判和生命周期之间来回找。",
+    actions: []
+  };
+}
+
+function renderWorkflowAssistant() {
+  const state = getWorkflowAssistantState();
+  const title = byId("workflow-assistant-title");
+  const description = byId("workflow-assistant-description");
+  const actions = byId("workflow-assistant-actions");
+  const timeline = byId("workflow-timeline");
+
+  if (title) title.textContent = state.title;
+  if (description) description.textContent = state.description;
+  if (actions) {
+    actions.innerHTML = state.actions.length
+      ? state.actions.map(workflowActionButton).join("")
+      : '<span class="workflow-assistant-empty">等待输入内容</span>';
+  }
+
+  if (timeline) {
+    [...timeline.querySelectorAll("li")].forEach((item, index) => {
+      item.classList.toggle("is-active", index === state.step);
+      item.classList.toggle("is-complete", index < state.step);
+    });
+  }
+}
+
 function hasAnalyzeInput() {
   const payload = getAnalyzePayload();
 
@@ -588,6 +684,8 @@ function syncAnalyzeActions() {
   if (crossReviewButton && !crossReviewButton.dataset.busy) {
     crossReviewButton.disabled = !enabled;
   }
+
+  renderWorkflowAssistant();
 }
 
 function getAnalyzeTagInput() {
@@ -2228,6 +2326,13 @@ function revealNoteLifecyclePane() {
   byId("note-lifecycle-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+function getRecommendedGenerationCandidate() {
+  const candidates = appState.latestGeneration?.scoredCandidates || [];
+  const recommendedId = String(appState.latestGeneration?.recommendedCandidateId || "");
+
+  return candidates.find((item) => String(item.id || "") === recommendedId) || candidates[0] || null;
+}
+
 async function saveLifecycleFromCurrent(source = "analysis", candidateId = "", candidateIndex = "") {
   const payload = {
     source,
@@ -2278,6 +2383,43 @@ async function saveLifecycleFromCurrent(source = "analysis", candidateId = "", c
   renderNoteLifecycle(response.items || []);
   revealNoteLifecyclePane();
   return response;
+}
+
+async function runWorkflowAction(action = "") {
+  if (action === "analyze") {
+    byId("analyze-button")?.click();
+    return;
+  }
+
+  if (action === "rewrite") {
+    byId("rewrite-button")?.click();
+    return;
+  }
+
+  if (action === "cross-review") {
+    byId("cross-review-button")?.click();
+    return;
+  }
+
+  if (action === "save-analysis") {
+    await saveLifecycleFromCurrent("analysis");
+    return;
+  }
+
+  if (action === "save-rewrite") {
+    await saveLifecycleFromCurrent("rewrite");
+    return;
+  }
+
+  if (action === "save-generation-final") {
+    const candidate = getRecommendedGenerationCandidate();
+    await saveLifecycleFromCurrent("generation", candidate?.id || "", "");
+    return;
+  }
+
+  if (action === "open-lifecycle") {
+    revealNoteLifecyclePane();
+  }
 }
 
 const analyzeForm = byId("analyze-form");
@@ -2377,6 +2519,7 @@ byId("analyze-form").addEventListener("submit", async (event) => {
     appState.latestAnalysisFalsePositiveSource = falsePositiveSources.analysis;
     appState.latestRewriteFalsePositiveSource = null;
     renderAnalysis(result, appState.latestAnalysisFalsePositiveSource);
+    renderWorkflowAssistant();
   } catch (error) {
     byId("analysis-result").innerHTML = `
       <div class="result-card-shell muted">${escapeHtml(error.message || "检测失败")}</div>
@@ -2426,6 +2569,7 @@ byId("rewrite-button").addEventListener("click", async () => {
       ...result,
       rewrite: appState.latestRewrite
     });
+    renderWorkflowAssistant();
   } catch (error) {
     byId("rewrite-result").innerHTML = `
       <div class="result-card-shell muted">${escapeHtml(error.message || "改写失败")}</div>
@@ -2463,6 +2607,7 @@ byId("cross-review-button").addEventListener("click", async () => {
     appState.latestAnalysis = result.analysis;
     renderAnalysis(result.analysis);
     renderCrossReviewResult(result);
+    renderWorkflowAssistant();
   } catch (error) {
     byId("cross-review-result").innerHTML = `
       <div class="result-card-shell muted">${escapeHtml(error.message || "交叉复判失败")}</div>
@@ -2487,6 +2632,7 @@ byId("generation-workbench-form").addEventListener("submit", async (event) => {
 
     appState.latestGeneration = result;
     renderGenerationResult(result);
+    renderWorkflowAssistant();
   } catch (error) {
     byId("generation-result").innerHTML = `
       <div class="result-card-shell muted">${escapeHtml(error.message || "生成候选稿失败")}</div>
@@ -2822,6 +2968,23 @@ document.querySelectorAll(".tab-button[data-tab-target]").forEach((button) => {
 activateTab("custom-lexicon-pane");
 
 document.addEventListener("click", async (event) => {
+  const workflowButton = event.target.closest("[data-workflow-action]");
+
+  if (workflowButton) {
+    setButtonBusy(workflowButton, true, "处理中...");
+
+    try {
+      await runWorkflowAction(workflowButton.dataset.workflowAction);
+    } catch (error) {
+      const assistant = byId("workflow-assistant");
+      assistant?.insertAdjacentHTML("beforeend", `<p class="helper-text">${escapeHtml(error.message || "操作失败")}</p>`);
+    } finally {
+      setButtonBusy(workflowButton, false);
+      renderWorkflowAssistant();
+    }
+    return;
+  }
+
   const button = event.target.closest("button[data-action]");
 
   if (!button) {

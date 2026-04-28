@@ -11,6 +11,8 @@ test("frontend exposes success samples, lifecycle, style profile, and generation
   ]);
 
   assert.match(indexHtml, /id="generation-workbench-form"/);
+  assert.match(indexHtml, /id="workflow-assistant"/);
+  assert.match(indexHtml, /id="workflow-assistant-actions"/);
   assert.match(indexHtml, /id="generation-style-profile-select"/);
   assert.match(indexHtml, /id="success-sample-form"/);
   assert.match(indexHtml, /id="note-lifecycle-pane"/);
@@ -23,6 +25,12 @@ test("frontend exposes success samples, lifecycle, style profile, and generation
   assert.match(appJs, /\/api\/style-profile\/draft/);
   assert.match(appJs, /activate-style-profile/);
   assert.match(appJs, /renderGenerationResult/);
+  assert.match(appJs, /renderWorkflowAssistant/);
+  assert.match(appJs, /data-workflow-action/);
+  assert.match(appJs, /action: "rewrite"/);
+  assert.match(appJs, /action: "save-generation-final"/);
+  assert.match(styles, /\.workflow-assistant-card/);
+  assert.match(styles, /\.workflow-timeline/);
   assert.match(styles, /\.lifecycle-update-grid/);
   assert.match(styles, /\.generation-repair-banner/);
   assert.match(styles, /\.style-profile-version-card/);

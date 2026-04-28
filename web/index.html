@@ -28,8 +28,23 @@
               <p class="eyebrow">内容检测台</p>
               <h2>内容检测与改写</h2>
             </div>
-            <p class="section-note">先检测，再决定是否改写或交叉复判。</p>
+            <p class="section-note">按一条主链路推进：输入 -> 检测 -> 改写 / 复判 -> 最终稿 -> 发布回填。</p>
           </div>
+          <section class="workflow-assistant-card" id="workflow-assistant" aria-live="polite">
+            <div class="workflow-assistant-copy">
+              <span class="model-scope-kicker">下一步建议</span>
+              <strong id="workflow-assistant-title">先输入一篇笔记</strong>
+              <p id="workflow-assistant-description">系统会根据当前结果推荐下一步，避免你在检测、改写、复判和生命周期之间来回找。</p>
+            </div>
+            <ol class="workflow-timeline" id="workflow-timeline" aria-label="笔记处理进度">
+              <li class="is-active">输入</li>
+              <li>检测</li>
+              <li>改写/复判</li>
+              <li>最终稿</li>
+              <li>发布回填</li>
+            </ol>
+            <div class="workflow-assistant-actions" id="workflow-assistant-actions"></div>
+          </section>
           <form id="analyze-form" class="stack analyze-workflow">
             <section class="workflow-card input-workflow-card">
               <div class="workflow-card-head">
