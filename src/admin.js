@@ -5,6 +5,7 @@ import {
   loadReviewQueue,
   loadRewritePairs,
   loadSeedLexicon,
+  loadSuccessSamples,
   loadWhitelist,
   saveCustomLexicon,
   saveFeedbackLog,
@@ -175,13 +176,14 @@ function enrichReviewQueueItem(item) {
 }
 
 export async function loadAdminData() {
-  const [seedLexicon, customLexicon, feedbackLog, reviewQueue, rewritePairs, falsePositiveLog] = await Promise.all([
+  const [seedLexicon, customLexicon, feedbackLog, reviewQueue, rewritePairs, falsePositiveLog, successSamples] = await Promise.all([
     loadSeedLexicon(),
     loadCustomLexicon(),
     loadFeedbackLog(),
     loadReviewQueue(),
     loadRewritePairs(),
-    loadFalsePositiveLog()
+    loadFalsePositiveLog(),
+    loadSuccessSamples()
   ]);
 
   return {
@@ -196,7 +198,8 @@ export async function loadAdminData() {
     feedbackLog,
     reviewQueue: reviewQueue.map(enrichReviewQueueItem),
     rewritePairs,
-    falsePositiveLog: falsePositiveLog.map(enrichFalsePositiveLogItem)
+    falsePositiveLog: falsePositiveLog.map(enrichFalsePositiveLogItem),
+    successSamples
   };
 }
 

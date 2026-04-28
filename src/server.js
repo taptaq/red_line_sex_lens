@@ -21,8 +21,10 @@ import {
   loadFalsePositiveLog,
   loadReviewQueue,
   loadSummary,
+  loadSuccessSamples,
   saveAnalyzeTagOptions,
   saveFalsePositiveLog,
+  saveSuccessSamples,
   upsertFeedbackEntries
 } from "./data-store.js";
 import {
@@ -47,6 +49,7 @@ import { runCrossModelReview } from "./cross-review.js";
 import { recognizeFeedbackScreenshot, rewritePostForCompliance, suggestFeedbackCandidates } from "./glm.js";
 import { buildRewritePairRecord } from "./rewrite-pairs.js";
 import { mergeRuleAndSemanticAnalysis, runSemanticReview } from "./semantic-review.js";
+import { buildSuccessSampleRecord, upsertSuccessSampleRecords } from "./success-samples.js";
 import { webDir } from "./config.js";
 
 const host = "127.0.0.1";
@@ -548,6 +551,14 @@ async function handleRequest(request, response) {
     });
   }
 
+  if (request.method === "GET" && url.pathname === "/api/success-samples") {
+    const items = await loadSuccessSamples();
+    return sendJson(response, 200, {
+      ok: true,
+      items
+    });
+  }
+
   if (request.method === "GET" && url.pathname === "/api/analyze-tag-options") {
     const options = await loadAnalyzeTagOptions();
     return sendJson(response, 200, {
@@ -685,6 +696,19 @@ async function handleRequest(request, response) {
     });
   }
 
+  if (request.method === "POST" && url.pathname === "/api/success-samples") {
+    const payload = await readBody(request);
+    const current = await loadSuccessSamples();
+    const nextRecord = buildSuccessSampleRecord(payload);
+    const next = upsertSuccessSampleRecords(current, [nextRecord]);
+    await saveSuccessSamples(next);
+    return sendJson(response, 200, {
+      ok: true,
+      item: next[next.length - 1],
+      items: next
+    });
+  }
+
   if (request.method === "PATCH" && url.pathname === "/api/false-positive-log") {
     const payload = await readBody(request);
     const current = await loadFalsePositiveLog();
@@ -793,6 +817,24 @@ async function handleRequest(request, response) {
     const payload = await readBody(request);
     await deleteReviewQueueItem(payload.id);
     return sendJson(response, 200, { ok: true });
+  }
+
+  if (request.method === "DELETE" && url.pathname === "/api/success-samples") {
+    const payload = await readBody(request);
+    const current = await loadSuccessSamples();
+    const next = current.filter((item) => String(item.id || "").trim() !== String(payload?.id || "").trim());
+
+    if (next.length === current.length) {
+      const error = new Error("未找到要删除的成功样本。");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    await saveSuccessSamples(next);
+    return sendJson(response, 200, {
+      ok: true,
+      items: next
+    });
   }
 
   if (request.method === "POST" && url.pathname === "/api/admin/review-queue/promote") {
