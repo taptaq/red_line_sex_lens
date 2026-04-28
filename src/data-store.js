@@ -102,6 +102,14 @@ export async function saveSuccessSamples(items) {
   await writeJson(paths.successSamples, Array.isArray(items) ? items : []);
 }
 
+export async function loadStyleProfile() {
+  return readJson(paths.styleProfile, {});
+}
+
+export async function saveStyleProfile(profile) {
+  await writeJson(paths.styleProfile, profile && typeof profile === "object" ? profile : {});
+}
+
 export async function appendRewritePairs(entries) {
   const current = await loadRewritePairs();
   const next = [...current, ...entries];

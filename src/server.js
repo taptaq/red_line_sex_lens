@@ -21,9 +21,11 @@ import {
   loadFalsePositiveLog,
   loadReviewQueue,
   loadSummary,
+  loadStyleProfile,
   loadSuccessSamples,
   saveAnalyzeTagOptions,
   saveFalsePositiveLog,
+  saveStyleProfile,
   saveSuccessSamples,
   upsertFeedbackEntries
 } from "./data-store.js";
@@ -49,6 +51,7 @@ import { runCrossModelReview } from "./cross-review.js";
 import { recognizeFeedbackScreenshot, rewritePostForCompliance, suggestFeedbackCandidates } from "./glm.js";
 import { buildRewritePairRecord } from "./rewrite-pairs.js";
 import { mergeRuleAndSemanticAnalysis, runSemanticReview } from "./semantic-review.js";
+import { buildStyleProfileDraft, confirmStyleProfileDraft } from "./style-profile.js";
 import { buildSuccessSampleRecord, upsertSuccessSampleRecords } from "./success-samples.js";
 import { webDir } from "./config.js";
 
@@ -559,6 +562,14 @@ async function handleRequest(request, response) {
     });
   }
 
+  if (request.method === "GET" && url.pathname === "/api/style-profile") {
+    const profile = await loadStyleProfile();
+    return sendJson(response, 200, {
+      ok: true,
+      profile
+    });
+  }
+
   if (request.method === "GET" && url.pathname === "/api/analyze-tag-options") {
     const options = await loadAnalyzeTagOptions();
     return sendJson(response, 200, {
@@ -709,6 +720,22 @@ async function handleRequest(request, response) {
     });
   }
 
+  if (request.method === "POST" && url.pathname === "/api/style-profile/draft") {
+    const samples = await loadSuccessSamples();
+    const current = await loadStyleProfile();
+    const draft = buildStyleProfileDraft(samples);
+    const profile = {
+      ...current,
+      draft
+    };
+    await saveStyleProfile(profile);
+    return sendJson(response, 200, {
+      ok: true,
+      profile,
+      draft
+    });
+  }
+
   if (request.method === "PATCH" && url.pathname === "/api/false-positive-log") {
     const payload = await readBody(request);
     const current = await loadFalsePositiveLog();
@@ -741,6 +768,17 @@ async function handleRequest(request, response) {
     return sendJson(response, 200, {
       ok: true,
       items: next
+    });
+  }
+
+  if (request.method === "PATCH" && url.pathname === "/api/style-profile") {
+    const payload = await readBody(request);
+    const current = await loadStyleProfile();
+    const profile = confirmStyleProfileDraft(current, payload?.profile || payload || {});
+    await saveStyleProfile(profile);
+    return sendJson(response, 200, {
+      ok: true,
+      profile
     });
   }
 

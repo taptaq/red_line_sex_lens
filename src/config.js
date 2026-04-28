@@ -17,5 +17,6 @@ export const paths = {
   reviewQueue: path.join(dataDir, "review-queue.json"),
   rewritePairs: path.join(dataDir, "rewrite-pairs.json"),
   successSamples: path.join(dataDir, "success-samples.json"),
+  styleProfile: path.join(dataDir, "style-profile.json"),
   analyzeTagOptions: path.join(dataDir, "analyze-tag-options.json")
 };
