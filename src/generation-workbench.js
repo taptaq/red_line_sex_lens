@@ -1,9 +1,19 @@
+import { analyzePost } from "./analyzer.js";
+import { runCrossModelReview } from "./cross-review.js";
 import { callRoutedTextProviderJson } from "./glm.js";
 import { getRewriteProviderSelection, getRewriteSelectionModel } from "./model-selection.js";
 import { ensureArray } from "./normalizer.js";
+import { runSemanticReview } from "./semantic-review.js";
+import { scoreContentAgainstStyleProfile } from "./style-profile.js";
 import { getSuccessSampleWeight } from "./success-samples.js";
 
 const variants = ["safe", "natural", "expressive"];
+const verdictPenalty = {
+  pass: 0,
+  observe: 12,
+  manual_review: 38,
+  hard_block: 90
+};
 
 function uniqueStrings(items = []) {
   return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
@@ -159,5 +169,97 @@ export async function generateNoteCandidates({
       routeLabel: payload.routeLabel || "",
       attemptedRoutes: payload.attemptedRoutes || []
     }
+  };
+}
+
+function normalizeVerdict(value = "") {
+  const verdict = String(value || "").trim();
+  return ["pass", "observe", "manual_review", "hard_block"].includes(verdict) ? verdict : "manual_review";
+}
+
+function scoreCompleteness(candidate = {}, brief = {}) {
+  const text = `${candidate.title || ""}\n${candidate.body || ""}\n${candidate.coverText || ""}\n${ensureArray(candidate.tags).join(" ")}`;
+  const topic = String(brief.topic || "").trim();
+  const hasTopic = !topic || text.includes(topic);
+  const hasBody = String(candidate.body || "").trim().length >= 120;
+  const hasCover = Boolean(String(candidate.coverText || "").trim());
+  const hasTags = ensureArray(candidate.tags).length >= 2;
+  const score = Math.max(0, Math.min(100, (hasTopic ? 30 : 0) + (hasBody ? 35 : 0) + (hasCover ? 15 : 0) + (hasTags ? 20 : 0)));
+
+  return {
+    score,
+    reasons: [
+      hasTopic ? "覆盖主题" : "主题覆盖不明显",
+      hasBody ? "正文完整" : "正文偏短",
+      hasCover ? "包含封面文案" : "缺少封面文案",
+      hasTags ? "标签数量足够" : "标签偏少"
+    ]
+  };
+}
+
+function rankScoredCandidate(item) {
+  const verdict = normalizeVerdict(item.analysis?.finalVerdict || item.analysis?.verdict);
+  const riskScore = Math.max(0, 100 - (verdictPenalty[verdict] || 0) - Math.min(50, Number(item.analysis?.score) || 0));
+
+  return {
+    riskScore,
+    total: Math.round(riskScore * 0.5 + item.style.score * 0.3 + item.completeness.score * 0.2)
+  };
+}
+
+export async function scoreGenerationCandidates({
+  candidates = [],
+  styleProfile = null,
+  brief = {},
+  modelSelection = {},
+  analyzeCandidate = analyzePost,
+  semanticReviewCandidate = runSemanticReview,
+  crossReviewCandidate = runCrossModelReview
+} = {}) {
+  const scoredCandidates = [];
+
+  for (const candidate of candidates) {
+    const analysis = await analyzeCandidate(candidate);
+    const semanticReview = await semanticReviewCandidate({
+      input: candidate,
+      analysis,
+      modelSelection: modelSelection.semantic
+    });
+    const mergedAnalysis = {
+      ...analysis,
+      semanticReview
+    };
+    const crossReview = await crossReviewCandidate({
+      input: candidate,
+      analysis: mergedAnalysis,
+      modelSelection: modelSelection.crossReview
+    });
+    const style = scoreContentAgainstStyleProfile(candidate, styleProfile);
+    const completeness = scoreCompleteness(candidate, brief);
+    const scores = rankScoredCandidate({ analysis: mergedAnalysis, style, completeness });
+
+    scoredCandidates.push({
+      ...candidate,
+      analysis: mergedAnalysis,
+      crossReview,
+      style,
+      completeness,
+      scores
+    });
+  }
+
+  scoredCandidates.sort((a, b) => b.scores.total - a.scores.total);
+  const recommended = scoredCandidates[0] || null;
+  const recommendedVerdict = normalizeVerdict(recommended?.analysis?.finalVerdict || recommended?.analysis?.verdict);
+  const recommendationReason = recommended
+    ? recommendedVerdict === "pass" || recommendedVerdict === "observe"
+      ? "推荐该候选：合规风险更低，风格匹配和内容完整度综合分最高。"
+      : "当前候选仍需人工复核：综合分最高但没有达到可直接发布区间。"
+    : "当前没有可推荐候选。";
+
+  return {
+    recommendedCandidateId: recommended?.id || "",
+    recommendationReason,
+    scoredCandidates
   };
 }
