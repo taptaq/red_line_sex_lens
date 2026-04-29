@@ -1,5 +1,6 @@
 import { analyzePost } from "./analyzer.js";
 import { runCrossModelReview } from "./cross-review.js";
+import { deriveFailureReasonTags } from "./feedback.js";
 import { callRoutedTextProviderJson, rewritePostForCompliance } from "./glm.js";
 import { getRewriteProviderSelection, getRewriteSelectionModel } from "./model-selection.js";
 import { ensureArray } from "./normalizer.js";
@@ -204,11 +205,26 @@ function scoreCompleteness(candidate = {}, brief = {}) {
 function rankScoredCandidate(item) {
   const verdict = normalizeVerdict(item.analysis?.finalVerdict || item.analysis?.verdict);
   const riskScore = Math.max(0, 100 - (verdictPenalty[verdict] || 0) - Math.min(50, Number(item.analysis?.score) || 0));
+  const variantPenalty = item.variant === "expressive" && isAcceptedVerdict(verdict) ? 8 : 0;
 
   return {
     riskScore,
-    total: Math.round(riskScore * 0.5 + item.style.score * 0.3 + item.completeness.score * 0.2)
+    total: Math.round(riskScore * 0.5 + item.style.score * 0.3 + item.completeness.score * 0.2 - variantPenalty)
   };
+}
+
+function getRecommendationBucket(item) {
+  const verdict = normalizeVerdict(item.analysis?.finalVerdict || item.analysis?.verdict);
+
+  if (verdict === "hard_block") {
+    return 0;
+  }
+
+  if (verdict === "manual_review") {
+    return 1;
+  }
+
+  return item.variant === "expressive" ? 2 : 3;
 }
 
 function buildRepairReason(analysis = {}, crossReview = null) {
@@ -219,6 +235,18 @@ function buildRepairReason(analysis = {}, crossReview = null) {
   ])
     .slice(0, 5)
     .join("；");
+}
+
+function buildRepairReasonTags(analysis = {}, crossReview = null) {
+  return deriveFailureReasonTags({
+    texts: [
+      ...(analysis?.suggestions || []),
+      ...(analysis?.semanticReview?.status === "ok" ? analysis.semanticReview.review?.reasons || [] : []),
+      ...(crossReview?.aggregate?.reasons || [])
+    ],
+    categories: analysis?.categories || [],
+    topHits: analysis?.hits || []
+  });
 }
 
 function shouldRepairCandidate(analysis = {}, crossReview = null) {
@@ -276,6 +304,7 @@ export async function scoreGenerationCandidates({
       attempted: false,
       applied: false,
       reason: "",
+      reasonTags: [],
       error: "",
       rewrite: null,
       beforeAnalysis: mergedAnalysis,
@@ -285,6 +314,7 @@ export async function scoreGenerationCandidates({
     if (repairCandidate && shouldRepairCandidate(mergedAnalysis, crossReview)) {
       repair.attempted = true;
       repair.reason = buildRepairReason(mergedAnalysis, crossReview) || "候选稿未达到直接推荐区间，自动修复一次。";
+      repair.reasonTags = buildRepairReasonTags(mergedAnalysis, crossReview);
 
       try {
         const rewrite = await repairCandidate({
@@ -344,7 +374,15 @@ export async function scoreGenerationCandidates({
     });
   }
 
-  scoredCandidates.sort((a, b) => b.scores.total - a.scores.total);
+  scoredCandidates.sort((left, right) => {
+    const bucketDelta = getRecommendationBucket(right) - getRecommendationBucket(left);
+
+    if (bucketDelta !== 0) {
+      return bucketDelta;
+    }
+
+    return right.scores.total - left.scores.total;
+  });
   const recommended = scoredCandidates[0] || null;
   const recommendedVerdict = normalizeVerdict(recommended?.analysis?.finalVerdict || recommended?.analysis?.verdict);
   const recommendationReason = recommended

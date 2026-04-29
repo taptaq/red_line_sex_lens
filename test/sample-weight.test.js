@@ -12,11 +12,17 @@ import { getSuccessSampleWeight } from "../src/success-samples.js";
 test("sample weights prefer stronger confirmed evidence over weaker samples", () => {
   const passed = calculateSampleWeight({ tier: "passed" }, "success");
   const featured = calculateSampleWeight({ tier: "featured" }, "success");
+  const pendingSuccess = calculateSampleWeight({ tier: "featured", confidence: "pending" }, "success");
+  const confirmedSuccess = calculateSampleWeight({ tier: "featured", confidence: "confirmed" }, "success");
   const pendingFalsePositive = calculateSampleWeight({ status: "platform_passed_pending" }, "false_positive");
   const confirmedFalsePositive = calculateSampleWeight({ status: "platform_passed_confirmed" }, "false_positive");
+  const importedSuccess = calculateSampleWeight({ tier: "featured", confidence: "confirmed", sourceQuality: "imported" }, "success");
+  const verifiedSuccess = calculateSampleWeight({ tier: "featured", confidence: "confirmed", sourceQuality: "manual_verified" }, "success");
 
   assert.ok(featured > passed);
+  assert.ok(confirmedSuccess > pendingSuccess);
   assert.ok(confirmedFalsePositive > pendingFalsePositive);
+  assert.ok(verifiedSuccess > importedSuccess);
   assert.equal(getSuccessSampleWeight({ tier: "featured" }), featured);
 });
 

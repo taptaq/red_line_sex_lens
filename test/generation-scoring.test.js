@@ -84,3 +84,91 @@ test("scoreGenerationCandidates repairs an unsafe candidate at most once before 
   assert.equal(result.scoredCandidates[0].analysis.finalVerdict, "pass");
   assert.deepEqual(analyzedBodies, ["私信我领取。".repeat(20), "温和沟通的完整科普建议。".repeat(12)]);
 });
+
+test("scoreGenerationCandidates prefers safe or natural variants over expressive when all are accepted", async () => {
+  const result = await scoreGenerationCandidates({
+    candidates: [
+      {
+        id: "candidate-safe",
+        variant: "safe",
+        title: "温和沟通建议",
+        body: "这是一段完整的温和沟通建议正文。".repeat(5),
+        coverText: "温和提醒",
+        tags: ["沟通", "关系"]
+      },
+      {
+        id: "candidate-expressive",
+        variant: "expressive",
+        title: "更有情绪张力的表达",
+        body: "这是一段完整的温和沟通建议正文，风格更有情绪张力，也更像经验分享。".repeat(10),
+        coverText: "经验提醒",
+        tags: ["沟通", "关系", "经验"]
+      }
+    ],
+    styleProfile: {
+      status: "active",
+      preferredTags: ["沟通", "关系", "经验"],
+      tone: "温和克制"
+    },
+    brief: { topic: "沟通" },
+    analyzeCandidate: async () => ({ verdict: "pass", finalVerdict: "pass", score: 0, suggestions: [] }),
+    semanticReviewCandidate: async () => ({ status: "unavailable", message: "测试不调用模型" }),
+    crossReviewCandidate: async () => ({
+      aggregate: {
+        recommendedVerdict: "pass",
+        analysisVerdict: "pass",
+        reasons: []
+      }
+    })
+  });
+
+  assert.equal(result.recommendedCandidateId, "candidate-safe");
+  assert.equal(result.scoredCandidates[0].id, "candidate-safe");
+  assert.equal(result.scoredCandidates[1].id, "candidate-expressive");
+});
+
+test("scoreGenerationCandidates never recommends a hard block candidate over an accepted one", async () => {
+  const result = await scoreGenerationCandidates({
+    candidates: [
+      {
+        id: "candidate-hard-block",
+        variant: "expressive",
+        title: "强刺激表达",
+        body: "这是一段很完整但不合规的正文。".repeat(20),
+        coverText: "刺激封面",
+        tags: ["沟通", "经验", "成长"]
+      },
+      {
+        id: "candidate-observe",
+        variant: "natural",
+        title: "自然表达",
+        body: "自然表达正文",
+        coverText: "",
+        tags: []
+      }
+    ],
+    styleProfile: {
+      status: "active",
+      preferredTags: ["沟通", "关系", "经验", "成长"],
+      tone: "温和克制"
+    },
+    brief: { topic: "沟通" },
+    analyzeCandidate: async (candidate) =>
+      candidate.id === "candidate-hard-block"
+        ? { verdict: "hard_block", finalVerdict: "hard_block", score: 0, suggestions: ["删除刺激表达"] }
+        : { verdict: "observe", finalVerdict: "observe", score: 0, suggestions: [] },
+    semanticReviewCandidate: async () => ({ status: "unavailable", message: "测试不调用模型" }),
+    crossReviewCandidate: async ({ analysis }) => ({
+      aggregate: {
+        recommendedVerdict: analysis.finalVerdict || analysis.verdict,
+        analysisVerdict: analysis.finalVerdict || analysis.verdict,
+        reasons: []
+      }
+    })
+  });
+
+  assert.equal(result.recommendedCandidateId, "candidate-observe");
+  assert.equal(result.scoredCandidates[0].id, "candidate-observe");
+  assert.equal(result.scoredCandidates[1].id, "candidate-hard-block");
+  assert.match(result.recommendationReason, /合规风险更低/);
+});

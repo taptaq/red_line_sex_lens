@@ -80,6 +80,34 @@ function uniqueStrings(items = []) {
   return [...new Set(list.map((item) => String(item || "").trim()).filter(Boolean))];
 }
 
+const failureReasonTagRules = [
+  {
+    tag: "导流感",
+    categories: ["导流与私域"],
+    patterns: [/导流|私信|联系方式|二维码|站外|私域|领取|咨询|转化|引导动作感/iu]
+  },
+  {
+    tag: "功效承诺",
+    categories: ["绝对化与功效承诺"],
+    patterns: [/功效|承诺|绝对化|根治|永久|见效|治疗|修复|最好|最佳/iu]
+  },
+  {
+    tag: "标题挑逗感",
+    categories: ["低俗挑逗与擦边"],
+    patterns: [/标题.{0,8}(挑逗|刺激|擦边)|挑逗感|擦边氛围|刺激性点击诱导|标题党/iu]
+  },
+  {
+    tag: "步骤化敏感内容",
+    categories: ["步骤化敏感内容"],
+    patterns: [/步骤|教程|实操|流程|演示|怎么做/iu]
+  },
+  {
+    tag: "敏感词直给",
+    categories: ["两性用品宣传与展示", "未成年人边界"],
+    patterns: [/两性用品|情趣用品|成人用品|愉悦玩具|私密部位|敏感部位|敏感词|直给/iu]
+  }
+];
+
 function uniqueObjectsBy(items = [], keySelector) {
   const seen = new Set();
   const next = [];
@@ -106,6 +134,22 @@ function summarizeText(value = "", maxLength = 80) {
   }
 
   return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+export function deriveFailureReasonTags({ texts = [], categories = [], topHits = [] } = {}) {
+  const normalizedTexts = uniqueStrings([
+    ...texts,
+    ...categories,
+    ...topHits.flatMap((item) => [item?.category, item?.reason, item?.evidence, ...(Array.isArray(item?.fields) ? item.fields : [])])
+  ]);
+
+  return failureReasonTagRules
+    .filter((rule) => {
+      const matchesCategory = rule.categories.some((category) => categories.includes(category));
+      const matchesPattern = normalizedTexts.some((text) => rule.patterns.some((pattern) => pattern.test(String(text || ""))));
+      return matchesCategory || matchesPattern;
+    })
+    .map((rule) => rule.tag);
 }
 
 export function inferFeedbackCategory(reason = "") {
@@ -247,8 +291,11 @@ export function buildAnalysisSnapshot(analysis) {
   const categories = uniqueStrings(analysis.categories);
   const suggestions = uniqueStrings(analysis.suggestions).slice(0, 3);
   const topHits = topAnalysisHits(analysis.hits);
+  const failureReasonTags = uniqueStrings(
+    analysis.failureReasonTags || deriveFailureReasonTags({ texts: suggestions, categories, topHits })
+  );
 
-  if (!verdict && !categories.length && !topHits.length && !suggestions.length && !Number.isFinite(score)) {
+  if (!verdict && !categories.length && !topHits.length && !suggestions.length && !failureReasonTags.length && !Number.isFinite(score)) {
     return null;
   }
 
@@ -258,7 +305,8 @@ export function buildAnalysisSnapshot(analysis) {
     categories,
     hitCount: Array.isArray(analysis.hits) ? analysis.hits.length : 0,
     topHits,
-    suggestions
+    suggestions,
+    failureReasonTags
   };
 }
 
@@ -358,8 +406,11 @@ function sanitizeAnalysisSnapshot(snapshot) {
   const suggestions = uniqueStrings(snapshot.suggestions);
   const topHits = topAnalysisHits(snapshot.topHits || snapshot.hits);
   const hitCount = Number(snapshot.hitCount);
+  const failureReasonTags = uniqueStrings(
+    snapshot.failureReasonTags || deriveFailureReasonTags({ texts: suggestions, categories, topHits })
+  );
 
-  if (!verdict && !categories.length && !suggestions.length && !topHits.length && !Number.isFinite(score)) {
+  if (!verdict && !categories.length && !suggestions.length && !topHits.length && !failureReasonTags.length && !Number.isFinite(score)) {
     return null;
   }
 
@@ -369,7 +420,8 @@ function sanitizeAnalysisSnapshot(snapshot) {
     categories,
     hitCount: Number.isFinite(hitCount) ? hitCount : topHits.length,
     topHits,
-    suggestions
+    suggestions,
+    failureReasonTags
   };
 }
 

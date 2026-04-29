@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import { paths } from '../src/config.js';
 import { loadFalsePositiveLog, saveFalsePositiveLog } from '../src/data-store.js';
+import { calculateSampleWeight } from '../src/sample-weight.js';
 
 test('load/save false positive log persists normalized entries', async (t) => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'false-positive-log-'));
@@ -25,6 +26,8 @@ test('load/save false positive log persists normalized entries', async (t) => {
     {
       id: '  fp-1  ',
       status: '   ',
+      confidence: '  pending ',
+      sourceQuality: '  unknown ',
       observationWindowHours: '  24  ',
       title: '  示例标题  ',
       body: '  正文内容  ',
@@ -37,6 +40,8 @@ test('load/save false positive log persists normalized entries', async (t) => {
   const persisted = JSON.parse(await fs.readFile(tempFile, 'utf8'));
   assert.equal(persisted[0].id, 'fp-1');
   assert.equal(persisted[0].status, 'platform_passed_pending');
+  assert.equal(persisted[0].confidence, 'pending');
+  assert.equal(persisted[0].sourceQuality, 'unknown');
   assert.equal(persisted[0].observationWindowHours, 24);
   assert.equal(persisted[0].title, '示例标题');
   assert.equal(persisted[0].body, '正文内容');
@@ -47,10 +52,33 @@ test('load/save false positive log persists normalized entries', async (t) => {
   const loaded = await loadFalsePositiveLog();
   assert.equal(loaded[0].id, 'fp-1');
   assert.equal(loaded[0].status, 'platform_passed_pending');
+  assert.equal(loaded[0].confidence, 'pending');
+  assert.equal(loaded[0].sourceQuality, 'unknown');
   assert.equal(loaded[0].observationWindowHours, 24);
   assert.equal(loaded[0].title, '示例标题');
   assert.equal(loaded[0].body, '正文内容');
   assert.equal(loaded[0].coverText, '封面文案');
   assert.equal(loaded[0].userNotes, '人工备注');
   assert.deepEqual(loaded[0].tags, ['关系沟通', '健康表达']);
+});
+
+test('false positive weights prefer confirmed entries with clearer provenance', () => {
+  const pendingUnknown = calculateSampleWeight(
+    {
+      status: 'platform_passed_pending',
+      confidence: 'pending',
+      sourceQuality: 'unknown'
+    },
+    'false_positive'
+  );
+  const confirmedVerified = calculateSampleWeight(
+    {
+      status: 'platform_passed_confirmed',
+      confidence: 'confirmed',
+      sourceQuality: 'manual_verified'
+    },
+    'false_positive'
+  );
+
+  assert.ok(confirmedVerified > pendingUnknown);
 });

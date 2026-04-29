@@ -3,6 +3,8 @@ import { ensureArray, normalizeText } from "./normalizer.js";
 import { calculateSampleWeight, withSampleWeight } from "./sample-weight.js";
 
 const allowedTiers = new Set(["passed", "performed", "featured"]);
+const allowedConfidence = new Set(["confirmed", "pending"]);
+const allowedSourceQuality = new Set(["manual_verified", "imported", "unknown"]);
 
 function uniqueStrings(items = []) {
   return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
@@ -11,6 +13,26 @@ function uniqueStrings(items = []) {
 function normalizeTier(value = "") {
   const normalized = String(value || "").trim().toLowerCase();
   return allowedTiers.has(normalized) ? normalized : "passed";
+}
+
+function normalizeConfidence(value = "", source = "") {
+  const normalized = String(value || "").trim().toLowerCase();
+
+  if (allowedConfidence.has(normalized)) {
+    return normalized;
+  }
+
+  return String(source || "").trim().toLowerCase() === "manual" ? "confirmed" : "pending";
+}
+
+function normalizeSourceQuality(value = "", source = "") {
+  const normalized = String(value || "").trim().toLowerCase();
+
+  if (allowedSourceQuality.has(normalized)) {
+    return normalized;
+  }
+
+  return String(source || "").trim().toLowerCase() === "manual" ? "manual_verified" : "imported";
 }
 
 function normalizeMetric(value) {
@@ -53,6 +75,7 @@ export function isSameSuccessSample(left = {}, right = {}) {
 export function buildSuccessSampleRecord(input = {}) {
   const now = new Date().toISOString();
   const identityKey = buildSuccessSampleIdentityKey(input);
+  const source = String(input.source || "manual").trim() || "manual";
   const id =
     String(input.id || "").trim() ||
     `success-${crypto.createHash("sha1").update(identityKey || `${Date.now()}`).digest("hex").slice(0, 16)}`;
@@ -60,12 +83,14 @@ export function buildSuccessSampleRecord(input = {}) {
   return withSampleWeight({
     id,
     tier: normalizeTier(input.tier),
+    confidence: normalizeConfidence(input.confidence, source),
+    sourceQuality: normalizeSourceQuality(input.sourceQuality, source),
     title: String(input.title || "").trim(),
     body: String(input.body || input.noteContent || "").trim(),
     coverText: String(input.coverText || "").trim(),
     tags: uniqueStrings(ensureArray(input.tags)),
     sourcePlatform: String(input.sourcePlatform || "xiaohongshu").trim() || "xiaohongshu",
-    source: String(input.source || "manual").trim() || "manual",
+    source,
     publishedAt: String(input.publishedAt || "").trim(),
     metrics: normalizeMetrics(input.metrics || {}),
     notes: String(input.notes || "").trim(),

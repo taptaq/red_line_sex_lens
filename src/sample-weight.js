@@ -27,6 +27,16 @@ function normalizeString(value) {
   return String(value || "").trim();
 }
 
+function normalizeConfidence(value = "", fallback = "pending") {
+  const normalized = normalizeString(value).toLowerCase();
+  return normalized === "confirmed" || normalized === "pending" ? normalized : fallback;
+}
+
+function normalizeSourceQuality(value = "", fallback = "unknown") {
+  const normalized = normalizeString(value).toLowerCase();
+  return ["manual_verified", "imported", "unknown"].includes(normalized) ? normalized : fallback;
+}
+
 function engagementBoost(metrics = {}) {
   const likes = normalizeNumber(metrics.likes);
   const favorites = normalizeNumber(metrics.favorites);
@@ -65,6 +75,19 @@ function roundWeight(value) {
   return Math.round(Math.max(0, value) * 100) / 100;
 }
 
+function confidenceBoost(item = {}, fallback = "pending") {
+  return normalizeConfidence(item.confidence, fallback) === "confirmed" ? 0.35 : 0;
+}
+
+function sourceQualityBoost(item = {}, fallback = "unknown") {
+  const sourceQuality = normalizeSourceQuality(item.sourceQuality, fallback);
+
+  if (sourceQuality === "manual_verified") return 0.2;
+  if (sourceQuality === "imported") return 0.05;
+  if (sourceQuality === "unknown") return -0.05;
+  return 0;
+}
+
 function inferKind(item = {}, kind = "auto") {
   if (kind && kind !== "auto") {
     return kind;
@@ -82,12 +105,24 @@ export function calculateSampleWeight(item = {}, kind = "auto") {
 
   if (resolvedKind === "success") {
     const tier = normalizeString(item.tier) || "passed";
-    return roundWeight((successTierBase[tier] || successTierBase.passed) + engagementBoost(item.metrics) + recencyBoost(item));
+    return roundWeight(
+      (successTierBase[tier] || successTierBase.passed) +
+        confidenceBoost(item, normalizeString(item.source) === "manual" ? "confirmed" : "pending") +
+        sourceQualityBoost(item, normalizeString(item.source) === "manual" ? "manual_verified" : "imported") +
+        engagementBoost(item.metrics) +
+        recencyBoost(item)
+    );
   }
 
   if (resolvedKind === "false_positive") {
     const auditBonus = normalizeString(item.falsePositiveAudit?.signal) === "strict_confirmed" ? 0.25 : 0;
-    return roundWeight((falsePositiveStatusBase[status] || 0.7) + auditBonus + recencyBoost(item));
+    return roundWeight(
+      (falsePositiveStatusBase[status] || 0.7) +
+        confidenceBoost(item, status === "platform_passed_confirmed" ? "confirmed" : "pending") +
+        sourceQualityBoost(item) +
+        auditBonus +
+        recencyBoost(item)
+    );
   }
 
   if (resolvedKind === "lifecycle") {

@@ -1,4 +1,5 @@
 import { loadFalsePositiveLog, loadLexicon, loadWhitelist } from "./data-store.js";
+import { deriveFailureReasonTags } from "./feedback.js";
 import { isSameFeedbackNote } from "./feedback-identity.js";
 import { evaluateContextRules } from "./risk-rules.js";
 import { ensureArray, flattenPost, normalizeText } from "./normalizer.js";
@@ -184,6 +185,12 @@ export async function analyzePost(input = {}) {
     );
   }
 
+  const failureReasonTags = deriveFailureReasonTags({
+    texts: suggestions,
+    categories: [...categorySet],
+    topHits: hits
+  });
+
   return {
     input: {
       ...post,
@@ -205,6 +212,7 @@ export async function analyzePost(input = {}) {
     falsePositiveHints,
     softenedByFalsePositive,
     categories: [...categorySet],
-    suggestions
+    suggestions,
+    failureReasonTags
   };
 }

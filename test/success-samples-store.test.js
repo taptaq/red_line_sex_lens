@@ -30,6 +30,8 @@ test("buildSuccessSampleRecord normalizes tiers, metrics, content, and snapshots
   const record = buildSuccessSampleRecord({
     id: "sample-1",
     tier: "featured",
+    confidence: " pending ",
+    sourceQuality: " imported ",
     title: " 标题 ",
     body: " 正文 ",
     coverText: " 封面 ",
@@ -43,6 +45,8 @@ test("buildSuccessSampleRecord normalizes tiers, metrics, content, and snapshots
   });
 
   assert.equal(record.tier, "featured");
+  assert.equal(record.confidence, "pending");
+  assert.equal(record.sourceQuality, "imported");
   assert.equal(record.title, "标题");
   assert.equal(record.body, "正文");
   assert.deepEqual(record.tags, ["科普", "关系"]);
@@ -52,6 +56,17 @@ test("buildSuccessSampleRecord normalizes tiers, metrics, content, and snapshots
   assert.equal(record.rewriteSnapshot.model, "glm-test");
   assert.ok(getSuccessSampleWeight(record) > 3);
   assert.equal(record.sampleWeight, getSuccessSampleWeight(record));
+});
+
+test("buildSuccessSampleRecord defaults confidence and source quality for manual samples", () => {
+  const record = buildSuccessSampleRecord({
+    title: "人工样本",
+    body: "人工确认的高质量正文",
+    source: "manual"
+  });
+
+  assert.equal(record.confidence, "confirmed");
+  assert.equal(record.sourceQuality, "manual_verified");
 });
 
 test("success sample store upserts the same note instead of appending duplicates", async (t) => {

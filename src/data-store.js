@@ -36,11 +36,25 @@ function normalizeNumber(value, fallback = 0) {
 
 function normalizeFalsePositiveEntry(entry = {}) {
   const status = normalizeString(entry.status) || "platform_passed_pending";
+  const confidence = (() => {
+    const normalized = normalizeString(entry.confidence).toLowerCase();
+    if (normalized === "confirmed" || normalized === "pending") {
+      return normalized;
+    }
+
+    return status === "platform_passed_confirmed" ? "confirmed" : "pending";
+  })();
+  const sourceQuality = (() => {
+    const normalized = normalizeString(entry.sourceQuality).toLowerCase();
+    return ["manual_verified", "imported", "unknown"].includes(normalized) ? normalized : "unknown";
+  })();
 
   return withSampleWeight({
     ...entry,
     id: normalizeString(entry.id),
     status,
+    confidence,
+    sourceQuality,
     createdAt: normalizeString(entry.createdAt),
     updatedAt: normalizeString(entry.updatedAt),
     observedAt: normalizeString(entry.observedAt),

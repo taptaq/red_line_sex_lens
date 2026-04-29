@@ -3,6 +3,7 @@ import path from "node:path";
 import { analyzePost } from "./analyzer.js";
 import { loadSummary, readImportFile, upsertFeedbackEntries } from "./data-store.js";
 import { runFeedbackHarness } from "./evals/feedback-harness.js";
+import { runReviewBenchmarkHarness } from "./evals/review-benchmark-harness.js";
 import { runRewritePairsHarness } from "./evals/rewrite-pairs-harness.js";
 import {
   createReviewCandidates,
@@ -155,6 +156,12 @@ async function runEvalRewritePairs(args) {
   console.log(JSON.stringify(result, null, 2));
 }
 
+async function runEvalReviewBenchmark(args) {
+  const filePath = args.file ? path.resolve(args.file) : path.resolve("data/evals/review-benchmark.json");
+  const result = await runReviewBenchmarkHarness({ filePath });
+  console.log(JSON.stringify(result, null, 2));
+}
+
 async function main() {
   const [, , command = "summary", ...rest] = process.argv;
   const args = parseArgs(rest);
@@ -181,6 +188,11 @@ async function main() {
 
   if (command === "eval-rewrite-pairs") {
     await runEvalRewritePairs(args);
+    return;
+  }
+
+  if (command === "eval-review-benchmark") {
+    await runEvalReviewBenchmark(args);
     return;
   }
 
