@@ -20,6 +20,7 @@ import {
   loadAnalyzeTagOptions,
   loadFalsePositiveLog,
   loadNoteLifecycle,
+  loadReviewBenchmarkSamples,
   loadReviewQueue,
   loadSummary,
   loadStyleProfile,
@@ -27,6 +28,7 @@ import {
   saveAnalyzeTagOptions,
   saveFalsePositiveLog,
   saveNoteLifecycle,
+  saveReviewBenchmarkSamples,
   saveStyleProfile,
   saveSuccessSamples,
   upsertFeedbackEntries
@@ -60,11 +62,12 @@ import {
   getActiveStyleProfile,
   setActiveStyleProfileVersion
 } from "./style-profile.js";
-import { buildSuccessSampleRecord, upsertSuccessSampleRecords } from "./success-samples.js";
+import { buildSuccessSampleRecord, isSameSuccessSample, upsertSuccessSampleRecords } from "./success-samples.js";
 import { buildLifecycleRecord, updateLifecyclePublishResult, upsertLifecycleRecords } from "./note-lifecycle.js";
 import { rankSamplesByWeight, withSampleWeight } from "./sample-weight.js";
 import { buildModelPerformanceSummary } from "./model-performance.js";
-import { webDir } from "./config.js";
+import { paths, webDir } from "./config.js";
+import { runReviewBenchmarkHarness } from "./evals/review-benchmark-harness.js";
 
 const host = "127.0.0.1";
 const port = 3030;
@@ -148,6 +151,111 @@ export function buildGenerationReferenceSamples({ successSamples = [], noteLifec
 
 function uniqueStrings(items = []) {
   return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
+function normalizeComparableText(value = "") {
+  return String(value || "").trim();
+}
+
+function isSameLifecycleItem(left = {}, right = {}) {
+  const leftId = normalizeComparableText(left.id);
+  const rightId = normalizeComparableText(right.id);
+
+  if (leftId && rightId && leftId === rightId) {
+    return true;
+  }
+
+  const leftNote = left.note || left;
+  const rightNote = right.note || right;
+  const leftTitle = normalizeComparableText(leftNote.title);
+  const rightTitle = normalizeComparableText(rightNote.title);
+  const leftBody = normalizeComparableText(leftNote.body);
+  const rightBody = normalizeComparableText(rightNote.body);
+  const leftCoverText = normalizeComparableText(leftNote.coverText);
+  const rightCoverText = normalizeComparableText(rightNote.coverText);
+
+  if (leftTitle || rightTitle || leftBody || rightBody) {
+    return leftTitle === rightTitle && leftBody === rightBody && leftCoverText === rightCoverText;
+  }
+
+  return Boolean(leftCoverText && rightCoverText && leftCoverText === rightCoverText);
+}
+
+function parseBenchmarkTags(tags = []) {
+  if (Array.isArray(tags)) {
+    return uniqueStrings(tags);
+  }
+
+  return uniqueStrings(String(tags || "").split(/[,\n]/));
+}
+
+function buildReviewBenchmarkSamplePayload(payload = {}) {
+  return {
+    expectedType: String(payload.expectedType || "").trim(),
+    input: {
+      title: String(payload.title || "").trim(),
+      body: String(payload.body || "").trim(),
+      coverText: String(payload.coverText || "").trim(),
+      tags: parseBenchmarkTags(payload.tags)
+    }
+  };
+}
+
+function isAllowedBenchmarkExpectedType(value = "") {
+  return [
+    "violation",
+    "false_positive",
+    "success",
+    "违规样本",
+    "误报样本",
+    "正常样本",
+    "成功样本",
+    "正常通过样本"
+  ].includes(String(value || "").trim());
+}
+
+function assertReviewBenchmarkSamplePayload(payload = {}) {
+  if (!payload?.input?.title) {
+    const error = new Error("基准样本标题不能为空。");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!payload?.input?.body) {
+    const error = new Error("基准样本正文不能为空。");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!isAllowedBenchmarkExpectedType(payload.expectedType)) {
+    const error = new Error("基准样本预期类型无效，请选择违规样本、误报样本或正常通过样本。");
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+function assertRunnableReviewBenchmarkSamples(items = []) {
+  const invalidItem = (Array.isArray(items) ? items : []).find(
+    (item) => !["violation", "false_positive", "success"].includes(String(item?.expectedType || "").trim())
+  );
+
+  if (!invalidItem) {
+    return;
+  }
+
+  const error = new Error(
+    `存在预期类型无效的基准样本：${String(invalidItem.id || invalidItem?.input?.title || "未命名样本").trim() || "未命名样本"}`
+  );
+  error.statusCode = 400;
+  throw error;
+}
+
+let reviewBenchmarkHarnessRunner = runReviewBenchmarkHarness;
+
+export function setReviewBenchmarkHarnessRunnerForTests(runner) {
+  const previous = reviewBenchmarkHarnessRunner;
+  reviewBenchmarkHarnessRunner = typeof runner === "function" ? runner : runReviewBenchmarkHarness;
+  return previous;
 }
 
 function sendJson(response, statusCode, payload) {
@@ -609,6 +717,14 @@ async function handleRequest(request, response) {
     });
   }
 
+  if (request.method === "GET" && url.pathname === "/api/review-benchmark") {
+    const items = await loadReviewBenchmarkSamples();
+    return sendJson(response, 200, {
+      ok: true,
+      items
+    });
+  }
+
   if (request.method === "GET" && url.pathname === "/api/note-lifecycle") {
     const items = await loadNoteLifecycle();
     return sendJson(response, 200, {
@@ -808,10 +924,12 @@ async function handleRequest(request, response) {
     const nextRecord = buildSuccessSampleRecord(payload);
     const next = upsertSuccessSampleRecords(current, [nextRecord]);
     await saveSuccessSamples(next);
+    const items = await loadSuccessSamples();
+    const item = items.find((entry) => isSameSuccessSample(entry, nextRecord)) || items[items.length - 1] || null;
     return sendJson(response, 200, {
       ok: true,
-      item: next[next.length - 1],
-      items: next
+      item,
+      items
     });
   }
 
@@ -820,13 +938,38 @@ async function handleRequest(request, response) {
     const current = await loadNoteLifecycle();
     const nextRecord = buildLifecycleRecord(payload);
     const next = upsertLifecycleRecords(current, [nextRecord]);
-    const item = next.find((entry) => entry.id === nextRecord.id) || next[next.length - 1];
     await saveNoteLifecycle(next);
+    const items = await loadNoteLifecycle();
+    const item = items.find((entry) => isSameLifecycleItem(entry, nextRecord)) || items[items.length - 1] || null;
     return sendJson(response, 200, {
       ok: true,
       item,
-      items: next
+      items
     });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/review-benchmark") {
+    const payload = buildReviewBenchmarkSamplePayload(await readBody(request));
+    assertReviewBenchmarkSamplePayload(payload);
+    const current = await loadReviewBenchmarkSamples();
+    const next = [...current, payload];
+    await saveReviewBenchmarkSamples(next);
+    const items = await loadReviewBenchmarkSamples();
+    return sendJson(response, 200, {
+      ok: true,
+      item: items[items.length - 1] || null,
+      items
+    });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/review-benchmark/run") {
+    const samples = await loadReviewBenchmarkSamples();
+    assertRunnableReviewBenchmarkSamples(samples);
+    const result = await reviewBenchmarkHarnessRunner({
+      filePath: paths.reviewBenchmark,
+      samples
+    });
+    return sendJson(response, 200, result);
   }
 
   if (request.method === "POST" && url.pathname === "/api/style-profile/draft") {
@@ -913,10 +1056,12 @@ async function handleRequest(request, response) {
     const next = [...current];
     next[index] = updateLifecyclePublishResult(current[index], payload);
     await saveNoteLifecycle(next);
+    const items = await loadNoteLifecycle();
+    const item = items.find((entry) => String(entry.id || "").trim() === id) || items.find((entry) => isSameLifecycleItem(entry, next[index])) || null;
     return sendJson(response, 200, {
       ok: true,
-      item: next[index],
-      items: next
+      item,
+      items
     });
   }
 
@@ -1007,6 +1152,25 @@ async function handleRequest(request, response) {
     }
 
     await saveSuccessSamples(next);
+    const items = await loadSuccessSamples();
+    return sendJson(response, 200, {
+      ok: true,
+      items
+    });
+  }
+
+  if (request.method === "DELETE" && url.pathname === "/api/review-benchmark") {
+    const payload = await readBody(request);
+    const current = await loadReviewBenchmarkSamples();
+    const next = current.filter((item) => String(item.id || "").trim() !== String(payload?.id || "").trim());
+
+    if (next.length === current.length) {
+      const error = new Error("未找到要删除的基准样本。");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    await saveReviewBenchmarkSamples(next);
     return sendJson(response, 200, {
       ok: true,
       items: next
@@ -1025,9 +1189,10 @@ async function handleRequest(request, response) {
     }
 
     await saveNoteLifecycle(next);
+    const items = await loadNoteLifecycle();
     return sendJson(response, 200, {
       ok: true,
-      items: next
+      items
     });
   }
 
@@ -1041,7 +1206,8 @@ async function handleRequest(request, response) {
   response.end("Not found");
 }
 
-const server = http.createServer(withErrorHandling(handleRequest));
+const safeHandleRequest = withErrorHandling(handleRequest);
+const server = http.createServer(safeHandleRequest);
 
 const isDirectExecution = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
@@ -1053,3 +1219,4 @@ if (isDirectExecution) {
 
 export { server };
 export { handleRequest };
+export { safeHandleRequest };

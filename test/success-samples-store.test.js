@@ -5,21 +5,31 @@ import os from "node:os";
 import path from "node:path";
 
 import { paths } from "../src/config.js";
-import { loadSuccessSamples, saveSuccessSamples } from "../src/data-store.js";
+import { loadNoteRecords, loadNoteLifecycle, loadSuccessSamples, saveNoteLifecycle, saveSuccessSamples } from "../src/data-store.js";
 import {
   buildSuccessSampleRecord,
   getSuccessSampleWeight,
   upsertSuccessSampleRecords
 } from "../src/success-samples.js";
+import { buildLifecycleRecord } from "../src/note-lifecycle.js";
 
 async function withTempSuccessSamples(t, run) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "success-samples-"));
-  const originalPath = paths.successSamples;
+  const originals = {
+    successSamples: paths.successSamples,
+    noteLifecycle: paths.noteLifecycle,
+    noteRecords: paths.noteRecords
+  };
   paths.successSamples = path.join(tempDir, "success-samples.json");
-  await fs.writeFile(paths.successSamples, "[]\n", "utf8");
+  paths.noteLifecycle = path.join(tempDir, "note-lifecycle.json");
+  paths.noteRecords = path.join(tempDir, "note-records.json");
+  await Promise.all([
+    fs.writeFile(paths.successSamples, "[]\n", "utf8"),
+    fs.writeFile(paths.noteLifecycle, "[]\n", "utf8")
+  ]);
 
   t.after(async () => {
-    paths.successSamples = originalPath;
+    Object.assign(paths, originals);
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -93,5 +103,104 @@ test("success sample store upserts the same note instead of appending duplicates
     assert.equal(stored[0].tier, "performed");
     assert.equal(stored[0].metrics.likes, 20);
     assert.equal(stored[0].createdAt, first.createdAt);
+  });
+});
+
+test("saving success samples persists canonical note records in unified storage", async (t) => {
+  await withTempSuccessSamples(t, async () => {
+    const sample = buildSuccessSampleRecord({
+      title: "统一存储标题",
+      body: "统一存储正文",
+      tier: "featured",
+      metrics: { likes: 18, favorites: 6, comments: 2 },
+      notes: "人工精选"
+    });
+
+    await saveSuccessSamples([sample]);
+
+    const stored = await loadNoteRecords();
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0].reference.enabled, true);
+    assert.equal(stored[0].reference.tier, "featured");
+    assert.equal(stored[0].publish.status, "published_passed");
+    assert.equal(stored[0].publish.metrics.likes, 18);
+    assert.equal(stored[0].note.title, "统一存储标题");
+    assert.equal(stored[0].note.body, "统一存储正文");
+  });
+});
+
+test("merged lifecycle facts do not downgrade success sample manual confidence semantics", async (t) => {
+  await withTempSuccessSamples(t, async () => {
+    await saveSuccessSamples([
+      buildSuccessSampleRecord({
+        title: "人工成功样本",
+        body: "人工成功正文",
+        tier: "featured",
+        source: "manual",
+        metrics: { likes: 10, favorites: 3, comments: 1 }
+      })
+    ]);
+
+    await saveNoteLifecycle([
+      buildLifecycleRecord({
+        source: "generation_final",
+        stage: "published",
+        note: {
+          title: "人工成功样本",
+          body: "人工成功正文",
+          tags: ["科普"]
+        },
+        publishResult: {
+          status: "positive_performance",
+          metrics: { likes: 66, favorites: 18, comments: 6 }
+        }
+      })
+    ]);
+
+    const samples = await loadSuccessSamples();
+
+    assert.equal(samples.length, 1);
+    assert.equal(samples[0].confidence, "confirmed");
+    assert.equal(samples[0].sourceQuality, "manual_verified");
+  });
+});
+
+test("removing success samples keeps lifecycle facts but removes the success reference view", async (t) => {
+  await withTempSuccessSamples(t, async () => {
+    await saveSuccessSamples([
+      buildSuccessSampleRecord({
+        title: "双视图样本",
+        body: "双视图正文",
+        tier: "performed"
+      })
+    ]);
+
+    await saveNoteLifecycle([
+      buildLifecycleRecord({
+        source: "generation_final",
+        stage: "published",
+        note: {
+          title: "双视图样本",
+          body: "双视图正文",
+          tags: ["科普"]
+        },
+        publishResult: {
+          status: "positive_performance",
+          metrics: { likes: 50, favorites: 15, comments: 5 }
+        }
+      })
+    ]);
+
+    await saveSuccessSamples([]);
+
+    const samples = await loadSuccessSamples();
+    const lifecycle = await loadNoteLifecycle();
+    const records = await loadNoteRecords();
+
+    assert.equal(samples.length, 0);
+    assert.equal(lifecycle.length, 1);
+    assert.equal(lifecycle[0].publishResult.status, "positive_performance");
+    assert.equal(records.length, 1);
+    assert.equal(records[0].reference.enabled, false);
   });
 });

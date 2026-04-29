@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { paths } from "../src/config.js";
-import { loadStyleProfile, saveStyleProfile } from "../src/data-store.js";
+import { loadStyleProfile, loadSuccessSamples, saveStyleProfile } from "../src/data-store.js";
 import {
   buildStyleProfileDraft,
   confirmStyleProfileDraft,
@@ -104,4 +104,89 @@ test("style profile supports versions and activating an older version", async ()
   assert.equal(reverted.current.topic, "亲密关系科普");
   assert.equal(reverted.versions.find((item) => item.id === firstState.current.id).status, "active");
   assert.equal(reverted.versions.find((item) => item.id === secondState.current.id).status, "archived");
+});
+
+test("style profile draft keeps using success compatibility samples from unified note records", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "style-profile-note-records-"));
+  const originals = {
+    noteRecords: paths.noteRecords,
+    successSamples: paths.successSamples,
+    noteLifecycle: paths.noteLifecycle
+  };
+
+  paths.noteRecords = path.join(tempDir, "note-records.json");
+  paths.successSamples = path.join(tempDir, "success-samples.json");
+  paths.noteLifecycle = path.join(tempDir, "note-lifecycle.json");
+
+  t.after(async () => {
+    Object.assign(paths, originals);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  await fs.writeFile(
+    paths.noteRecords,
+    `${JSON.stringify([
+      {
+        id: "record-featured",
+        source: "manual",
+        stage: "published_reference",
+        note: {
+          title: "高权重参考样本",
+          body: "这是一篇更完整的经验正文。".repeat(8),
+          tags: ["关系", "科普"]
+        },
+        reference: {
+          enabled: true,
+          tier: "featured",
+          selectedBy: "manual"
+        },
+        publish: {
+          status: "published_passed"
+        }
+      },
+      {
+        id: "record-passed",
+        source: "manual",
+        stage: "published_reference",
+        note: {
+          title: "低权重过审样本",
+          body: "普通正文",
+          tags: ["普通"]
+        },
+        reference: {
+          enabled: true,
+          tier: "passed",
+          selectedBy: "manual"
+        },
+        publish: {
+          status: "published_passed"
+        }
+      },
+      {
+        id: "record-lifecycle-only",
+        source: "generation_final",
+        stage: "published",
+        note: {
+          title: "仅生命周期记录",
+          body: "这条记录应该只进入 lifecycle 兼容视图。",
+          tags: ["发布"]
+        },
+        publish: {
+          status: "positive_performance",
+          metrics: { likes: 80 }
+        },
+        reference: {
+          enabled: false
+        }
+      }
+    ], null, 2)}\n`,
+    "utf8"
+  );
+
+  const samples = await loadSuccessSamples();
+  const draft = buildStyleProfileDraft(samples, { topic: "亲密关系科普" });
+
+  assert.equal(draft.topic, "亲密关系科普");
+  assert.deepEqual(draft.sourceSampleIds, ["record-featured"]);
+  assert.equal(draft.sourceSampleIds.includes("record-lifecycle-only"), false);
 });

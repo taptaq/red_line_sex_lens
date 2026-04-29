@@ -22,30 +22,19 @@
 - `node src/cli.js eval-review-benchmark`
 - `npm run eval:review-benchmark`
 
-本次快照结果：
+本周还补上了页面维护入口：
 
-- 总样本数：`3`
-- 匹配预期：`2`
-- 未匹配预期：`1`
+- `数据维护台 > 基准评测`
+- 支持手动逐条录入 `标题 / 正文 / 标签 / 预期类型`
+- 支持页面内直接运行 benchmark，并查看未匹配样本列表
 
-按预期类型分布：
+当前仓库已移除默认演示 benchmark 样本，后续评测结果只以人工录入的真实样本为准。
 
-- `violation`: `1`
-- `false_positive`: `1`
-- `success`: `1`
+这意味着：
 
-按实际 verdict 分布：
-
-- `hard_block`: `1`
-- `observe`: `2`
-
-当前唯一未匹配样本：
-
-- `false-positive-relationship-tone`
-- 预期：`flagged`
-- 实际：`observe`
-
-这说明当前本地规则对这类“关系沟通/教育语境”内容偏宽，尚未把它识别成“值得关注的潜在误报样本”。这不是坏消息，反而说明评测集已经开始暴露真实校准缺口。
+- 首次运行 `eval-review-benchmark` 或页面里的“运行基准评测”时，如果还没有录入真实样本，会直接提示样本为空
+- 之后看到的总样本数、匹配率、未匹配样本，都会反映你自己的真实 benchmark 数据
+- 周报里不再把演示样本的命中情况当作当前系统基线
 
 ### 2. 样本信任分层
 
@@ -117,6 +106,8 @@ node --test test/generation-scoring.test.js
 node --test test/generation-api.test.js test/generation-workbench.test.js
 node --test test/failure-reason-tags.test.js
 node --test test/false-positive-audit.test.js test/false-positive-api.test.js
+node --test test/review-benchmark-store.test.js test/review-benchmark-harness.test.js test/review-benchmark-api.test.js
+node --test test/benchmark-generation-ui.test.js test/success-generation-ui.test.js
 ```
 
 ## 当前判断
@@ -126,13 +117,14 @@ node --test test/false-positive-audit.test.js test/false-positive-api.test.js
 已经明显变稳的部分：
 
 - 可以用固定评测集持续看规则变化
+- 基准评测不再只靠手改 JSON，页面里可以直接维护和回归
 - 样本开始区分强弱证据
 - 推荐第一稿不再过度偏向 `expressive`
 - 风险原因开始变成可统计标签
 
 还没有完全解决的点：
 
-- `false-positive-relationship-tone` 这类样本仍未进入更合适的关注区间
+- 真实 benchmark 样本量目前还需要继续积累
 - 当前评测集样本量还小，更适合作为基线，不适合作为最终结论
 - 还没有把“标签分布变化”做成单独的周度统计输出
 

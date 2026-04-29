@@ -190,6 +190,70 @@ function activateTab(targetId) {
   });
 }
 
+function activateSampleLibraryTab(targetId) {
+  const buttons = Array.from(document.querySelectorAll("[data-sample-library-tab-target]"));
+  const panels = Array.from(document.querySelectorAll(".sample-library-tab-panel"));
+  const fallbackTargetId = buttons[0]?.dataset.sampleLibraryTabTarget || panels[0]?.id || "";
+  const resolvedTargetId = targetId || fallbackTargetId;
+
+  buttons.forEach((button) => {
+    const active = button.dataset.sampleLibraryTabTarget === resolvedTargetId;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+
+  panels.forEach((panel) => {
+    const active = panel.id === resolvedTargetId;
+    panel.hidden = !active;
+    panel.classList.toggle("is-active", active);
+  });
+}
+
+function initializeTabs() {
+  document.querySelectorAll(".tab-button[data-tab-target]").forEach((button) => {
+    button.addEventListener("click", () => activateTab(button.dataset.tabTarget));
+  });
+
+  activateTab("custom-lexicon-pane");
+}
+
+function initializeSampleLibraryTabs() {
+  const buttons = Array.from(document.querySelectorAll("[data-sample-library-tab-target]"));
+  const panels = Array.from(document.querySelectorAll(".sample-library-tab-panel"));
+
+  if (!buttons.length || !panels.length) {
+    return;
+  }
+
+  buttons.forEach((button) => {
+    button.addEventListener("click", () => {
+      activateSampleLibraryTab(button.dataset.sampleLibraryTabTarget || "");
+    });
+  });
+
+  activateSampleLibraryTab(buttons[0].dataset.sampleLibraryTabTarget || "");
+}
+
+function resolveSampleLibraryTargetId(targetId = "") {
+  const normalized = String(targetId || "").trim();
+
+  if (!normalized || normalized === "success-samples-pane") return "sample-library-success-pane";
+  if (normalized === "note-lifecycle-pane") return "sample-library-lifecycle-pane";
+  if (normalized === "style-profile-pane") return "sample-library-style-pane";
+  return normalized;
+}
+
+function revealSampleLibraryPane(targetId = "sample-library-success-pane") {
+  const resolvedTargetId = resolveSampleLibraryTargetId(targetId);
+  activateTab("sample-library-pane");
+  activateSampleLibraryTab(resolvedTargetId);
+  byId("sample-library-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function revealStyleProfilePane() {
+  revealSampleLibraryPane("sample-library-style-pane");
+}
+
 function revealFalsePositiveLogPane() {
   activateTab("false-positive-log-pane");
   byId("false-positive-log-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -226,6 +290,7 @@ const presetAnalyzeTags = [
 let analyzeTagOptions = [...presetAnalyzeTags];
 const analyzeTagOptionsApi = "/api/analyze-tag-options";
 const modelOptionsApi = "/api/model-options";
+const reviewBenchmarkApi = "/api/review-benchmark";
 const defaultModelSelectionOptions = {
   semantic: [
     { value: "auto", label: "默认自动 / 依次尝试当前语义复判模型" },
@@ -1765,6 +1830,13 @@ function successTierLabel(tier) {
   return "仅过审";
 }
 
+function expectedTypeLabel(value) {
+  if (value === "violation") return "违规样本";
+  if (value === "false_positive") return "误报样本";
+  if (value === "success") return "正常通过样本";
+  return String(value || "").trim() || "未标记类型";
+}
+
 function renderSuccessSamples(items = []) {
   byId("success-sample-list").innerHTML = items.length
     ? items
@@ -1789,6 +1861,88 @@ function renderSuccessSamples(items = []) {
         )
         .join("")
     : '<div class="result-card muted">当前没有成功样本</div>';
+}
+
+function renderReviewBenchmarkSamples(items = []) {
+  byId("review-benchmark-list").innerHTML = items.length
+    ? items
+        .slice()
+        .reverse()
+        .map(
+          (item) => `
+            <article class="admin-item">
+              <strong>${escapeHtml(item.input?.title || item.title || "未命名基准样本")}</strong>
+              <div class="meta-row">
+                <span class="meta-pill">${escapeHtml(expectedTypeLabel(item.expectedType))}</span>
+                <span class="meta-pill">${escapeHtml(joinCSV(item.input?.tags || item.tags) || "未填写标签")}</span>
+                <span class="meta-pill">${escapeHtml(formatDate(item.createdAt))}</span>
+              </div>
+              <p>${escapeHtml(compactText(item.input?.body || item.body, 140) || "未填写正文")}</p>
+              <div class="item-actions">
+                <button
+                  type="button"
+                  class="button button-danger button-small"
+                  data-action="delete-review-benchmark"
+                  data-id="${escapeHtml(item.id || "")}"
+                >
+                  删除
+                </button>
+              </div>
+            </article>
+          `
+        )
+        .join("")
+    : '<div class="result-card muted">当前没有基准样本</div>';
+}
+
+function renderReviewBenchmarkResult(result = null) {
+  if (!result) {
+    byId("review-benchmark-result").innerHTML = '<div class="result-card muted">等待操作</div>';
+    return;
+  }
+
+  const summary = result.summary || {};
+  const mismatches = (result.results || []).filter((item) => !item.matchedExpectation);
+
+  byId("review-benchmark-result").innerHTML = `
+    <div class="result-card-shell">
+      <div class="review-benchmark-result-grid">
+        <div class="meta-pill">总样本 ${escapeHtml(String(summary.total || 0))}</div>
+        <div class="meta-pill">匹配 ${escapeHtml(String(summary.passed || 0))}</div>
+        <div class="meta-pill">未匹配 ${escapeHtml(String(summary.failed || 0))}</div>
+      </div>
+      <div class="tab-panel-head">
+        <strong>未匹配样本</strong>
+        <span>优先看这部分，决定是补规则、调权重，还是修正基准样本预期。</span>
+      </div>
+      <ul class="review-benchmark-mismatch-list">
+        ${
+          mismatches.length
+            ? mismatches
+                .map(
+                  (item) => `
+                    <li>
+                      <strong>${escapeHtml(item.input?.title || item.id || "未命名样本")}</strong>
+                      <span>
+                        预期 ${escapeHtml(expectedTypeLabel(item.expectedType))} / 实际 ${escapeHtml(
+                          verdictLabel(item.actualVerdict)
+                        )}
+                      </span>
+                    </li>
+                  `
+                )
+                .join("")
+            : "<li><strong>当前没有未匹配样本</strong><span>这次基准评测全部命中预期。</span></li>"
+        }
+      </ul>
+    </div>
+  `;
+}
+
+async function refreshReviewBenchmark() {
+  const payload = await apiJson(reviewBenchmarkApi);
+  renderReviewBenchmarkSamples(payload.items || []);
+  return payload;
 }
 
 function renderNoteLifecycle(items = []) {
@@ -2315,15 +2469,13 @@ function fillSuccessSampleFormFromCurrent(source = "analysis") {
   form.elements.notes.value =
     form.elements.notes.value ||
     (source === "rewrite" ? "从当前改写结果填充的成功样本" : "从当前检测内容填充的成功样本");
-  activateTab("success-samples-pane");
-  byId("success-samples-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  revealSampleLibraryPane("sample-library-success-pane");
   byId("success-sample-result").innerHTML =
     '<div class="result-card-shell">已填充成功样本表单，可补充表现数据后保存。</div>';
 }
 
 function revealNoteLifecyclePane() {
-  activateTab("note-lifecycle-pane");
-  byId("note-lifecycle-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  revealSampleLibraryPane("sample-library-lifecycle-pane");
 }
 
 function getRecommendedGenerationCandidate() {
@@ -2887,8 +3039,58 @@ byId("success-sample-form").addEventListener("submit", async (event) => {
   }
 });
 
+byId("review-benchmark-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const formElement = event.currentTarget;
+  const submitButton = formElement.querySelector('button[type="submit"]');
+  const form = new FormData(formElement);
+  setButtonBusy(submitButton, true, "保存中...");
+
+  try {
+    const response = await apiJson(reviewBenchmarkApi, {
+      method: "POST",
+      body: JSON.stringify({
+        title: form.get("title"),
+        body: form.get("body"),
+        tags: splitCSV(form.get("tags")),
+        expectedType: form.get("expectedType")
+      })
+    });
+
+    renderReviewBenchmarkSamples(response.items || []);
+    byId("review-benchmark-result").innerHTML = '<div class="result-card-shell">基准样本已保存。</div>';
+    formElement.reset();
+  } catch (error) {
+    byId("review-benchmark-result").innerHTML = `
+      <div class="result-card-shell muted">${escapeHtml(error.message || "保存基准样本失败")}</div>
+    `;
+  } finally {
+    setButtonBusy(submitButton, false);
+  }
+});
+
+byId("review-benchmark-run-button").addEventListener("click", async () => {
+  const button = byId("review-benchmark-run-button");
+  setButtonBusy(button, true, "运行中...");
+
+  try {
+    const result = await apiJson(`${reviewBenchmarkApi}/run`, {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+    renderReviewBenchmarkResult(result);
+  } catch (error) {
+    byId("review-benchmark-result").innerHTML = `
+      <div class="result-card-shell muted">${escapeHtml(error.message || "运行基准评测失败")}</div>
+    `;
+  } finally {
+    setButtonBusy(button, false);
+  }
+});
+
 byId("style-profile-draft-button").addEventListener("click", async () => {
   const button = byId("style-profile-draft-button");
+  revealStyleProfilePane();
   setButtonBusy(button, true, "生成中...");
 
   try {
@@ -2961,11 +3163,8 @@ byId("rewrite-pair-form").addEventListener("submit", async (event) => {
   }
 });
 
-document.querySelectorAll(".tab-button[data-tab-target]").forEach((button) => {
-  button.addEventListener("click", () => activateTab(button.dataset.tabTarget));
-});
-
-activateTab("custom-lexicon-pane");
+initializeTabs();
+initializeSampleLibraryTabs();
 
 document.addEventListener("click", async (event) => {
   const workflowButton = event.target.closest("[data-workflow-action]");
@@ -3123,7 +3322,20 @@ document.addEventListener("click", async (event) => {
       revealNoteLifecyclePane();
     }
 
+    if (action === "delete-review-benchmark") {
+      const response = await apiJson(reviewBenchmarkApi, {
+        method: "DELETE",
+        body: JSON.stringify({
+          id: button.dataset.id
+        })
+      });
+      renderReviewBenchmarkSamples(response.items || []);
+      byId("review-benchmark-result").innerHTML = '<div class="result-card-shell">基准样本已删除。</div>';
+      return;
+    }
+
     if (action === "confirm-style-profile") {
+      revealStyleProfilePane();
       const response = await apiJson("/api/style-profile", {
         method: "PATCH",
         body: JSON.stringify({})
@@ -3132,6 +3344,7 @@ document.addEventListener("click", async (event) => {
     }
 
     if (action === "activate-style-profile") {
+      revealStyleProfilePane();
       const response = await apiJson("/api/style-profile", {
         method: "PATCH",
         body: JSON.stringify({
@@ -3157,11 +3370,19 @@ document.addEventListener("click", async (event) => {
 
 renderModelSelectionControls(defaultModelSelectionOptions);
 
-Promise.all([refreshAll(), loadModelSelectionOptions()]).catch((error) => {
+refreshAll().catch((error) => {
   byId("analysis-result").innerHTML = `
     <div class="result-card-shell muted">${escapeHtml(error.message || "初始化失败")}</div>
   `;
 });
+
+refreshReviewBenchmark().catch((error) => {
+  byId("review-benchmark-result").innerHTML = `
+    <div class="result-card-shell muted">${escapeHtml(error.message || "基准评测初始化失败")}</div>
+  `;
+});
+
+loadModelSelectionOptions().catch(() => {});
 
 syncAnalyzeActions();
 syncRewritePairPrefillButton();

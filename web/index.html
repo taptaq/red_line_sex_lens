@@ -343,10 +343,9 @@
             <button type="button" class="tab-button" data-tab-target="false-positive-log-pane">误报样本</button>
             <span class="tab-sep" role="separator" aria-hidden="true"></span>
             <button type="button" class="tab-button" data-tab-target="rewrite-pairs-pane">改写样本</button>
-            <button type="button" class="tab-button" data-tab-target="success-samples-pane">成功样本</button>
-            <button type="button" class="tab-button" data-tab-target="note-lifecycle-pane">生命周期</button>
+            <button type="button" class="tab-button" data-tab-target="sample-library-pane">样本库</button>
+            <button type="button" class="tab-button" data-tab-target="review-benchmark-pane">基准评测</button>
             <button type="button" class="tab-button" data-tab-target="model-performance-pane">模型看板</button>
-            <button type="button" class="tab-button" data-tab-target="style-profile-pane">风格画像</button>
           </div>
           <div class="tab-panels">
             <section class="tab-panel" id="custom-lexicon-pane">
@@ -554,81 +553,159 @@
               </div>
             </section>
 
-            <section class="tab-panel" id="success-samples-pane">
+            <section class="tab-panel" id="sample-library-pane">
               <div class="tab-panel-head">
-                <strong>成功样本</strong>
-                <span>记录平台已过审或表现好的笔记，用于后续生成和风格画像。</span>
+                <strong>样本库</strong>
+                <span>把参考样本、生命周期记录和风格画像收在一个入口下，减少并列心智负担。</span>
               </div>
-              <div class="admin-panel-block">
-                <div class="admin-panel-body">
-                  <form id="success-sample-form" class="stack compact-form">
-                    <label>
-                      <span>标题</span>
-                      <input name="title" placeholder="成功样本标题" />
-                    </label>
-                    <label>
-                      <span>正文</span>
-                      <textarea name="body" rows="4" placeholder="成功样本正文"></textarea>
-                    </label>
-                    <label>
-                      <span>封面文案</span>
-                      <input name="coverText" placeholder="封面文案" />
-                    </label>
-                    <label>
-                      <span>标签</span>
-                      <input name="tags" placeholder="标签，用逗号分隔" />
-                    </label>
-                    <label>
-                      <span>成功等级</span>
-                      <select name="tier">
-                        <option value="passed">仅过审</option>
-                        <option value="performed">过审且表现好</option>
-                        <option value="featured">人工精选标杆</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span>点赞数</span>
-                      <input name="likes" type="number" min="0" placeholder="点赞数" />
-                    </label>
-                    <label>
-                      <span>收藏数</span>
-                      <input name="favorites" type="number" min="0" placeholder="收藏数" />
-                    </label>
-                    <label>
-                      <span>评论数</span>
-                      <input name="comments" type="number" min="0" placeholder="评论数" />
-                    </label>
-                    <label>
-                      <span>发布时间</span>
-                      <input name="publishedAt" type="date" />
-                    </label>
-                    <label>
-                      <span>人工备注</span>
-                      <textarea name="notes" rows="2" placeholder="人工备注"></textarea>
-                    </label>
-                    <div class="inline-actions inline-actions-row">
-                      <button type="button" class="button button-ghost" id="success-sample-prefill-analysis">
-                        从当前检测填充
-                      </button>
-                      <button type="button" class="button button-ghost" id="success-sample-prefill-rewrite">
-                        从当前改写填充
-                      </button>
-                      <button type="submit" class="button button-alt">保存成功样本</button>
+              <div class="legacy-pane-anchor" id="success-samples-pane" aria-hidden="true"></div>
+              <div class="legacy-pane-anchor" id="note-lifecycle-pane" aria-hidden="true"></div>
+              <div class="legacy-pane-anchor" id="style-profile-pane" aria-hidden="true"></div>
+              <div class="sample-library-tab-strip" role="tablist" aria-label="样本库分区">
+                <button
+                  type="button"
+                  class="sample-library-tab-button"
+                  data-sample-library-tab-target="sample-library-success-pane"
+                >
+                  参考样本
+                </button>
+                <button
+                  type="button"
+                  class="sample-library-tab-button"
+                  data-sample-library-tab-target="sample-library-lifecycle-pane"
+                >
+                  生命周期
+                </button>
+                <button
+                  type="button"
+                  class="sample-library-tab-button"
+                  data-sample-library-tab-target="sample-library-style-pane"
+                >
+                  风格画像
+                </button>
+              </div>
+              <div class="sample-library-tab-panels">
+                <section class="sample-library-tab-panel" id="sample-library-success-pane">
+                  <div class="admin-panel-block">
+                    <div class="admin-panel-body">
+                      <form id="success-sample-form" class="stack compact-form">
+                        <label>
+                          <span>标题</span>
+                          <input name="title" placeholder="成功样本标题" />
+                        </label>
+                        <label>
+                          <span>正文</span>
+                          <textarea name="body" rows="4" placeholder="成功样本正文"></textarea>
+                        </label>
+                        <label>
+                          <span>封面文案</span>
+                          <input name="coverText" placeholder="封面文案" />
+                        </label>
+                        <label>
+                          <span>标签</span>
+                          <input name="tags" placeholder="标签，用逗号分隔" />
+                        </label>
+                        <label>
+                          <span>成功等级</span>
+                          <select name="tier">
+                            <option value="passed">仅过审</option>
+                            <option value="performed">过审且表现好</option>
+                            <option value="featured">人工精选标杆</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>点赞数</span>
+                          <input name="likes" type="number" min="0" placeholder="点赞数" />
+                        </label>
+                        <label>
+                          <span>收藏数</span>
+                          <input name="favorites" type="number" min="0" placeholder="收藏数" />
+                        </label>
+                        <label>
+                          <span>评论数</span>
+                          <input name="comments" type="number" min="0" placeholder="评论数" />
+                        </label>
+                        <label>
+                          <span>发布时间</span>
+                          <input name="publishedAt" type="date" />
+                        </label>
+                        <label>
+                          <span>人工备注</span>
+                          <textarea name="notes" rows="2" placeholder="人工备注"></textarea>
+                        </label>
+                        <div class="inline-actions inline-actions-row">
+                          <button type="button" class="button button-ghost" id="success-sample-prefill-analysis">
+                            从当前检测填充
+                          </button>
+                          <button type="button" class="button button-ghost" id="success-sample-prefill-rewrite">
+                            从当前改写填充
+                          </button>
+                          <button type="submit" class="button button-alt">保存成功样本</button>
+                        </div>
+                      </form>
                     </div>
-                  </form>
-                </div>
-                <div id="success-sample-result" class="result-card muted">等待操作</div>
-                <div id="success-sample-list" class="admin-list"></div>
+                    <div id="success-sample-result" class="result-card muted">等待操作</div>
+                    <div id="success-sample-list" class="admin-list"></div>
+                  </div>
+                </section>
+                <section class="sample-library-tab-panel" id="sample-library-lifecycle-pane">
+                  <div class="admin-panel-block">
+                    <div id="note-lifecycle-list" class="admin-list"></div>
+                  </div>
+                </section>
+                <section class="sample-library-tab-panel" id="sample-library-style-pane">
+                  <div class="admin-panel-block">
+                    <div class="admin-panel-body">
+                      <label>
+                        <span>画像主题</span>
+                        <input id="style-profile-topic" placeholder="例如：亲密关系科普 / 产品软植入" />
+                      </label>
+                      <button type="button" class="button" id="style-profile-draft-button">
+                        从成功样本生成画像草稿
+                      </button>
+                    </div>
+                    <div id="style-profile-result" class="admin-list"></div>
+                  </div>
+                </section>
               </div>
             </section>
 
-            <section class="tab-panel" id="note-lifecycle-pane">
+            <section class="tab-panel" id="review-benchmark-pane">
               <div class="tab-panel-head">
-                <strong>笔记生命周期</strong>
-                <span>记录从检测、改写、生成到发布后的结果，帮助系统学习哪些内容真正能稳定过审。</span>
+                <strong>基准评测</strong>
+                <span>手动维护回归评测题库，后续可直接接到 benchmark harness。</span>
               </div>
               <div class="admin-panel-block">
-                <div id="note-lifecycle-list" class="admin-list"></div>
+                <div class="admin-panel-body">
+                  <form id="review-benchmark-form" class="stack compact-form">
+                    <label>
+                      <span>标题</span>
+                      <input type="text" name="title" placeholder="基准样本标题" />
+                    </label>
+                    <label>
+                      <span>正文</span>
+                      <textarea name="body" rows="4" placeholder="输入用于回归评测的正文"></textarea>
+                    </label>
+                    <label>
+                      <span>标签</span>
+                      <input type="text" name="tags" placeholder="标签1, 标签2" />
+                    </label>
+                    <label>
+                      <span>预期类型</span>
+                      <select name="expectedType">
+                        <option value="violation">违规样本</option>
+                        <option value="false_positive">误报样本</option>
+                        <option value="success">正常通过样本</option>
+                      </select>
+                    </label>
+                    <div class="inline-actions inline-actions-row">
+                      <button type="submit" class="button button-alt">保存基准样本</button>
+                      <button type="button" class="button button-ghost" id="review-benchmark-run-button">运行基准评测</button>
+                    </div>
+                  </form>
+                </div>
+                <div id="review-benchmark-result" class="result-card muted">等待操作</div>
+                <div id="review-benchmark-list" class="admin-list"></div>
               </div>
             </section>
 
@@ -642,24 +719,6 @@
               </div>
             </section>
 
-            <section class="tab-panel" id="style-profile-pane">
-              <div class="tab-panel-head">
-                <strong>风格画像</strong>
-                <span>从高权重成功样本生成画像草稿，按主题管理版本，人工确认后才参与正式生成。</span>
-              </div>
-              <div class="admin-panel-block">
-                <div class="admin-panel-body">
-                  <label>
-                    <span>画像主题</span>
-                    <input id="style-profile-topic" placeholder="例如：亲密关系科普 / 产品软植入" />
-                  </label>
-                  <button type="button" class="button" id="style-profile-draft-button">
-                    从成功样本生成画像草稿
-                  </button>
-                </div>
-                <div id="style-profile-result" class="admin-list"></div>
-              </div>
-            </section>
           </div>
         </article>
       </section>

@@ -1,11 +1,7 @@
 import path from "node:path";
 import { analyzePost } from "../analyzer.js";
 import { readImportFile } from "../data-store.js";
-
-function normalizeExpectedType(value = "") {
-  const normalized = String(value || "").trim().toLowerCase();
-  return ["violation", "false_positive", "success"].includes(normalized) ? normalized : "success";
-}
+import { normalizeExpectedType } from "../review-benchmark.js";
 
 function normalizeVerdict(value = "") {
   const normalized = String(value || "").trim().toLowerCase();
@@ -55,6 +51,13 @@ function matchesExpectedGroup(group = "", verdict = "") {
 
 async function evaluateSample(sample, index, analyzeCandidate) {
   const expectedType = normalizeExpectedType(sample.expectedType);
+
+  if (!expectedType) {
+    const error = new Error(`基准样本预期类型无效：${String(sample.id || `review-benchmark-${index + 1}`).trim()}`);
+    error.statusCode = 400;
+    throw error;
+  }
+
   const input = normalizeInput(sample.input || sample);
   const analysis = await analyzeCandidate(input);
   const actualVerdict = normalizeVerdict(analysis.finalVerdict || analysis.verdict);
@@ -74,13 +77,14 @@ async function evaluateSample(sample, index, analyzeCandidate) {
 
 export async function runReviewBenchmarkHarness({
   filePath,
+  samples: providedSamples,
   analyzeCandidate = analyzePost
 } = {}) {
-  const resolvedPath = path.resolve(filePath);
-  const samples = await readImportFile(resolvedPath);
+  const resolvedPath = filePath ? path.resolve(filePath) : "";
+  const samples = Array.isArray(providedSamples) ? providedSamples : await readImportFile(resolvedPath);
 
   if (!Array.isArray(samples) || !samples.length) {
-    throw new Error(`评测样本为空：${resolvedPath}`);
+    throw new Error(`评测样本为空：${resolvedPath || "(in-memory)"}`);
   }
 
   const results = [];
@@ -93,7 +97,7 @@ export async function runReviewBenchmarkHarness({
 
   return {
     ok: passed === results.length,
-    sampleFile: resolvedPath,
+    sampleFile: resolvedPath || "(in-memory)",
     summary: {
       total: results.length,
       passed,

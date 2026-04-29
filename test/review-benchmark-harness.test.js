@@ -33,7 +33,7 @@ test("review benchmark harness summarizes expected sample types and actual verdi
       },
       {
         id: "false-positive-1",
-        expectedType: "false_positive",
+        expectedType: "误报样本",
         input: {
           title: "关系沟通",
           body: "这是一篇温和讨论关系边界的内容。",
@@ -83,6 +83,46 @@ test("review benchmark harness summarizes expected sample types and actual verdi
       assert.equal(result.results[2].matchedExpectation, true);
     }
   );
+});
+
+test("review benchmark harness supports in-memory samples and rejects invalid expectedType", async () => {
+  await assert.rejects(
+    () =>
+      runReviewBenchmarkHarness({
+        samples: [
+          {
+            id: "invalid-1",
+            expectedType: "未识别样本",
+            input: {
+              title: "无效样本",
+              body: "正文",
+              tags: ["标签"]
+            }
+          }
+        ],
+        analyzeCandidate: async () => ({ verdict: "pass", finalVerdict: "pass", score: 1 })
+      }),
+    /预期类型无效/
+  );
+
+  const result = await runReviewBenchmarkHarness({
+    samples: [
+      {
+        id: "memory-1",
+        expectedType: "正常通过样本",
+        input: {
+          title: "内存样本",
+          body: "这是一篇完整的经验分享内容。".repeat(8),
+          tags: ["经验"]
+        }
+      }
+    ],
+    analyzeCandidate: async () => ({ verdict: "pass", finalVerdict: "pass", score: 2 })
+  });
+
+  assert.equal(result.sampleFile, "(in-memory)");
+  assert.equal(result.summary.total, 1);
+  assert.equal(result.results[0].expectedType, "success");
 });
 
 test("review benchmark harness marks mismatched verdict expectations as failures", async (t) => {

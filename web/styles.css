@@ -1517,6 +1517,65 @@ li + li {
   gap: 1rem;
 }
 
+.sample-library-tab-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
+  padding: 0.25rem;
+  border-radius: 20px;
+  background: rgba(255, 250, 241, 0.44);
+  border: 1px solid rgba(54, 43, 31, 0.08);
+}
+
+.legacy-pane-anchor {
+  display: none;
+}
+
+.sample-library-tab-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0.58rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(54, 43, 31, 0.1);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--muted);
+  font-size: 0.94rem;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.sample-library-tab-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(199, 154, 69, 0.28);
+}
+
+.sample-library-tab-button.is-active {
+  background: rgba(54, 43, 31, 0.9);
+  color: #fff7e8;
+  border-color: rgba(54, 43, 31, 0.9);
+  box-shadow: 0 8px 18px rgba(36, 26, 16, 0.1);
+}
+
+.sample-library-tab-panels {
+  display: grid;
+}
+
+.sample-library-tab-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.sample-library-tab-panel[hidden] {
+  display: none;
+}
+
 .tab-panel-head {
   display: grid;
   gap: 0.28rem;
@@ -1539,6 +1598,36 @@ li + li {
   background:
     linear-gradient(180deg, rgba(255, 251, 244, 0.72), rgba(248, 238, 222, 0.52));
   padding: 1.1rem;
+}
+
+.review-benchmark-result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.review-benchmark-mismatch-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.review-benchmark-mismatch-list li {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.review-benchmark-mismatch-list li span {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+@media (max-width: 720px) {
+  .sample-library-tab-button {
+    flex: 1 1 calc(50% - 0.55rem);
+  }
 }
 
 .admin-accordion {

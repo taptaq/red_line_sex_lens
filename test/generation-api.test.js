@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { paths } from "../src/config.js";
+import { loadNoteLifecycle, loadSuccessSamples } from "../src/data-store.js";
 import { buildGenerationReferenceSamples, handleRequest } from "../src/server.js";
 
 async function withTempGenerationData(t, run) {
@@ -113,6 +114,95 @@ test("published final generation drafts become weighted references for the next 
 
   assert.equal(references[0].title, "最终推荐稿样本");
   assert.equal(references[0].source, "generation_final");
+  assert.equal(references.some((item) => item.title === "未发布最终稿"), false);
+});
+
+test("unified note records still feed success and lifecycle compatibility views into generation references", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "generation-note-records-"));
+  const originals = {
+    noteRecords: paths.noteRecords,
+    successSamples: paths.successSamples,
+    noteLifecycle: paths.noteLifecycle
+  };
+
+  paths.noteRecords = path.join(tempDir, "note-records.json");
+  paths.successSamples = path.join(tempDir, "success-samples.json");
+  paths.noteLifecycle = path.join(tempDir, "note-lifecycle.json");
+
+  t.after(async () => {
+    Object.assign(paths, originals);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  await fs.writeFile(
+    paths.noteRecords,
+    `${JSON.stringify([
+      {
+        id: "record-reference",
+        source: "manual",
+        stage: "published_reference",
+        note: {
+          title: "手工参考样本",
+          body: "参考正文",
+          tags: ["沟通"]
+        },
+        reference: {
+          enabled: true,
+          tier: "featured",
+          selectedBy: "manual"
+        },
+        publish: {
+          status: "published_passed"
+        }
+      },
+      {
+        id: "record-final",
+        source: "generation_final",
+        stage: "published",
+        note: {
+          title: "发布后表现好的最终稿",
+          body: "发布后表现好的最终稿正文",
+          tags: ["科普"]
+        },
+        publish: {
+          status: "positive_performance",
+          metrics: { likes: 120, favorites: 35, comments: 9 }
+        },
+        reference: {
+          enabled: false
+        }
+      },
+      {
+        id: "record-unpublished",
+        source: "generation_final",
+        stage: "generated",
+        note: {
+          title: "未发布最终稿",
+          body: "未发布正文"
+        },
+        publish: {
+          status: "not_published"
+        },
+        reference: {
+          enabled: false
+        }
+      }
+    ], null, 2)}\n`,
+    "utf8"
+  );
+
+  const successSamples = await loadSuccessSamples();
+  const noteLifecycle = await loadNoteLifecycle();
+  const references = buildGenerationReferenceSamples({ successSamples, noteLifecycle });
+
+  assert.deepEqual(successSamples.map((item) => item.id), ["record-reference"]);
+  assert.equal(noteLifecycle.length, 2);
+  assert.deepEqual(
+    noteLifecycle.map((item) => item.note?.title).sort(),
+    ["发布后表现好的最终稿", "未发布最终稿"]
+  );
+  assert.equal(references.some((item) => item.title === "发布后表现好的最终稿"), true);
+  assert.equal(references.some((item) => item.title === "手工参考样本"), true);
   assert.equal(references.some((item) => item.title === "未发布最终稿"), false);
 });
 

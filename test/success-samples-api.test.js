@@ -6,17 +6,27 @@ import os from "node:os";
 import path from "node:path";
 
 import { paths } from "../src/config.js";
+import { loadNoteRecords } from "../src/data-store.js";
 import { loadAdminData } from "../src/admin.js";
 import { handleRequest } from "../src/server.js";
 
 async function withTempSuccessSampleApi(t, run) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "success-samples-api-"));
-  const originalPath = paths.successSamples;
+  const originals = {
+    successSamples: paths.successSamples,
+    noteLifecycle: paths.noteLifecycle,
+    noteRecords: paths.noteRecords
+  };
   paths.successSamples = path.join(tempDir, "success-samples.json");
-  await fs.writeFile(paths.successSamples, "[]\n", "utf8");
+  paths.noteLifecycle = path.join(tempDir, "note-lifecycle.json");
+  paths.noteRecords = path.join(tempDir, "note-records.json");
+  await Promise.all([
+    fs.writeFile(paths.successSamples, "[]\n", "utf8"),
+    fs.writeFile(paths.noteLifecycle, "[]\n", "utf8")
+  ]);
 
   t.after(async () => {
-    paths.successSamples = originalPath;
+    Object.assign(paths, originals);
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -58,6 +68,44 @@ test("success sample API creates, lists, upserts, and deletes samples", async (t
 
     const deleted = await invokeRoute("DELETE", "/api/success-samples", { id: listed.items[0].id });
     assert.equal(deleted.items.length, 0);
+  });
+});
+
+test("success sample POST returns the canonical unified record after merging with an existing lifecycle entry", async (t) => {
+  await withTempSuccessSampleApi(t, async () => {
+    const lifecycle = await invokeRoute("POST", "/api/note-lifecycle", {
+      source: "rewrite",
+      note: {
+        title: "统一存储标题",
+        body: "统一存储正文",
+        tags: ["科普"]
+      },
+      rewriteSnapshot: {
+        model: "glm-5.1-free"
+      }
+    });
+
+    const created = await invokeRoute("POST", "/api/success-samples", {
+      title: "统一存储标题",
+      body: "统一存储正文",
+      tier: "featured",
+      metrics: { likes: 28, favorites: 8, comments: 3 }
+    });
+
+    const listed = await invokeRoute("GET", "/api/success-samples");
+    const adminData = await loadAdminData();
+    const records = await loadNoteRecords();
+
+    assert.equal(created.status, 200);
+    assert.equal(created.item.id, lifecycle.item.id);
+    assert.equal(created.items.length, 1);
+    assert.equal(created.items[0].id, lifecycle.item.id);
+    assert.equal(listed.items.length, 1);
+    assert.equal(listed.items[0].id, lifecycle.item.id);
+    assert.equal(adminData.successSamples.length, 1);
+    assert.equal(adminData.successSamples[0].id, lifecycle.item.id);
+    assert.equal(records.length, 1);
+    assert.equal(records[0].id, lifecycle.item.id);
   });
 });
 

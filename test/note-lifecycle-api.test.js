@@ -6,17 +6,27 @@ import os from "node:os";
 import path from "node:path";
 
 import { paths } from "../src/config.js";
+import { loadNoteRecords } from "../src/data-store.js";
 import { loadAdminData } from "../src/admin.js";
 import { handleRequest } from "../src/server.js";
 
 async function withTempLifecycleApi(t, run) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "note-lifecycle-api-"));
-  const originalPath = paths.noteLifecycle;
+  const originals = {
+    successSamples: paths.successSamples,
+    noteLifecycle: paths.noteLifecycle,
+    noteRecords: paths.noteRecords
+  };
+  paths.successSamples = path.join(tempDir, "success-samples.json");
   paths.noteLifecycle = path.join(tempDir, "note-lifecycle.json");
-  await fs.writeFile(paths.noteLifecycle, "[]\n", "utf8");
+  paths.noteRecords = path.join(tempDir, "note-records.json");
+  await Promise.all([
+    fs.writeFile(paths.successSamples, "[]\n", "utf8"),
+    fs.writeFile(paths.noteLifecycle, "[]\n", "utf8")
+  ]);
 
   t.after(async () => {
-    paths.noteLifecycle = originalPath;
+    Object.assign(paths, originals);
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -118,6 +128,84 @@ test("recommended generation final draft enters lifecycle and gains weight after
     assert.equal(patched.item.source, "generation_final");
     assert.equal(patched.item.status, "positive_performance");
     assert.ok(patched.item.sampleWeight > created.item.sampleWeight);
+  });
+});
+
+test("note lifecycle POST returns merged publish facts from unified storage when a success sample already exists", async (t) => {
+  await withTempLifecycleApi(t, async () => {
+    const success = await invokeRoute("POST", "/api/success-samples", {
+      title: "统一兼容标题",
+      body: "统一兼容正文",
+      tier: "featured",
+      metrics: { likes: 20, favorites: 6, comments: 2 }
+    });
+
+    const created = await invokeRoute("POST", "/api/note-lifecycle", {
+      source: "rewrite",
+      note: {
+        title: "统一兼容标题",
+        body: "统一兼容正文",
+        tags: ["科普"]
+      },
+      rewriteSnapshot: {
+        model: "glm-5.1-free"
+      }
+    });
+
+    const listed = await invokeRoute("GET", "/api/note-lifecycle");
+    const adminData = await loadAdminData();
+    const records = await loadNoteRecords();
+
+    assert.equal(created.status, 200);
+    assert.equal(created.item.id, listed.items[0].id);
+    assert.equal(created.item.id, records[0].id);
+    assert.equal(created.item.status, "published_passed");
+    assert.equal(created.item.publishResult.label, "已发布通过");
+    assert.equal(created.items.length, 1);
+    assert.equal(created.items[0].status, "published_passed");
+    assert.equal(listed.items[0].status, "published_passed");
+    assert.equal(adminData.noteLifecycle.length, 1);
+    assert.equal(adminData.noteLifecycle[0].status, "published_passed");
+    assert.equal(success.item.id, listed.items[0].id);
+  });
+});
+
+test("note lifecycle PATCH can downgrade merged publish status when platform feedback turns negative", async (t) => {
+  await withTempLifecycleApi(t, async () => {
+    await invokeRoute("POST", "/api/success-samples", {
+      title: "回退状态标题",
+      body: "回退状态正文",
+      tier: "featured",
+      metrics: { likes: 20, favorites: 6, comments: 2 }
+    });
+
+    const created = await invokeRoute("POST", "/api/note-lifecycle", {
+      source: "generation_final",
+      note: {
+        title: "回退状态标题",
+        body: "回退状态正文",
+        tags: ["科普"]
+      }
+    });
+
+    const patched = await invokeRoute("PATCH", "/api/note-lifecycle", {
+      id: created.item.id,
+      publishStatus: "violation",
+      metrics: {
+        likes: 0,
+        favorites: 0,
+        comments: 0
+      },
+      notes: "平台反馈违规"
+    });
+
+    const listed = await invokeRoute("GET", "/api/note-lifecycle");
+    const adminData = await loadAdminData();
+
+    assert.equal(patched.item.status, "violation");
+    assert.equal(patched.item.publishResult.label, "平台判违规");
+    assert.equal(listed.items[0].status, "violation");
+    assert.equal(adminData.noteLifecycle[0].status, "violation");
   });
 });
 
