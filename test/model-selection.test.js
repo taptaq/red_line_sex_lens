@@ -5,6 +5,7 @@ import {
   buildFeedbackModelSelectionOptionsPayload,
   buildModelSelectionOptionsPayload,
   filterProviderConfigsBySelection,
+  getRewriteSelectionModel,
   normalizeFeedbackModelSelectionState,
   normalizeModelSelectionState
 } from "../src/model-selection.js";
@@ -19,13 +20,13 @@ test("normalizeModelSelectionState keeps defaults and supported overrides", () =
   assert.deepEqual(
     normalizeModelSelectionState({
       semantic: "qwen",
-      rewrite: "kimi",
-      crossReview: "deepseek"
+      rewrite: "mimo",
+      crossReview: "mimo"
     }),
     {
       semantic: "qwen",
-      rewrite: "kimi",
-      crossReview: "deepseek"
+      rewrite: "mimo",
+      crossReview: "mimo"
     }
   );
 
@@ -53,8 +54,12 @@ test("buildModelSelectionOptionsPayload exposes the three main-workbench model s
   assert.equal(payload.rewrite[0]?.value, "auto");
   assert.equal(payload.crossReview[0]?.value, "group");
   assert.match(payload.semantic.map((item) => item.value).join(","), /glm/);
+  assert.match(payload.semantic.map((item) => item.value).join(","), /mimo/);
   assert.match(payload.rewrite.map((item) => item.value).join(","), /kimi/);
+  assert.match(payload.rewrite.map((item) => item.value).join(","), /mimo/);
+  assert.match(payload.crossReview.map((item) => item.value).join(","), /kimi/);
   assert.match(payload.crossReview.map((item) => item.value).join(","), /deepseek/);
+  assert.match(payload.crossReview.map((item) => item.value).join(","), /mimo/);
 });
 
 test("feedback model selection payload exposes screenshot and suggestion selectors", () => {
@@ -66,6 +71,7 @@ test("feedback model selection payload exposes screenshot and suggestion selecto
   assert.equal(payload.feedbackSuggestion[0]?.value, "auto");
   assert.match(payload.feedbackScreenshot.map((item) => item.value).join(","), /glm/);
   assert.match(payload.feedbackSuggestion.map((item) => item.value).join(","), /qwen/);
+  assert.match(payload.feedbackSuggestion.map((item) => item.value).join(","), /mimo/);
 });
 
 test("normalizeFeedbackModelSelectionState keeps defaults and supported feedback overrides", () => {
@@ -77,13 +83,18 @@ test("normalizeFeedbackModelSelectionState keeps defaults and supported feedback
   assert.deepEqual(
     normalizeFeedbackModelSelectionState({
       feedbackScreenshot: "glm",
-      feedbackSuggestion: "deepseek"
+      feedbackSuggestion: "mimo"
     }),
     {
       feedbackScreenshot: "glm",
-      feedbackSuggestion: "deepseek"
+      feedbackSuggestion: "mimo"
     }
   );
+});
+
+test("getRewriteSelectionModel resolves mimo separately from deepseek", () => {
+  assert.equal(getRewriteSelectionModel("mimo"), process.env.MIMO_DMXAPI_MODEL || process.env.DEEPSEEK_DMXAPI_MODEL || "mimo-v2.5-free");
+  assert.equal(getRewriteSelectionModel("deepseek"), process.env.DEEPSEEK_FEEDBACK_MODEL || "deepseek-v4-flash");
 });
 
 test("filterProviderConfigsBySelection keeps all providers for default modes and narrows to a single provider when selected", () => {

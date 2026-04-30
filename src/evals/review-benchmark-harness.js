@@ -2,6 +2,7 @@ import path from "node:path";
 import { analyzePost } from "../analyzer.js";
 import { readImportFile } from "../data-store.js";
 import { normalizeExpectedType } from "../review-benchmark.js";
+import { buildXhsHumanizerBenchmarkRubric, evaluateXhsHumanizerSignals } from "../xhs-humanizer-rules.js";
 
 function normalizeVerdict(value = "") {
   const normalized = String(value || "").trim().toLowerCase();
@@ -62,6 +63,7 @@ async function evaluateSample(sample, index, analyzeCandidate) {
   const analysis = await analyzeCandidate(input);
   const actualVerdict = normalizeVerdict(analysis.finalVerdict || analysis.verdict);
   const group = expectedVerdictGroup(expectedType);
+  const humanizer = evaluateXhsHumanizerSignals(input);
 
   return {
     id: String(sample.id || `review-benchmark-${index + 1}`).trim(),
@@ -71,7 +73,8 @@ async function evaluateSample(sample, index, analyzeCandidate) {
     matchedExpectation: matchesExpectedGroup(group, actualVerdict),
     score: Number(analysis.score) || 0,
     input,
-    analysis
+    analysis,
+    humanizer
   };
 }
 
@@ -94,6 +97,20 @@ export async function runReviewBenchmarkHarness({
   }
 
   const passed = results.filter((item) => item.matchedExpectation).length;
+  const rubric = buildXhsHumanizerBenchmarkRubric();
+  const humanizerPassed = results.filter((item) => item.humanizer?.passed).length;
+  const humanizerByCheck = rubric.reduce((summary, item) => {
+    const failed = results.filter((result) => result.humanizer?.checks?.some((check) => check.id === item.id && check.passed === false)).length;
+
+    summary[item.id] = {
+      label: item.label,
+      description: item.description,
+      passed: results.length - failed,
+      failed
+    };
+
+    return summary;
+  }, {});
 
   return {
     ok: passed === results.length,
@@ -103,7 +120,13 @@ export async function runReviewBenchmarkHarness({
       passed,
       failed: results.length - passed,
       byExpectedType: summarizeCounts(results, (item) => item.expectedType),
-      byVerdict: summarizeCounts(results, (item) => item.actualVerdict)
+      byVerdict: summarizeCounts(results, (item) => item.actualVerdict),
+      humanizer: {
+        total: results.length,
+        passedSamples: humanizerPassed,
+        failedSamples: results.length - humanizerPassed,
+        byCheck: humanizerByCheck
+      }
     },
     results
   };

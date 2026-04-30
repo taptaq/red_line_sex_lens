@@ -99,7 +99,8 @@ export function buildModelSelectionOptionsPayload() {
     buildProviderOption("glm", providerDisplayLabel("glm"), getGlmDmxapiModel(), getSemanticGlmModel()),
     buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getSemanticQwenModel()),
     buildProviderOption("minimax", providerDisplayLabel("minimax"), getMiniMaxDmxapiModel()),
-    buildProviderOption("deepseek", providerDisplayLabel("deepseek"), getMimoDmxapiModel(), getSemanticDeepSeekModel())
+    buildProviderOption("mimo", providerDisplayLabel("mimo"), getMimoDmxapiModel()),
+    buildProviderOption("deepseek", providerDisplayLabel("deepseek"), "", getSemanticDeepSeekModel())
   ];
 
   const rewrite = [
@@ -112,7 +113,8 @@ export function buildModelSelectionOptionsPayload() {
     buildProviderOption("kimi", providerDisplayLabel("kimi"), getKimiDmxapiModel(), getRewriteKimiModel()),
     buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getRewriteQwenModel()),
     buildProviderOption("minimax", providerDisplayLabel("minimax"), getMiniMaxDmxapiModel()),
-    buildProviderOption("deepseek", providerDisplayLabel("deepseek"), getMimoDmxapiModel(), getRewriteDeepSeekModel())
+    buildProviderOption("mimo", providerDisplayLabel("mimo"), getMimoDmxapiModel()),
+    buildProviderOption("deepseek", providerDisplayLabel("deepseek"), "", getRewriteDeepSeekModel())
   ];
 
   const crossReview = [
@@ -122,9 +124,11 @@ export function buildModelSelectionOptionsPayload() {
       label: "默认模型组 / 并行调用全部交叉复判模型"
     },
     buildProviderOption("glm", providerDisplayLabel("glm"), getGlmDmxapiModel(), getCrossReviewGlmModel()),
+    buildProviderOption("kimi", providerDisplayLabel("kimi"), getKimiDmxapiModel(), getRewriteKimiModel()),
     buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getCrossReviewQwenModel()),
     buildProviderOption("minimax", providerDisplayLabel("minimax"), getMiniMaxDmxapiModel()),
-    buildProviderOption("deepseek", providerDisplayLabel("deepseek"), getMimoDmxapiModel(), getCrossReviewDeepSeekModel())
+    buildProviderOption("mimo", providerDisplayLabel("mimo"), getMimoDmxapiModel()),
+    buildProviderOption("deepseek", providerDisplayLabel("deepseek"), "", getCrossReviewDeepSeekModel())
   ];
 
   return {
@@ -152,7 +156,8 @@ export function buildFeedbackModelSelectionOptionsPayload() {
       },
       buildProviderOption("glm", providerDisplayLabel("glm"), getGlmTextModelCandidates()[0] || getRewriteGlmModel()),
       buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getRewriteQwenModel()),
-      buildProviderOption("deepseek", providerDisplayLabel("deepseek"), getMimoDmxapiModel(), getRewriteDeepSeekModel())
+      buildProviderOption("mimo", providerDisplayLabel("mimo"), getMimoDmxapiModel()),
+      buildProviderOption("deepseek", providerDisplayLabel("deepseek"), "", getRewriteDeepSeekModel())
     ]
   };
 }
@@ -233,6 +238,7 @@ export function getRewriteSelectionModel(selection = "") {
   if (provider === "kimi") return getRewriteKimiModel();
   if (provider === "qwen") return getRewriteQwenModel();
   if (provider === "minimax") return getMiniMaxDmxapiModel();
+  if (provider === "mimo") return getMimoDmxapiModel();
   if (provider === "deepseek") return getRewriteDeepSeekModel();
   return getRewriteGlmModel();
 }

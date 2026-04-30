@@ -12,6 +12,10 @@ async function readJson(filePath, fallback) {
       return fallback;
     }
 
+    if (error instanceof SyntaxError) {
+      return fallback;
+    }
+
     throw error;
   }
 }

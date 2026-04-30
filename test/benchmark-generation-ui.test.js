@@ -43,9 +43,16 @@ test("frontend exposes review benchmark maintenance tab and form skeleton", asyn
   assert.match(indexHtml, />运行基准评测</);
   assert.match(indexHtml, /id="review-benchmark-result"/);
   assert.match(indexHtml, /id="review-benchmark-list"/);
+  assert.match(indexHtml, /id="review-benchmark-collection-filter"/);
+  assert.match(indexHtml, /id="review-benchmark-type-filter"/);
+  assert.match(indexHtml, /id="review-benchmark-source-filter"/);
+  assert.match(indexHtml, /id="review-benchmark-view-filter"/);
+  assert.match(benchmarkPanel, /name="collectionType"/);
   assert.match(appJs, /const reviewBenchmarkApi = "\/api\/review-benchmark"/);
   assert.match(appJs, /function renderReviewBenchmarkSamples/);
   assert.match(appJs, /function expectedTypeLabel/);
+  assert.match(appJs, /function filterReviewBenchmarkSamples/);
+  assert.match(appJs, /function buildReviewBenchmarkMismatchSummary/);
   assert.match(appJs, /data-action="delete-review-benchmark"/);
 });
 
@@ -60,11 +67,35 @@ test("review benchmark submit handler prevents native reload and posts to benchm
   assert.match(submitHandler, /byId\("review-benchmark-form"\)\.addEventListener\("submit", async \(event\) => \{/);
   assert.match(submitHandler, /event\.preventDefault\(\)/);
   assert.match(submitHandler, /new FormData\(formElement\)/);
-  assert.match(submitHandler, /await apiJson\(reviewBenchmarkApi, \{/);
-  assert.match(submitHandler, /method: "POST"/);
-  assert.match(submitHandler, /renderReviewBenchmarkSamples\(response\.items \|\| \[\]\)/);
-  assert.match(submitHandler, /基准样本已保存/);
+  assert.match(submitHandler, /await addBenchmarkSample\(\{/);
+  assert.match(submitHandler, /type: "manual"/);
   assert.match(submitHandler, /formElement\.reset\(\)/);
+});
+
+test("review benchmark filter controls are wired into app state and list rendering", async () => {
+  const { appJs, styles } = await readFrontendFiles();
+
+  assert.match(appJs, /reviewBenchmarkSamples:\s*\[\s*\]/);
+  assert.match(appJs, /reviewBenchmarkCollectionFilter:\s*"all"/);
+  assert.match(appJs, /reviewBenchmarkTypeFilter:\s*"all"/);
+  assert.match(appJs, /reviewBenchmarkSourceFilter:\s*"all"/);
+  assert.match(appJs, /reviewBenchmarkViewFilter:\s*"all"/);
+  assert.match(appJs, /reviewBenchmarkLastRunResult:\s*null/);
+  assert.match(appJs, /function filterReviewBenchmarkSamples\(/);
+  assert.match(appJs, /byId\("review-benchmark-collection-filter"\)\.addEventListener\("change"/);
+  assert.match(appJs, /byId\("review-benchmark-type-filter"\)\.addEventListener\("change"/);
+  assert.match(appJs, /byId\("review-benchmark-source-filter"\)\.addEventListener\("change"/);
+  assert.match(appJs, /byId\("review-benchmark-view-filter"\)\.addEventListener\("change"/);
+  assert.match(appJs, /review-benchmark-list-count/);
+  assert.match(styles, /\.shell\s*\{/);
+  assert.match(styles, /width:\s*min\(1600px,\s*calc\(100% - 2\.4rem\)\)/);
+  assert.match(styles, /\.review-benchmark-toolbar/);
+  assert.match(styles, /\.review-benchmark-toolbar-filters/);
+  assert.match(styles, /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(220px,\s*1fr\)\)/);
+  assert.match(styles, /@media\s*\(max-width:\s*1200px\)/);
+  assert.match(styles, /\.sample-library-toolbar/);
+  assert.match(styles, /\.workflow-assistant-card/);
+  assert.match(styles, /\.false-positive-capture-form/);
 });
 
 test("review benchmark run button uses dedicated run endpoint and renders summary details", async () => {
@@ -78,6 +109,7 @@ test("review benchmark run button uses dedicated run endpoint and renders summar
   assert.match(runHandler, /byId\("review-benchmark-run-button"\)\.addEventListener\("click", async \(\) => \{/);
   assert.match(runHandler, /reviewBenchmarkApi}\/run/);
   assert.match(runHandler, /renderReviewBenchmarkResult\(/);
+  assert.match(runHandler, /reviewBenchmarkViewFilter/);
   assert.match(appJs, /summary\.total/);
   assert.match(appJs, /matchedExpectation/);
   assert.match(appJs, /未匹配样本/);
@@ -125,7 +157,67 @@ test("review benchmark result renderer shows totals, matched counts, and unmatch
   assert.match(renderSource, /未匹配/);
   assert.match(renderSource, /matchedExpectation/);
   assert.match(renderSource, /actualVerdict/);
+  assert.match(renderSource, /send-review-benchmark-to-sample-library/);
+  assert.match(renderSource, /send-review-benchmark-to-false-positive/);
+  assert.match(renderSource, /回流到样本库/);
+  assert.match(renderSource, /回流到误报日志/);
   assert.match(renderSource, /review-benchmark-result-grid/);
   assert.match(styles, /\.review-benchmark-result-grid/);
   assert.match(styles, /\.review-benchmark-mismatch-list/);
+});
+
+test("review benchmark mismatch actions expose recovery branches for sample library and false positive log", async () => {
+  const { appJs } = await readFrontendFiles();
+  const actionBranch = sliceBetween(
+    appJs,
+    'if (action === "send-review-benchmark-to-sample-library") {',
+    'if (action === "delete-review-benchmark") {'
+  );
+
+  assert.match(actionBranch, /if \(action === "send-review-benchmark-to-sample-library"\) \{/);
+  assert.match(actionBranch, /buildReviewBenchmarkMismatchSummary\(mismatch\)/);
+  assert.match(actionBranch, /apiJson\(sampleLibraryApi, \{/);
+  assert.match(actionBranch, /source: "benchmark_mismatch"/);
+  assert.match(actionBranch, /notes: buildReviewBenchmarkMismatchSummary\(mismatch\)/);
+  assert.match(actionBranch, /revealSampleLibraryPane\(\)/);
+  assert.match(actionBranch, /if \(action === "send-review-benchmark-to-false-positive"\) \{/);
+  assert.match(actionBranch, /apiJson\("\/api\/false-positive-log", \{/);
+  assert.match(actionBranch, /source: "benchmark_mismatch"/);
+  assert.match(actionBranch, /userNotes: buildReviewBenchmarkMismatchSummary\(mismatch\)/);
+  assert.match(actionBranch, /revealFalsePositiveLogPane\(\)/);
+});
+
+test("style profile draft supports inline manual editing controls and update flow", async () => {
+  const { appJs, styles } = await readFrontendFiles();
+  const renderSource = sliceBetween(appJs, "function renderStyleProfile(", "function formatRate(");
+  const styleProfileActionArea = sliceBetween(
+    appJs,
+    'if (action === "edit-style-profile-draft") {',
+    'if (action === "activate-style-profile") {'
+  );
+  const styleProfileConfirmBranch = sliceBetween(
+    appJs,
+    'if (action === "confirm-style-profile") {',
+    'if (action === "activate-style-profile") {'
+  );
+
+  assert.match(appJs, /styleProfileDraftEditing:\s*false/);
+  assert.match(appJs, /styleProfileDraftForm:\s*\{/);
+  assert.match(appJs, /function enterStyleProfileDraftEditMode\(/);
+  assert.match(appJs, /function exitStyleProfileDraftEditMode\(/);
+  assert.match(appJs, /function buildStyleProfileDraftPayload\(/);
+  assert.match(renderSource, /人工编辑/);
+  assert.match(renderSource, /保存修改/);
+  assert.match(renderSource, /取消/);
+  assert.match(renderSource, /name="topic"/);
+  assert.match(renderSource, /name="tone"/);
+  assert.match(renderSource, /name="titleStyle"/);
+  assert.match(renderSource, /name="bodyStructure"/);
+  assert.match(renderSource, /name="preferredTags"/);
+  assert.match(styleProfileActionArea, /save-style-profile-draft/);
+  assert.match(styleProfileConfirmBranch, /action:\s*"update-draft"/);
+  assert.match(appJs, /edit-style-profile-draft/);
+  assert.match(appJs, /cancel-style-profile-draft/);
+  assert.match(styles, /\.style-profile-form/);
+  assert.match(styles, /\.style-profile-actions/);
 });

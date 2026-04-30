@@ -1,5 +1,5 @@
 import "./env.js";
-import { callDeepSeekJson, callGlmJson, callMiniMaxJson, callQwenJson } from "./glm.js";
+import { callDeepSeekJson, callGlmJson, callKimiJson, callMimoJson, callMiniMaxJson, callQwenJson } from "./glm.js";
 import { filterProviderConfigsBySelection } from "./model-selection.js";
 import { resolveDisplayProvider, splitProviderResultForDisplay } from "./provider-display.js";
 
@@ -19,6 +19,13 @@ const providerConfigs = [
     model: process.env.GLM_CROSS_REVIEW_MODEL || "glm-4-flash"
   },
   {
+    provider: "kimi",
+    label: "Kimi",
+    envKey: "KIMI_API_KEY",
+    endpoint: process.env.KIMI_BASE_URL || "https://api.moonshot.cn/v1/chat/completions",
+    model: process.env.KIMI_TEXT_MODEL || "moonshot-v1-8k"
+  },
+  {
     provider: "qwen",
     label: "通义千问",
     envKey: "DASHSCOPE_API_KEY",
@@ -31,6 +38,13 @@ const providerConfigs = [
     envKey: "DMXAPI_API_KEY",
     endpoint: "https://www.dmxapi.cn/v1/chat/completions",
     model: process.env.MINIMAX_DMXAPI_MODEL || "MiniMax-M2.7-free"
+  },
+  {
+    provider: "mimo",
+    label: "Mimo",
+    envKey: "DMXAPI_API_KEY",
+    endpoint: "https://www.dmxapi.cn/v1/chat/completions",
+    model: process.env.MIMO_DMXAPI_MODEL || process.env.DEEPSEEK_DMXAPI_MODEL || "mimo-v2.5-free"
   },
   {
     provider: "deepseek",
@@ -190,16 +204,27 @@ function buildMessages(input, analysis) {
 }
 
 async function callProvider(config, input, analysis) {
-  if (config.provider === "glm" || config.provider === "qwen" || config.provider === "minimax" || config.provider === "deepseek") {
+  if (
+    config.provider === "glm" ||
+    config.provider === "kimi" ||
+    config.provider === "qwen" ||
+    config.provider === "minimax" ||
+    config.provider === "mimo" ||
+    config.provider === "deepseek"
+  ) {
     try {
       const routedCall =
         config.provider === "glm"
           ? callGlmJson
-          : config.provider === "qwen"
+          : config.provider === "kimi"
+            ? callKimiJson
+            : config.provider === "qwen"
             ? callQwenJson
             : config.provider === "minimax"
               ? callMiniMaxJson
-              : callDeepSeekJson;
+              : config.provider === "mimo"
+                ? callMimoJson
+                : callDeepSeekJson;
       const { parsed, model, route, routeLabel, attemptedRoutes } = await routedCall({
         model: config.model,
         temperature: 0.1,
@@ -208,6 +233,7 @@ async function callProvider(config, input, analysis) {
         timeoutMs: providerTimeoutMs,
         missingKeyMessage: `缺少 ${config.envKey}`,
         scene: "cross_review",
+        allowDmxapi: config.provider === "deepseek" ? false : undefined,
         fallbackParser: (message) => extractJsonBlock(message)
       });
       const displayProvider = resolveDisplayProvider({

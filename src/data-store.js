@@ -75,6 +75,7 @@ function normalizeFalsePositiveEntry(entry = {}) {
   return withSampleWeight({
     ...entry,
     id: normalizeString(entry.id),
+    source: normalizeString(entry.source),
     status,
     confidence,
     sourceQuality,
@@ -534,6 +535,19 @@ export async function loadStyleProfile() {
 
 export async function saveStyleProfile(profile) {
   await writeJson(paths.styleProfile, profile && typeof profile === "object" ? profile : {});
+}
+
+export async function loadCollectionTypes() {
+  const payload = await readJson(paths.collectionTypes, { custom: [] });
+  return {
+    custom: uniqueStrings(payload.custom || [])
+  };
+}
+
+export async function saveCollectionTypes(value = {}) {
+  await writeJson(paths.collectionTypes, {
+    custom: uniqueStrings(value.custom || [])
+  });
 }
 
 export async function appendRewritePairs(entries) {

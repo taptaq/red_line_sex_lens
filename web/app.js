@@ -120,6 +120,7 @@ function publishStatusLabel(status) {
 }
 
 function lifecycleSourceLabel(source) {
+  if (source === "benchmark_mismatch") return "基准未命中回流";
   if (source === "generation_final") return "最终推荐稿";
   if (source === "generation_candidate") return "生成候选稿";
   if (source === "generation") return "生成稿";
@@ -190,25 +191,6 @@ function activateTab(targetId) {
   });
 }
 
-function activateSampleLibraryTab(targetId) {
-  const buttons = Array.from(document.querySelectorAll("[data-sample-library-tab-target]"));
-  const panels = Array.from(document.querySelectorAll(".sample-library-tab-panel"));
-  const fallbackTargetId = buttons[0]?.dataset.sampleLibraryTabTarget || panels[0]?.id || "";
-  const resolvedTargetId = targetId || fallbackTargetId;
-
-  buttons.forEach((button) => {
-    const active = button.dataset.sampleLibraryTabTarget === resolvedTargetId;
-    button.classList.toggle("is-active", active);
-    button.setAttribute("aria-selected", active ? "true" : "false");
-  });
-
-  panels.forEach((panel) => {
-    const active = panel.id === resolvedTargetId;
-    panel.hidden = !active;
-    panel.classList.toggle("is-active", active);
-  });
-}
-
 function initializeTabs() {
   document.querySelectorAll(".tab-button[data-tab-target]").forEach((button) => {
     button.addEventListener("click", () => activateTab(button.dataset.tabTarget));
@@ -217,46 +199,24 @@ function initializeTabs() {
   activateTab("custom-lexicon-pane");
 }
 
-function initializeSampleLibraryTabs() {
-  const buttons = Array.from(document.querySelectorAll("[data-sample-library-tab-target]"));
-  const panels = Array.from(document.querySelectorAll(".sample-library-tab-panel"));
-
-  if (!buttons.length || !panels.length) {
-    return;
-  }
-
-  buttons.forEach((button) => {
-    button.addEventListener("click", () => {
-      activateSampleLibraryTab(button.dataset.sampleLibraryTabTarget || "");
-    });
-  });
-
-  activateSampleLibraryTab(buttons[0].dataset.sampleLibraryTabTarget || "");
-}
-
-function resolveSampleLibraryTargetId(targetId = "") {
-  const normalized = String(targetId || "").trim();
-
-  if (!normalized || normalized === "success-samples-pane") return "sample-library-success-pane";
-  if (normalized === "note-lifecycle-pane") return "sample-library-lifecycle-pane";
-  if (normalized === "style-profile-pane") return "sample-library-style-pane";
-  return normalized;
-}
-
-function revealSampleLibraryPane(targetId = "sample-library-success-pane") {
-  const resolvedTargetId = resolveSampleLibraryTargetId(targetId);
+function revealSampleLibraryPane() {
   activateTab("sample-library-pane");
-  activateSampleLibraryTab(resolvedTargetId);
   byId("sample-library-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function revealStyleProfilePane() {
-  revealSampleLibraryPane("sample-library-style-pane");
+  revealSampleLibraryPane();
+  byId("style-profile-topic")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function revealFalsePositiveLogPane() {
   activateTab("false-positive-log-pane");
   byId("false-positive-log-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function revealReviewBenchmarkPane() {
+  activateTab("review-benchmark-pane");
+  byId("review-benchmark-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 const appState = {
@@ -266,6 +226,28 @@ const appState = {
   latestGeneration: null,
   latestAnalysisFalsePositiveSource: null,
   latestRewriteFalsePositiveSource: null,
+  falsePositiveLog: [],
+  reviewBenchmarkSamples: [],
+  reviewBenchmarkLastRunResult: null,
+  reviewBenchmarkCollectionFilter: "all",
+  reviewBenchmarkTypeFilter: "all",
+  reviewBenchmarkSourceFilter: "all",
+  reviewBenchmarkViewFilter: "all",
+  collectionTypeOptions: [],
+  sampleLibraryRecords: [],
+  selectedSampleLibraryRecordId: "",
+  sampleLibraryCollectionFilter: "all",
+  sampleLibraryFilter: "all",
+  sampleLibrarySearch: "",
+  styleProfileState: null,
+  styleProfileDraftEditing: false,
+  styleProfileDraftForm: {
+    topic: "",
+    tone: "",
+    titleStyle: "",
+    bodyStructure: "",
+    preferredTags: ""
+  },
   modelOptions: null,
   modelRecommendations: {}
 };
@@ -289,14 +271,168 @@ const presetAnalyzeTags = [
 ];
 let analyzeTagOptions = [...presetAnalyzeTags];
 const analyzeTagOptionsApi = "/api/analyze-tag-options";
+const collectionTypesApi = "/api/collection-types";
 const modelOptionsApi = "/api/model-options";
 const reviewBenchmarkApi = "/api/review-benchmark";
+const sampleLibraryApi = "/api/sample-library";
+
+function buildCollectionTypeOptionsMarkup({
+  options = [],
+  value = "",
+  allowAll = false,
+  placeholder = "请选择合集类型"
+} = {}) {
+  const normalizedValue = String(value || "").trim();
+  const baseOptions = allowAll ? ['<option value="all">全部合集</option>'] : [`<option value="">${escapeHtml(placeholder)}</option>`];
+
+  return [
+    ...baseOptions,
+    ...options.map(
+      (item) => `<option value="${escapeHtml(item)}"${normalizedValue === item ? " selected" : ""}>${escapeHtml(item)}</option>`
+    )
+  ].join("");
+}
+
+function renderCollectionTypeSelectors() {
+  const analyzeSelect = byId("analyze-collection-type-select");
+  const generationSelect = byId("generation-collection-type-select");
+  const sampleLibrarySelect = byId("sample-library-collection-type-select");
+  const sampleLibraryFilterSelect = byId("sample-library-collection-filter");
+  const reviewBenchmarkSelect = byId("review-benchmark-collection-type-select");
+  const reviewBenchmarkFilterSelect = byId("review-benchmark-collection-filter");
+
+  if (analyzeSelect) {
+    analyzeSelect.innerHTML = buildCollectionTypeOptionsMarkup({
+      options: appState.collectionTypeOptions,
+      value: analyzeSelect.value || appState.latestAnalyzePayload?.collectionType || ""
+    });
+  }
+
+  if (generationSelect) {
+    generationSelect.innerHTML = buildCollectionTypeOptionsMarkup({
+      options: appState.collectionTypeOptions,
+      value: generationSelect.value || appState.latestGeneration?.collectionType || ""
+    });
+  }
+
+  if (sampleLibrarySelect) {
+    sampleLibrarySelect.innerHTML = buildCollectionTypeOptionsMarkup({
+      options: appState.collectionTypeOptions,
+      value: sampleLibrarySelect.value
+    });
+  }
+
+  if (sampleLibraryFilterSelect) {
+    sampleLibraryFilterSelect.innerHTML = buildCollectionTypeOptionsMarkup({
+      options: appState.collectionTypeOptions,
+      value: appState.sampleLibraryCollectionFilter,
+      allowAll: true
+    });
+  }
+
+  if (reviewBenchmarkSelect) {
+    reviewBenchmarkSelect.innerHTML = buildCollectionTypeOptionsMarkup({
+      options: appState.collectionTypeOptions,
+      value: reviewBenchmarkSelect.value
+    });
+  }
+
+  if (reviewBenchmarkFilterSelect) {
+    reviewBenchmarkFilterSelect.innerHTML = buildCollectionTypeOptionsMarkup({
+      options: appState.collectionTypeOptions,
+      value: appState.reviewBenchmarkCollectionFilter,
+      allowAll: true
+    });
+  }
+}
+
+async function loadCollectionTypeOptions() {
+  const payload = await apiJson(collectionTypesApi);
+  appState.collectionTypeOptions = Array.isArray(payload.options) ? payload.options : [];
+  renderCollectionTypeSelectors();
+}
+
+async function addCollectionTypeOption(targetSelectId) {
+  const nextName = window.prompt("输入新的合集类型名称");
+  const normalizedName = String(nextName || "").trim();
+
+  if (!normalizedName) {
+    return;
+  }
+
+  const payload = await apiJson(collectionTypesApi, {
+    method: "POST",
+    body: JSON.stringify({ name: normalizedName })
+  });
+
+  appState.collectionTypeOptions = Array.isArray(payload.options) ? payload.options : appState.collectionTypeOptions;
+  renderCollectionTypeSelectors();
+
+  const select = byId(targetSelectId);
+  if (select) {
+    select.value = normalizedName;
+  }
+}
+
+function normalizeStyleProfileDraftForm(profile = {}) {
+  return {
+    topic: String(profile?.topic || "").trim(),
+    tone: String(profile?.tone || "").trim(),
+    titleStyle: String(profile?.titleStyle || "").trim(),
+    bodyStructure: String(profile?.bodyStructure || "").trim(),
+    preferredTags: joinCSV(profile?.preferredTags || [])
+  };
+}
+
+function enterStyleProfileDraftEditMode(profile = null) {
+  appState.styleProfileDraftEditing = true;
+  appState.styleProfileDraftForm = normalizeStyleProfileDraftForm(profile || appState.styleProfileState?.draft || {});
+}
+
+function exitStyleProfileDraftEditMode() {
+  appState.styleProfileDraftEditing = false;
+  appState.styleProfileDraftForm = normalizeStyleProfileDraftForm({});
+}
+
+function buildStyleProfileDraftPayload(source = appState.styleProfileDraftForm) {
+  const isFormElement = typeof HTMLFormElement !== "undefined" && source instanceof HTMLFormElement;
+  const isContainerElement = !isFormElement && source && typeof source.querySelector === "function";
+  const formValues = isFormElement
+    ? Object.fromEntries(new FormData(source).entries())
+    : isContainerElement
+      ? {
+          topic: source.querySelector('[name="topic"]')?.value,
+          tone: source.querySelector('[name="tone"]')?.value,
+          titleStyle: source.querySelector('[name="titleStyle"]')?.value,
+          bodyStructure: source.querySelector('[name="bodyStructure"]')?.value,
+          preferredTags: source.querySelector('[name="preferredTags"]')?.value
+        }
+      : source || {};
+  const normalized = {
+    topic: String(formValues.topic || "").trim(),
+    tone: String(formValues.tone || "").trim(),
+    titleStyle: String(formValues.titleStyle || "").trim(),
+    bodyStructure: String(formValues.bodyStructure || "").trim(),
+    preferredTags: String(formValues.preferredTags || "").trim()
+  };
+
+  appState.styleProfileDraftForm = normalized;
+
+  return {
+    topic: normalized.topic,
+    tone: normalized.tone,
+    titleStyle: normalized.titleStyle,
+    bodyStructure: normalized.bodyStructure,
+    preferredTags: splitCSV(normalized.preferredTags)
+  };
+}
 const defaultModelSelectionOptions = {
   semantic: [
     { value: "auto", label: "默认自动 / 依次尝试当前语义复判模型" },
     { value: "glm", label: "智谱 GLM" },
     { value: "qwen", label: "通义千问" },
     { value: "minimax", label: "MiniMax" },
+    { value: "mimo", label: "Mimo" },
     { value: "deepseek", label: "深度求索" }
   ],
   rewrite: [
@@ -305,13 +441,16 @@ const defaultModelSelectionOptions = {
     { value: "kimi", label: "Kimi" },
     { value: "qwen", label: "通义千问" },
     { value: "minimax", label: "MiniMax" },
+    { value: "mimo", label: "Mimo" },
     { value: "deepseek", label: "深度求索" }
   ],
   crossReview: [
     { value: "group", label: "默认模型组 / 并行调用全部交叉复判模型" },
     { value: "glm", label: "智谱 GLM" },
+    { value: "kimi", label: "Kimi" },
     { value: "qwen", label: "通义千问" },
     { value: "minimax", label: "MiniMax" },
+    { value: "mimo", label: "Mimo" },
     { value: "deepseek", label: "深度求索" }
   ],
   feedbackScreenshot: [
@@ -322,6 +461,7 @@ const defaultModelSelectionOptions = {
     { value: "auto", label: "默认自动 / 顺序尝试候选补充模型" },
     { value: "glm", label: "智谱 GLM" },
     { value: "qwen", label: "通义千问" },
+    { value: "mimo", label: "Mimo" },
     { value: "deepseek", label: "深度求索" }
   ]
 };
@@ -395,6 +535,34 @@ function populateModelSelectionControl(selectId, items = [], fallbackValue = "")
   }
 }
 
+function syncCrossReviewModelSelectionRules() {
+  const rewriteSelect = byId("rewrite-model-selection");
+  const crossReviewSelect = byId("cross-review-model-selection");
+
+  if (!(rewriteSelect instanceof HTMLSelectElement) || !(crossReviewSelect instanceof HTMLSelectElement)) {
+    return;
+  }
+
+  const blockedProvider = String(rewriteSelect.value || "").trim().toLowerCase();
+  const shouldBlock = blockedProvider && blockedProvider !== "auto";
+
+  [...crossReviewSelect.options].forEach((option) => {
+    const optionValue = String(option.value || "").trim().toLowerCase();
+    const baseLabel = option.dataset.baseLabel || option.textContent || "";
+    const disabled = shouldBlock && optionValue === blockedProvider;
+
+    option.dataset.baseLabel = baseLabel;
+    option.disabled = disabled;
+    option.textContent = disabled ? `${baseLabel}（改写已选）` : baseLabel;
+  });
+
+  if (shouldBlock && String(crossReviewSelect.value || "").trim().toLowerCase() === blockedProvider) {
+    crossReviewSelect.value = [...crossReviewSelect.options].some((option) => option.value === "group" && !option.disabled)
+      ? "group"
+      : [...crossReviewSelect.options].find((option) => !option.disabled)?.value || "group";
+  }
+}
+
 function renderModelSelectionControls(options = defaultModelSelectionOptions) {
   const normalizedOptions = {
     semantic: normalizeModelSelectionOptions(options?.semantic, defaultModelSelectionOptions.semantic),
@@ -416,6 +584,7 @@ function renderModelSelectionControls(options = defaultModelSelectionOptions) {
   populateModelSelectionControl("cross-review-model-selection", normalizedOptions.crossReview, "group");
   populateModelSelectionControl("feedback-screenshot-model-selection", normalizedOptions.feedbackScreenshot, "auto");
   populateModelSelectionControl("feedback-suggestion-model-selection", normalizedOptions.feedbackSuggestion, "auto");
+  syncCrossReviewModelSelectionRules();
 }
 
 async function loadModelSelectionOptions() {
@@ -1481,8 +1650,8 @@ function buildCrossReviewMarkup(review, { embedded = false } = {}) {
 
       <div class="model-scope-banner model-scope-banner-review">
         <span class="model-scope-kicker">复判模型组</span>
-        <strong>GLM / 通义千问 / 深度求索</strong>
-        <p>当前交叉复判固定使用独立复判模型逐个比对，不含 Kimi，避免改写模型自己给自己复判。</p>
+        <strong>按当前可用复判模型组逐个比对</strong>
+        <p>当前交叉复判会自动避开已选改写模型，确保复判模型不与改写模型重复，避免同模型自己给自己复判。</p>
       </div>
 
       <div class="cross-review-stats">
@@ -1775,8 +1944,10 @@ function renderFeedbackLog(items) {
 }
 
 function renderFalsePositiveLog(items) {
-  byId("false-positive-log-list").innerHTML = items.length
-    ? items
+  appState.falsePositiveLog = Array.isArray(items) ? items : [];
+
+  byId("false-positive-log-list").innerHTML = appState.falsePositiveLog.length
+    ? appState.falsePositiveLog
         .slice()
         .reverse()
         .map((item) => buildFalsePositiveEntryMarkup({
@@ -1837,8 +2008,635 @@ function expectedTypeLabel(value) {
   return String(value || "").trim() || "未标记类型";
 }
 
+function benchmarkSourceLabel(source = null) {
+  const type = String(source?.type || "").trim();
+
+  if (type === "manual") return "手动录入";
+  if (type === "sample_library") return "样本库";
+  if (type === "false_positive_log") return "误报日志";
+  return "历史样本";
+}
+
+function benchmarkSourceFilterValue(source = null) {
+  const type = String(source?.type || "").trim();
+  return type || "legacy";
+}
+
+function reviewBenchmarkTypeFilterLabel(value = "all") {
+  if (value === "violation") return "违规样本";
+  if (value === "false_positive") return "误报样本";
+  if (value === "success") return "正常通过样本";
+  return "全部类型";
+}
+
+function reviewBenchmarkCollectionFilterLabel(value = "all") {
+  return value === "all" ? "全部合集" : collectionTypeLabel(value);
+}
+
+function reviewBenchmarkViewFilterLabel(value = "all") {
+  if (value === "mismatches") return "仅看最近未命中";
+  return "全部样本";
+}
+
+function reviewBenchmarkSourceFilterLabel(value = "all") {
+  if (value === "manual") return "手动录入";
+  if (value === "sample_library") return "样本库";
+  if (value === "false_positive_log") return "误报日志";
+  if (value === "legacy") return "历史样本";
+  return "全部来源";
+}
+
+function inferSampleLibraryPublishStatusFromBenchmarkExpectedType(expectedType = "") {
+  if (expectedType === "false_positive") return "false_positive";
+  if (expectedType === "violation") return "violation";
+  if (expectedType === "success") return "published_passed";
+  return "not_published";
+}
+
+function getReviewBenchmarkMismatchById(id = "") {
+  const targetId = String(id || "").trim();
+
+  if (!targetId) {
+    return null;
+  }
+
+  return (
+    (appState.reviewBenchmarkLastRunResult?.results || []).find(
+      (item) => item?.matchedExpectation === false && String(item?.id || "").trim() === targetId
+    ) || null
+  );
+}
+
+function buildReviewBenchmarkMismatchSummary(mismatch = {}) {
+  const failedHumanizerChecks = (mismatch.humanizer?.checks || [])
+    .filter((check) => check?.passed === false)
+    .map((check) => String(check?.label || "").trim())
+    .filter(Boolean);
+
+  return [
+    "来自基准评测未命中回流",
+    `预期 ${expectedTypeLabel(mismatch.expectedType)} / 实际 ${verdictLabel(mismatch.actualVerdict)}`,
+    `人味项未通过：${failedHumanizerChecks.join("、") || "无"}`
+  ].join("；");
+}
+
+function getSampleRecordNote(record = {}) {
+  return record?.note && typeof record.note === "object" ? record.note : record || {};
+}
+
+function getSampleRecordReference(record = {}) {
+  if (record?.reference && typeof record.reference === "object") {
+    return {
+      enabled: record.reference.enabled === true,
+      tier: String(record.reference.tier || "").trim(),
+      selectedBy: String(record.reference.selectedBy || "").trim(),
+      notes: String(record.reference.notes || "").trim()
+    };
+  }
+
+  const tier = String(record?.tier || "").trim();
+  return {
+    enabled: Boolean(tier),
+    tier,
+    selectedBy: "",
+    notes: String(record?.notes || "").trim()
+  };
+}
+
+function getSampleRecordPublish(record = {}) {
+  const source =
+    record?.publish && typeof record.publish === "object"
+      ? record.publish
+      : record?.publishResult && typeof record.publishResult === "object"
+        ? record.publishResult
+        : record || {};
+
+  return {
+    status: String(source.status || source.publishStatus || "not_published").trim() || "not_published",
+    notes: String(source.notes || source.publishNotes || "").trim(),
+    publishedAt: String(source.publishedAt || "").trim(),
+    platformReason: String(source.platformReason || "").trim(),
+    metrics: {
+      likes: Number(source.metrics?.likes ?? source.likes ?? 0) || 0,
+      favorites: Number(source.metrics?.favorites ?? source.favorites ?? 0) || 0,
+      comments: Number(source.metrics?.comments ?? source.comments ?? 0) || 0
+    }
+  };
+}
+
+function getSampleRecordTitle(record = {}) {
+  return String(getSampleRecordNote(record)?.title || record?.title || "").trim();
+}
+
+function getSampleRecordBody(record = {}) {
+  return String(getSampleRecordNote(record)?.body || record?.body || "").trim();
+}
+
+function getSampleRecordCoverText(record = {}) {
+  return String(getSampleRecordNote(record)?.coverText || record?.coverText || "").trim();
+}
+
+function getSampleRecordCollectionType(record = {}) {
+  return String(getSampleRecordNote(record)?.collectionType || record?.collectionType || "").trim();
+}
+
+function getSampleRecordTags(record = {}) {
+  return uniqueStrings(getSampleRecordNote(record)?.tags || record?.tags || []);
+}
+
+function getReviewBenchmarkCollectionType(item = {}) {
+  return String(item?.input?.collectionType || item?.collectionType || "").trim();
+}
+
+function inferBenchmarkExpectedTypeFromSampleRecord(record = {}) {
+  const publish = getSampleRecordPublish(record);
+
+  if (publish.status === "false_positive") {
+    return "false_positive";
+  }
+
+  if (publish.status === "violation") {
+    return "violation";
+  }
+
+  return "success";
+}
+
+async function addBenchmarkSample(payload = {}) {
+  const response = await apiJson(reviewBenchmarkApi, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+
+  renderReviewBenchmarkSamples(response.items || []);
+
+  const resultNode = byId("review-benchmark-result");
+
+  if (resultNode) {
+    resultNode.innerHTML = `
+      <div class="result-card-shell">
+        ${
+          response.duplicate
+            ? `样本已存在，未重复加入，当前样本数 ${escapeHtml(String(response.items?.length ?? 0))}。`
+            : `已加入基准评测，当前样本数 ${escapeHtml(String(response.items?.length ?? 0))}。`
+        }
+      </div>
+    `;
+  }
+
+  revealReviewBenchmarkPane();
+  return response;
+}
+
+function hasTrackedLifecycle(record = {}) {
+  const publish = getSampleRecordPublish(record);
+  return (
+    publish.status !== "not_published" ||
+    publish.metrics.likes > 0 ||
+    publish.metrics.favorites > 0 ||
+    publish.metrics.comments > 0 ||
+    Boolean(publish.notes || publish.publishedAt || publish.platformReason)
+  );
+}
+
+function collectionTypeLabel(value = "") {
+  return String(value || "").trim() || "未分类合集";
+}
+
+function sampleLibraryFilterLabel(value = "all") {
+  if (value === "incomplete") return "待补全";
+  if (value === "reference") return "已成参考";
+  if (value === "published") return "已跟踪发布";
+  return "全部记录";
+}
+
+function sampleLibraryCollectionFilterLabel(value = "all") {
+  return value === "all" ? "全部合集" : collectionTypeLabel(value);
+}
+
+function filterSampleLibraryRecords(items = []) {
+  const normalizedItems = Array.isArray(items) ? items : [];
+  const filter = String(appState.sampleLibraryFilter || "all").trim() || "all";
+  const collectionFilter = String(appState.sampleLibraryCollectionFilter || "all").trim() || "all";
+  const search = String(appState.sampleLibrarySearch || "")
+    .trim()
+    .toLowerCase();
+
+  return normalizedItems.filter((item) => {
+    const reference = getSampleRecordReference(item);
+    const trackedLifecycle = hasTrackedLifecycle(item);
+    const collectionType = getSampleRecordCollectionType(item);
+
+    if (filter === "incomplete" && (reference.enabled || trackedLifecycle)) {
+      return false;
+    }
+
+    if (filter === "reference" && !reference.enabled) {
+      return false;
+    }
+
+    if (filter === "published" && !trackedLifecycle) {
+      return false;
+    }
+
+    if (collectionFilter !== "all" && collectionType !== collectionFilter) {
+      return false;
+    }
+
+    if (!search) {
+      return true;
+    }
+
+    const haystack = [
+      item?.id,
+      item?.source,
+      item?.stage,
+      getSampleRecordTitle(item),
+      getSampleRecordBody(item),
+      getSampleRecordCoverText(item),
+      collectionType,
+      joinCSV(getSampleRecordTags(item)),
+      getSampleRecordReference(item)?.tier,
+      getSampleRecordPublish(item)?.status
+    ]
+      .map((value) => String(value || "").toLowerCase())
+      .join("\n");
+
+    return haystack.includes(search);
+  });
+}
+
+function getSelectedSampleLibraryRecord() {
+  const filteredItems = filterSampleLibraryRecords(appState.sampleLibraryRecords);
+
+  if (!filteredItems.length) {
+    appState.selectedSampleLibraryRecordId = "";
+    return null;
+  }
+
+  const selectedRecord =
+    filteredItems.find((item) => String(item?.id || "") === appState.selectedSampleLibraryRecordId) || filteredItems[0];
+
+  appState.selectedSampleLibraryRecordId = String(selectedRecord?.id || "");
+  return selectedRecord;
+}
+
+function renderSampleLibraryList(items = []) {
+  const listNode = byId("sample-library-record-list");
+  const countNode = byId("sample-library-list-count");
+
+  if (!listNode) {
+    return;
+  }
+
+  if (countNode) {
+    countNode.textContent = `${items.length} 条 · ${sampleLibraryFilterLabel(appState.sampleLibraryFilter)} · ${sampleLibraryCollectionFilterLabel(
+      appState.sampleLibraryCollectionFilter
+    )}`;
+  }
+
+  listNode.innerHTML = items.length
+    ? items
+        .map((item) => {
+          const itemId = String(item?.id || "");
+          const isActive = itemId && itemId === appState.selectedSampleLibraryRecordId;
+          const reference = getSampleRecordReference(item);
+          const publish = getSampleRecordPublish(item);
+          const title = getSampleRecordTitle(item) || "未命名样本记录";
+          const body = getSampleRecordBody(item);
+          const collectionType = getSampleRecordCollectionType(item);
+          const tags = getSampleRecordTags(item);
+
+          return `
+            <button
+              type="button"
+              class="sample-library-record-card admin-item${isActive ? " is-active" : ""}"
+              data-sample-library-record-id="${escapeHtml(itemId)}"
+            >
+              <strong>${escapeHtml(title)}</strong>
+              <div class="meta-row">
+                <span class="meta-pill">${escapeHtml(reference.enabled ? successTierLabel(reference.tier) : "待补全")}</span>
+                <span class="meta-pill">${escapeHtml(publishStatusLabel(publish.status))}</span>
+                <span class="meta-pill">${escapeHtml(collectionTypeLabel(collectionType))}</span>
+                <span class="meta-pill">${escapeHtml(lifecycleSourceLabel(item?.source || "manual"))}</span>
+                <span class="meta-pill">${escapeHtml(formatDate(item?.updatedAt || item?.createdAt))}</span>
+              </div>
+              <p>${escapeHtml(compactText(body || getSampleRecordCoverText(item), 96) || "未填写正文")}</p>
+              <p>标签：${escapeHtml(joinCSV(tags) || "未填写")}</p>
+            </button>
+          `;
+        })
+        .join("")
+    : '<div class="result-card muted">当前没有样本记录</div>';
+}
+
+function renderSampleLibraryDetailSection(nodeId, markup) {
+  const node = byId(nodeId);
+
+  if (node) {
+    node.innerHTML = markup;
+  }
+}
+
+function renderSampleLibraryDetail(record) {
+  const detailNode = byId("sample-library-detail");
+  const headerNode = byId("sample-library-detail-header");
+
+  if (!detailNode) {
+    return;
+  }
+
+  if (!record) {
+    if (headerNode) {
+      headerNode.innerHTML = '<div class="result-card muted">请选择左侧样本，或先新增一条记录。</div>';
+    }
+
+    renderSampleLibraryDetailSection(
+      "sample-library-base-section",
+      `
+        <div class="sample-library-section-head">
+          <div>
+            <strong>基础内容</strong>
+            <p>先保存标题、正文、标签和封面文案。</p>
+          </div>
+          <span class="meta-pill">未选择记录</span>
+        </div>
+        <div class="result-card muted">选中一条记录后再补充基础内容。</div>
+      `
+    );
+    renderSampleLibraryDetailSection(
+      "sample-library-reference-section",
+      `
+        <div class="sample-library-section-head">
+          <div>
+            <strong>参考属性</strong>
+            <p>决定它是否进入参考样本和风格画像。</p>
+          </div>
+          <span class="meta-pill">未启用</span>
+        </div>
+        <div class="result-card muted">选中记录后可启用参考属性。</div>
+      `
+    );
+    renderSampleLibraryDetailSection(
+      "sample-library-lifecycle-section",
+      `
+        <div class="sample-library-section-head">
+          <div>
+            <strong>生命周期属性</strong>
+            <p>回填发布结果和互动表现。</p>
+          </div>
+          <span class="meta-pill">未回填</span>
+        </div>
+        <div class="result-card muted">选中记录后可补充发布状态与互动指标。</div>
+      `
+    );
+    return;
+  }
+
+  const note = getSampleRecordNote(record);
+  const reference = getSampleRecordReference(record);
+  const publish = getSampleRecordPublish(record);
+  const collectionType = getSampleRecordCollectionType(record);
+  const referenceSummary = reference.enabled ? successTierLabel(reference.tier) : "未启用";
+  const lifecycleSummary = hasTrackedLifecycle(record) ? publishStatusLabel(publish.status) : "未回填";
+
+  if (headerNode) {
+    headerNode.innerHTML = `
+      <article class="result-card-shell">
+        <div class="sample-library-detail-topbar">
+          <div>
+            <strong>${escapeHtml(getSampleRecordTitle(record) || "未命名样本记录")}</strong>
+            <p>${escapeHtml(compactText(getSampleRecordBody(record) || getSampleRecordCoverText(record), 120) || "未填写正文")}</p>
+          </div>
+          <div class="item-actions">
+            <button
+              type="button"
+              class="button button-alt button-small"
+              data-action="add-sample-library-to-benchmark"
+              data-id="${escapeHtml(record.id || "")}"
+            >
+              加入基准评测
+            </button>
+            <button
+              type="button"
+              class="button button-danger button-small"
+              data-action="delete-sample-library-record"
+              data-id="${escapeHtml(record.id || "")}"
+            >
+              删除记录
+            </button>
+          </div>
+        </div>
+        <div class="meta-row">
+          <span class="meta-pill">${escapeHtml(referenceSummary)}</span>
+          <span class="meta-pill">${escapeHtml(lifecycleSummary)}</span>
+          <span class="meta-pill">${escapeHtml(collectionTypeLabel(collectionType))}</span>
+          <span class="meta-pill">${escapeHtml(lifecycleSourceLabel(record.source || "manual"))}</span>
+          <span class="meta-pill">${escapeHtml(formatDate(record.updatedAt || record.createdAt))}</span>
+        </div>
+      </article>
+    `;
+  }
+
+  renderSampleLibraryDetailSection(
+    "sample-library-base-section",
+    `
+      <div class="sample-library-section-head">
+        <div>
+          <strong>基础内容</strong>
+          <p>先确认标题、正文和标签，后续筛选都基于这里。</p>
+        </div>
+        <span class="meta-pill">已选中</span>
+      </div>
+      <div class="admin-panel-body stack compact-form">
+        <label>
+          <span>标题</span>
+          <input name="title" value="${escapeHtml(note.title || "")}" placeholder="样本标题" />
+        </label>
+        <label>
+          <span>正文</span>
+          <textarea name="body" rows="6" placeholder="样本正文">${escapeHtml(note.body || "")}</textarea>
+        </label>
+        <label>
+          <span>封面文案</span>
+          <input name="coverText" value="${escapeHtml(note.coverText || "")}" placeholder="封面文案" />
+        </label>
+        <label>
+          <span>合集类型</span>
+          <select name="collectionType">
+            ${buildCollectionTypeOptionsMarkup({
+              options: appState.collectionTypeOptions,
+              value: collectionType
+            })}
+          </select>
+        </label>
+        <label>
+          <span>标签</span>
+          <input name="tags" value="${escapeHtml(joinCSV(note.tags) || "")}" placeholder="标签1, 标签2" />
+        </label>
+        <div class="item-actions">
+          <button type="button" class="button button-small" data-action="save-sample-library-base" data-id="${escapeHtml(record.id || "")}">
+            保存基础内容
+          </button>
+        </div>
+      </div>
+    `
+  );
+
+  renderSampleLibraryDetailSection(
+    "sample-library-reference-section",
+    `
+      <div class="sample-library-section-head">
+        <div>
+          <strong>参考属性</strong>
+          <p>决定这条记录是否参与参考样本和风格画像生成。</p>
+        </div>
+        <span class="meta-pill">${escapeHtml(referenceSummary)}</span>
+      </div>
+      <div class="admin-panel-body stack compact-form">
+        <label class="sample-library-checkbox">
+          <input type="checkbox" name="enabled"${reference.enabled ? " checked" : ""} />
+          <span>启用为参考样本</span>
+        </label>
+        <label>
+          <span>参考等级</span>
+          <select name="tier">
+            <option value=""${!reference.tier ? " selected" : ""}>未启用</option>
+            <option value="passed"${reference.tier === "passed" ? " selected" : ""}>仅过审</option>
+            <option value="performed"${reference.tier === "performed" ? " selected" : ""}>过审且表现好</option>
+            <option value="featured"${reference.tier === "featured" ? " selected" : ""}>人工精选标杆</option>
+          </select>
+        </label>
+        <label>
+          <span>备注</span>
+          <textarea name="notes" rows="3" placeholder="例如：适合作为情绪沟通类参考">${escapeHtml(reference.notes || "")}</textarea>
+        </label>
+        <div class="item-actions">
+          <button
+            type="button"
+            class="button button-small"
+            data-action="save-sample-library-reference"
+            data-id="${escapeHtml(record.id || "")}"
+          >
+            保存参考属性
+          </button>
+        </div>
+      </div>
+    `
+  );
+
+  renderSampleLibraryDetailSection(
+    "sample-library-lifecycle-section",
+    `
+      <div class="sample-library-section-head">
+        <div>
+          <strong>生命周期属性</strong>
+          <p>发布后回填结果，便于后续判断哪些内容真正可复用。</p>
+        </div>
+        <span class="meta-pill">${escapeHtml(lifecycleSummary)}</span>
+      </div>
+      <div class="admin-panel-body">
+        <div class="lifecycle-update-grid sample-library-lifecycle-grid">
+          <div class="lifecycle-primary-grid">
+            <label>
+              <span>发布状态</span>
+              <select name="status">
+                <option value="not_published"${publish.status === "not_published" ? " selected" : ""}>未发布</option>
+                <option value="published_passed"${publish.status === "published_passed" ? " selected" : ""}>已发布通过</option>
+                <option value="limited"${publish.status === "limited" ? " selected" : ""}>疑似限流</option>
+                <option value="violation"${publish.status === "violation" ? " selected" : ""}>平台判违规</option>
+                <option value="false_positive"${publish.status === "false_positive" ? " selected" : ""}>系统误报 / 平台放行</option>
+                <option value="positive_performance"${publish.status === "positive_performance" ? " selected" : ""}>过审且表现好</option>
+              </select>
+            </label>
+            <label>
+              <span>发布时间</span>
+              <input name="publishedAt" type="date" value="${escapeHtml(String(publish.publishedAt || "").slice(0, 10))}" />
+            </label>
+          </div>
+          <div class="lifecycle-metrics-grid">
+            <label>
+              <span>点赞</span>
+              <input name="likes" type="number" min="0" value="${escapeHtml(String(publish.metrics.likes || 0))}" />
+            </label>
+            <label>
+              <span>收藏</span>
+              <input name="favorites" type="number" min="0" value="${escapeHtml(String(publish.metrics.favorites || 0))}" />
+            </label>
+            <label>
+              <span>评论</span>
+              <input name="comments" type="number" min="0" value="${escapeHtml(String(publish.metrics.comments || 0))}" />
+            </label>
+          </div>
+          <label class="field-wide">
+            <span>平台原因</span>
+            <input name="platformReason" value="${escapeHtml(publish.platformReason || "")}" placeholder="例如：疑似导流、低俗等" />
+          </label>
+          <label class="field-wide">
+            <span>回填备注</span>
+            <textarea name="notes" rows="3" placeholder="例如：发布 24h 后稳定通过">${escapeHtml(publish.notes || "")}</textarea>
+          </label>
+        </div>
+        <div class="item-actions">
+          <button
+            type="button"
+            class="button button-small"
+            data-action="save-sample-library-lifecycle"
+            data-id="${escapeHtml(record.id || "")}"
+          >
+            保存生命周期属性
+          </button>
+        </div>
+      </div>
+    `
+  );
+}
+
+function renderSampleLibraryWorkspace() {
+  const workspaceNode = byId("sample-library-workspace");
+  const listNode = byId("sample-library-record-list");
+  const detailNode = byId("sample-library-detail");
+
+  if (!workspaceNode && !listNode && !detailNode) {
+    return;
+  }
+
+  renderCollectionTypeSelectors();
+  const filteredItems = filterSampleLibraryRecords(appState.sampleLibraryRecords);
+  const selectedRecord = getSelectedSampleLibraryRecord();
+
+  renderSampleLibraryList(filteredItems);
+  renderSampleLibraryDetail(selectedRecord);
+}
+
+async function refreshSampleLibraryWorkspace() {
+  const workspaceNode = byId("sample-library-workspace");
+  const listNode = byId("sample-library-record-list");
+  const detailNode = byId("sample-library-detail");
+
+  if (!workspaceNode && !listNode && !detailNode) {
+    return appState.sampleLibraryRecords;
+  }
+
+  try {
+    const payload = await apiJson(sampleLibraryApi);
+    appState.sampleLibraryRecords = Array.isArray(payload?.items) ? payload.items : [];
+  } catch {
+    appState.sampleLibraryRecords = Array.isArray(appState.sampleLibraryRecords) ? appState.sampleLibraryRecords : [];
+  }
+
+  renderSampleLibraryWorkspace();
+  return appState.sampleLibraryRecords;
+}
+
 function renderSuccessSamples(items = []) {
-  byId("success-sample-list").innerHTML = items.length
+  const listNode = byId("success-sample-list");
+
+  if (!listNode) {
+    return;
+  }
+
+  listNode.innerHTML = items.length
     ? items
         .slice()
         .reverse()
@@ -1864,8 +2662,28 @@ function renderSuccessSamples(items = []) {
 }
 
 function renderReviewBenchmarkSamples(items = []) {
-  byId("review-benchmark-list").innerHTML = items.length
-    ? items
+  appState.reviewBenchmarkSamples = Array.isArray(items) ? items : [];
+  renderCollectionTypeSelectors();
+  const listNode = byId("review-benchmark-list");
+  const countNode = byId("review-benchmark-list-count");
+  const filteredItems = filterReviewBenchmarkSamples(appState.reviewBenchmarkSamples);
+
+  if (countNode) {
+    countNode.textContent = `${filteredItems.length} 条 · ${reviewBenchmarkViewFilterLabel(
+      appState.reviewBenchmarkViewFilter
+    )} · ${reviewBenchmarkCollectionFilterLabel(
+      appState.reviewBenchmarkCollectionFilter
+    )} · ${reviewBenchmarkTypeFilterLabel(
+      appState.reviewBenchmarkTypeFilter
+    )} · ${reviewBenchmarkSourceFilterLabel(appState.reviewBenchmarkSourceFilter)}`;
+  }
+
+  if (!listNode) {
+    return;
+  }
+
+  listNode.innerHTML = filteredItems.length
+    ? filteredItems
         .slice()
         .reverse()
         .map(
@@ -1873,7 +2691,9 @@ function renderReviewBenchmarkSamples(items = []) {
             <article class="admin-item">
               <strong>${escapeHtml(item.input?.title || item.title || "未命名基准样本")}</strong>
               <div class="meta-row">
+                <span class="meta-pill">${escapeHtml(collectionTypeLabel(getReviewBenchmarkCollectionType(item)))}</span>
                 <span class="meta-pill">${escapeHtml(expectedTypeLabel(item.expectedType))}</span>
+                <span class="meta-pill">${escapeHtml(benchmarkSourceLabel(item.source))}</span>
                 <span class="meta-pill">${escapeHtml(joinCSV(item.input?.tags || item.tags) || "未填写标签")}</span>
                 <span class="meta-pill">${escapeHtml(formatDate(item.createdAt))}</span>
               </div>
@@ -1895,13 +2715,51 @@ function renderReviewBenchmarkSamples(items = []) {
     : '<div class="result-card muted">当前没有基准样本</div>';
 }
 
+function filterReviewBenchmarkSamples(items = []) {
+  const normalizedItems = Array.isArray(items) ? items : [];
+  const viewFilter = String(appState.reviewBenchmarkViewFilter || "all").trim() || "all";
+  const collectionFilter = String(appState.reviewBenchmarkCollectionFilter || "all").trim() || "all";
+  const typeFilter = String(appState.reviewBenchmarkTypeFilter || "all").trim() || "all";
+  const sourceFilter = String(appState.reviewBenchmarkSourceFilter || "all").trim() || "all";
+  const mismatchIds = new Set(
+    (appState.reviewBenchmarkLastRunResult?.results || [])
+      .filter((item) => item?.matchedExpectation === false)
+      .map((item) => String(item?.id || "").trim())
+      .filter(Boolean)
+  );
+
+  return normalizedItems.filter((item) => {
+    if (viewFilter === "mismatches" && !mismatchIds.has(String(item?.id || "").trim())) {
+      return false;
+    }
+
+    if (collectionFilter !== "all" && getReviewBenchmarkCollectionType(item) !== collectionFilter) {
+      return false;
+    }
+
+    if (typeFilter !== "all" && String(item?.expectedType || "").trim() !== typeFilter) {
+      return false;
+    }
+
+    if (sourceFilter !== "all" && benchmarkSourceFilterValue(item?.source) !== sourceFilter) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
 function renderReviewBenchmarkResult(result = null) {
   if (!result) {
+    appState.reviewBenchmarkLastRunResult = null;
     byId("review-benchmark-result").innerHTML = '<div class="result-card muted">等待操作</div>';
     return;
   }
 
+  appState.reviewBenchmarkLastRunResult = result;
   const summary = result.summary || {};
+  const humanizerSummary = summary.humanizer || {};
+  const humanizerChecks = Object.values(humanizerSummary.byCheck || {});
   const mismatches = (result.results || []).filter((item) => !item.matchedExpectation);
 
   byId("review-benchmark-result").innerHTML = `
@@ -1910,7 +2768,28 @@ function renderReviewBenchmarkResult(result = null) {
         <div class="meta-pill">总样本 ${escapeHtml(String(summary.total || 0))}</div>
         <div class="meta-pill">匹配 ${escapeHtml(String(summary.passed || 0))}</div>
         <div class="meta-pill">未匹配 ${escapeHtml(String(summary.failed || 0))}</div>
+        <div class="meta-pill">人味项通过 ${escapeHtml(String(humanizerSummary.passedSamples || 0))}</div>
       </div>
+      <div class="tab-panel-head">
+        <strong>人味化检查</strong>
+        <span>这部分用轻量规则检查开头抓力、真实场景、假设例子和说教腔，不替代人工判断，但能帮我们快速发现 AI 味偏重的样本。</span>
+      </div>
+      <ul class="review-benchmark-mismatch-list">
+        ${
+          humanizerChecks.length
+            ? humanizerChecks
+                .map(
+                  (item) => `
+                    <li>
+                      <strong>${escapeHtml(item.label || "未命名检查项")}</strong>
+                      <span>通过 ${escapeHtml(String(item.passed || 0))} / 失败 ${escapeHtml(String(item.failed || 0))}</span>
+                    </li>
+                  `
+                )
+                .join("")
+            : "<li><strong>当前没有人味化检查结果</strong><span>运行基准评测后会在这里展示。</span></li>"
+        }
+      </ul>
       <div class="tab-panel-head">
         <strong>未匹配样本</strong>
         <span>优先看这部分，决定是补规则、调权重，还是修正基准样本预期。</span>
@@ -1928,6 +2807,38 @@ function renderReviewBenchmarkResult(result = null) {
                           verdictLabel(item.actualVerdict)
                         )}
                       </span>
+                      <span>
+                        人味项未通过：${escapeHtml(
+                          (item.humanizer?.checks || [])
+                            .filter((check) => check.passed === false)
+                            .map((check) => check.label)
+                            .join("、") || "无"
+                            )}
+                      </span>
+                      <div class="item-actions">
+                        <button
+                          type="button"
+                          class="button button-small"
+                          data-action="send-review-benchmark-to-sample-library"
+                          data-id="${escapeHtml(item.id || "")}"
+                        >
+                          回流到样本库
+                        </button>
+                        ${
+                          item.expectedType === "false_positive"
+                            ? `
+                          <button
+                            type="button"
+                            class="button button-alt button-small"
+                            data-action="send-review-benchmark-to-false-positive"
+                            data-id="${escapeHtml(item.id || "")}"
+                          >
+                            回流到误报日志
+                          </button>
+                        `
+                            : ""
+                        }
+                      </div>
                     </li>
                   `
                 )
@@ -1954,8 +2865,13 @@ function renderNoteLifecycle(items = []) {
     "false_positive",
     "positive_performance"
   ];
+  const listNode = byId("note-lifecycle-list");
 
-  byId("note-lifecycle-list").innerHTML = items.length
+  if (!listNode) {
+    return;
+  }
+
+  listNode.innerHTML = items.length
     ? items
         .slice()
         .reverse()
@@ -1977,35 +2893,39 @@ function renderNoteLifecycle(items = []) {
               <p>${escapeHtml(compactText(item.note?.body || item.note?.title || item.note?.coverText, 150) || "未填写正文")}</p>
               <p>标签：${escapeHtml(joinCSV(item.note?.tags) || "未填写")}</p>
               <div class="lifecycle-update-grid">
-                <label>
-                  <span>发布状态</span>
-                  <select name="publishStatus">
-                    ${statusOptions
-                      .map(
-                        (option) =>
-                          `<option value="${escapeHtml(option)}"${option === status ? " selected" : ""}>${escapeHtml(
-                            publishStatusLabel(option)
-                          )}</option>`
-                      )
-                      .join("")}
-                  </select>
-                </label>
-                <label>
-                  <span>点赞</span>
-                  <input name="likes" type="number" min="0" value="${escapeHtml(String(item.publishResult?.metrics?.likes || 0))}" />
-                </label>
-                <label>
-                  <span>收藏</span>
-                  <input name="favorites" type="number" min="0" value="${escapeHtml(
-                    String(item.publishResult?.metrics?.favorites || 0)
-                  )}" />
-                </label>
-                <label>
-                  <span>评论</span>
-                  <input name="comments" type="number" min="0" value="${escapeHtml(
-                    String(item.publishResult?.metrics?.comments || 0)
-                  )}" />
-                </label>
+                <div class="lifecycle-primary-grid">
+                  <label>
+                    <span>发布状态</span>
+                    <select name="publishStatus">
+                      ${statusOptions
+                        .map(
+                          (option) =>
+                            `<option value="${escapeHtml(option)}"${option === status ? " selected" : ""}>${escapeHtml(
+                              publishStatusLabel(option)
+                            )}</option>`
+                        )
+                        .join("")}
+                    </select>
+                  </label>
+                </div>
+                <div class="lifecycle-metrics-grid">
+                  <label>
+                    <span>点赞</span>
+                    <input name="likes" type="number" min="0" value="${escapeHtml(String(item.publishResult?.metrics?.likes || 0))}" />
+                  </label>
+                  <label>
+                    <span>收藏</span>
+                    <input name="favorites" type="number" min="0" value="${escapeHtml(
+                      String(item.publishResult?.metrics?.favorites || 0)
+                    )}" />
+                  </label>
+                  <label>
+                    <span>评论</span>
+                    <input name="comments" type="number" min="0" value="${escapeHtml(
+                      String(item.publishResult?.metrics?.comments || 0)
+                    )}" />
+                  </label>
+                </div>
                 <label class="field-wide">
                   <span>回填备注</span>
                   <input name="notes" value="${escapeHtml(item.publishResult?.notes || "")}" placeholder="例如：发出 24h 后正常，互动稳定" />
@@ -2027,10 +2947,17 @@ function renderNoteLifecycle(items = []) {
 }
 
 function renderStyleProfile(profileState = {}) {
+  appState.styleProfileState = profileState;
   const current = profileState?.current;
   const draft = profileState?.draft;
   const profile = draft || current;
   const versions = Array.isArray(profileState?.versions) ? profileState.versions : [];
+  const isDraftEditing = Boolean(draft && appState.styleProfileDraftEditing);
+
+  if (!draft && appState.styleProfileDraftEditing) {
+    exitStyleProfileDraftEditMode();
+  }
+
   const options = [
     '<option value="">当前默认画像</option>',
     ...versions.map(
@@ -2086,13 +3013,65 @@ function renderStyleProfile(profileState = {}) {
           <span class="meta-pill">引用 ${escapeHtml(String(profile.sourceSampleIds?.length || 0))} 条样本</span>
         </div>
         <strong>${escapeHtml(profile.status === "active" ? "当前风格画像" : "待确认风格画像")}</strong>
-        <p>${escapeHtml(profile.tone || "未生成语气画像")}</p>
-        <p>${escapeHtml(profile.titleStyle || "未生成标题画像")}</p>
-        <p>${escapeHtml(profile.bodyStructure || "未生成正文结构画像")}</p>
-        <p>偏好标签：${escapeHtml(joinCSV(profile.preferredTags) || "未总结")}</p>
+        ${
+          isDraftEditing
+            ? `
+              <div class="style-profile-form compact-form">
+                <label>
+                  <span>主题</span>
+                  <input name="topic" value="${escapeHtml(appState.styleProfileDraftForm.topic || "")}" placeholder="例如：亲密关系科普" />
+                </label>
+                <label>
+                  <span>语气画像</span>
+                  <textarea name="tone" rows="3" placeholder="例如：温和、克制、像朋友提醒">${escapeHtml(
+                    appState.styleProfileDraftForm.tone || ""
+                  )}</textarea>
+                </label>
+                <label>
+                  <span>标题风格</span>
+                  <textarea name="titleStyle" rows="3" placeholder="例如：先讲场景，再给轻结论">${escapeHtml(
+                    appState.styleProfileDraftForm.titleStyle || ""
+                  )}</textarea>
+                </label>
+                <label>
+                  <span>正文结构</span>
+                  <textarea name="bodyStructure" rows="3" placeholder="例如：先结论、再场景、最后建议">${escapeHtml(
+                    appState.styleProfileDraftForm.bodyStructure || ""
+                  )}</textarea>
+                </label>
+                <label>
+                  <span>偏好标签</span>
+                  <input name="preferredTags" value="${escapeHtml(
+                    appState.styleProfileDraftForm.preferredTags || ""
+                  )}" placeholder="标签1, 标签2" />
+                </label>
+              </div>
+            `
+            : `
+              <p>${escapeHtml(profile.tone || "未生成语气画像")}</p>
+              <p>${escapeHtml(profile.titleStyle || "未生成标题画像")}</p>
+              <p>${escapeHtml(profile.bodyStructure || "未生成正文结构画像")}</p>
+              <p>偏好标签：${escapeHtml(joinCSV(profile.preferredTags) || "未总结")}</p>
+            `
+        }
         ${
           profile.status === "draft"
-            ? '<button type="button" class="button button-alt button-small" data-action="confirm-style-profile">确认生效</button>'
+            ? `
+              <div class="item-actions style-profile-actions${isDraftEditing ? " style-profile-form" : ""}">
+                ${
+                  isDraftEditing
+                    ? `
+                      <button type="button" class="button button-ghost button-small" data-action="save-style-profile-draft">保存修改</button>
+                      <button type="button" class="button button-ghost button-small" data-action="cancel-style-profile-draft">取消</button>
+                      <button type="button" class="button button-alt button-small" data-action="confirm-style-profile">确认生效</button>
+                    `
+                    : `
+                      <button type="button" class="button button-ghost button-small" data-action="edit-style-profile-draft">人工编辑</button>
+                      <button type="button" class="button button-alt button-small" data-action="confirm-style-profile">确认生效</button>
+                    `
+                }
+              </div>
+            `
             : ""
         }
       </article>
@@ -2147,6 +3126,15 @@ function renderMainModelRecommendations(recommendations = {}) {
       node.textContent = buildModelRecommendationText(item);
       node.title = item?.reason || "根据模型调用表现生成，仅作提示，不自动改变路由";
     }
+  }
+}
+
+async function refreshModelPerformancePanel() {
+  try {
+    const modelPerformance = await apiJson("/api/model-performance");
+    renderModelPerformance(modelPerformance.summary || {});
+  } catch {
+    renderModelPerformance({});
   }
 }
 
@@ -2358,18 +3346,21 @@ function renderAdminData(data) {
 }
 
 async function refreshAll() {
-  const [summary, adminData, styleProfile, modelPerformance] = await Promise.all([
+  const [summary, adminData, styleProfile, collectionTypePayload] = await Promise.all([
     apiJson("/api/summary"),
     apiJson("/api/admin/data"),
     apiJson("/api/style-profile"),
-    apiJson("/api/model-performance")
+    apiJson(collectionTypesApi)
   ]);
 
+  appState.collectionTypeOptions = Array.isArray(collectionTypePayload.options) ? collectionTypePayload.options : [];
   renderSummary(summary);
   renderQueue(adminData.reviewQueue);
   renderAdminData(adminData);
   renderStyleProfile(styleProfile.profile || {});
-  renderModelPerformance(modelPerformance.summary || {});
+  renderCollectionTypeSelectors();
+  await refreshModelPerformancePanel();
+  await refreshSampleLibraryWorkspace();
 }
 
 async function fileToDataUrl(file) {
@@ -2381,6 +3372,15 @@ async function fileToDataUrl(file) {
   });
 }
 
+function syncSampleLibraryCreateButtonLabel() {
+  const button = byId("sample-library-create-button");
+  const shell = byId("sample-library-create-form-shell");
+
+  if (button) {
+    button.textContent = shell?.hidden === false ? "收起新建" : "新增样本记录";
+  }
+}
+
 function getAnalyzePayload() {
   const form = new FormData(byId("analyze-form"));
 
@@ -2388,6 +3388,7 @@ function getAnalyzePayload() {
     title: form.get("title"),
     body: form.get("body"),
     coverText: form.get("coverText"),
+    collectionType: String(form.get("collectionType") || "").trim(),
     tags: splitCSV(form.get("tags"))
   };
 }
@@ -2397,7 +3398,9 @@ function getGenerationPayload() {
 
   return {
     mode: String(form.get("mode") || "from_scratch"),
+    collectionType: String(form.get("collectionType") || "").trim(),
     brief: {
+      collectionType: String(form.get("collectionType") || "").trim(),
       topic: String(form.get("topic") || "").trim(),
       sellingPoints: String(form.get("sellingPoints") || "").trim(),
       audience: String(form.get("audience") || "").trim(),
@@ -2457,25 +3460,39 @@ function fillRewritePairFormFromCurrent() {
 }
 
 function fillSuccessSampleFormFromCurrent(source = "analysis") {
-  const form = byId("success-sample-form");
+  const form = byId("sample-library-create-form");
+  const shell = byId("sample-library-create-form-shell");
+  const resultNode = byId("sample-library-create-result");
   const payload = appState.latestAnalyzePayload || {};
   const rewrite = source === "rewrite" && appState.latestRewrite ? normalizeRewritePayload(appState.latestRewrite) : null;
+
+  if (!form) {
+    return;
+  }
 
   form.elements.title.value = rewrite?.title || payload.title || "";
   form.elements.body.value = rewrite?.body || payload.body || "";
   form.elements.coverText.value = rewrite?.coverText || payload.coverText || "";
+  if (form.elements.collectionType) {
+    form.elements.collectionType.value = rewrite?.collectionType || payload.collectionType || "";
+  }
   form.elements.tags.value = joinCSV(rewrite?.tags?.length ? rewrite.tags : payload.tags || []);
-  form.elements.tier.value = form.elements.tier.value || "passed";
-  form.elements.notes.value =
-    form.elements.notes.value ||
-    (source === "rewrite" ? "从当前改写结果填充的成功样本" : "从当前检测内容填充的成功样本");
-  revealSampleLibraryPane("sample-library-success-pane");
-  byId("success-sample-result").innerHTML =
-    '<div class="result-card-shell">已填充成功样本表单，可补充表现数据后保存。</div>';
+  revealSampleLibraryPane();
+  if (shell) {
+    shell.hidden = false;
+  }
+  syncSampleLibraryCreateButtonLabel();
+  if (resultNode) {
+    resultNode.innerHTML =
+      '<div class="result-card-shell">已填充新增表单，保存后可继续补参考属性和生命周期属性。</div>';
+  }
+  window.setTimeout(() => {
+    form.elements.title?.focus();
+  }, 120);
 }
 
 function revealNoteLifecyclePane() {
-  revealSampleLibraryPane("sample-library-lifecycle-pane");
+  revealSampleLibraryPane();
 }
 
 function getRecommendedGenerationCandidate() {
@@ -2489,7 +3506,12 @@ async function saveLifecycleFromCurrent(source = "analysis", candidateId = "", c
   const payload = {
     source,
     note: appState.latestAnalyzePayload || {},
-    analysisSnapshot: appState.latestAnalysis || null
+    snapshots: {
+      analysis: appState.latestAnalysis || null,
+      rewrite: null,
+      generation: null,
+      crossReview: null
+    }
   };
 
   if (source === "rewrite") {
@@ -2498,9 +3520,10 @@ async function saveLifecycleFromCurrent(source = "analysis", candidateId = "", c
       title: rewrite.title,
       body: rewrite.body,
       coverText: rewrite.coverText,
+      collectionType: appState.latestAnalyzePayload?.collectionType || "",
       tags: rewrite.tags
     };
-    payload.rewriteSnapshot = rewrite;
+    payload.snapshots.rewrite = appState.latestRewrite || rewrite;
   }
 
   if (source === "generation") {
@@ -2516,23 +3539,34 @@ async function saveLifecycleFromCurrent(source = "analysis", candidateId = "", c
       title: finalDraft?.title,
       body: finalDraft?.body,
       coverText: finalDraft?.coverText,
+      collectionType: appState.latestGeneration?.collectionType || "",
       tags: finalDraft?.tags
     };
-    payload.generationSnapshot = candidate
+    payload.stage = "generated";
+    payload.snapshots.generation = candidate
       ? {
           ...candidate,
           lifecycleSource: payload.source,
           savedDraft: finalDraft
         }
       : null;
-    payload.analysisSnapshot = candidate?.analysis || null;
+    payload.snapshots.analysis = candidate?.analysis || null;
+    payload.snapshots.crossReview = candidate?.crossReview || null;
   }
 
-  const response = await apiJson("/api/note-lifecycle", {
+  const response = await apiJson(sampleLibraryApi, {
     method: "POST",
     body: JSON.stringify(payload)
   });
-  renderNoteLifecycle(response.items || []);
+  appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+  appState.sampleLibraryFilter = "all";
+  appState.sampleLibraryCollectionFilter = "all";
+  appState.sampleLibrarySearch = "";
+  appState.selectedSampleLibraryRecordId = String(response.item?.id || "");
+  byId("sample-library-search-input") && (byId("sample-library-search-input").value = "");
+  byId("sample-library-filter") && (byId("sample-library-filter").value = "all");
+  byId("sample-library-collection-filter") && (byId("sample-library-collection-filter").value = "all");
+  renderSampleLibraryWorkspace();
   revealNoteLifecyclePane();
   return response;
 }
@@ -2777,12 +3811,16 @@ byId("generation-workbench-form").addEventListener("submit", async (event) => {
   byId("generation-result").innerHTML = '<div class="result-card-shell muted">正在生成并评分候选稿...</div>';
 
   try {
+    const payload = getGenerationPayload();
     const result = await apiJson("/api/generate-note", {
       method: "POST",
-      body: JSON.stringify(getGenerationPayload())
+      body: JSON.stringify(payload)
     });
 
-    appState.latestGeneration = result;
+    appState.latestGeneration = {
+      ...result,
+      collectionType: result.collectionType || payload.collectionType || ""
+    };
     renderGenerationResult(result);
     renderWorkflowAssistant();
   } catch (error) {
@@ -2791,6 +3829,46 @@ byId("generation-workbench-form").addEventListener("submit", async (event) => {
     `;
   } finally {
     setButtonBusy(submitButton, false);
+  }
+});
+
+byId("analyze-collection-type-add")?.addEventListener("click", async () => {
+  try {
+    await addCollectionTypeOption("analyze-collection-type-select");
+  } catch (error) {
+    byId("analysis-result").innerHTML = `
+      <div class="result-card-shell muted">${escapeHtml(error.message || "新增合集失败")}</div>
+    `;
+  }
+});
+
+byId("generation-collection-type-add")?.addEventListener("click", async () => {
+  try {
+    await addCollectionTypeOption("generation-collection-type-select");
+  } catch (error) {
+    byId("generation-result").innerHTML = `
+      <div class="result-card-shell muted">${escapeHtml(error.message || "新增合集失败")}</div>
+    `;
+  }
+});
+
+byId("sample-library-collection-type-add")?.addEventListener("click", async () => {
+  try {
+    await addCollectionTypeOption("sample-library-collection-type-select");
+  } catch (error) {
+    byId("sample-library-create-result").innerHTML = `
+      <div class="result-card-shell muted">${escapeHtml(error.message || "新增合集失败")}</div>
+    `;
+  }
+});
+
+byId("review-benchmark-collection-type-add")?.addEventListener("click", async () => {
+  try {
+    await addCollectionTypeOption("review-benchmark-collection-type-select");
+  } catch (error) {
+    byId("review-benchmark-result").innerHTML = `
+      <div class="result-card-shell muted">${escapeHtml(error.message || "新增合集失败")}</div>
+    `;
   }
 });
 
@@ -2990,15 +4068,46 @@ byId("rewrite-pair-prefill").addEventListener("click", () => {
   fillRewritePairFormFromCurrent();
 });
 
-byId("success-sample-prefill-analysis").addEventListener("click", () => {
+byId("sample-library-create-button").addEventListener("click", () => {
+  const shell = byId("sample-library-create-form-shell");
+  const form = byId("sample-library-create-form");
+  const nextHidden = !shell?.hidden;
+
+  if (shell) {
+    shell.hidden = nextHidden;
+  }
+  syncSampleLibraryCreateButtonLabel();
+
+  if (!nextHidden) {
+    window.setTimeout(() => {
+      form?.elements.title?.focus();
+    }, 120);
+  }
+});
+
+byId("rewrite-model-selection").addEventListener("change", () => {
+  syncCrossReviewModelSelectionRules();
+});
+
+byId("sample-library-search-input").addEventListener("input", (event) => {
+  appState.sampleLibrarySearch = String(event.currentTarget.value || "");
+  renderSampleLibraryWorkspace();
+});
+
+byId("sample-library-filter").addEventListener("change", (event) => {
+  appState.sampleLibraryFilter = String(event.currentTarget.value || "all");
+  renderSampleLibraryWorkspace();
+});
+
+byId("sample-library-prefill-analysis").addEventListener("click", () => {
   fillSuccessSampleFormFromCurrent("analysis");
 });
 
-byId("success-sample-prefill-rewrite").addEventListener("click", () => {
+byId("sample-library-prefill-rewrite").addEventListener("click", () => {
   fillSuccessSampleFormFromCurrent("rewrite");
 });
 
-byId("success-sample-form").addEventListener("submit", async (event) => {
+byId("sample-library-create-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const formElement = event.currentTarget;
   const submitButton = formElement.querySelector('button[type="submit"]');
@@ -3006,33 +4115,42 @@ byId("success-sample-form").addEventListener("submit", async (event) => {
   setButtonBusy(submitButton, true, "保存中...");
 
   try {
-    const response = await apiJson("/api/success-samples", {
+    const response = await apiJson(sampleLibraryApi, {
       method: "POST",
       body: JSON.stringify({
-        title: form.get("title"),
-        body: form.get("body"),
-        coverText: form.get("coverText"),
-        tags: splitCSV(form.get("tags")),
-        tier: form.get("tier"),
-        publishedAt: form.get("publishedAt"),
-        notes: form.get("notes"),
         source: "manual",
-        metrics: {
-          likes: form.get("likes"),
-          favorites: form.get("favorites"),
-          comments: form.get("comments")
+        note: {
+          title: form.get("title"),
+          body: form.get("body"),
+          coverText: form.get("coverText"),
+          collectionType: form.get("collectionType"),
+          tags: splitCSV(form.get("tags"))
         },
-        analysisSnapshot: appState.latestAnalysis,
-        rewriteSnapshot: appState.latestRewrite
+        snapshots: {
+          analysis: appState.latestAnalysis,
+          rewrite: appState.latestRewrite,
+          generation: null,
+          crossReview: null
+        }
       })
     });
 
-    byId("success-sample-result").innerHTML = '<div class="result-card-shell">成功样本已保存。</div>';
-    renderSuccessSamples(response.items || []);
+    appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+    appState.sampleLibraryFilter = "all";
+    appState.sampleLibrarySearch = "";
+    appState.selectedSampleLibraryRecordId = String(response.item?.id || "");
+    byId("sample-library-search-input").value = "";
+    byId("sample-library-filter").value = "all";
+    byId("sample-library-collection-filter").value = "all";
+    renderSampleLibraryWorkspace();
+    byId("sample-library-create-result").innerHTML = '<div class="result-card-shell">样本记录已保存，可继续补参考属性和生命周期属性。</div>';
     formElement.reset();
+    renderCollectionTypeSelectors();
+    byId("sample-library-create-form-shell").hidden = true;
+    syncSampleLibraryCreateButtonLabel();
   } catch (error) {
-    byId("success-sample-result").innerHTML = `
-      <div class="result-card-shell muted">${escapeHtml(error.message || "保存成功样本失败")}</div>
+    byId("sample-library-create-result").innerHTML = `
+      <div class="result-card-shell muted">${escapeHtml(error.message || "保存样本记录失败")}</div>
     `;
   } finally {
     setButtonBusy(submitButton, false);
@@ -3047,19 +4165,18 @@ byId("review-benchmark-form").addEventListener("submit", async (event) => {
   setButtonBusy(submitButton, true, "保存中...");
 
   try {
-    const response = await apiJson(reviewBenchmarkApi, {
-      method: "POST",
-      body: JSON.stringify({
-        title: form.get("title"),
-        body: form.get("body"),
-        tags: splitCSV(form.get("tags")),
-        expectedType: form.get("expectedType")
-      })
+    await addBenchmarkSample({
+      title: form.get("title"),
+      body: form.get("body"),
+      collectionType: form.get("collectionType"),
+      tags: splitCSV(form.get("tags")),
+      expectedType: form.get("expectedType"),
+      source: {
+        type: "manual"
+      }
     });
-
-    renderReviewBenchmarkSamples(response.items || []);
-    byId("review-benchmark-result").innerHTML = '<div class="result-card-shell">基准样本已保存。</div>';
     formElement.reset();
+    renderCollectionTypeSelectors();
   } catch (error) {
     byId("review-benchmark-result").innerHTML = `
       <div class="result-card-shell muted">${escapeHtml(error.message || "保存基准样本失败")}</div>
@@ -3067,6 +4184,31 @@ byId("review-benchmark-form").addEventListener("submit", async (event) => {
   } finally {
     setButtonBusy(submitButton, false);
   }
+});
+
+byId("sample-library-collection-filter").addEventListener("change", (event) => {
+  appState.sampleLibraryCollectionFilter = String(event.currentTarget.value || "all");
+  renderSampleLibraryWorkspace();
+});
+
+byId("review-benchmark-collection-filter").addEventListener("change", (event) => {
+  appState.reviewBenchmarkCollectionFilter = String(event.currentTarget.value || "all");
+  renderReviewBenchmarkSamples(appState.reviewBenchmarkSamples);
+});
+
+byId("review-benchmark-type-filter").addEventListener("change", (event) => {
+  appState.reviewBenchmarkTypeFilter = String(event.currentTarget.value || "all");
+  renderReviewBenchmarkSamples(appState.reviewBenchmarkSamples);
+});
+
+byId("review-benchmark-view-filter").addEventListener("change", (event) => {
+  appState.reviewBenchmarkViewFilter = String(event.currentTarget.value || "all");
+  renderReviewBenchmarkSamples(appState.reviewBenchmarkSamples);
+});
+
+byId("review-benchmark-source-filter").addEventListener("change", (event) => {
+  appState.reviewBenchmarkSourceFilter = String(event.currentTarget.value || "all");
+  renderReviewBenchmarkSamples(appState.reviewBenchmarkSamples);
 });
 
 byId("review-benchmark-run-button").addEventListener("click", async () => {
@@ -3078,7 +4220,11 @@ byId("review-benchmark-run-button").addEventListener("click", async () => {
       method: "POST",
       body: JSON.stringify({})
     });
+    appState.reviewBenchmarkViewFilter = result?.summary?.failed > 0 ? "mismatches" : "all";
+    byId("review-benchmark-view-filter") && (byId("review-benchmark-view-filter").value = appState.reviewBenchmarkViewFilter);
+    renderReviewBenchmarkSamples(appState.reviewBenchmarkSamples);
     renderReviewBenchmarkResult(result);
+    renderReviewBenchmarkSamples(appState.reviewBenchmarkSamples);
   } catch (error) {
     byId("review-benchmark-result").innerHTML = `
       <div class="result-card-shell muted">${escapeHtml(error.message || "运行基准评测失败")}</div>
@@ -3164,7 +4310,7 @@ byId("rewrite-pair-form").addEventListener("submit", async (event) => {
 });
 
 initializeTabs();
-initializeSampleLibraryTabs();
+renderSampleLibraryWorkspace();
 
 document.addEventListener("click", async (event) => {
   const workflowButton = event.target.closest("[data-workflow-action]");
@@ -3181,6 +4327,14 @@ document.addEventListener("click", async (event) => {
       setButtonBusy(workflowButton, false);
       renderWorkflowAssistant();
     }
+    return;
+  }
+
+  const sampleLibraryRecord = event.target.closest("[data-sample-library-record-id]");
+
+  if (sampleLibraryRecord) {
+    appState.selectedSampleLibraryRecordId = String(sampleLibraryRecord.dataset.sampleLibraryRecordId || "");
+    renderSampleLibraryWorkspace();
     return;
   }
 
@@ -3282,6 +4436,126 @@ document.addEventListener("click", async (event) => {
       });
     }
 
+    if (action === "save-sample-library-base") {
+      const section = byId("sample-library-base-section");
+      const response = await apiJson(sampleLibraryApi, {
+        method: "PATCH",
+        body: JSON.stringify({
+          id: button.dataset.id,
+          note: {
+            title: section?.querySelector('[name="title"]')?.value || "",
+            body: section?.querySelector('[name="body"]')?.value || "",
+            coverText: section?.querySelector('[name="coverText"]')?.value || "",
+            collectionType: section?.querySelector('[name="collectionType"]')?.value || "",
+            tags: splitCSV(section?.querySelector('[name="tags"]')?.value || "")
+          }
+        })
+      });
+      appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+      appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
+      renderSampleLibraryWorkspace();
+    }
+
+    if (action === "save-sample-library-reference") {
+      const section = byId("sample-library-reference-section");
+      const enabled = section?.querySelector('[name="enabled"]')?.checked === true;
+      const tier = String(section?.querySelector('[name="tier"]')?.value || "").trim();
+      const response = await apiJson(sampleLibraryApi, {
+        method: "PATCH",
+        body: JSON.stringify({
+          id: button.dataset.id,
+          reference: {
+            enabled,
+            tier: enabled ? tier || "passed" : "",
+            notes: section?.querySelector('[name="notes"]')?.value || ""
+          }
+        })
+      });
+      appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+      appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
+      renderSampleLibraryWorkspace();
+    }
+
+    if (action === "save-sample-library-lifecycle") {
+      const section = byId("sample-library-lifecycle-section");
+      const response = await apiJson(sampleLibraryApi, {
+        method: "PATCH",
+        body: JSON.stringify({
+          id: button.dataset.id,
+          publish: {
+            status: section?.querySelector('[name="status"]')?.value || "not_published",
+            publishedAt: section?.querySelector('[name="publishedAt"]')?.value || "",
+            platformReason: section?.querySelector('[name="platformReason"]')?.value || "",
+            notes: section?.querySelector('[name="notes"]')?.value || "",
+            metrics: {
+              likes: section?.querySelector('[name="likes"]')?.value || 0,
+              favorites: section?.querySelector('[name="favorites"]')?.value || 0,
+              comments: section?.querySelector('[name="comments"]')?.value || 0
+            }
+          }
+        })
+      });
+      appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+      appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
+      renderSampleLibraryWorkspace();
+    }
+
+    if (action === "delete-sample-library-record") {
+      const response = await apiJson(sampleLibraryApi, {
+        method: "DELETE",
+        body: JSON.stringify({
+          id: button.dataset.id
+        })
+      });
+      appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : [];
+      appState.selectedSampleLibraryRecordId = "";
+      renderSampleLibraryWorkspace();
+      return;
+    }
+
+    if (action === "add-sample-library-to-benchmark") {
+      const record = appState.sampleLibraryRecords.find((item) => String(item.id || "") === String(button.dataset.id || ""));
+
+      if (!record) {
+        throw new Error("未找到对应的样本记录。");
+      }
+
+      await addBenchmarkSample({
+        title: getSampleRecordTitle(record),
+        body: getSampleRecordBody(record) || getSampleRecordCoverText(record) || getSampleRecordTitle(record),
+        coverText: getSampleRecordCoverText(record),
+        collectionType: getSampleRecordCollectionType(record),
+        tags: getSampleRecordTags(record),
+        expectedType: inferBenchmarkExpectedTypeFromSampleRecord(record),
+        source: {
+          type: "sample_library",
+          recordId: String(record.id || "").trim()
+        }
+      });
+      return;
+    }
+
+    if (action === "add-false-positive-to-benchmark") {
+      const item = appState.falsePositiveLog.find((entry) => String(entry.id || "") === String(button.dataset.id || ""));
+
+      if (!item) {
+        throw new Error("未找到对应的误报样本。");
+      }
+
+      await addBenchmarkSample({
+        title: String(item.title || "").trim(),
+        body: String(item.body || item.coverText || item.title || "").trim(),
+        coverText: String(item.coverText || "").trim(),
+        tags: uniqueStrings(item.tags || []),
+        expectedType: "false_positive",
+        source: {
+          type: "false_positive_log",
+          recordId: String(item.id || "").trim()
+        }
+      });
+      return;
+    }
+
     if (action === "save-lifecycle-analysis") {
       await saveLifecycleFromCurrent("analysis");
     }
@@ -3322,6 +4596,95 @@ document.addEventListener("click", async (event) => {
       revealNoteLifecyclePane();
     }
 
+    if (action === "send-review-benchmark-to-sample-library") {
+      const mismatch = getReviewBenchmarkMismatchById(button.dataset.id);
+
+      if (!mismatch) {
+        throw new Error("未找到对应的未命中样本。");
+      }
+
+      const response = await apiJson(sampleLibraryApi, {
+        method: "POST",
+        body: JSON.stringify({
+          source: "benchmark_mismatch",
+          stage: "draft",
+          note: {
+            title: mismatch.input?.title || "",
+            body: mismatch.input?.body || "",
+            coverText: mismatch.input?.coverText || "",
+            collectionType: mismatch.input?.collectionType || "",
+            tags: uniqueStrings(mismatch.input?.tags || [])
+          },
+          publish: {
+            status: inferSampleLibraryPublishStatusFromBenchmarkExpectedType(mismatch.expectedType),
+            notes: buildReviewBenchmarkMismatchSummary(mismatch)
+          },
+          snapshots: {
+            analysis: mismatch.analysis || null,
+            rewrite: null,
+            generation: null,
+            crossReview: null
+          }
+        })
+      });
+
+      appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+      appState.sampleLibraryFilter = "all";
+      appState.sampleLibraryCollectionFilter = "all";
+      appState.sampleLibrarySearch = "";
+      appState.selectedSampleLibraryRecordId = String(response.item?.id || "");
+      byId("sample-library-search-input") && (byId("sample-library-search-input").value = "");
+      byId("sample-library-filter") && (byId("sample-library-filter").value = "all");
+      byId("sample-library-collection-filter") && (byId("sample-library-collection-filter").value = "all");
+      renderSampleLibraryWorkspace();
+      revealSampleLibraryPane();
+
+      if (appState.reviewBenchmarkLastRunResult) {
+        renderReviewBenchmarkResult(appState.reviewBenchmarkLastRunResult);
+      }
+
+      byId("review-benchmark-result")?.insertAdjacentHTML(
+        "afterbegin",
+        '<div class="result-card-shell">未命中样本已回流到样本库，可继续补充参考属性或修正生命周期状态。</div>'
+      );
+      return;
+    }
+
+    if (action === "send-review-benchmark-to-false-positive") {
+      const mismatch = getReviewBenchmarkMismatchById(button.dataset.id);
+
+      if (!mismatch) {
+        throw new Error("未找到对应的未命中样本。");
+      }
+
+      const response = await apiJson("/api/false-positive-log", {
+        method: "POST",
+        body: JSON.stringify({
+          source: "benchmark_mismatch",
+          title: mismatch.input?.title || "",
+          body: mismatch.input?.body || "",
+          coverText: mismatch.input?.coverText || "",
+          tags: uniqueStrings(mismatch.input?.tags || []),
+          status: "platform_passed_pending",
+          userNotes: buildReviewBenchmarkMismatchSummary(mismatch),
+          analysis: mismatch.analysis || undefined
+        })
+      });
+
+      renderFalsePositiveLog(response.items || []);
+      revealFalsePositiveLogPane();
+
+      if (appState.reviewBenchmarkLastRunResult) {
+        renderReviewBenchmarkResult(appState.reviewBenchmarkLastRunResult);
+      }
+
+      byId("review-benchmark-result")?.insertAdjacentHTML(
+        "afterbegin",
+        '<div class="result-card-shell">未命中样本已回流到误报日志，可继续确认是否为稳定误报。</div>'
+      );
+      return;
+    }
+
     if (action === "delete-review-benchmark") {
       const response = await apiJson(reviewBenchmarkApi, {
         method: "DELETE",
@@ -3334,13 +4697,61 @@ document.addEventListener("click", async (event) => {
       return;
     }
 
+    if (action === "edit-style-profile-draft") {
+      revealStyleProfilePane();
+      enterStyleProfileDraftEditMode(appState.styleProfileState?.draft || {});
+      renderStyleProfile(appState.styleProfileState || {});
+      return;
+    }
+
+    if (action === "cancel-style-profile-draft") {
+      revealStyleProfilePane();
+      exitStyleProfileDraftEditMode();
+      renderStyleProfile(appState.styleProfileState || {});
+      return;
+    }
+
+    if (action === "save-style-profile-draft") {
+      revealStyleProfilePane();
+      const container = button.closest(".style-profile-card");
+      const response = await apiJson("/api/style-profile", {
+        method: "PATCH",
+        body: JSON.stringify({
+          action: "update-draft",
+          profile: buildStyleProfileDraftPayload(container)
+        })
+      });
+      exitStyleProfileDraftEditMode();
+      renderStyleProfile(response.profile || {});
+      return;
+    }
+
     if (action === "confirm-style-profile") {
       revealStyleProfilePane();
+      if (appState.styleProfileDraftEditing) {
+        const container = button.closest(".style-profile-card");
+        const updated = await apiJson("/api/style-profile", {
+          method: "PATCH",
+          body: JSON.stringify({
+            action: "update-draft",
+            profile: buildStyleProfileDraftPayload(container)
+          })
+        });
+        const response = await apiJson("/api/style-profile", {
+          method: "PATCH",
+          body: JSON.stringify({})
+        });
+        exitStyleProfileDraftEditMode();
+        renderStyleProfile(response.profile || updated.profile || {});
+        return;
+      }
+
       const response = await apiJson("/api/style-profile", {
         method: "PATCH",
         body: JSON.stringify({})
       });
       renderStyleProfile(response.profile || {});
+      return;
     }
 
     if (action === "activate-style-profile") {
@@ -3353,6 +4764,7 @@ document.addEventListener("click", async (event) => {
         })
       });
       renderStyleProfile(response.profile || {});
+      return;
     }
 
     await refreshAll();
@@ -3369,6 +4781,8 @@ document.addEventListener("click", async (event) => {
 });
 
 renderModelSelectionControls(defaultModelSelectionOptions);
+renderCollectionTypeSelectors();
+syncSampleLibraryCreateButtonLabel();
 
 refreshAll().catch((error) => {
   byId("analysis-result").innerHTML = `
@@ -3383,6 +4797,7 @@ refreshReviewBenchmark().catch((error) => {
 });
 
 loadModelSelectionOptions().catch(() => {});
+loadCollectionTypeOptions().catch(() => {});
 
 syncAnalyzeActions();
 syncRewritePairPrefillButton();

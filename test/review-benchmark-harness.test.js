@@ -153,3 +153,39 @@ test("review benchmark harness marks mismatched verdict expectations as failures
     }
   );
 });
+
+test("review benchmark harness includes xiaohongshu humanization checks in summary and per-sample results", async () => {
+  const result = await runReviewBenchmarkHarness({
+    samples: [
+      {
+        id: "humanized-good",
+        expectedType: "success",
+        input: {
+          title: "今天试了下这个方法，居然真有点用",
+          body: "今天我自己试了一遍，刚开始还有点懵，但后面慢慢顺了。回到这件事本身，我觉得最有用的是它没有那么重的说教感。",
+          tags: ["经验分享"]
+        }
+      },
+      {
+        id: "humanized-bad",
+        expectedType: "success",
+        input: {
+          title: "经验总结",
+          body: "首先，我们需要理解这个问题。其次，假如你是普通用户，也可以参考这个方法。总的来说，这是一个值得注意的方向。",
+          tags: ["总结"]
+        }
+      }
+    ],
+    analyzeCandidate: async () => ({ verdict: "pass", finalVerdict: "pass", score: 5 })
+  });
+
+  assert.equal(result.summary.humanizer.total, 2);
+  assert.equal(result.summary.humanizer.passedSamples, 1);
+  assert.equal(result.summary.humanizer.failedSamples, 1);
+  assert.equal(result.summary.humanizer.byCheck.hook_opening.failed, 1);
+  assert.equal(result.summary.humanizer.byCheck.no_hypothetical_example.failed, 1);
+  assert.equal(result.summary.humanizer.byCheck.non_lecturing_tone.failed, 1);
+  assert.equal(result.results[0].humanizer.passed, true);
+  assert.equal(result.results[1].humanizer.passed, false);
+  assert.ok(result.results[1].humanizer.checks.some((item) => item.id === "non_lecturing_tone" && item.passed === false));
+});

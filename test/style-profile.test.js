@@ -11,6 +11,7 @@ import {
   confirmStyleProfileDraft,
   getActiveStyleProfile,
   setActiveStyleProfileVersion,
+  updateStyleProfileDraft,
   scoreContentAgainstStyleProfile
 } from "../src/style-profile.js";
 
@@ -104,6 +105,46 @@ test("style profile supports versions and activating an older version", async ()
   assert.equal(reverted.current.topic, "亲密关系科普");
   assert.equal(reverted.versions.find((item) => item.id === firstState.current.id).status, "active");
   assert.equal(reverted.versions.find((item) => item.id === secondState.current.id).status, "archived");
+});
+
+test("style profile draft can be manually updated with editable fields only", () => {
+  const draft = buildStyleProfileDraft(
+    [{ id: "sample-1", tier: "featured", title: "关系沟通", body: "温和正文", tags: ["沟通"] }],
+    { topic: "亲密关系科普" }
+  );
+
+  const updated = updateStyleProfileDraft(
+    { draft, current: null, versions: [] },
+    {
+      topic: " 手动修订主题 ",
+      tone: " 更克制、更像顾问式提醒 ",
+      titleStyle: " 标题先讲场景，再给轻结论 ",
+      bodyStructure: " 先结论、再场景、最后建议 ",
+      preferredTags: ["沟通", "关系", "沟通"],
+      avoidExpressions: ["不应被客户端覆盖"]
+    }
+  );
+
+  assert.equal(updated.draft.topic, "手动修订主题");
+  assert.equal(updated.draft.tone, "更克制、更像顾问式提醒");
+  assert.equal(updated.draft.titleStyle, "标题先讲场景，再给轻结论");
+  assert.equal(updated.draft.bodyStructure, "先结论、再场景、最后建议");
+  assert.deepEqual(updated.draft.preferredTags, ["沟通", "关系"]);
+  assert.deepEqual(updated.draft.avoidExpressions, draft.avoidExpressions);
+  assert.notEqual(updated.draft.updatedAt, draft.updatedAt);
+});
+
+test("style profile draft update rejects when no draft exists", () => {
+  assert.throws(
+    () =>
+      updateStyleProfileDraft(
+        { draft: null, current: null, versions: [] },
+        {
+          topic: "手动修订主题"
+        }
+      ),
+    /待确认的风格画像/
+  );
 });
 
 test("style profile draft keeps using success compatibility samples from unified note records", async (t) => {

@@ -25,6 +25,7 @@ test('load/save false positive log persists normalized entries', async (t) => {
   await saveFalsePositiveLog([
     {
       id: '  fp-1  ',
+      source: '  benchmark_mismatch  ',
       status: '   ',
       confidence: '  pending ',
       sourceQuality: '  unknown ',
@@ -39,6 +40,7 @@ test('load/save false positive log persists normalized entries', async (t) => {
 
   const persisted = JSON.parse(await fs.readFile(tempFile, 'utf8'));
   assert.equal(persisted[0].id, 'fp-1');
+  assert.equal(persisted[0].source, 'benchmark_mismatch');
   assert.equal(persisted[0].status, 'platform_passed_pending');
   assert.equal(persisted[0].confidence, 'pending');
   assert.equal(persisted[0].sourceQuality, 'unknown');
@@ -51,6 +53,7 @@ test('load/save false positive log persists normalized entries', async (t) => {
 
   const loaded = await loadFalsePositiveLog();
   assert.equal(loaded[0].id, 'fp-1');
+  assert.equal(loaded[0].source, 'benchmark_mismatch');
   assert.equal(loaded[0].status, 'platform_passed_pending');
   assert.equal(loaded[0].confidence, 'pending');
   assert.equal(loaded[0].sourceQuality, 'unknown');

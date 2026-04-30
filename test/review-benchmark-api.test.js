@@ -13,15 +13,20 @@ import {
 
 async function withTempReviewBenchmarkApi(t, run) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "review-benchmark-api-"));
-  const originalPath = paths.reviewBenchmark;
+  const originals = {
+    collectionTypes: paths.collectionTypes,
+    reviewBenchmark: paths.reviewBenchmark
+  };
   const originalRunner = setReviewBenchmarkHarnessRunnerForTests(null);
+  paths.collectionTypes = path.join(tempDir, "collection-types.json");
   paths.reviewBenchmark = path.join(tempDir, "review-benchmark.json");
+  await fs.writeFile(paths.collectionTypes, `${JSON.stringify({ custom: [] }, null, 2)}\n`, "utf8");
   await fs.mkdir(path.dirname(paths.reviewBenchmark), { recursive: true });
   await fs.writeFile(paths.reviewBenchmark, "[]\n", "utf8");
 
   t.after(async () => {
     setReviewBenchmarkHarnessRunnerForTests(originalRunner);
-    paths.reviewBenchmark = originalPath;
+    Object.assign(paths, originals);
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -33,6 +38,7 @@ test("review benchmark API creates, lists, deletes, and runs samples", async (t)
     const created = await invokeRoute("POST", "/api/review-benchmark", {
       title: "关系沟通提醒",
       body: "这是一条容易误报的正文",
+      collectionType: "科普",
       tags: "关系, 沟通, 关系",
       expectedType: "误报样本"
     });
@@ -46,6 +52,7 @@ test("review benchmark API creates, lists, deletes, and runs samples", async (t)
       title: "关系沟通提醒",
       body: "这是一条容易误报的正文",
       coverText: "",
+      collectionType: "科普",
       tags: ["关系", "沟通"]
     });
 
@@ -116,6 +123,51 @@ test("review benchmark API rejects unknown expectedType and returns 404 when del
     assert.equal(missingDelete.status, 404);
     assert.equal(missingDelete.ok, false);
     assert.match(missingDelete.error, /未找到要删除的基准样本/);
+  });
+});
+
+test("review benchmark API does not create duplicate samples and preserves source metadata", async (t) => {
+  await withTempReviewBenchmarkApi(t, async () => {
+    const first = await invokeRoute("POST", "/api/review-benchmark", {
+      title: "重复样本标题",
+      body: "重复样本正文",
+      collectionType: "疗愈指南",
+      tags: ["关系", "沟通"],
+      expectedType: "正常通过样本",
+      source: {
+        type: "sample_library",
+        recordId: "note-001"
+      }
+    });
+
+    const duplicate = await invokeRoute("POST", "/api/review-benchmark", {
+      title: " 重复样本标题 ",
+      body: "重复样本正文",
+      collectionType: "疗愈指南",
+      tags: ["沟通", "关系", "关系"],
+      expectedType: "success",
+      source: {
+        type: "sample_library",
+        recordId: "note-001"
+      }
+    });
+
+    assert.equal(first.status, 200);
+    assert.equal(first.items.length, 1);
+    assert.deepEqual(first.item.source, {
+      type: "sample_library",
+      recordId: "note-001"
+    });
+
+    assert.equal(duplicate.status, 200);
+    assert.equal(duplicate.ok, true);
+    assert.equal(duplicate.duplicate, true);
+    assert.equal(duplicate.items.length, 1);
+    assert.equal(duplicate.item.id, first.item.id);
+    assert.deepEqual(duplicate.item.source, {
+      type: "sample_library",
+      recordId: "note-001"
+    });
   });
 });
 

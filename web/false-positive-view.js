@@ -64,6 +64,11 @@ function falsePositiveAuditLabel(audit) {
   return label || signalLabel || "未生成审核结论";
 }
 
+function falsePositiveSourceLabel(source) {
+  if (source === "benchmark_mismatch") return "基准未命中回流";
+  return "";
+}
+
 function normalizeSource(source = {}) {
   const sourceType = String(source.sourceType || source.kind || "analysis").trim() || "analysis";
   const rewriteSnapshot =
@@ -149,6 +154,7 @@ export function buildFalsePositiveEntryMarkup(item = {}) {
       <strong>${escapeHtml(title)}</strong>
       <div class="meta-row">
         <span class="meta-pill">${escapeHtml(status)}</span>
+        ${item.source ? `<span class="meta-pill">${escapeHtml(falsePositiveSourceLabel(item.source) || item.source)}</span>` : ""}
         <span class="meta-pill">权重 ${escapeHtml(String(item.sampleWeight ?? "-"))}</span>
         <span class="meta-pill">${escapeHtml(falsePositiveAuditLabel(audit))}</span>
         <span class="meta-pill">${escapeHtml(verdictLabel(analysisVerdict))}</span>
@@ -173,6 +179,14 @@ export function buildFalsePositiveEntryMarkup(item = {}) {
             <p>${escapeHtml(item.status === "platform_passed_confirmed" ? "该样本已过观察期确认，可作为更强的偏严证据。" : "该样本仍在观察期，建议继续留意平台是否维持放行。")}</p>
           </div>
           <div class="false-positive-admin-actions">
+            <button
+              type="button"
+              class="button button-small"
+              data-action="add-false-positive-to-benchmark"
+              data-id="${escapeHtml(item.id)}"
+            >
+              加入基准评测
+            </button>
             ${
               item.status !== "platform_passed_confirmed"
                 ? `

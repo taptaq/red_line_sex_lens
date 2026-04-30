@@ -1,5 +1,5 @@
 import "./env.js";
-import { callDeepSeekJson, callGlmJson, callMiniMaxJson, callQwenJson } from "./glm.js";
+import { callDeepSeekJson, callGlmJson, callMimoJson, callMiniMaxJson, callQwenJson } from "./glm.js";
 import { filterProviderConfigsBySelection } from "./model-selection.js";
 import { resolveDisplayProvider, splitProviderResultForDisplay } from "./provider-display.js";
 
@@ -32,6 +32,13 @@ const providerConfigs = [
     envKey: "DMXAPI_API_KEY",
     endpoint: "https://www.dmxapi.cn/v1/chat/completions",
     model: process.env.MINIMAX_DMXAPI_MODEL || "MiniMax-M2.7-free"
+  },
+  {
+    provider: "mimo",
+    label: "Mimo",
+    envKey: "DMXAPI_API_KEY",
+    endpoint: "https://www.dmxapi.cn/v1/chat/completions",
+    model: process.env.MIMO_DMXAPI_MODEL || process.env.DEEPSEEK_DMXAPI_MODEL || "mimo-v2.5-free"
   },
   {
     provider: "deepseek",
@@ -204,7 +211,13 @@ function withReviewModelTrace(review = {}, providerLabelText = "") {
 }
 
 async function callProvider(config, input, analysis) {
-  if (config.provider === "glm" || config.provider === "qwen" || config.provider === "minimax" || config.provider === "deepseek") {
+  if (
+    config.provider === "glm" ||
+    config.provider === "qwen" ||
+    config.provider === "minimax" ||
+    config.provider === "mimo" ||
+    config.provider === "deepseek"
+  ) {
     try {
       const routedCall =
         config.provider === "glm"
@@ -213,7 +226,9 @@ async function callProvider(config, input, analysis) {
             ? callQwenJson
             : config.provider === "minimax"
               ? callMiniMaxJson
-              : callDeepSeekJson;
+              : config.provider === "mimo"
+                ? callMimoJson
+                : callDeepSeekJson;
       const { parsed, model, route, routeLabel, attemptedRoutes } = await routedCall({
         model: config.model,
         temperature: 0.1,
@@ -222,6 +237,7 @@ async function callProvider(config, input, analysis) {
         timeoutMs: semanticTimeoutMs,
         missingKeyMessage: `缺少 ${config.envKey}`,
         scene: "semantic_review",
+        allowDmxapi: config.provider === "deepseek" ? false : undefined,
         fallbackParser: (message) => extractJsonBlock(message)
       });
       const displayProvider = resolveDisplayProvider({

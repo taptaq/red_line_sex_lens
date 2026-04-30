@@ -67,6 +67,13 @@
                   <span>封面文案</span>
                   <input type="text" name="coverText" placeholder="输入封面文案" />
                 </label>
+                <label>
+                  <span>合集类型</span>
+                  <select name="collectionType" id="analyze-collection-type-select" required>
+                    <option value="">请选择合集类型</option>
+                  </select>
+                  <button type="button" class="button button-ghost button-small" id="analyze-collection-type-add">新增合集</button>
+                </label>
                 <div>
                   <span>标签</span>
                   <div class="tag-picker" id="analyze-tag-picker">
@@ -276,6 +283,13 @@
               <select name="styleProfileId" id="generation-style-profile-select">
                 <option value="">当前默认画像</option>
               </select>
+            </label>
+            <label>
+              <span>合集类型</span>
+              <select name="collectionType" id="generation-collection-type-select" required>
+                <option value="">请选择合集类型</option>
+              </select>
+              <button type="button" class="button button-ghost button-small" id="generation-collection-type-add">新增合集</button>
             </label>
             <label>
               <span>生成模式</span>
@@ -556,117 +570,125 @@
             <section class="tab-panel" id="sample-library-pane">
               <div class="tab-panel-head">
                 <strong>样本库</strong>
-                <span>把参考样本、生命周期记录和风格画像收在一个入口下，减少并列心智负担。</span>
+                <span>先新增一条样本记录，再在同一条记录里补参考属性和发布结果，减少并列入口。</span>
               </div>
-              <div class="legacy-pane-anchor" id="success-samples-pane" aria-hidden="true"></div>
-              <div class="legacy-pane-anchor" id="note-lifecycle-pane" aria-hidden="true"></div>
-              <div class="legacy-pane-anchor" id="style-profile-pane" aria-hidden="true"></div>
-              <div class="sample-library-tab-strip" role="tablist" aria-label="样本库分区">
-                <button
-                  type="button"
-                  class="sample-library-tab-button"
-                  data-sample-library-tab-target="sample-library-success-pane"
-                >
-                  参考样本
-                </button>
-                <button
-                  type="button"
-                  class="sample-library-tab-button"
-                  data-sample-library-tab-target="sample-library-lifecycle-pane"
-                >
-                  生命周期
-                </button>
-                <button
-                  type="button"
-                  class="sample-library-tab-button"
-                  data-sample-library-tab-target="sample-library-style-pane"
-                >
-                  风格画像
-                </button>
+              <div class="sample-library-toolbar">
+                <div class="sample-library-toolbar-filters">
+                  <label class="field-wide">
+                    <span>搜索</span>
+                    <input id="sample-library-search-input" type="search" placeholder="按标题 / 标签搜索" />
+                  </label>
+                  <label>
+                    <span>筛选</span>
+                    <select id="sample-library-filter">
+                      <option value="all">全部</option>
+                      <option value="incomplete">待补全</option>
+                      <option value="reference">已成参考</option>
+                      <option value="published">已跟踪发布</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>合集</span>
+                    <select id="sample-library-collection-filter">
+                      <option value="all">全部合集</option>
+                    </select>
+                  </label>
+                </div>
+                <button type="button" class="button button-alt" id="sample-library-create-button">新增样本记录</button>
               </div>
-              <div class="sample-library-tab-panels">
-                <section class="sample-library-tab-panel" id="sample-library-success-pane">
-                  <div class="admin-panel-block">
-                    <div class="admin-panel-body">
-                      <form id="success-sample-form" class="stack compact-form">
-                        <label>
-                          <span>标题</span>
-                          <input name="title" placeholder="成功样本标题" />
-                        </label>
-                        <label>
-                          <span>正文</span>
-                          <textarea name="body" rows="4" placeholder="成功样本正文"></textarea>
-                        </label>
-                        <label>
-                          <span>封面文案</span>
-                          <input name="coverText" placeholder="封面文案" />
-                        </label>
-                        <label>
-                          <span>标签</span>
-                          <input name="tags" placeholder="标签，用逗号分隔" />
-                        </label>
-                        <label>
-                          <span>成功等级</span>
-                          <select name="tier">
-                            <option value="passed">仅过审</option>
-                            <option value="performed">过审且表现好</option>
-                            <option value="featured">人工精选标杆</option>
-                          </select>
-                        </label>
-                        <label>
-                          <span>点赞数</span>
-                          <input name="likes" type="number" min="0" placeholder="点赞数" />
-                        </label>
-                        <label>
-                          <span>收藏数</span>
-                          <input name="favorites" type="number" min="0" placeholder="收藏数" />
-                        </label>
-                        <label>
-                          <span>评论数</span>
-                          <input name="comments" type="number" min="0" placeholder="评论数" />
-                        </label>
-                        <label>
-                          <span>发布时间</span>
-                          <input name="publishedAt" type="date" />
-                        </label>
-                        <label>
-                          <span>人工备注</span>
-                          <textarea name="notes" rows="2" placeholder="人工备注"></textarea>
-                        </label>
-                        <div class="inline-actions inline-actions-row">
-                          <button type="button" class="button button-ghost" id="success-sample-prefill-analysis">
-                            从当前检测填充
-                          </button>
-                          <button type="button" class="button button-ghost" id="success-sample-prefill-rewrite">
-                            从当前改写填充
-                          </button>
-                          <button type="submit" class="button button-alt">保存成功样本</button>
-                        </div>
-                      </form>
-                    </div>
-                    <div id="success-sample-result" class="result-card muted">等待操作</div>
-                    <div id="success-sample-list" class="admin-list"></div>
-                  </div>
-                </section>
-                <section class="sample-library-tab-panel" id="sample-library-lifecycle-pane">
-                  <div class="admin-panel-block">
-                    <div id="note-lifecycle-list" class="admin-list"></div>
-                  </div>
-                </section>
-                <section class="sample-library-tab-panel" id="sample-library-style-pane">
-                  <div class="admin-panel-block">
-                    <div class="admin-panel-body">
-                      <label>
-                        <span>画像主题</span>
-                        <input id="style-profile-topic" placeholder="例如：亲密关系科普 / 产品软植入" />
-                      </label>
-                      <button type="button" class="button" id="style-profile-draft-button">
-                        从成功样本生成画像草稿
+              <div class="admin-panel-block sample-library-create-block" id="sample-library-create-form-shell" hidden>
+                <div class="admin-panel-body">
+                  <form id="sample-library-create-form" class="stack compact-form">
+                    <label>
+                      <span>标题</span>
+                      <input name="title" placeholder="样本标题" />
+                    </label>
+                    <label>
+                      <span>正文</span>
+                      <textarea name="body" rows="5" placeholder="样本正文"></textarea>
+                    </label>
+                    <label>
+                      <span>封面文案</span>
+                      <input name="coverText" placeholder="封面文案" />
+                    </label>
+                    <label>
+                      <span>合集类型</span>
+                      <select name="collectionType" id="sample-library-collection-type-select" required>
+                        <option value="">请选择合集类型</option>
+                      </select>
+                      <button type="button" class="button button-ghost button-small" id="sample-library-collection-type-add">新增合集</button>
+                    </label>
+                    <label>
+                      <span>标签</span>
+                      <input name="tags" placeholder="标签，用逗号分隔" />
+                    </label>
+                    <div class="inline-actions inline-actions-row">
+                      <button type="button" class="button button-ghost" id="sample-library-prefill-analysis">
+                        从当前检测填充
                       </button>
+                      <button type="button" class="button button-ghost" id="sample-library-prefill-rewrite">
+                        从当前改写填充
+                      </button>
+                      <button type="submit" class="button button-alt">保存样本记录</button>
                     </div>
-                    <div id="style-profile-result" class="admin-list"></div>
+                  </form>
+                </div>
+                <div id="sample-library-create-result" class="result-card muted">等待操作</div>
+              </div>
+              <div class="sample-library-workspace" id="sample-library-workspace">
+                <aside class="sample-library-record-list">
+                  <div class="sample-library-list-head">
+                    <strong>记录列表</strong>
+                    <span id="sample-library-list-count">0 条 · 全部记录</span>
                   </div>
+                  <div id="sample-library-record-list" class="admin-list"></div>
+                </aside>
+                <section id="sample-library-detail" class="sample-library-detail">
+                  <div id="sample-library-detail-header" class="result-card muted">请选择左侧样本，或先新增一条记录。</div>
+                  <section id="sample-library-base-section" class="sample-library-detail-section">
+                    <div class="sample-library-section-head">
+                      <div>
+                        <strong>基础内容</strong>
+                        <p>先保存标题、正文、标签和封面文案。</p>
+                      </div>
+                      <span class="meta-pill">未选择记录</span>
+                    </div>
+                  </section>
+                  <section id="sample-library-reference-section" class="sample-library-detail-section">
+                    <div class="sample-library-section-head">
+                      <div>
+                        <strong>参考属性</strong>
+                        <p>决定它是否进入参考样本和风格画像。</p>
+                      </div>
+                      <span class="meta-pill">未启用</span>
+                    </div>
+                  </section>
+                  <section id="sample-library-lifecycle-section" class="sample-library-detail-section">
+                    <div class="sample-library-section-head">
+                      <div>
+                        <strong>生命周期属性</strong>
+                        <p>回填发布结果和互动表现。</p>
+                      </div>
+                      <span class="meta-pill">未回填</span>
+                    </div>
+                  </section>
                 </section>
+              </div>
+              <div class="admin-panel-block">
+                <div class="tab-panel-head">
+                  <strong>风格画像</strong>
+                  <span>基于已启用的参考记录生成画像，作为辅助能力放在样本库下方。</span>
+                </div>
+                <div class="admin-panel-body">
+                  <label>
+                    <span>画像主题</span>
+                    <input id="style-profile-topic" placeholder="例如：亲密关系科普 / 产品软植入" />
+                  </label>
+                  <button type="button" class="button" id="style-profile-draft-button">
+                    从参考样本生成画像草稿
+                  </button>
+                </div>
+                <div id="style-profile-result" class="admin-list"></div>
               </div>
             </section>
 
@@ -674,6 +696,43 @@
               <div class="tab-panel-head">
                 <strong>基准评测</strong>
                 <span>手动维护回归评测题库，后续可直接接到 benchmark harness。</span>
+              </div>
+              <div class="review-benchmark-toolbar">
+                <div class="review-benchmark-toolbar-filters">
+                  <label>
+                    <span>视角</span>
+                    <select id="review-benchmark-view-filter">
+                      <option value="all">全部样本</option>
+                      <option value="mismatches">仅看最近未命中</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>合集</span>
+                    <select id="review-benchmark-collection-filter">
+                      <option value="all">全部合集</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>类型</span>
+                    <select id="review-benchmark-type-filter">
+                      <option value="all">全部类型</option>
+                      <option value="violation">违规样本</option>
+                      <option value="false_positive">误报样本</option>
+                      <option value="success">正常通过样本</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>来源</span>
+                    <select id="review-benchmark-source-filter">
+                      <option value="all">全部来源</option>
+                      <option value="manual">手动录入</option>
+                      <option value="sample_library">样本库</option>
+                      <option value="false_positive_log">误报日志</option>
+                      <option value="legacy">历史样本</option>
+                    </select>
+                  </label>
+                </div>
+                <div id="review-benchmark-list-count" class="meta-pill">0 条 · 全部类型 · 全部来源</div>
               </div>
               <div class="admin-panel-block">
                 <div class="admin-panel-body">
@@ -685,6 +744,13 @@
                     <label>
                       <span>正文</span>
                       <textarea name="body" rows="4" placeholder="输入用于回归评测的正文"></textarea>
+                    </label>
+                    <label>
+                      <span>合集类型</span>
+                      <select name="collectionType" id="review-benchmark-collection-type-select" required>
+                        <option value="">请选择合集类型</option>
+                      </select>
+                      <button type="button" class="button button-ghost button-small" id="review-benchmark-collection-type-add">新增合集</button>
                     </label>
                     <label>
                       <span>标签</span>

@@ -38,6 +38,28 @@ function normalizeTopic(value = "") {
   return String(value || "").trim() || "通用风格";
 }
 
+function normalizeEditableProfileText(value = "", fallback = "") {
+  const next = String(value || "").trim();
+  return next || String(fallback || "").trim();
+}
+
+function normalizeEditablePreferredTags(value = [], fallback = []) {
+  if (Array.isArray(value)) {
+    return uniqueStrings(value);
+  }
+
+  if (typeof value === "string") {
+    return uniqueStrings(
+      value
+        .split(/[,\n]/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+    );
+  }
+
+  return uniqueStrings(fallback);
+}
+
 function normalizeVersions(profileState = {}) {
   const versions = Array.isArray(profileState.versions) ? profileState.versions : [];
   const current = profileState.current && typeof profileState.current === "object" ? profileState.current : null;
@@ -126,6 +148,33 @@ export function confirmStyleProfileDraft(profileState = {}, overrides = {}) {
     draft: null,
     current,
     versions
+  };
+}
+
+export function updateStyleProfileDraft(profileState = {}, updates = {}) {
+  const draft = profileState?.draft;
+
+  if (!draft) {
+    const error = new Error("当前没有待确认的风格画像。");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const previousUpdatedAt = new Date(draft.updatedAt || draft.createdAt || 0).getTime();
+  const nextUpdatedAtMs = Math.max(Date.now(), previousUpdatedAt + 1);
+  const nextDraft = {
+    ...draft,
+    topic: normalizeTopic(updates.topic || draft.topic),
+    tone: normalizeEditableProfileText(updates.tone, draft.tone),
+    titleStyle: normalizeEditableProfileText(updates.titleStyle, draft.titleStyle),
+    bodyStructure: normalizeEditableProfileText(updates.bodyStructure, draft.bodyStructure),
+    preferredTags: normalizeEditablePreferredTags(updates.preferredTags, draft.preferredTags),
+    updatedAt: new Date(nextUpdatedAtMs).toISOString()
+  };
+
+  return {
+    ...profileState,
+    draft: nextDraft
   };
 }
 

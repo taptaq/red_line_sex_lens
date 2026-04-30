@@ -151,6 +151,22 @@ test("model performance API returns summarized dashboard data", async (t) => {
   });
 });
 
+test("model performance summary falls back to empty data when log json is malformed", async (t) => {
+  await withTempModelPerformance(t, async () => {
+    await fs.writeFile(paths.modelPerformance, '{"broken": }\n', "utf8");
+
+    const summary = await buildModelPerformanceSummary();
+    const result = await invokeRoute("GET", "/api/model-performance");
+
+    assert.equal(summary.totalCalls, 0);
+    assert.deepEqual(summary.items, []);
+    assert.deepEqual(summary.recommendations, {});
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.equal(result.summary.totalCalls, 0);
+  });
+});
+
 test("frontend exposes model performance dashboard tab", async () => {
   const [indexHtml, appJs, styles] = await Promise.all([
     fs.readFile(path.join(process.cwd(), "web/index.html"), "utf8"),

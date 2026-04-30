@@ -193,3 +193,28 @@ test("saveReviewBenchmarkSamples does not persist duplicate ids unchanged", asyn
     assert.match(raw[1].id, /^review-benchmark-[a-f0-9]{12}$/);
   });
 });
+
+test("saveReviewBenchmarkSamples normalizes source metadata", async (t) => {
+  await withTempBenchmarkPath(t, async (filePath) => {
+    await saveReviewBenchmarkSamples([
+      {
+        expectedType: "误报样本",
+        source: {
+          type: " false_positive_log ",
+          recordId: " fp-001 "
+        },
+        input: {
+          title: "来源样本",
+          body: "这是一条用于验证来源字段的正文",
+          tags: ["误报"]
+        }
+      }
+    ]);
+
+    const raw = JSON.parse(await fs.readFile(filePath, "utf8"));
+    assert.deepEqual(raw[0].source, {
+      type: "false_positive_log",
+      recordId: "fp-001"
+    });
+  });
+});

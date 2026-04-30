@@ -8,15 +8,19 @@ import path from "node:path";
 import { paths } from "../src/config.js";
 import { loadNoteLifecycle, loadSuccessSamples } from "../src/data-store.js";
 import { buildGenerationReferenceSamples, handleRequest } from "../src/server.js";
+import { buildGenerationMessages } from "../src/generation-workbench.js";
 
 async function withTempGenerationData(t, run) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "generation-api-"));
   const originals = {
+    collectionTypes: paths.collectionTypes,
     successSamples: paths.successSamples,
     styleProfile: paths.styleProfile
   };
+  paths.collectionTypes = path.join(tempDir, "collection-types.json");
   paths.successSamples = path.join(tempDir, "success-samples.json");
   paths.styleProfile = path.join(tempDir, "style-profile.json");
+  await fs.writeFile(paths.collectionTypes, `${JSON.stringify({ custom: [] }, null, 2)}\n`, "utf8");
   await fs.writeFile(
     paths.successSamples,
     `${JSON.stringify([{ id: "sample-1", tier: "featured", title: "参考标题", body: "参考正文", tags: ["沟通"] }], null, 2)}\n`,
@@ -51,6 +55,7 @@ test("generation endpoint returns candidates with recommendation metadata", asyn
   await withTempGenerationData(t, async () => {
     const result = await invokeRoute("POST", "/api/generate-note", {
       mode: "from_scratch",
+      collectionType: "科普",
       brief: { topic: "沟通", constraints: "温和" },
       mockCandidates: [
         { variant: "safe", title: "沟通标题", body: "完整正文".repeat(40), coverText: "封面", tags: ["沟通", "关系"] }
@@ -69,6 +74,7 @@ test("generation endpoint can use a selected style profile version", async (t) =
   await withTempGenerationData(t, async () => {
     const result = await invokeRoute("POST", "/api/generate-note", {
       mode: "from_scratch",
+      collectionType: "疗愈指南",
       styleProfileId: "profile-alt",
       brief: { topic: "体验", constraints: "克制" },
       mockCandidates: [
@@ -79,6 +85,19 @@ test("generation endpoint can use a selected style profile version", async (t) =
     assert.equal(result.status, 200);
     assert.equal(result.scoredCandidates[0].style.reasons.some((item) => /体验/.test(item)), true);
   });
+});
+
+test("generation prompt context includes collection type", () => {
+  const messages = buildGenerationMessages({
+    mode: "from_scratch",
+    brief: {
+      collectionType: "科普",
+      topic: "沟通",
+      constraints: "温和"
+    }
+  });
+
+  assert.match(messages[1].content, /合集类型：科普/);
 });
 
 test("published final generation drafts become weighted references for the next generation", () => {

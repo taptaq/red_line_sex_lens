@@ -191,6 +191,7 @@ test("admin page exposes a false positive samples tab and pane", async () => {
   assert.match(indexHtml, /data-tab-target="false-positive-log-pane"/);
   assert.match(indexHtml, /id="false-positive-log-list"/);
   assert.match(appJs, /renderFalsePositiveLog|false-positive-log-list/);
+  assert.match(appJs, /benchmark_mismatch/);
 });
 
 test("recording a false positive sample refreshes the false positive log list in the UI", async () => {

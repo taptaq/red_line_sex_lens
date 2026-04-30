@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildHumanizerMessages,
   buildPatchMessages,
   buildRewriteMessages,
   rewriteGenerationConfig,
@@ -126,6 +127,43 @@ test("prefers the base rewrite body when the humanizer output is suspiciously tr
 
   assert.equal(shouldPreferBaseRewriteBody(baseBody, humanizedBody), true);
   assert.equal(shouldPreferBaseRewriteBody(baseBody, baseBody), false);
+});
+
+test("humanizer prompt asks for xiaohongshu-style humanization instead of generic anti-ai cleanup", () => {
+  const messages = buildHumanizerMessages({
+    input: {
+      title: "原始标题",
+      body: "今天随手试了一下这个功能，发现还真有点东西。",
+      coverText: "原始封面",
+      tags: ["关系沟通", "经验分享"]
+    },
+    analysis: {
+      verdict: "observe",
+      finalVerdict: "observe",
+      suggestions: []
+    },
+    semantic: {
+      summary: "整体风险较低",
+      reasons: ["避免过强承诺"]
+    },
+    baseRewrite: {
+      title: "合规标题",
+      body: "这是已经过合规处理后的正文。",
+      coverText: "合规封面",
+      tags: ["关系沟通", "经验分享"],
+      rewriteNotes: "去掉了敏感表达"
+    }
+  });
+
+  const systemPrompt = String(messages[0]?.content || "");
+  const userPrompt = String(messages[1]?.content || "");
+
+  assert.match(systemPrompt, /小红书|平台分享/);
+  assert.match(userPrompt, /优先保留真实场景和亲身体验/);
+  assert.match(userPrompt, /不要编造“有一次”|不要写假设性例子/);
+  assert.match(userPrompt, /开头尽量保留抓人感|第一句要让人想继续看/);
+  assert.match(userPrompt, /可以使用口语化转场/);
+  assert.match(userPrompt, /先理解读者处境|避免居高临下说教/);
 });
 
 test("rewriteUntilAccepted retries until merged analysis and cross review both pass", async () => {

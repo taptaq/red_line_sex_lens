@@ -4,6 +4,7 @@ import path from "node:path";
 import { abstractReasonPhraseLabels, feedbackContextCategories } from "./feedback.js";
 import { filterProviderConfigsBySelection, getRewriteProviderSelection } from "./model-selection.js";
 import { recordModelCall } from "./model-performance.js";
+import { buildXhsHumanizerSystemRules, buildXhsHumanizerUserRequirements } from "./xhs-humanizer-rules.js";
 
 const glmEndpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
 const defaultKimiEndpoint = "https://api.moonshot.cn/v1/chat/completions";
@@ -41,11 +42,20 @@ const feedbackProviderConfigs = [
     models: [defaultQwenFeedbackModel]
   },
   {
+    provider: "mimo",
+    label: "Mimo",
+    envKey: "DMXAPI_API_KEY",
+    endpoint: defaultDmxapiEndpoint,
+    models: [defaultMimoDmxapiModel],
+    routeMode: "dmxapi_only"
+  },
+  {
     provider: "deepseek",
     label: "深度求索",
     envKey: "DEEPSEEK_API_KEY",
     endpoint: "https://api.deepseek.com/chat/completions",
-    models: [defaultDeepSeekFeedbackModel]
+    models: [defaultDeepSeekFeedbackModel],
+    routeMode: "official_only"
   }
 ];
 
@@ -136,13 +146,25 @@ export function getRewriteProviderConfig(modelSelection = "auto") {
     };
   }
 
+  if (provider === "mimo") {
+    return {
+      provider: "mimo",
+      label: "Mimo",
+      envKey: "DMXAPI_API_KEY",
+      endpoint: defaultDmxapiEndpoint,
+      models: uniqueNonEmpty([getDefaultMimoDmxapiModel()]),
+      routeMode: "dmxapi_only"
+    };
+  }
+
   if (provider === "deepseek") {
     return {
       provider: "deepseek",
       label: "深度求索",
       envKey: "DEEPSEEK_API_KEY",
       endpoint: "https://api.deepseek.com/chat/completions",
-      models: uniqueNonEmpty([defaultDeepSeekFeedbackModel])
+      models: uniqueNonEmpty([defaultDeepSeekFeedbackModel]),
+      routeMode: "official_only"
     };
   }
 
@@ -852,36 +874,21 @@ export function buildPatchMessages({ input = {}, analysis = {}, semantic = null 
   ];
 }
 
-function buildHumanizerMessages({ input = {}, analysis = {}, semantic = null, baseRewrite = {} } = {}) {
+export function buildHumanizerMessages({ input = {}, analysis = {}, semantic = null, baseRewrite = {} } = {}) {
+  const systemRules = buildXhsHumanizerSystemRules();
+  const userRequirements = buildXhsHumanizerUserRequirements();
+
   return [
     {
       role: "system",
-      content: [
-        "你现在执行 humanizer 技能，对中文文本做去 AI 腔润色。",
-        "你的任务不是改意思，也不是重新创作，而是去掉明显的 AI 写作痕迹，让文字更像真人写的。",
-        "最终风格要自然、幽默风趣、说人话，读起来像真实的人在表达，像朋友聊天式分享。",
-        "重点处理这些问题：过度拔高意义、假大空、宣传腔、过于整齐的排比、僵硬的提纲感、过量 AI 常用词、套话、空洞总结、无聊的安全说明、过分平均的句式。",
-        "保留作者原本的语气、分享感、口语感、节奏、人设和情绪。",
-        "原始笔记就是你的风格样本，必须向它靠拢，不要把文本润色成统一模板腔。",
-        "不要引入新的风险内容，不要恢复已经删掉的高风险表达。",
-        "不要把已经写好的正文缩成短版，不要删掉大段信息量，不要把全文改成摘要。",
-        "请做一次 final anti-AI pass：先在心里判断哪里还像 AI 文，再把它改得更自然，但不要把这个思考过程写出来。",
-        "输出必须是 JSON。"
-      ].join("\n")
+      content: systemRules.join("\n")
     },
     {
       role: "user",
       content: [
         "请把下面已经合规改写过的版本，再做一轮人味化处理。",
         "要求：",
-        "1. 保留内容含义和合规方向，不要把风险点写回去。",
-        "2. 尽量贴近原笔记的表达习惯，让它像同一个人写的。",
-        "3. 去掉明显 AI 味，包括模板化科普腔、说明书腔、假大空总结、过于工整的排比。",
-        "4. 可以让句子更自然、更口语一点，但不要油腻，不要过度发挥。",
-        "5. 如果某一段已经自然，就尽量少改。",
-        "6. 不要明显缩短正文篇幅，尽量保留当前正文的段落数和信息量。",
-        "7. 风格上要自然、幽默风趣、说人话，更像朋友聊天式分享，但不要刻意抖机灵，更不要浮夸尬聊。",
-        "8. 不要写成老师讲课、编辑发稿或品牌官号的口气，要保留真人聊天感和轻松分享感。",
+        ...userRequirements,
         "输出格式：",
         "{",
         '  "title": "润色后的标题",',
@@ -1064,7 +1071,18 @@ const routedTextProviderConfigs = {
     officialEnvKey: "",
     getOfficialModel: (model) => String(model || "").trim(),
     getDmxapiModel: () => getDefaultMiniMaxDmxapiModel(),
-    dmxapiLabel: "MiniMax DMXAPI"
+    dmxapiLabel: "MiniMax DMXAPI",
+    supportsOfficial: false
+  },
+  mimo: {
+    provider: "mimo",
+    label: "Mimo",
+    officialEndpoint: "",
+    officialEnvKey: "",
+    getOfficialModel: (model) => String(model || "").trim(),
+    getDmxapiModel: () => getDefaultMimoDmxapiModel(),
+    dmxapiLabel: "Mimo DMXAPI",
+    supportsOfficial: false
   },
   deepseek: {
     provider: "deepseek",
@@ -1367,6 +1385,8 @@ export async function callRoutedTextProviderJson({
   responseFormat = "json_object",
   fallbackParser = null,
   timeoutMs = 0,
+  allowDmxapi = true,
+  allowOfficial = true,
   scene = "unknown"
 }) {
   const config = routedTextProviderConfigs[String(provider || "").trim()];
@@ -1378,8 +1398,10 @@ export async function callRoutedTextProviderJson({
   const officialModel = config.getOfficialModel(model);
   const dmxapiApiKey = String(process.env.DMXAPI_API_KEY || "").trim();
   const attemptedRoutes = [];
+  const shouldUseDmxapi = allowDmxapi !== false && config.supportsDmxapi !== false;
+  const shouldUseOfficial = allowOfficial !== false && config.supportsOfficial !== false;
 
-  if (dmxapiApiKey) {
+  if (shouldUseDmxapi && dmxapiApiKey) {
     const dmxapiModel = config.getDmxapiModel();
     const dmxapiResult = await attemptRoutedProviderRoute({
       provider: config.provider,
@@ -1417,7 +1439,7 @@ export async function callRoutedTextProviderJson({
       message: dmxapiResult.error?.message || ""
     });
 
-    const officialApiKey = String(process.env[config.officialEnvKey] || "").trim();
+    const officialApiKey = shouldUseOfficial ? String(process.env[config.officialEnvKey] || "").trim() : "";
 
     if (dmxapiResult.shouldFallback && officialApiKey) {
       const officialResult = await attemptRoutedProviderRoute({
@@ -1459,6 +1481,14 @@ export async function callRoutedTextProviderJson({
     }
 
     throw attachAttemptedRoutes(dmxapiResult.error, attemptedRoutes);
+  }
+
+  if (shouldUseDmxapi && !dmxapiApiKey && !shouldUseOfficial) {
+    throw createGlmError(missingKeyMessage || "缺少 DMXAPI_API_KEY 环境变量。", 400);
+  }
+
+  if (!shouldUseOfficial) {
+    throw createGlmError(`${config.label} 没有可用调用路由。`, 500);
   }
 
   const officialApiKey = String(process.env[config.officialEnvKey] || "").trim();
@@ -1519,6 +1549,21 @@ export async function callDeepSeekJson(options = {}) {
   });
 }
 
+export async function callKimiJson(options = {}) {
+  return callRoutedTextProviderJson({
+    provider: "kimi",
+    ...options
+  });
+}
+
+export async function callMimoJson(options = {}) {
+  return callRoutedTextProviderJson({
+    provider: "mimo",
+    allowOfficial: false,
+    ...options
+  });
+}
+
 export async function callMiniMaxJson(options = {}) {
   return callRoutedTextProviderJson({
     provider: "minimax",
@@ -1548,6 +1593,9 @@ async function callChatJson({
   if (providerConfig?.provider && routedTextProviderConfigs[providerConfig.provider]) {
     const officialModels = (Array.isArray(models) && models.length ? models : [model]).filter(Boolean);
     let lastError = null;
+    const routeMode = String(providerConfig?.routeMode || "").trim().toLowerCase();
+    const allowDmxapi = routeMode === "official_only" ? false : undefined;
+    const allowOfficial = routeMode === "dmxapi_only" ? false : undefined;
 
     for (const candidate of officialModels) {
       try {
@@ -1560,6 +1608,8 @@ async function callChatJson({
           missingKeyMessage,
           responseFormat,
           fallbackParser,
+          allowDmxapi,
+          allowOfficial,
           scene
         });
       } catch (error) {

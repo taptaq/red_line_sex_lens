@@ -106,3 +106,26 @@ test("buildFalsePositiveCaptureSources keeps analysis and rewrite panel sources 
   assert.match(rewriteHtml, /改写正文/);
   assert.doesNotMatch(rewriteHtml, /原始标题/);
 });
+
+test("buildFalsePositiveEntryMarkup shows benchmark mismatch source label", async () => {
+  const { buildFalsePositiveEntryMarkup } = await import("../web/false-positive-view.js");
+
+  const html = buildFalsePositiveEntryMarkup({
+    id: "fp-benchmark",
+    source: "benchmark_mismatch",
+    status: "platform_passed_pending",
+    title: "基准回流误报样本",
+    body: "用于验证来源标签是否展示",
+    tags: ["关系沟通"],
+    analysisSnapshot: {
+      verdict: "manual_review",
+      score: 44
+    },
+    falsePositiveAudit: {
+      signal: "strict_pending",
+      label: "规则偏严待确认"
+    }
+  });
+
+  assert.match(html, /基准未命中回流/);
+});

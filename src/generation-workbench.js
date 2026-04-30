@@ -55,6 +55,7 @@ export function buildGenerationMessages({
       role: "user",
       content: [
         `生成模式：${mode === "draft_optimize" ? "草稿优化" : "从零生成"}`,
+        `合集类型：${brief.collectionType || ""}`,
         `主题：${brief.topic || ""}`,
         `卖点：${brief.sellingPoints || ""}`,
         `目标人群：${brief.audience || ""}`,

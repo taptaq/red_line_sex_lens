@@ -27,9 +27,9 @@ test("rewrite and cross review panels explain model responsibilities clearly", a
   assert.match(renderRewriteResultSource, /改写模型来源/);
   assert.match(renderRewriteResultSource, /model-scope-banner-rewrite/);
   assert.match(renderRewriteResultSource, /本区只展示改写模型/);
-  assert.match(buildCrossReviewMarkupSource, /当前交叉复判固定使用独立复判模型/);
+  assert.match(buildCrossReviewMarkupSource, /当前交叉复判会自动避开已选改写模型/);
   assert.match(buildCrossReviewMarkupSource, /model-scope-banner-review/);
-  assert.match(buildCrossReviewMarkupSource, /不含 Kimi/);
+  assert.match(buildCrossReviewMarkupSource, /不与改写模型重复/);
 });
 
 test("analysis panel shows rule engine and semantic model source labels", async () => {
@@ -66,6 +66,10 @@ test("main workbench exposes per-action model selectors and sends current select
   assert.match(indexHtml, /id="cross-review-model-selection"/);
   assert.match(appJs, /\/api\/model-options/);
   assert.match(appJs, /modelSelection:\s*getSelectedModelSelections\(\)/);
+  assert.match(appJs, /function syncCrossReviewModelSelectionRules\(/);
+  assert.match(appJs, /cross-review-model-selection/);
+  assert.match(appJs, /rewrite-model-selection/);
+  assert.match(appJs, /option\.disabled/);
 });
 
 test("feedback workbench exposes per-action model selectors and sends current selections with feedback model requests", async () => {

@@ -126,6 +126,7 @@ function mergeNote(left = {}, right = {}) {
     title: preferLongerString(normalizedLeft.title, normalizedRight.title),
     body: preferLongerString(normalizedLeft.body, normalizedRight.body),
     coverText: preferLongerString(normalizedLeft.coverText, normalizedRight.coverText),
+    collectionType: normalizedRight.collectionType || normalizedLeft.collectionType,
     tags: [...new Set([...normalizedLeft.tags, ...normalizedRight.tags])].sort((a, b) => a.localeCompare(b, "zh-Hans-CN"))
   };
 }
@@ -201,6 +202,7 @@ function normalizeNote(note = {}) {
     title: normalizeString(note.title),
     body: normalizeString(note.body || note.noteContent),
     coverText: normalizeString(note.coverText),
+    collectionType: normalizeString(note.collectionType),
     tags: uniqueStrings(note.tags)
   };
 }
