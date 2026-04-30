@@ -344,6 +344,11 @@ function renderCollectionTypeSelectors() {
       allowAll: true
     });
   }
+
+  syncAnalyzeActions();
+  syncGenerationActions();
+  syncSampleLibraryCreateActions();
+  syncReviewBenchmarkActions();
 }
 
 async function loadCollectionTypeOptions() {
@@ -372,6 +377,11 @@ async function addCollectionTypeOption(targetSelectId) {
   if (select) {
     select.value = normalizedName;
   }
+
+  syncAnalyzeActions();
+  syncGenerationActions();
+  syncSampleLibraryCreateActions();
+  syncReviewBenchmarkActions();
 }
 
 function normalizeStyleProfileDraftForm(profile = {}) {
@@ -794,6 +804,29 @@ function setButtonBusy(button, isBusy, busyText) {
   button.textContent = isBusy ? busyText : button.dataset.label;
 }
 
+function setActionGateHint(id, message = "") {
+  const node = byId(id);
+
+  if (!node) {
+    return;
+  }
+
+  node.textContent = message || "";
+  node.classList.toggle("is-visible", Boolean(message));
+}
+
+function setGatedButtonState(button, enabled, hint = "") {
+  if (!button) {
+    return;
+  }
+
+  if (!button.dataset.busy) {
+    button.disabled = !enabled;
+  }
+
+  button.title = !enabled && hint ? hint : "";
+}
+
 function workflowActionButton({ action, label, tone = "button" } = {}) {
   return `<button type="button" class="button ${escapeHtml(tone)}" data-workflow-action="${escapeHtml(action)}">${escapeHtml(label)}</button>`;
 }
@@ -901,23 +934,31 @@ function hasAnalyzeInput() {
   );
 }
 
+function getAnalyzeActionRequirementMessage() {
+  const payload = getAnalyzePayload();
+
+  if (!hasAnalyzeInput()) {
+    return "请先填写标题、正文、封面文案或标签。";
+  }
+
+  if (!String(payload.collectionType || "").trim()) {
+    return "请先选择合集类型。";
+  }
+
+  return "";
+}
+
 function syncAnalyzeActions() {
-  const enabled = hasAnalyzeInput();
+  const requirementMessage = getAnalyzeActionRequirementMessage();
+  const enabled = !requirementMessage;
   const analyzeButton = byId("analyze-button");
   const rewriteButton = byId("rewrite-button");
   const crossReviewButton = byId("cross-review-button");
 
-  if (analyzeButton && !analyzeButton.dataset.busy) {
-    analyzeButton.disabled = !enabled;
-  }
-
-  if (rewriteButton && !rewriteButton.dataset.busy) {
-    rewriteButton.disabled = !enabled;
-  }
-
-  if (crossReviewButton && !crossReviewButton.dataset.busy) {
-    crossReviewButton.disabled = !enabled;
-  }
+  setGatedButtonState(analyzeButton, enabled, requirementMessage);
+  setGatedButtonState(rewriteButton, enabled, requirementMessage);
+  setGatedButtonState(crossReviewButton, enabled, requirementMessage);
+  setActionGateHint("analyze-action-hint", requirementMessage);
 
   renderWorkflowAssistant();
 }
@@ -1371,7 +1412,9 @@ function renderAnalysis(result, falsePositiveSource = null) {
         保存为生命周期记录
       </button>
     </div>
+    <p class="helper-text action-gate-hint" id="analysis-lifecycle-action-hint" aria-live="polite"></p>
   `;
+  syncLifecycleResultActions();
 }
 
 function renderRewriteResult(result) {
@@ -1554,7 +1597,9 @@ function renderRewriteResult(result) {
         记为前后对照样本
       </button>
     </div>
+    <p class="helper-text action-gate-hint" id="rewrite-lifecycle-action-hint" aria-live="polite"></p>
   `;
+  syncLifecycleResultActions();
 }
 
 function buildCrossReviewMarkup(review, { embedded = false } = {}) {
@@ -2479,6 +2524,7 @@ function renderSampleLibraryDetail(record) {
             保存基础内容
           </button>
         </div>
+        <p class="helper-text action-gate-hint" id="sample-library-base-action-hint" aria-live="polite"></p>
       </div>
     `
   );
@@ -2521,6 +2567,7 @@ function renderSampleLibraryDetail(record) {
             保存参考属性
           </button>
         </div>
+        <p class="helper-text action-gate-hint" id="sample-library-reference-action-hint" aria-live="polite"></p>
       </div>
     `
   );
@@ -2587,9 +2634,11 @@ function renderSampleLibraryDetail(record) {
             保存生命周期属性
           </button>
         </div>
+        <p class="helper-text action-gate-hint" id="sample-library-lifecycle-action-hint" aria-live="polite"></p>
       </div>
     `
   );
+  syncSampleLibraryDetailActions();
 }
 
 function renderSampleLibraryWorkspace() {
@@ -2607,6 +2656,10 @@ function renderSampleLibraryWorkspace() {
 
   renderSampleLibraryList(filteredItems);
   renderSampleLibraryDetail(selectedRecord);
+  syncSampleLibraryCreateActions();
+  syncSampleLibraryPrefillActions();
+  syncSampleLibraryDetailActions();
+  syncStyleProfileDraftActions();
 }
 
 async function refreshSampleLibraryWorkspace() {
@@ -2713,6 +2766,7 @@ function renderReviewBenchmarkSamples(items = []) {
         )
         .join("")
     : '<div class="result-card muted">当前没有基准样本</div>';
+  syncReviewBenchmarkActions();
 }
 
 function filterReviewBenchmarkSamples(items = []) {
@@ -3078,6 +3132,7 @@ function renderStyleProfile(profileState = {}) {
       ${versionsMarkup}
     `
     : '<div class="result-card muted">当前没有风格画像，请先积累成功样本。</div>';
+  syncStyleProfileDraftActions();
 }
 
 function formatRate(value) {
@@ -3141,49 +3196,88 @@ async function refreshModelPerformancePanel() {
 function renderModelPerformance(summary = {}) {
   const items = Array.isArray(summary.items) ? summary.items : [];
   const recommendations = summary.recommendations || {};
+  const confidence = summary.confidence || {};
+  const successfulItems = items.filter((item) => Number(item.okCount || 0) > 0);
+  const failedOnlyItems = items.filter((item) => Number(item.okCount || 0) <= 0);
   appState.modelRecommendations = recommendations;
   renderMainModelRecommendations(recommendations);
-  const cards = items.length
-    ? items
-        .map(
-          (item) => `
-            <article class="admin-item model-performance-card">
-              <strong>${escapeHtml([item.routeLabel || item.route, providerLabel(item.provider), item.model].filter(Boolean).join(" / "))}</strong>
-              <div class="model-performance-grid">
-                <div>
-                  <span>调用</span>
-                  <strong>${escapeHtml(String(item.totalCalls || 0))}</strong>
-                </div>
-                <div>
-                  <span>成功率</span>
-                  <strong>${escapeHtml(formatRate(item.successRate))}</strong>
-                </div>
-                <div>
-                  <span>超时率</span>
-                  <strong>${escapeHtml(formatRate(item.timeoutRate))}</strong>
-                </div>
-                <div>
-                  <span>JSON 错误</span>
-                  <strong>${escapeHtml(formatRate(item.jsonErrorRate))}</strong>
-                </div>
-                <div>
-                  <span>平均耗时</span>
-                  <strong>${escapeHtml(String(item.averageDurationMs || 0))}ms</strong>
-                </div>
+  const buildPerformanceCards = (list = []) =>
+    list
+      .map(
+        (item) => `
+          <article class="admin-item model-performance-card">
+            <strong>${escapeHtml([item.routeLabel || item.route, providerLabel(item.provider), item.model].filter(Boolean).join(" / "))}</strong>
+            <div class="model-performance-grid">
+              <div>
+                <span>调用</span>
+                <strong>${escapeHtml(String(item.totalCalls || 0))}</strong>
               </div>
-              <p>场景：${escapeHtml((item.scenes || []).map(sceneLabel).join("、") || "未记录")}</p>
-              ${item.lastError ? `<p class="helper-text">最近错误：${escapeHtml(item.lastError)}</p>` : ""}
-            </article>
-          `
-        )
-        .join("")
+              <div>
+                <span>成功</span>
+                <strong>${escapeHtml(String(item.okCount || 0))}</strong>
+              </div>
+              <div>
+                <span>失败</span>
+                <strong>${escapeHtml(String(item.errorCount || 0))}</strong>
+              </div>
+              <div>
+                <span>成功率</span>
+                <strong>${escapeHtml(formatRate(item.successRate))}</strong>
+              </div>
+              <div>
+                <span>超时率</span>
+                <strong>${escapeHtml(formatRate(item.timeoutRate))}</strong>
+              </div>
+              <div>
+                <span>JSON 错误</span>
+                <strong>${escapeHtml(formatRate(item.jsonErrorRate))}</strong>
+              </div>
+              <div>
+                <span>平均耗时</span>
+                <strong>${escapeHtml(String(item.averageDurationMs || 0))}ms</strong>
+              </div>
+            </div>
+            <p>场景：${escapeHtml((item.scenes || []).map(sceneLabel).join("、") || "未记录")}</p>
+            <p class="helper-text">最近成功：${escapeHtml(item.lastOkAt ? formatDate(item.lastOkAt) : "暂无")}</p>
+            <p class="helper-text">最近失败：${escapeHtml(item.lastErrorAt ? formatDate(item.lastErrorAt) : "暂无")}</p>
+            ${item.lastError ? `<p class="helper-text">最近错误：${escapeHtml(item.lastError)}</p>` : ""}
+          </article>
+        `
+      )
+      .join("");
+  const cards = items.length
+    ? `
+        <section class="model-performance-section">
+          <div class="model-performance-section-head">
+            <strong>有成功记录</strong>
+            <span>这部分至少有过一次真实成功调用，更适合作为稳定性参考。</span>
+          </div>
+          ${
+            successfulItems.length
+              ? buildPerformanceCards(successfulItems)
+              : '<div class="result-card muted">当前还没有真实成功样本，先不要根据看板推荐切模型。</div>'
+          }
+        </section>
+        <section class="model-performance-section">
+          <div class="model-performance-section-head">
+            <strong>仅失败记录</strong>
+            <span>这部分目前只有失败样本，适合排查链路或密钥，不建议直接作为模型推荐依据。</span>
+          </div>
+          ${
+            failedOnlyItems.length
+              ? buildPerformanceCards(failedOnlyItems)
+              : '<div class="result-card muted">当前没有纯失败分组。</div>'
+          }
+        </section>
+      `
     : '<div class="result-card muted">暂无模型调用记录。触发语义复判、改写、生成或反馈识别后会开始沉淀。</div>';
 
   byId("model-performance-result").innerHTML = `
     <div class="model-scope-banner">
       <span class="model-scope-kicker">模型表现</span>
       <strong>累计调用 ${escapeHtml(String(summary.totalCalls || 0))} 次</strong>
-      <p>当前只做观察统计和推荐提示，不会自动改变模型路由顺序。</p>
+      <p>成功 ${escapeHtml(String(summary.okCalls || 0))} 次，失败 ${escapeHtml(String(summary.errorCalls || 0))} 次。当前只做观察统计和推荐提示，不会自动改变模型路由顺序。</p>
+      <p>数据可信度：${escapeHtml(confidence.message || "暂无判断")}</p>
     </div>
     ${cards}
   `;
@@ -3247,7 +3341,9 @@ function renderGenerationResult(result = {}) {
       <strong>${escapeHtml(result.recommendationReason || "暂无推荐")}</strong>
     </div>
     <div class="generation-candidate-grid">${cards || '<div class="muted">没有候选稿</div>'}</div>
+    <p class="helper-text action-gate-hint" id="generation-lifecycle-action-hint" aria-live="polite"></p>
   `;
+  syncLifecycleResultActions();
 }
 
 function renderReviewQueueAdmin(items) {
@@ -3381,6 +3477,30 @@ function syncSampleLibraryCreateButtonLabel() {
   }
 }
 
+function setSampleLibraryCreateFormOpen(isOpen) {
+  const button = byId("sample-library-create-button");
+  const shell = byId("sample-library-create-form-shell");
+  const form = byId("sample-library-create-form");
+  const nextHidden = !isOpen;
+
+  if (shell) {
+    shell.hidden = nextHidden;
+  }
+
+  if (button) {
+    button.setAttribute("aria-expanded", String(!nextHidden));
+  }
+
+  syncSampleLibraryCreateButtonLabel();
+
+  if (!nextHidden) {
+    shell?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    window.setTimeout(() => {
+      form?.elements.title?.focus();
+    }, 120);
+  }
+}
+
 function getAnalyzePayload() {
   const form = new FormData(byId("analyze-form"));
 
@@ -3417,16 +3537,14 @@ function getGenerationPayload() {
 
 function syncRewritePairPrefillButton() {
   const button = byId("rewrite-pair-prefill");
+  const requirementMessage = getRewritePairPrefillRequirementMessage();
 
   if (!button) {
     return;
   }
 
-  const enabled = Boolean(appState.latestAnalyzePayload && appState.latestRewrite && appState.latestAnalysis);
-
-  if (!button.dataset.busy) {
-    button.disabled = !enabled;
-  }
+  setGatedButtonState(button, !requirementMessage, requirementMessage);
+  setActionGateHint("rewrite-pair-prefill-hint", requirementMessage);
 }
 
 function fillRewritePairFormFromCurrent() {
@@ -3457,6 +3575,7 @@ function fillRewritePairFormFromCurrent() {
   }, 120);
   byId("rewrite-pair-result").innerHTML =
     '<div class="result-card-shell">已用当前改写结果填充前后样本，可补充平台原因或改写策略后保存。</div>';
+  syncRewritePairActions();
 }
 
 function fillSuccessSampleFormFromCurrent(source = "analysis") {
@@ -3478,17 +3597,12 @@ function fillSuccessSampleFormFromCurrent(source = "analysis") {
   }
   form.elements.tags.value = joinCSV(rewrite?.tags?.length ? rewrite.tags : payload.tags || []);
   revealSampleLibraryPane();
-  if (shell) {
-    shell.hidden = false;
-  }
-  syncSampleLibraryCreateButtonLabel();
+  setSampleLibraryCreateFormOpen(true);
   if (resultNode) {
     resultNode.innerHTML =
       '<div class="result-card-shell">已填充新增表单，保存后可继续补参考属性和生命周期属性。</div>';
   }
-  window.setTimeout(() => {
-    form.elements.title?.focus();
-  }, 120);
+  syncSampleLibraryCreateActions();
 }
 
 function revealNoteLifecyclePane() {
@@ -3611,6 +3725,22 @@ async function runWorkflowAction(action = "") {
 const analyzeForm = byId("analyze-form");
 analyzeForm.addEventListener("input", syncAnalyzeActions);
 analyzeForm.addEventListener("change", syncAnalyzeActions);
+byId("feedback-form").addEventListener("input", syncFeedbackActions);
+byId("feedback-form").addEventListener("change", syncFeedbackActions);
+byId("generation-workbench-form").addEventListener("input", syncGenerationActions);
+byId("generation-workbench-form").addEventListener("change", syncGenerationActions);
+byId("rewrite-pair-form").addEventListener("input", syncRewritePairActions);
+byId("rewrite-pair-form").addEventListener("change", syncRewritePairActions);
+byId("custom-lexicon-form").addEventListener("input", syncLexiconFormActions);
+byId("custom-lexicon-form").addEventListener("change", syncLexiconFormActions);
+byId("seed-lexicon-form").addEventListener("input", syncLexiconFormActions);
+byId("seed-lexicon-form").addEventListener("change", syncLexiconFormActions);
+byId("sample-library-create-form").addEventListener("input", syncSampleLibraryCreateActions);
+byId("sample-library-create-form").addEventListener("change", syncSampleLibraryCreateActions);
+byId("sample-library-detail")?.addEventListener("input", syncSampleLibraryDetailActions);
+byId("sample-library-detail")?.addEventListener("change", syncSampleLibraryDetailActions);
+byId("review-benchmark-form").addEventListener("input", syncReviewBenchmarkActions);
+byId("review-benchmark-form").addEventListener("change", syncReviewBenchmarkActions);
 initializeAnalyzeTagPicker();
 
 function buildLexiconEntry(form) {
@@ -3634,6 +3764,426 @@ const feedbackState = {
   recognition: null
 };
 
+function hasMeaningfulNoteDraft(note = {}) {
+  return Boolean(
+    String(note.title || "").trim() ||
+      String(note.body || "").trim() ||
+      String(note.coverText || "").trim() ||
+      splitCSV(note.tags || []).length ||
+      (Array.isArray(note.tags) ? note.tags.length : 0)
+  );
+}
+
+function hasFeedbackSubmissionSource() {
+  const form = byId("feedback-form");
+  const noteContent = String(form?.elements?.noteContent?.value || "").trim();
+
+  return Boolean(noteContent || feedbackState.recognition?.extractedText || feedbackState.recognition?.platformReason);
+}
+
+function getFeedbackRecognitionRequirementMessage() {
+  if (!feedbackState.screenshot) {
+    return "请先上传违规截图。";
+  }
+
+  return "";
+}
+
+function getFeedbackSubmitRequirementMessage() {
+  const form = byId("feedback-form");
+  const platformReason = String(form?.elements?.platformReason?.value || feedbackState.recognition?.platformReason || "").trim();
+
+  if (!hasFeedbackSubmissionSource()) {
+    return "请先填写笔记内容，或先完成截图识别。";
+  }
+
+  if (!platformReason) {
+    return "请先填写平台违规原因。";
+  }
+
+  return "";
+}
+
+function syncFeedbackActions() {
+  const recognizeMessage = getFeedbackRecognitionRequirementMessage();
+  const submitMessage = getFeedbackSubmitRequirementMessage();
+  const recognizeButton = byId("feedback-recognize");
+  const submitButton = byId("feedback-form")?.querySelector('button[type="submit"]');
+
+  setGatedButtonState(recognizeButton, !recognizeMessage, recognizeMessage);
+  setGatedButtonState(submitButton, !submitMessage, submitMessage);
+  setActionGateHint("feedback-action-hint", submitMessage || recognizeMessage);
+}
+
+function getGenerationRequirementMessage() {
+  const payload = getGenerationPayload();
+
+  if (!String(payload.collectionType || "").trim()) {
+    return "请先选择合集类型。";
+  }
+
+  if (payload.mode === "draft_optimize") {
+    if (!String(payload.draft?.title || "").trim() && !String(payload.draft?.body || "").trim()) {
+      return "草稿优化模式请先填写草稿标题或草稿正文。";
+    }
+
+    return "";
+  }
+
+  if (!String(payload.brief?.topic || "").trim() && !String(payload.brief?.sellingPoints || "").trim()) {
+    return "请至少填写主题或卖点 / 重点。";
+  }
+
+  return "";
+}
+
+function syncGenerationActions() {
+  const requirementMessage = getGenerationRequirementMessage();
+  const submitButton = byId("generation-workbench-form")?.querySelector('button[type="submit"]');
+
+  setGatedButtonState(submitButton, !requirementMessage, requirementMessage);
+  setActionGateHint("generation-action-hint", requirementMessage);
+}
+
+function getRewritePairRequirementMessage() {
+  const form = byId("rewrite-pair-form");
+
+  if (!form) {
+    return "";
+  }
+
+  const before = {
+    title: form.elements.beforeTitle?.value,
+    body: form.elements.beforeBody?.value,
+    coverText: form.elements.beforeCoverText?.value,
+    tags: form.elements.beforeTags?.value
+  };
+  const after = {
+    title: form.elements.afterTitle?.value,
+    body: form.elements.afterBody?.value,
+    coverText: form.elements.afterCoverText?.value,
+    tags: form.elements.afterTags?.value
+  };
+
+  if (!hasMeaningfulNoteDraft(before) && !hasMeaningfulNoteDraft(after)) {
+    return "请至少填写改写前或改写后的标题、正文、封面文案、标签之一。";
+  }
+
+  return "";
+}
+
+function syncRewritePairActions() {
+  const requirementMessage = getRewritePairRequirementMessage();
+  const submitButton = byId("rewrite-pair-form")?.querySelector('button[type="submit"]');
+
+  setGatedButtonState(submitButton, !requirementMessage, requirementMessage);
+  setActionGateHint("rewrite-pair-action-hint", requirementMessage);
+}
+
+function getRewritePairPrefillRequirementMessage() {
+  if (!appState.latestAnalyzePayload || !appState.latestRewrite || !appState.latestAnalysis) {
+    return "请先完成一次改写，再从当前结果填充。";
+  }
+
+  const rewrite = normalizeRewritePayload(appState.latestRewrite);
+
+  if (!hasMeaningfulNoteDraft(rewrite)) {
+    return "请先生成有效的改写结果。";
+  }
+
+  return "";
+}
+
+function getSampleLibraryCreateRequirementMessage() {
+  const form = byId("sample-library-create-form");
+
+  if (!form) {
+    return "";
+  }
+
+  if (
+    !String(form.elements.title?.value || "").trim() &&
+    !String(form.elements.body?.value || "").trim() &&
+    !String(form.elements.coverText?.value || "").trim()
+  ) {
+    return "请至少填写标题、正文或封面文案。";
+  }
+
+  if (!String(form.elements.collectionType?.value || "").trim()) {
+    return "请先选择合集类型。";
+  }
+
+  return "";
+}
+
+function syncSampleLibraryCreateActions() {
+  const requirementMessage = getSampleLibraryCreateRequirementMessage();
+  const submitButton = byId("sample-library-create-form")?.querySelector('button[type="submit"]');
+
+  setGatedButtonState(submitButton, !requirementMessage, requirementMessage);
+  setActionGateHint("sample-library-create-action-hint", requirementMessage);
+}
+
+function getSampleLibraryPrefillAnalysisRequirementMessage() {
+  if (!hasMeaningfulNoteDraft(appState.latestAnalyzePayload || {})) {
+    return "请先输入内容并完成检测，再从当前检测填充。";
+  }
+
+  return "";
+}
+
+function getSampleLibraryPrefillRewriteRequirementMessage() {
+  const rewrite = normalizeRewritePayload(appState.latestRewrite);
+
+  if (!hasMeaningfulNoteDraft(rewrite)) {
+    return "请先完成一次有效改写，再从当前改写填充。";
+  }
+
+  return "";
+}
+
+function syncSampleLibraryPrefillActions() {
+  const analysisMessage = getSampleLibraryPrefillAnalysisRequirementMessage();
+  const rewriteMessage = getSampleLibraryPrefillRewriteRequirementMessage();
+  const analysisButton = byId("sample-library-prefill-analysis");
+  const rewriteButton = byId("sample-library-prefill-rewrite");
+
+  setGatedButtonState(analysisButton, !analysisMessage, analysisMessage);
+  setGatedButtonState(rewriteButton, !rewriteMessage, rewriteMessage);
+  setActionGateHint("sample-library-prefill-action-hint", analysisMessage || rewriteMessage);
+}
+
+function getSampleLibraryDetailBaseRequirementMessage() {
+  const section = byId("sample-library-base-section");
+
+  if (!section) {
+    return "";
+  }
+
+  const note = {
+    title: section.querySelector('[name="title"]')?.value || "",
+    body: section.querySelector('[name="body"]')?.value || "",
+    coverText: section.querySelector('[name="coverText"]')?.value || "",
+    tags: splitCSV(section.querySelector('[name="tags"]')?.value || "")
+  };
+  const collectionType = String(section.querySelector('[name="collectionType"]')?.value || "").trim();
+
+  if (!hasMeaningfulNoteDraft(note)) {
+    return "请至少填写标题、正文、封面文案或标签。";
+  }
+
+  if (!collectionType) {
+    return "请先选择合集类型。";
+  }
+
+  return "";
+}
+
+function getSampleLibraryDetailReferenceRequirementMessage() {
+  const section = byId("sample-library-reference-section");
+  const baseMessage = getSampleLibraryDetailBaseRequirementMessage();
+
+  if (!section) {
+    return "";
+  }
+
+  if (baseMessage) {
+    return baseMessage;
+  }
+
+  const enabled = section.querySelector('[name="enabled"]')?.checked === true;
+  const tier = String(section.querySelector('[name="tier"]')?.value || "").trim();
+
+  if (enabled && !tier) {
+    return "启用参考样本时请先选择参考等级。";
+  }
+
+  return "";
+}
+
+function getSampleLibraryDetailLifecycleRequirementMessage() {
+  return getSampleLibraryDetailBaseRequirementMessage();
+}
+
+function syncSampleLibraryDetailActions() {
+  const baseMessage = getSampleLibraryDetailBaseRequirementMessage();
+  const referenceMessage = getSampleLibraryDetailReferenceRequirementMessage();
+  const lifecycleMessage = getSampleLibraryDetailLifecycleRequirementMessage();
+  const baseButton = byId("sample-library-base-section")?.querySelector('[data-action="save-sample-library-base"]');
+  const referenceButton = byId("sample-library-reference-section")?.querySelector('[data-action="save-sample-library-reference"]');
+  const lifecycleButton = byId("sample-library-lifecycle-section")?.querySelector('[data-action="save-sample-library-lifecycle"]');
+
+  setGatedButtonState(baseButton, !baseMessage, baseMessage);
+  setGatedButtonState(referenceButton, !referenceMessage, referenceMessage);
+  setGatedButtonState(lifecycleButton, !lifecycleMessage, lifecycleMessage);
+  setActionGateHint("sample-library-base-action-hint", baseMessage);
+  setActionGateHint("sample-library-reference-action-hint", referenceMessage);
+  setActionGateHint("sample-library-lifecycle-action-hint", lifecycleMessage);
+}
+
+function getLifecycleSaveRequirementMessage(source = "analysis", candidateId = "", candidateIndex = "") {
+  if (source === "analysis") {
+    if (!hasMeaningfulNoteDraft(appState.latestAnalyzePayload || {})) {
+      return "请先完成一次带内容的检测。";
+    }
+
+    if (!String(appState.latestAnalyzePayload?.collectionType || "").trim()) {
+      return "请先选择合集类型后再保存检测结果。";
+    }
+
+    return "";
+  }
+
+  if (source === "rewrite") {
+    const rewrite = normalizeRewritePayload(appState.latestRewrite);
+
+    if (!hasMeaningfulNoteDraft(rewrite)) {
+      return "请先生成有效的改写结果。";
+    }
+
+    if (!String(appState.latestAnalyzePayload?.collectionType || "").trim()) {
+      return "请先选择合集类型后再保存改写稿。";
+    }
+
+    return "";
+  }
+
+  if (source === "generation") {
+    const candidates = appState.latestGeneration?.scoredCandidates || [];
+    const candidate =
+      candidates.find((item) => String(item?.id || "") === String(candidateId || "")) ||
+      candidates[Number(candidateIndex)];
+    const finalDraft = candidate?.finalDraft || candidate || {};
+
+    if (!hasMeaningfulNoteDraft(finalDraft)) {
+      return "请先生成有效的候选稿。";
+    }
+
+    if (!String(appState.latestGeneration?.collectionType || "").trim()) {
+      return "请先选择合集类型后再保存生成稿。";
+    }
+  }
+
+  return "";
+}
+
+function syncLifecycleResultActions() {
+  const analysisMessage = getLifecycleSaveRequirementMessage("analysis");
+  const rewriteMessage = getLifecycleSaveRequirementMessage("rewrite");
+  const generationButtons = [...document.querySelectorAll('[data-action="save-lifecycle-generation"]')];
+  const generationMessage = generationButtons.reduce((message, button) => {
+    if (message) {
+      return message;
+    }
+
+    return getLifecycleSaveRequirementMessage("generation", button.dataset.candidateId, button.dataset.candidateIndex);
+  }, "");
+  const analysisButton = byId("analysis-result")?.querySelector('[data-action="save-lifecycle-analysis"]');
+  const rewriteButton = byId("rewrite-result")?.querySelector('[data-action="save-lifecycle-rewrite"]');
+
+  setGatedButtonState(analysisButton, !analysisMessage, analysisMessage);
+  setGatedButtonState(rewriteButton, !rewriteMessage, rewriteMessage);
+  generationButtons.forEach((button) => {
+    const buttonMessage = getLifecycleSaveRequirementMessage("generation", button.dataset.candidateId, button.dataset.candidateIndex);
+    setGatedButtonState(button, !buttonMessage, buttonMessage);
+  });
+  setActionGateHint("analysis-lifecycle-action-hint", analysisMessage);
+  setActionGateHint("rewrite-lifecycle-action-hint", rewriteMessage);
+  setActionGateHint("generation-lifecycle-action-hint", generationMessage);
+}
+
+function getReviewBenchmarkSubmitRequirementMessage() {
+  const form = byId("review-benchmark-form");
+
+  if (!form) {
+    return "";
+  }
+
+  if (!String(form.elements.title?.value || "").trim() && !String(form.elements.body?.value || "").trim()) {
+    return "请至少填写标题或正文。";
+  }
+
+  if (!String(form.elements.collectionType?.value || "").trim()) {
+    return "请先选择合集类型。";
+  }
+
+  return "";
+}
+
+function getReviewBenchmarkRunRequirementMessage() {
+  if (!appState.reviewBenchmarkSamples.length) {
+    return "请先至少保存一条基准样本。";
+  }
+
+  return "";
+}
+
+function syncReviewBenchmarkActions() {
+  const submitMessage = getReviewBenchmarkSubmitRequirementMessage();
+  const runMessage = getReviewBenchmarkRunRequirementMessage();
+  const submitButton = byId("review-benchmark-form")?.querySelector('button[type="submit"]');
+  const runButton = byId("review-benchmark-run-button");
+
+  setGatedButtonState(submitButton, !submitMessage, submitMessage);
+  setGatedButtonState(runButton, !runMessage, runMessage);
+  setActionGateHint("review-benchmark-action-hint", submitMessage || runMessage);
+}
+
+function getStyleProfileDraftRequirementMessage() {
+  const hasReferenceSample = appState.sampleLibraryRecords.some((item) => item?.reference?.enabled);
+
+  if (!hasReferenceSample) {
+    return "请先在样本库启用至少一条参考样本。";
+  }
+
+  return "";
+}
+
+function syncStyleProfileDraftActions() {
+  const requirementMessage = getStyleProfileDraftRequirementMessage();
+  const button = byId("style-profile-draft-button");
+
+  setGatedButtonState(button, !requirementMessage, requirementMessage);
+  setActionGateHint("style-profile-action-hint", requirementMessage);
+}
+
+function getLexiconRequirementMessage(formId) {
+  const form = byId(formId);
+
+  if (!form) {
+    return "";
+  }
+
+  const source = String(form.elements.source?.value || "").trim();
+  const category = String(form.elements.category?.value || "").trim();
+
+  if (!source && !category) {
+    return "请先填写词 / 模式和分类。";
+  }
+
+  if (!source) {
+    return "请先填写词 / 模式。";
+  }
+
+  if (!category) {
+    return "请先填写分类。";
+  }
+
+  return "";
+}
+
+function syncLexiconFormActions() {
+  const customMessage = getLexiconRequirementMessage("custom-lexicon-form");
+  const seedMessage = getLexiconRequirementMessage("seed-lexicon-form");
+  const customButton = byId("custom-lexicon-form")?.querySelector('button[type="submit"]');
+  const seedButton = byId("seed-lexicon-form")?.querySelector('button[type="submit"]');
+
+  setGatedButtonState(customButton, !customMessage, customMessage);
+  setGatedButtonState(seedButton, !seedMessage, seedMessage);
+  setActionGateHint("custom-lexicon-action-hint", customMessage);
+  setActionGateHint("seed-lexicon-action-hint", seedMessage);
+}
+
 function openResultPanel(id) {
   const panel = byId(id);
 
@@ -3649,6 +4199,7 @@ byId("feedback-screenshot").addEventListener("change", async (event) => {
   if (!file) {
     feedbackState.screenshot = null;
     renderScreenshotRecognition(null, null);
+    syncFeedbackActions();
     return;
   }
 
@@ -3670,14 +4221,17 @@ byId("feedback-screenshot").addEventListener("change", async (event) => {
     byId("feedback-screenshot-result").innerHTML = `
       <div class="result-card-shell muted">${escapeHtml(error.message || "读取截图失败")}</div>
     `;
+  } finally {
+    syncFeedbackActions();
   }
 });
 
 byId("analyze-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const analyzeButton = byId("analyze-button");
+  const requirementMessage = getAnalyzeActionRequirementMessage();
 
-  if (!hasAnalyzeInput()) {
+  if (requirementMessage) {
     syncAnalyzeActions();
     return;
   }
@@ -3714,13 +4268,15 @@ byId("analyze-form").addEventListener("submit", async (event) => {
     setButtonBusy(analyzeButton, false);
     syncAnalyzeActions();
     syncRewritePairPrefillButton();
+    syncSampleLibraryPrefillActions();
   }
 });
 
 byId("rewrite-button").addEventListener("click", async () => {
   const rewriteButton = byId("rewrite-button");
+  const requirementMessage = getAnalyzeActionRequirementMessage();
 
-  if (!hasAnalyzeInput()) {
+  if (requirementMessage) {
     syncAnalyzeActions();
     return;
   }
@@ -3764,13 +4320,15 @@ byId("rewrite-button").addEventListener("click", async () => {
     setButtonBusy(rewriteButton, false);
     syncAnalyzeActions();
     syncRewritePairPrefillButton();
+    syncSampleLibraryPrefillActions();
   }
 });
 
 byId("cross-review-button").addEventListener("click", async () => {
   const crossReviewButton = byId("cross-review-button");
+  const requirementMessage = getAnalyzeActionRequirementMessage();
 
-  if (!hasAnalyzeInput()) {
+  if (requirementMessage) {
     syncAnalyzeActions();
     return;
   }
@@ -3807,6 +4365,13 @@ byId("cross-review-button").addEventListener("click", async () => {
 byId("generation-workbench-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+  const requirementMessage = getGenerationRequirementMessage();
+
+  if (requirementMessage) {
+    syncGenerationActions();
+    return;
+  }
+
   setButtonBusy(submitButton, true, "生成中...");
   byId("generation-result").innerHTML = '<div class="result-card-shell muted">正在生成并评分候选稿...</div>';
 
@@ -3874,10 +4439,12 @@ byId("review-benchmark-collection-type-add")?.addEventListener("click", async ()
 
 byId("feedback-recognize").addEventListener("click", async () => {
   const recognizeButton = byId("feedback-recognize");
+  const requirementMessage = getFeedbackRecognitionRequirementMessage();
 
-  if (!feedbackState.screenshot) {
+  if (requirementMessage) {
+    syncFeedbackActions();
     byId("feedback-screenshot-result").innerHTML =
-      '<div class="result-card-shell muted">请先选择一张违规截图。</div>';
+      `<div class="result-card-shell muted">${escapeHtml(requirementMessage)}</div>`;
     return;
   }
 
@@ -3907,6 +4474,7 @@ byId("feedback-recognize").addEventListener("click", async () => {
     `;
   } finally {
     setButtonBusy(recognizeButton, false);
+    syncFeedbackActions();
   }
 });
 
@@ -3976,6 +4544,13 @@ byId("feedback-form").addEventListener("submit", async (event) => {
   const formElement = event.currentTarget;
   const submitButton = formElement.querySelector('button[type="submit"]');
   const form = new FormData(formElement);
+  const requirementMessage = getFeedbackSubmitRequirementMessage();
+
+  if (requirementMessage) {
+    syncFeedbackActions();
+    return;
+  }
+
   setButtonBusy(submitButton, true, "写入中...");
 
   try {
@@ -4025,6 +4600,7 @@ byId("feedback-form").addEventListener("submit", async (event) => {
     `;
   } finally {
     setButtonBusy(submitButton, false);
+    syncFeedbackActions();
   }
 });
 
@@ -4033,6 +4609,13 @@ async function handleLexiconSubmit(event, scope, resultId, busyText) {
   const formElement = event.currentTarget;
   const submitButton = formElement.querySelector('button[type="submit"]');
   const form = new FormData(formElement);
+  const requirementMessage = getLexiconRequirementMessage(formElement.id);
+
+  if (requirementMessage) {
+    syncLexiconFormActions();
+    return;
+  }
+
   setButtonBusy(submitButton, true, busyText);
 
   try {
@@ -4053,6 +4636,7 @@ async function handleLexiconSubmit(event, scope, resultId, busyText) {
     `;
   } finally {
     setButtonBusy(submitButton, false);
+    syncLexiconFormActions();
   }
 }
 
@@ -4065,24 +4649,19 @@ byId("custom-lexicon-form").addEventListener("submit", (event) =>
 );
 
 byId("rewrite-pair-prefill").addEventListener("click", () => {
+  const requirementMessage = getRewritePairPrefillRequirementMessage();
+
+  if (requirementMessage) {
+    syncRewritePairPrefillButton();
+    return;
+  }
+
   fillRewritePairFormFromCurrent();
 });
 
 byId("sample-library-create-button").addEventListener("click", () => {
   const shell = byId("sample-library-create-form-shell");
-  const form = byId("sample-library-create-form");
-  const nextHidden = !shell?.hidden;
-
-  if (shell) {
-    shell.hidden = nextHidden;
-  }
-  syncSampleLibraryCreateButtonLabel();
-
-  if (!nextHidden) {
-    window.setTimeout(() => {
-      form?.elements.title?.focus();
-    }, 120);
-  }
+  setSampleLibraryCreateFormOpen(Boolean(shell?.hidden));
 });
 
 byId("rewrite-model-selection").addEventListener("change", () => {
@@ -4100,10 +4679,24 @@ byId("sample-library-filter").addEventListener("change", (event) => {
 });
 
 byId("sample-library-prefill-analysis").addEventListener("click", () => {
+  const requirementMessage = getSampleLibraryPrefillAnalysisRequirementMessage();
+
+  if (requirementMessage) {
+    syncSampleLibraryPrefillActions();
+    return;
+  }
+
   fillSuccessSampleFormFromCurrent("analysis");
 });
 
 byId("sample-library-prefill-rewrite").addEventListener("click", () => {
+  const requirementMessage = getSampleLibraryPrefillRewriteRequirementMessage();
+
+  if (requirementMessage) {
+    syncSampleLibraryPrefillActions();
+    return;
+  }
+
   fillSuccessSampleFormFromCurrent("rewrite");
 });
 
@@ -4112,6 +4705,13 @@ byId("sample-library-create-form").addEventListener("submit", async (event) => {
   const formElement = event.currentTarget;
   const submitButton = formElement.querySelector('button[type="submit"]');
   const form = new FormData(formElement);
+  const requirementMessage = getSampleLibraryCreateRequirementMessage();
+
+  if (requirementMessage) {
+    syncSampleLibraryCreateActions();
+    return;
+  }
+
   setButtonBusy(submitButton, true, "保存中...");
 
   try {
@@ -4146,14 +4746,14 @@ byId("sample-library-create-form").addEventListener("submit", async (event) => {
     byId("sample-library-create-result").innerHTML = '<div class="result-card-shell">样本记录已保存，可继续补参考属性和生命周期属性。</div>';
     formElement.reset();
     renderCollectionTypeSelectors();
-    byId("sample-library-create-form-shell").hidden = true;
-    syncSampleLibraryCreateButtonLabel();
+    setSampleLibraryCreateFormOpen(false);
   } catch (error) {
     byId("sample-library-create-result").innerHTML = `
       <div class="result-card-shell muted">${escapeHtml(error.message || "保存样本记录失败")}</div>
     `;
   } finally {
     setButtonBusy(submitButton, false);
+    syncSampleLibraryCreateActions();
   }
 });
 
@@ -4162,6 +4762,13 @@ byId("review-benchmark-form").addEventListener("submit", async (event) => {
   const formElement = event.currentTarget;
   const submitButton = formElement.querySelector('button[type="submit"]');
   const form = new FormData(formElement);
+  const requirementMessage = getReviewBenchmarkSubmitRequirementMessage();
+
+  if (requirementMessage) {
+    syncReviewBenchmarkActions();
+    return;
+  }
+
   setButtonBusy(submitButton, true, "保存中...");
 
   try {
@@ -4183,6 +4790,7 @@ byId("review-benchmark-form").addEventListener("submit", async (event) => {
     `;
   } finally {
     setButtonBusy(submitButton, false);
+    syncReviewBenchmarkActions();
   }
 });
 
@@ -4213,6 +4821,13 @@ byId("review-benchmark-source-filter").addEventListener("change", (event) => {
 
 byId("review-benchmark-run-button").addEventListener("click", async () => {
   const button = byId("review-benchmark-run-button");
+  const requirementMessage = getReviewBenchmarkRunRequirementMessage();
+
+  if (requirementMessage) {
+    syncReviewBenchmarkActions();
+    return;
+  }
+
   setButtonBusy(button, true, "运行中...");
 
   try {
@@ -4231,11 +4846,19 @@ byId("review-benchmark-run-button").addEventListener("click", async () => {
     `;
   } finally {
     setButtonBusy(button, false);
+    syncReviewBenchmarkActions();
   }
 });
 
 byId("style-profile-draft-button").addEventListener("click", async () => {
   const button = byId("style-profile-draft-button");
+  const requirementMessage = getStyleProfileDraftRequirementMessage();
+
+  if (requirementMessage) {
+    syncStyleProfileDraftActions();
+    return;
+  }
+
   revealStyleProfilePane();
   setButtonBusy(button, true, "生成中...");
 
@@ -4253,6 +4876,7 @@ byId("style-profile-draft-button").addEventListener("click", async () => {
     `;
   } finally {
     setButtonBusy(button, false);
+    syncStyleProfileDraftActions();
   }
 });
 
@@ -4261,6 +4885,13 @@ byId("rewrite-pair-form").addEventListener("submit", async (event) => {
   const formElement = event.currentTarget;
   const submitButton = formElement.querySelector('button[type="submit"]');
   const form = new FormData(formElement);
+  const requirementMessage = getRewritePairRequirementMessage();
+
+  if (requirementMessage) {
+    syncRewritePairActions();
+    return;
+  }
+
   setButtonBusy(submitButton, true, "保存中...");
 
   try {
@@ -4306,6 +4937,7 @@ byId("rewrite-pair-form").addEventListener("submit", async (event) => {
     `;
   } finally {
     setButtonBusy(submitButton, false);
+    syncRewritePairActions();
   }
 });
 
@@ -4437,6 +5069,13 @@ document.addEventListener("click", async (event) => {
     }
 
     if (action === "save-sample-library-base") {
+      const requirementMessage = getSampleLibraryDetailBaseRequirementMessage();
+
+      if (requirementMessage) {
+        syncSampleLibraryDetailActions();
+        return;
+      }
+
       const section = byId("sample-library-base-section");
       const response = await apiJson(sampleLibraryApi, {
         method: "PATCH",
@@ -4457,6 +5096,13 @@ document.addEventListener("click", async (event) => {
     }
 
     if (action === "save-sample-library-reference") {
+      const requirementMessage = getSampleLibraryDetailReferenceRequirementMessage();
+
+      if (requirementMessage) {
+        syncSampleLibraryDetailActions();
+        return;
+      }
+
       const section = byId("sample-library-reference-section");
       const enabled = section?.querySelector('[name="enabled"]')?.checked === true;
       const tier = String(section?.querySelector('[name="tier"]')?.value || "").trim();
@@ -4477,6 +5123,13 @@ document.addEventListener("click", async (event) => {
     }
 
     if (action === "save-sample-library-lifecycle") {
+      const requirementMessage = getSampleLibraryDetailLifecycleRequirementMessage();
+
+      if (requirementMessage) {
+        syncSampleLibraryDetailActions();
+        return;
+      }
+
       const section = byId("sample-library-lifecycle-section");
       const response = await apiJson(sampleLibraryApi, {
         method: "PATCH",
@@ -4557,14 +5210,35 @@ document.addEventListener("click", async (event) => {
     }
 
     if (action === "save-lifecycle-analysis") {
+      const requirementMessage = getLifecycleSaveRequirementMessage("analysis");
+
+      if (requirementMessage) {
+        syncLifecycleResultActions();
+        return;
+      }
+
       await saveLifecycleFromCurrent("analysis");
     }
 
     if (action === "save-lifecycle-rewrite") {
+      const requirementMessage = getLifecycleSaveRequirementMessage("rewrite");
+
+      if (requirementMessage) {
+        syncLifecycleResultActions();
+        return;
+      }
+
       await saveLifecycleFromCurrent("rewrite");
     }
 
     if (action === "save-lifecycle-generation") {
+      const requirementMessage = getLifecycleSaveRequirementMessage("generation", button.dataset.candidateId, button.dataset.candidateIndex);
+
+      if (requirementMessage) {
+        syncLifecycleResultActions();
+        return;
+      }
+
       await saveLifecycleFromCurrent("generation", button.dataset.candidateId, button.dataset.candidateIndex);
     }
 
@@ -4698,21 +5372,18 @@ document.addEventListener("click", async (event) => {
     }
 
     if (action === "edit-style-profile-draft") {
-      revealStyleProfilePane();
       enterStyleProfileDraftEditMode(appState.styleProfileState?.draft || {});
       renderStyleProfile(appState.styleProfileState || {});
       return;
     }
 
     if (action === "cancel-style-profile-draft") {
-      revealStyleProfilePane();
       exitStyleProfileDraftEditMode();
       renderStyleProfile(appState.styleProfileState || {});
       return;
     }
 
     if (action === "save-style-profile-draft") {
-      revealStyleProfilePane();
       const container = button.closest(".style-profile-card");
       const response = await apiJson("/api/style-profile", {
         method: "PATCH",
@@ -4727,7 +5398,6 @@ document.addEventListener("click", async (event) => {
     }
 
     if (action === "confirm-style-profile") {
-      revealStyleProfilePane();
       if (appState.styleProfileDraftEditing) {
         const container = button.closest(".style-profile-card");
         const updated = await apiJson("/api/style-profile", {
@@ -4755,7 +5425,6 @@ document.addEventListener("click", async (event) => {
     }
 
     if (action === "activate-style-profile") {
-      revealStyleProfilePane();
       const response = await apiJson("/api/style-profile", {
         method: "PATCH",
         body: JSON.stringify({
@@ -4800,4 +5469,14 @@ loadModelSelectionOptions().catch(() => {});
 loadCollectionTypeOptions().catch(() => {});
 
 syncAnalyzeActions();
+syncFeedbackActions();
+syncGenerationActions();
+syncRewritePairActions();
 syncRewritePairPrefillButton();
+syncSampleLibraryCreateActions();
+syncSampleLibraryPrefillActions();
+syncSampleLibraryDetailActions();
+syncReviewBenchmarkActions();
+syncStyleProfileDraftActions();
+syncLifecycleResultActions();
+syncLexiconFormActions();

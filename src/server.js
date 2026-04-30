@@ -59,7 +59,7 @@ import {
 import { runCrossModelReview } from "./cross-review.js";
 import { generateNoteCandidates, repairGenerationCandidate, scoreGenerationCandidates } from "./generation-workbench.js";
 import { recognizeFeedbackScreenshot, rewritePostForCompliance, suggestFeedbackCandidates } from "./glm.js";
-import { buildRewritePairRecord } from "./rewrite-pairs.js";
+import { buildRewritePairRecord, isMeaningfulRewritePairRecord } from "./rewrite-pairs.js";
 import {
   choosePreferredReviewBenchmarkSource,
   findMatchingReviewBenchmarkSample,
@@ -714,6 +714,13 @@ async function appendFeedbackAndQueue(payload, { modelSelection = {} } = {}) {
 async function appendRewritePair(payload) {
   const before = payload?.before || {};
   const after = payload?.after || {};
+
+  if (!isMeaningfulRewritePairRecord({ before, after })) {
+    const error = new Error("改写样本不能为空，至少填写改写前或改写后的标题、正文、封面文案、标签之一。");
+    error.statusCode = 400;
+    throw error;
+  }
+
   const [beforeAnalysis, afterAnalysis] = await Promise.all([
     buildMergedAnalysis(before),
     buildMergedAnalysis(after)

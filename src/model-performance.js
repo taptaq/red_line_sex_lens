@@ -101,6 +101,10 @@ function summarizeGroup(records = []) {
   const timeoutCount = records.filter((item) => item.errorType === "timeout").length;
   const jsonErrorCount = records.filter((item) => item.errorType === "json_error").length;
   const totalDuration = records.reduce((total, item) => total + item.durationMs, 0);
+  const lastOk = records
+    .slice()
+    .reverse()
+    .find((item) => item.status === "ok");
   const lastError = records
     .slice()
     .reverse()
@@ -120,7 +124,9 @@ function summarizeGroup(records = []) {
     jsonErrorRate: totalCalls ? roundRate(jsonErrorCount / totalCalls) : 0,
     averageDurationMs: totalCalls ? Math.round(totalDuration / totalCalls) : 0,
     scenes: [...new Set(records.map((item) => item.scene).filter(Boolean))].sort(),
+    lastOkAt: lastOk?.createdAt || "",
     lastError: lastError?.message || "",
+    lastErrorAt: lastError?.createdAt || "",
     lastErrorType: lastError?.errorType || "",
     lastCalledAt: records[records.length - 1]?.createdAt || ""
   };
@@ -182,9 +188,56 @@ function buildSceneRecommendations(records = []) {
   return recommendations;
 }
 
-export async function buildModelPerformanceSummary({ limit = 40 } = {}) {
+function toTime(value) {
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function buildConfidenceSummary(records = [], now = new Date()) {
+  const nowTime = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  const okRecords = records.filter((record) => record.status === "ok");
+  const recentRecords = records.slice(-3);
+  const hints = [];
+  let level = "high";
+
+  if (!records.length) {
+    return {
+      level: "low",
+      message: "暂无模型调用记录，暂时不能判断数据可信度。"
+    };
+  }
+
+  if (!okRecords.length) {
+    hints.push("当前只有失败记录");
+    level = "low";
+  } else {
+    if (okRecords.length < 3) {
+      hints.push("成功样本过少");
+      if (level === "high") level = "medium";
+    }
+
+    const latestOkTime = Math.max(...okRecords.map((record) => toTime(record.createdAt)));
+    if (latestOkTime > 0 && nowTime - latestOkTime > 24 * 60 * 60 * 1000) {
+      hints.push("最近 24h 无成功记录");
+      if (level === "high") level = "medium";
+    }
+  }
+
+  if (recentRecords.length >= 3 && recentRecords.every((record) => record.status !== "ok")) {
+    hints.push("最近 3 次调用全部失败");
+    level = "low";
+  }
+
+  return {
+    level,
+    message: hints.length ? hints.join("；") : "最近有稳定成功样本，可作为参考。"
+  };
+}
+
+export async function buildModelPerformanceSummary({ limit = 40, now = new Date() } = {}) {
   const records = await loadModelPerformanceLog();
   const groups = new Map();
+  const okCalls = records.filter((record) => record.status === "ok").length;
 
   for (const record of records) {
     const key = [record.provider, record.route, record.model].join("|");
@@ -198,7 +251,10 @@ export async function buildModelPerformanceSummary({ limit = 40 } = {}) {
 
   return {
     totalCalls: records.length,
+    okCalls,
+    errorCalls: records.length - okCalls,
     items,
+    confidence: buildConfidenceSummary(records, now),
     recommendations: buildSceneRecommendations(records),
     recent: records.slice(-20).reverse()
   };

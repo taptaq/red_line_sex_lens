@@ -30,6 +30,7 @@ async function withTempModelPerformance(t, run) {
 test("model performance log records calls and summarizes model stability", async (t) => {
   await withTempModelPerformance(t, async () => {
     await recordModelCall({
+      createdAt: "2026-04-30T08:00:00.000Z",
       scene: "semantic_review",
       provider: "glm",
       route: "dmxapi",
@@ -39,6 +40,7 @@ test("model performance log records calls and summarizes model stability", async
       durationMs: 1200
     });
     await recordModelCall({
+      createdAt: "2026-04-30T08:05:00.000Z",
       scene: "semantic_review",
       provider: "glm",
       route: "dmxapi",
@@ -50,6 +52,7 @@ test("model performance log records calls and summarizes model stability", async
       durationMs: 60000
     });
     await recordModelCall({
+      createdAt: "2026-04-30T08:09:00.000Z",
       scene: "rewrite",
       provider: "qwen",
       route: "official",
@@ -70,12 +73,18 @@ test("model performance log records calls and summarizes model stability", async
     const qwen = summary.items.find((item) => item.provider === "qwen");
 
     assert.equal(summary.totalCalls, 3);
+    assert.equal(summary.okCalls, 1);
+    assert.equal(summary.errorCalls, 2);
     assert.equal(glm.totalCalls, 2);
     assert.equal(glm.successRate, 0.5);
     assert.equal(glm.timeoutRate, 0.5);
     assert.equal(glm.averageDurationMs, 30600);
     assert.deepEqual(glm.scenes, ["semantic_review"]);
+    assert.equal(glm.lastOkAt, "2026-04-30T08:00:00.000Z");
+    assert.equal(glm.lastErrorAt, "2026-04-30T08:05:00.000Z");
     assert.equal(qwen.jsonErrorRate, 1);
+    assert.equal(qwen.lastOkAt, "");
+    assert.equal(qwen.lastErrorAt, "2026-04-30T08:09:00.000Z");
     assert.match(qwen.lastError, /不是有效 JSON/);
   });
 });
@@ -167,6 +176,90 @@ test("model performance summary falls back to empty data when log json is malfor
   });
 });
 
+test("model performance summary exposes confidence hints for sparse and stale success data", async (t) => {
+  await withTempModelPerformance(t, async () => {
+    await recordModelCall({
+      createdAt: "2026-04-28T08:00:00.000Z",
+      scene: "semantic_review",
+      provider: "glm",
+      route: "dmxapi",
+      routeLabel: "DMXAPI",
+      model: "glm-5.1-free",
+      status: "ok",
+      durationMs: 1200
+    });
+    await recordModelCall({
+      createdAt: "2026-04-30T08:00:00.000Z",
+      scene: "semantic_review",
+      provider: "glm",
+      route: "dmxapi",
+      routeLabel: "DMXAPI",
+      model: "glm-5.1-free",
+      status: "error",
+      errorType: "timeout",
+      message: "请求超时",
+      durationMs: 8000
+    });
+
+    const summary = await buildModelPerformanceSummary({
+      now: "2026-04-30T12:00:00.000Z"
+    });
+
+    assert.equal(summary.confidence.level, "medium");
+    assert.match(summary.confidence.message, /成功样本过少/);
+    assert.match(summary.confidence.message, /最近 24h 无成功记录/);
+  });
+});
+
+test("model performance summary marks all-recent-failure streaks as low confidence", async (t) => {
+  await withTempModelPerformance(t, async () => {
+    await recordModelCall({
+      createdAt: "2026-04-30T09:00:00.000Z",
+      scene: "cross_review",
+      provider: "deepseek",
+      route: "official",
+      routeLabel: "官方",
+      model: "deepseek-v4-flash",
+      status: "error",
+      errorType: "server_error",
+      message: "fetch failed",
+      durationMs: 200
+    });
+    await recordModelCall({
+      createdAt: "2026-04-30T09:01:00.000Z",
+      scene: "cross_review",
+      provider: "deepseek",
+      route: "official",
+      routeLabel: "官方",
+      model: "deepseek-v4-flash",
+      status: "error",
+      errorType: "server_error",
+      message: "fetch failed",
+      durationMs: 220
+    });
+    await recordModelCall({
+      createdAt: "2026-04-30T09:02:00.000Z",
+      scene: "cross_review",
+      provider: "deepseek",
+      route: "official",
+      routeLabel: "官方",
+      model: "deepseek-v4-flash",
+      status: "error",
+      errorType: "server_error",
+      message: "fetch failed",
+      durationMs: 240
+    });
+
+    const summary = await buildModelPerformanceSummary({
+      now: "2026-04-30T12:00:00.000Z"
+    });
+
+    assert.equal(summary.confidence.level, "low");
+    assert.match(summary.confidence.message, /最近 3 次调用全部失败/);
+    assert.match(summary.confidence.message, /当前只有失败记录/);
+  });
+});
+
 test("frontend exposes model performance dashboard tab", async () => {
   const [indexHtml, appJs, styles] = await Promise.all([
     fs.readFile(path.join(process.cwd(), "web/index.html"), "utf8"),
@@ -178,8 +271,19 @@ test("frontend exposes model performance dashboard tab", async () => {
   assert.match(appJs, /\/api\/model-performance/);
   assert.match(appJs, /renderModelPerformance/);
   assert.match(appJs, /renderMainModelRecommendations/);
+  assert.match(appJs, /okCalls/);
+  assert.match(appJs, /errorCalls/);
+  assert.match(appJs, /lastOkAt/);
+  assert.match(appJs, /lastErrorAt/);
+  assert.match(appJs, /最近成功/);
+  assert.match(appJs, /最近失败/);
+  assert.match(appJs, /数据可信度/);
+  assert.match(appJs, /summary\.confidence/);
+  assert.match(appJs, /有成功记录/);
+  assert.match(appJs, /仅失败记录/);
   assert.match(indexHtml, /id="semantic-model-recommendation"/);
   assert.match(styles, /\.model-performance-grid/);
+  assert.match(styles, /\.model-performance-section-head/);
   assert.match(styles, /\.model-recommendation-hint/);
 });
 

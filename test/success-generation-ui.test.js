@@ -3,6 +3,16 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 
+async function readFrontendFiles() {
+  const [indexHtml, appJs, styles] = await Promise.all([
+    fs.readFile(path.join(process.cwd(), "web/index.html"), "utf8"),
+    fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8"),
+    fs.readFile(path.join(process.cwd(), "web/styles.css"), "utf8")
+  ]);
+
+  return { indexHtml, appJs, styles };
+}
+
 function extractElementInnerHtml(html, marker) {
   const startMarker = marker;
   const startIndex = html.indexOf(startMarker);
@@ -66,6 +76,8 @@ test("frontend exposes a list-first sample library workspace with one primary cr
 
   assert.equal(createButtonMatches.length, 1, "expected one primary sample library create action in the pane");
   assert.match(sampleLibraryPaneHtml, /id="sample-library-create-button"/);
+  assert.match(sampleLibraryPaneHtml, /aria-controls="sample-library-create-form-shell"/);
+  assert.match(sampleLibraryPaneHtml, /aria-expanded="false"/);
   assert.match(indexHtml, /新增样本记录/);
   assert.match(indexHtml, /id="sample-library-search-input"/);
   assert.match(indexHtml, /id="sample-library-filter"/);
@@ -88,6 +100,12 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(indexHtml, /id="sample-library-reference-section"/);
   assert.match(indexHtml, /id="sample-library-lifecycle-section"/);
   assert.match(indexHtml, /id="style-profile-result"/);
+  assert.match(indexHtml, /id="analyze-action-hint"/);
+  assert.match(indexHtml, /id="feedback-action-hint"/);
+  assert.match(indexHtml, /id="generation-action-hint"/);
+  assert.match(indexHtml, /id="rewrite-pair-action-hint"/);
+  assert.match(indexHtml, /id="sample-library-create-action-hint"/);
+  assert.match(indexHtml, /id="style-profile-action-hint"/);
 
   assert.doesNotMatch(indexHtml, /data-sample-library-tab-target=/);
   assert.doesNotMatch(indexHtml, /id="success-sample-form"/);
@@ -107,6 +125,18 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /function\s+renderSampleLibraryDetail\s*\(/);
   assert.match(appJs, /function\s+renderSampleLibraryWorkspace\s*\(/);
   assert.match(appJs, /function\s+refreshSampleLibraryWorkspace\s*\(/);
+  assert.match(appJs, /function\s+setSampleLibraryCreateFormOpen\s*\(/);
+  assert.match(appJs, /function\s+getAnalyzeActionRequirementMessage\s*\(/);
+  assert.match(appJs, /function\s+syncFeedbackActions\s*\(/);
+  assert.match(appJs, /function\s+getGenerationRequirementMessage\s*\(/);
+  assert.match(appJs, /function\s+syncGenerationActions\s*\(/);
+  assert.match(appJs, /function\s+getRewritePairRequirementMessage\s*\(/);
+  assert.match(appJs, /function\s+syncRewritePairActions\s*\(/);
+  assert.match(appJs, /function\s+getSampleLibraryCreateRequirementMessage\s*\(/);
+  assert.match(appJs, /function\s+syncSampleLibraryCreateActions\s*\(/);
+  assert.match(appJs, /function\s+getStyleProfileDraftRequirementMessage\s*\(/);
+  assert.match(appJs, /function\s+syncStyleProfileDraftActions\s*\(/);
+  assert.match(appJs, /function\s+setActionGateHint\s*\(/);
   assert.match(appJs, /add-sample-library-to-benchmark/);
   assert.match(appJs, /add-false-positive-to-benchmark/);
   assert.match(appJs, /benchmarkSourceLabel/);
@@ -145,4 +175,82 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(styles, /\.sample-library-workspace\s*>\s*\*/);
   assert.match(styles, /\.sample-library-detail\s*>\s*\*/);
   assert.match(styles, /max-width:\s*100%/);
+  assert.match(styles, /\.action-gate-hint\s*\{/);
+  assert.match(styles, /@media\s*\(max-width:\s*1360px\)/);
+  assert.match(styles, /\.tag-picker-selected\s*\{[\s\S]*flex-wrap:\s*nowrap/);
+  assert.match(styles, /@media\s*\(max-width:\s*1360px\)\s*\{[\s\S]*\.tag-picker-selected\s*\{[\s\S]*flex-wrap:\s*wrap;/);
+  assert.match(styles, /@media\s*\(max-width:\s*1360px\)\s*\{[\s\S]*\.tag-picker-selected\s*\{[\s\S]*mask-image:\s*none;/);
+  assert.match(styles, /@media\s*\(max-width:\s*1360px\)\s*\{[\s\S]*\.workflow-timeline\s*\{[\s\S]*repeat\(auto-fit,\s*minmax\(120px,\s*1fr\)\)/);
+  assert.match(styles, /@media\s*\(max-width:\s*1360px\)\s*\{[\s\S]*\.item-actions\s*\{[\s\S]*display:\s*grid;/);
+  assert.match(styles, /@media\s*\(max-width:\s*1360px\)\s*\{[\s\S]*\.item-actions\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(180px,\s*1fr\)\)/);
+});
+
+test("sample library create button toggles with explicit expanded state and scroll feedback", async () => {
+  const { appJs } = await readFrontendFiles();
+
+  assert.match(appJs, /function\s+setSampleLibraryCreateFormOpen\s*\(/);
+  assert.match(appJs, /button\.setAttribute\("aria-expanded",\s*String\(!nextHidden\)\)/);
+  assert.match(appJs, /shell\.hidden\s*=\s*nextHidden/);
+  assert.match(appJs, /shell\?\.scrollIntoView\(\{\s*behavior:\s*"smooth",\s*block:\s*"nearest"\s*\}\)/);
+  assert.match(appJs, /setSampleLibraryCreateFormOpen\(true\)/);
+  assert.match(appJs, /setSampleLibraryCreateFormOpen\(false\)/);
+});
+
+test("frontend gates secondary sample-library and lifecycle-save actions with inline hints", async () => {
+  const { appJs } = await readFrontendFiles();
+
+  assert.match(appJs, /function\s+getSampleLibraryDetailBaseRequirementMessage\s*\(/);
+  assert.match(appJs, /function\s+getSampleLibraryDetailReferenceRequirementMessage\s*\(/);
+  assert.match(appJs, /function\s+getSampleLibraryDetailLifecycleRequirementMessage\s*\(/);
+  assert.match(appJs, /function\s+syncSampleLibraryDetailActions\s*\(/);
+  assert.match(appJs, /function\s+getLifecycleSaveRequirementMessage\s*\(/);
+  assert.match(appJs, /function\s+syncLifecycleResultActions\s*\(/);
+
+  assert.match(appJs, /id="sample-library-base-action-hint"/);
+  assert.match(appJs, /id="sample-library-reference-action-hint"/);
+  assert.match(appJs, /id="sample-library-lifecycle-action-hint"/);
+  assert.match(appJs, /id="analysis-lifecycle-action-hint"/);
+  assert.match(appJs, /id="rewrite-lifecycle-action-hint"/);
+  assert.match(appJs, /id="generation-lifecycle-action-hint"/);
+
+  assert.match(appJs, /setActionGateHint\("sample-library-base-action-hint",\s*baseMessage\)/);
+  assert.match(appJs, /setActionGateHint\("sample-library-reference-action-hint",\s*referenceMessage\)/);
+  assert.match(appJs, /setActionGateHint\("sample-library-lifecycle-action-hint",\s*lifecycleMessage\)/);
+  assert.match(appJs, /setActionGateHint\("analysis-lifecycle-action-hint",\s*analysisMessage\)/);
+  assert.match(appJs, /setActionGateHint\("rewrite-lifecycle-action-hint",\s*rewriteMessage\)/);
+  assert.match(appJs, /setActionGateHint\("generation-lifecycle-action-hint",\s*generationMessage\)/);
+
+  assert.match(appJs, /byId\("sample-library-detail"\)\?\.addEventListener\("input",\s*syncSampleLibraryDetailActions\)/);
+  assert.match(appJs, /byId\("sample-library-detail"\)\?\.addEventListener\("change",\s*syncSampleLibraryDetailActions\)/);
+  assert.match(appJs, /renderSampleLibraryDetail\(selectedRecord\);[\s\S]*syncSampleLibraryDetailActions\(\)/);
+  assert.match(appJs, /renderAnalysis\(result[\s\S]*analysis-lifecycle-action-hint/);
+  assert.match(appJs, /renderRewriteResult\(result\)[\s\S]*rewrite-lifecycle-action-hint/);
+  assert.match(appJs, /renderGenerationResult\(result = \{\}\)[\s\S]*generation-lifecycle-action-hint/);
+});
+
+test("frontend also gates prefill and lexicon submit actions that depend on prerequisite content", async () => {
+  const { indexHtml, appJs } = await readFrontendFiles();
+
+  assert.match(indexHtml, /id="rewrite-pair-prefill-hint"/);
+  assert.match(indexHtml, /id="sample-library-prefill-action-hint"/);
+  assert.match(indexHtml, /id="custom-lexicon-action-hint"/);
+  assert.match(indexHtml, /id="seed-lexicon-action-hint"/);
+
+  assert.match(appJs, /function\s+getRewritePairPrefillRequirementMessage\s*\(/);
+  assert.match(appJs, /function\s+getSampleLibraryPrefillAnalysisRequirementMessage\s*\(/);
+  assert.match(appJs, /function\s+getSampleLibraryPrefillRewriteRequirementMessage\s*\(/);
+  assert.match(appJs, /function\s+syncSampleLibraryPrefillActions\s*\(/);
+  assert.match(appJs, /function\s+getLexiconRequirementMessage\s*\(/);
+  assert.match(appJs, /function\s+syncLexiconFormActions\s*\(/);
+
+  assert.match(appJs, /setActionGateHint\("rewrite-pair-prefill-hint",\s*requirementMessage\)/);
+  assert.match(appJs, /setActionGateHint\("sample-library-prefill-action-hint",\s*analysisMessage \|\| rewriteMessage\)/);
+  assert.match(appJs, /setActionGateHint\("custom-lexicon-action-hint",\s*customMessage\)/);
+  assert.match(appJs, /setActionGateHint\("seed-lexicon-action-hint",\s*seedMessage\)/);
+
+  assert.match(appJs, /byId\("custom-lexicon-form"\)\.addEventListener\("input",\s*syncLexiconFormActions\)/);
+  assert.match(appJs, /byId\("custom-lexicon-form"\)\.addEventListener\("change",\s*syncLexiconFormActions\)/);
+  assert.match(appJs, /byId\("seed-lexicon-form"\)\.addEventListener\("input",\s*syncLexiconFormActions\)/);
+  assert.match(appJs, /byId\("seed-lexicon-form"\)\.addEventListener\("change",\s*syncLexiconFormActions\)/);
+  assert.match(appJs, /syncRewritePairPrefillButton\(\);[\s\S]*syncSampleLibraryPrefillActions\(\);[\s\S]*syncLexiconFormActions\(\)/);
 });

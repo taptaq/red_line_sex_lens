@@ -47,12 +47,16 @@ test("frontend exposes review benchmark maintenance tab and form skeleton", asyn
   assert.match(indexHtml, /id="review-benchmark-type-filter"/);
   assert.match(indexHtml, /id="review-benchmark-source-filter"/);
   assert.match(indexHtml, /id="review-benchmark-view-filter"/);
+  assert.match(indexHtml, /id="review-benchmark-action-hint"/);
   assert.match(benchmarkPanel, /name="collectionType"/);
   assert.match(appJs, /const reviewBenchmarkApi = "\/api\/review-benchmark"/);
   assert.match(appJs, /function renderReviewBenchmarkSamples/);
   assert.match(appJs, /function expectedTypeLabel/);
   assert.match(appJs, /function filterReviewBenchmarkSamples/);
   assert.match(appJs, /function buildReviewBenchmarkMismatchSummary/);
+  assert.match(appJs, /function getReviewBenchmarkSubmitRequirementMessage\(/);
+  assert.match(appJs, /function getReviewBenchmarkRunRequirementMessage\(/);
+  assert.match(appJs, /function syncReviewBenchmarkActions\(/);
   assert.match(appJs, /data-action="delete-review-benchmark"/);
 });
 
@@ -92,10 +96,13 @@ test("review benchmark filter controls are wired into app state and list renderi
   assert.match(styles, /\.review-benchmark-toolbar/);
   assert.match(styles, /\.review-benchmark-toolbar-filters/);
   assert.match(styles, /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(220px,\s*1fr\)\)/);
+  assert.match(styles, /@media\s*\(max-width:\s*1360px\)/);
+  assert.match(styles, /@media\s*\(max-width:\s*1360px\)\s*\{[\s\S]*\.feedback-model-grid\s*,[\s\S]*\.review-provider-grid\s*\{[\s\S]*grid-template-columns:\s*1fr 1fr;/);
   assert.match(styles, /@media\s*\(max-width:\s*1200px\)/);
   assert.match(styles, /\.sample-library-toolbar/);
   assert.match(styles, /\.workflow-assistant-card/);
   assert.match(styles, /\.false-positive-capture-form/);
+  assert.match(styles, /@media\s*\(max-width:\s*1360px\)\s*\{[\s\S]*\.sample-library-toolbar\s*,[\s\S]*\.review-benchmark-toolbar\s*,[\s\S]*\.false-positive-capture-form\s*,[\s\S]*\.cross-review-top\s*\{[\s\S]*grid-template-columns:\s*1fr;/);
 });
 
 test("review benchmark run button uses dedicated run endpoint and renders summary details", async () => {
@@ -215,6 +222,7 @@ test("style profile draft supports inline manual editing controls and update flo
   assert.match(renderSource, /name="bodyStructure"/);
   assert.match(renderSource, /name="preferredTags"/);
   assert.match(styleProfileActionArea, /save-style-profile-draft/);
+  assert.doesNotMatch(styleProfileActionArea, /revealStyleProfilePane\(/);
   assert.match(styleProfileConfirmBranch, /action:\s*"update-draft"/);
   assert.match(appJs, /edit-style-profile-draft/);
   assert.match(appJs, /cancel-style-profile-draft/);

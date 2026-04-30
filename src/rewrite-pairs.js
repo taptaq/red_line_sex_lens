@@ -20,6 +20,15 @@ function normalizePairContent(input = {}) {
   };
 }
 
+function hasMeaningfulPairContent(input = {}) {
+  const normalized = normalizePairContent(input);
+  return Boolean(normalized.title || normalized.body || normalized.coverText || normalized.tags.length);
+}
+
+export function isMeaningfulRewritePairRecord(input = {}) {
+  return hasMeaningfulPairContent(input.before || {}) || hasMeaningfulPairContent(input.after || {});
+}
+
 function summarizeChanges(before, after) {
   const changedFields = ["title", "body", "coverText", "tags"].filter((field) => {
     const beforeValue = field === "tags" ? before.tags.join("、") : before[field];

@@ -11,6 +11,7 @@ import {
   migrateSuccessSampleToNoteRecord
 } from "./note-records.js";
 import { normalizeReviewBenchmarkSample } from "./review-benchmark.js";
+import { isMeaningfulRewritePairRecord } from "./rewrite-pairs.js";
 import { withSampleWeight } from "./sample-weight.js";
 
 async function readJson(filePath, fallback) {
@@ -403,7 +404,8 @@ export async function saveReviewQueue(items) {
 }
 
 export async function loadRewritePairs() {
-  return readJson(paths.rewritePairs, []);
+  const items = await readJson(paths.rewritePairs, []);
+  return (Array.isArray(items) ? items : []).filter((item) => isMeaningfulRewritePairRecord(item));
 }
 
 export async function loadNoteRecords() {
@@ -552,13 +554,13 @@ export async function saveCollectionTypes(value = {}) {
 
 export async function appendRewritePairs(entries) {
   const current = await loadRewritePairs();
-  const next = [...current, ...entries];
+  const next = [...current, ...(Array.isArray(entries) ? entries : [entries]).filter((item) => isMeaningfulRewritePairRecord(item))];
   await writeJson(paths.rewritePairs, next);
   return next;
 }
 
 export async function saveRewritePairs(items) {
-  await writeJson(paths.rewritePairs, items);
+  await writeJson(paths.rewritePairs, (Array.isArray(items) ? items : []).filter((item) => isMeaningfulRewritePairRecord(item)));
 }
 
 export async function loadSeedLexicon() {
