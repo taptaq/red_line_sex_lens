@@ -66,6 +66,13 @@ function buildGeneratedId(sample) {
 
 export function normalizeReviewBenchmarkSample(sample = {}) {
   const input = sample.input && typeof sample.input === "object" ? sample.input : sample;
+  const normalizedNote = {
+    title: normalizeString(input.title),
+    body: normalizeString(input.body),
+    coverText: normalizeString(input.coverText),
+    collectionType: normalizeString(input.collectionType),
+    tags: uniqueStrings(input.tags)
+  };
   const createdAt = isoTimestampOrNow(sample.createdAt);
   const source = normalizeReviewBenchmarkSource(sample.source);
   const normalized = {
@@ -73,19 +80,47 @@ export function normalizeReviewBenchmarkSample(sample = {}) {
     createdAt,
     updatedAt: isoTimestampOrNow(sample.updatedAt) || createdAt,
     ...(source ? { source } : {}),
-    input: {
-      title: normalizeString(input.title),
-      body: normalizeString(input.body),
-      coverText: normalizeString(input.coverText),
-      collectionType: normalizeString(input.collectionType),
-      tags: uniqueStrings(input.tags)
-    }
+    note: normalizedNote,
+    input: normalizedNote
   };
 
   return {
     id: normalizeString(sample.id) || buildGeneratedId(normalized),
     ...normalized
   };
+}
+
+export function buildReviewBenchmarkSampleFromNoteRecord(record = {}, options = {}) {
+  const note = record?.note && typeof record.note === "object" ? record.note : record || {};
+
+  return normalizeReviewBenchmarkSample({
+    expectedType: options.expectedType,
+    source: {
+      type: options.sourceType || "sample_library",
+      recordId: String(record?.id || "").trim()
+    },
+    input: {
+      title: note.title,
+      body: note.body,
+      coverText: note.coverText,
+      collectionType: note.collectionType,
+      tags: note.tags
+    }
+  });
+}
+
+export function buildReviewBenchmarkSampleFromFields(payload = {}) {
+  return normalizeReviewBenchmarkSample({
+    expectedType: payload.expectedType,
+    source: normalizeReviewBenchmarkSource(payload.source),
+    input: {
+      title: payload.title,
+      body: payload.body,
+      coverText: payload.coverText,
+      collectionType: payload.collectionType,
+      tags: payload.tags
+    }
+  });
 }
 
 export function buildReviewBenchmarkDuplicateKey(sample = {}) {

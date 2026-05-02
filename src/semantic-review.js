@@ -51,6 +51,57 @@ const providerConfigs = [
 
 const semanticTimeoutMs = Number(process.env.SEMANTIC_REVIEW_TIMEOUT_MS || 60000);
 const semanticMaxTokens = Number(process.env.SEMANTIC_REVIEW_MAX_TOKENS || 900);
+const semanticStructuredResponseFormat = {
+  type: "json_schema",
+  json_schema: {
+    name: "semantic_review",
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "verdict",
+        "confidence",
+        "categories",
+        "reasons",
+        "implicitSignals",
+        "safeSignals",
+        "summary",
+        "suggestion"
+      ],
+      properties: {
+        verdict: {
+          type: "string",
+          enum: ["hard_block", "manual_review", "observe", "pass"]
+        },
+        confidence: {
+          type: "number"
+        },
+        categories: {
+          type: "array",
+          items: { type: "string" }
+        },
+        reasons: {
+          type: "array",
+          items: { type: "string" }
+        },
+        implicitSignals: {
+          type: "array",
+          items: { type: "string" }
+        },
+        safeSignals: {
+          type: "array",
+          items: { type: "string" }
+        },
+        summary: {
+          type: "string"
+        },
+        suggestion: {
+          type: "string"
+        }
+      }
+    }
+  }
+};
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -234,6 +285,7 @@ async function callProvider(config, input, analysis) {
         temperature: 0.1,
         maxTokens: semanticMaxTokens,
         messages: buildMessages(input, analysis),
+        responseFormat: semanticStructuredResponseFormat,
         timeoutMs: semanticTimeoutMs,
         missingKeyMessage: `缺少 ${config.envKey}`,
         scene: "semantic_review",

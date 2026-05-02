@@ -1,1 +1,95 @@
-{}
+{
+  "draft": null,
+  "current": {
+    "id": "style-profile-draft-1777605040040-fb8183",
+    "status": "active",
+    "topic": "通用风格",
+    "name": "通用风格画像",
+    "sourceSampleIds": [
+      "note-ea1c4591bebf5d3f"
+    ],
+    "titleStyle": "标题平均约 7 字，优先保持清晰、克制、带一点真实经验感。",
+    "bodyStructure": "正文平均约 7 字，优先短段落、先结论后场景，再给可执行建议。",
+    "tone": "温和、克制、像朋友提醒，避免强营销和夸张刺激。",
+    "preferredTags": [
+      "科普",
+      "回退"
+    ],
+    "avoidExpressions": [
+      "绝对化承诺",
+      "强导流",
+      "低俗擦边",
+      "过度教程化"
+    ],
+    "generationGuidelines": [
+      "保留科普、沟通、经验分享语境",
+      "减少刺激性标题党表达",
+      "正文给出具体但不过度细节化的建议"
+    ],
+    "createdAt": "2026-05-01T03:10:40.040Z",
+    "updatedAt": "2026-05-01T03:10:40.040Z",
+    "confirmedAt": "2026-05-01T03:10:40.040Z"
+  },
+  "versions": [
+    {
+      "id": "style-profile-draft-1777605040040-fb8183",
+      "status": "active",
+      "topic": "通用风格",
+      "name": "通用风格画像",
+      "sourceSampleIds": [
+        "note-ea1c4591bebf5d3f"
+      ],
+      "titleStyle": "标题平均约 7 字，优先保持清晰、克制、带一点真实经验感。",
+      "bodyStructure": "正文平均约 7 字，优先短段落、先结论后场景，再给可执行建议。",
+      "tone": "温和、克制、像朋友提醒，避免强营销和夸张刺激。",
+      "preferredTags": [
+        "科普",
+        "回退"
+      ],
+      "avoidExpressions": [
+        "绝对化承诺",
+        "强导流",
+        "低俗擦边",
+        "过度教程化"
+      ],
+      "generationGuidelines": [
+        "保留科普、沟通、经验分享语境",
+        "减少刺激性标题党表达",
+        "正文给出具体但不过度细节化的建议"
+      ],
+      "createdAt": "2026-05-01T03:10:40.040Z",
+      "updatedAt": "2026-05-01T03:10:40.040Z",
+      "confirmedAt": "2026-05-01T03:10:40.040Z"
+    },
+    {
+      "id": "style-profile-draft-1777605040032-a3fa7b",
+      "status": "archived",
+      "topic": "通用风格",
+      "name": "通用风格画像",
+      "sourceSampleIds": [
+        "note-1f8070f6affcea5e"
+      ],
+      "titleStyle": "标题平均约 6 字，优先保持清晰、克制、带一点真实经验感。",
+      "bodyStructure": "正文平均约 6 字，优先短段落、先结论后场景，再给可执行建议。",
+      "tone": "温和、克制、像朋友提醒，避免强营销和夸张刺激。",
+      "preferredTags": [
+        "科普",
+        "沟通"
+      ],
+      "avoidExpressions": [
+        "绝对化承诺",
+        "强导流",
+        "低俗擦边",
+        "过度教程化"
+      ],
+      "generationGuidelines": [
+        "保留科普、沟通、经验分享语境",
+        "减少刺激性标题党表达",
+        "正文给出具体但不过度细节化的建议"
+      ],
+      "createdAt": "2026-05-01T03:10:40.032Z",
+      "updatedAt": "2026-05-01T03:10:40.032Z",
+      "confirmedAt": "2026-05-01T03:10:40.032Z"
+    }
+  ]
+}

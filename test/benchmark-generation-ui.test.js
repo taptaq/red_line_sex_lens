@@ -26,12 +26,19 @@ function sliceBetween(source, startMarker, endMarker) {
 
 test("frontend exposes review benchmark maintenance tab and form skeleton", async () => {
   const { indexHtml, appJs } = await readFrontendFiles();
-  const panelStart = indexHtml.indexOf('<section class="tab-panel" id="review-benchmark-pane">');
-  const panelEnd = indexHtml.indexOf('<section class="tab-panel" id="note-lifecycle-pane">', panelStart);
+  const calibrationStart = indexHtml.indexOf('<details id="system-calibration-panel"');
+  const calibrationEnd = indexHtml.indexOf("</details>", calibrationStart);
+  const calibrationPanel = indexHtml.slice(calibrationStart, calibrationEnd);
+  const panelStart = indexHtml.indexOf('<section id="review-benchmark-pane">');
+  const panelEnd = indexHtml.indexOf('<section id="model-performance-pane">', panelStart);
   const benchmarkPanel = indexHtml.slice(panelStart, panelEnd);
 
-  assert.match(indexHtml, /data-tab-target="review-benchmark-pane"[^>]*>基准评测</);
+  assert.doesNotMatch(indexHtml, /data-tab-target="review-benchmark-pane"[^>]*>基准评测</);
   assert.match(indexHtml, /id="review-benchmark-pane"/);
+  assert.match(indexHtml, /系统校准/);
+  assert.match(indexHtml, /id="system-calibration-panel"/);
+  assert.doesNotMatch(calibrationPanel, /<details id="system-calibration-panel"[^>]*\sopen[>\s]/);
+  assert.match(calibrationPanel, /<summary[^>]*>/);
   assert.match(benchmarkPanel, /id="review-benchmark-form"/);
   assert.match(benchmarkPanel, /name="title"/);
   assert.match(benchmarkPanel, /name="body"/);
@@ -54,6 +61,7 @@ test("frontend exposes review benchmark maintenance tab and form skeleton", asyn
   assert.match(appJs, /function expectedTypeLabel/);
   assert.match(appJs, /function filterReviewBenchmarkSamples/);
   assert.match(appJs, /function buildReviewBenchmarkMismatchSummary/);
+  assert.match(appJs, /function ensureSystemCalibrationOpen\(/);
   assert.match(appJs, /function getReviewBenchmarkSubmitRequirementMessage\(/);
   assert.match(appJs, /function getReviewBenchmarkRunRequirementMessage\(/);
   assert.match(appJs, /function syncReviewBenchmarkActions\(/);
@@ -110,7 +118,7 @@ test("review benchmark run button uses dedicated run endpoint and renders summar
   const runHandler = sliceBetween(
     appJs,
     'byId("review-benchmark-run-button").addEventListener("click"',
-    'byId("style-profile-draft-button").addEventListener("click"'
+    'initializeTabs();'
   );
 
   assert.match(runHandler, /byId\("review-benchmark-run-button"\)\.addEventListener\("click", async \(\) => \{/);
@@ -120,6 +128,7 @@ test("review benchmark run button uses dedicated run endpoint and renders summar
   assert.match(appJs, /summary\.total/);
   assert.match(appJs, /matchedExpectation/);
   assert.match(appJs, /未匹配样本/);
+  assert.match(appJs, /ensureSystemCalibrationOpen\(\)/);
 });
 
 test("review benchmark refresh chain is independent from admin aggregate data", async () => {
@@ -191,7 +200,7 @@ test("review benchmark mismatch actions expose recovery branches for sample libr
   assert.match(actionBranch, /apiJson\("\/api\/false-positive-log", \{/);
   assert.match(actionBranch, /source: "benchmark_mismatch"/);
   assert.match(actionBranch, /userNotes: buildReviewBenchmarkMismatchSummary\(mismatch\)/);
-  assert.match(actionBranch, /revealFalsePositiveLogPane\(\)/);
+  assert.match(actionBranch, /revealFeedbackCenterPane\(\)/);
 });
 
 test("style profile draft supports inline manual editing controls and update flow", async () => {
@@ -224,8 +233,17 @@ test("style profile draft supports inline manual editing controls and update flo
   assert.match(styleProfileActionArea, /save-style-profile-draft/);
   assert.doesNotMatch(styleProfileActionArea, /revealStyleProfilePane\(/);
   assert.match(styleProfileConfirmBranch, /action:\s*"update-draft"/);
+  assert.match(renderSource, /draft \|\| isDraftEditing/);
+  assert.match(renderSource, /cancel-style-profile-draft/);
   assert.match(appJs, /edit-style-profile-draft/);
   assert.match(appJs, /cancel-style-profile-draft/);
+  assert.match(appJs, /confirm-current/);
+  assert.match(renderSource, /style-profile-history-toggle/);
+  assert.match(renderSource, /historyCount/);
+  assert.match(renderSource, /展开历史版本/);
+  assert.match(renderSource, /收起历史版本/);
+  assert.match(renderSource, /Array\.isArray\(profileState\?\.versions\) \? profileState\.versions : \[\]/);
   assert.match(styles, /\.style-profile-form/);
   assert.match(styles, /\.style-profile-actions/);
+  assert.match(styles, /\.style-profile-history-toggle/);
 });

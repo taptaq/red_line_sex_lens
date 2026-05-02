@@ -7,9 +7,11 @@ import path from "node:path";
 import { paths } from "../src/config.js";
 import { loadStyleProfile, loadSuccessSamples, saveStyleProfile } from "../src/data-store.js";
 import {
+  buildAutoStyleProfileState,
   buildStyleProfileDraft,
   confirmStyleProfileDraft,
   getActiveStyleProfile,
+  sanitizeStyleProfileState,
   setActiveStyleProfileVersion,
   updateStyleProfileDraft,
   scoreContentAgainstStyleProfile
@@ -230,4 +232,106 @@ test("style profile draft keeps using success compatibility samples from unified
   assert.equal(draft.topic, "亲密关系科普");
   assert.deepEqual(draft.sourceSampleIds, ["record-featured"]);
   assert.equal(draft.sourceSampleIds.includes("record-lifecycle-only"), false);
+});
+
+test("auto style profile state can be refreshed from unified success samples without manual draft generation", () => {
+  const samples = [
+    {
+      id: "record-featured",
+      tier: "featured",
+      title: "高权重参考样本",
+      body: "这是一篇更完整的经验正文。".repeat(8),
+      tags: ["关系", "科普"]
+    },
+    {
+      id: "record-performed",
+      tier: "performed",
+      title: "稳定参考样本",
+      body: "正文里先结论，再给场景和建议。".repeat(6),
+      tags: ["沟通", "疗愈"]
+    }
+  ];
+
+  const profile = buildAutoStyleProfileState({}, samples, {
+    topic: "自动沉淀画像"
+  });
+
+  assert.equal(profile.current.status, "active");
+  assert.equal(profile.current.topic, "自动沉淀画像");
+  assert.equal(profile.draft, null);
+  assert.deepEqual(profile.current.sourceSampleIds, ["record-featured", "record-performed"]);
+  assert.ok(Array.isArray(profile.versions));
+  assert.equal(profile.versions.length, 1);
+});
+
+test("auto style profile state does not append a new version when content fingerprint is unchanged", () => {
+  const samples = [
+    {
+      id: "record-featured",
+      tier: "featured",
+      title: "高权重参考样本",
+      body: "这是一篇更完整的经验正文。".repeat(8),
+      tags: ["关系", "科普"]
+    },
+    {
+      id: "record-performed",
+      tier: "performed",
+      title: "稳定参考样本",
+      body: "正文里先结论，再给场景和建议。".repeat(6),
+      tags: ["沟通", "疗愈"]
+    }
+  ];
+
+  const firstProfile = buildAutoStyleProfileState({}, samples, {
+    topic: "自动沉淀画像"
+  });
+  const secondProfile = buildAutoStyleProfileState(firstProfile, samples, {
+    topic: "自动沉淀画像"
+  });
+
+  assert.equal(secondProfile.versions.length, 1);
+  assert.equal(secondProfile.current.topic, "自动沉淀画像");
+  assert.deepEqual(secondProfile.current.sourceSampleIds, ["record-featured", "record-performed"]);
+});
+
+test("sanitizeStyleProfileState collapses duplicate historical versions with the same semantic content", () => {
+  const duplicateA = {
+    id: "style-profile-a",
+    status: "archived",
+    topic: "通用风格",
+    name: "通用风格画像",
+    sourceSampleIds: ["note-1"],
+    titleStyle: "标题平均约 6 字，优先保持清晰、克制、带一点真实经验感。",
+    bodyStructure: "正文平均约 6 字，优先短段落、先结论后场景，再给可执行建议。",
+    tone: "温和、克制、像朋友提醒，避免强营销和夸张刺激。",
+    preferredTags: ["科普", "沟通"],
+    avoidExpressions: ["绝对化承诺", "强导流", "低俗擦边", "过度教程化"],
+    generationGuidelines: ["保留科普、沟通、经验分享语境", "减少刺激性标题党表达", "正文给出具体但不过度细节化的建议"],
+    createdAt: "2026-04-30T14:59:46.472Z",
+    updatedAt: "2026-04-30T14:59:46.473Z",
+    confirmedAt: "2026-04-30T14:59:46.473Z"
+  };
+  const duplicateB = {
+    ...duplicateA,
+    id: "style-profile-b",
+    updatedAt: "2026-04-30T15:00:46.473Z",
+    confirmedAt: "2026-04-30T15:00:46.473Z"
+  };
+  const current = {
+    ...duplicateA,
+    id: "style-profile-current",
+    status: "active",
+    updatedAt: "2026-05-01T03:10:40.040Z",
+    confirmedAt: "2026-05-01T03:10:40.040Z"
+  };
+
+  const sanitized = sanitizeStyleProfileState({
+    draft: null,
+    current,
+    versions: [duplicateA, duplicateB, current]
+  });
+
+  assert.equal(sanitized.current.id, "style-profile-current");
+  assert.equal(sanitized.versions.length, 1);
+  assert.equal(sanitized.versions[0].id, "style-profile-current");
 });

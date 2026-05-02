@@ -78,6 +78,71 @@ function normalizeVersions(profileState = {}) {
   return [...byId.values()];
 }
 
+function normalizeProfileFingerprintList(items = []) {
+  return uniqueStrings(items).sort();
+}
+
+function buildStyleProfileFingerprint(profile = {}) {
+  if (!profile || typeof profile !== "object") {
+    return "";
+  }
+
+  return JSON.stringify({
+    topic: normalizeTopic(profile.topic),
+    name: String(profile.name || "").trim(),
+    sourceSampleIds: normalizeProfileFingerprintList(profile.sourceSampleIds),
+    titleStyle: String(profile.titleStyle || "").trim(),
+    bodyStructure: String(profile.bodyStructure || "").trim(),
+    tone: String(profile.tone || "").trim(),
+    preferredTags: normalizeProfileFingerprintList(profile.preferredTags),
+    avoidExpressions: normalizeProfileFingerprintList(profile.avoidExpressions),
+    generationGuidelines: normalizeProfileFingerprintList(profile.generationGuidelines)
+  });
+}
+
+export function sanitizeStyleProfileState(profileState = {}) {
+  const draft = profileState?.draft && typeof profileState.draft === "object" ? profileState.draft : null;
+  const current = profileState?.current && typeof profileState.current === "object" ? profileState.current : null;
+  const versions = normalizeVersions(profileState);
+  const dedupedVersions = [];
+  const seenFingerprints = new Set();
+
+  if (current) {
+    const currentFingerprint = buildStyleProfileFingerprint(current);
+    if (currentFingerprint) {
+      seenFingerprints.add(currentFingerprint);
+    }
+    dedupedVersions.push({ ...current, status: "active" });
+  }
+
+  versions
+    .slice()
+    .sort(
+      (left, right) =>
+        new Date(right.updatedAt || right.confirmedAt || right.createdAt || 0).getTime() -
+        new Date(left.updatedAt || left.confirmedAt || left.createdAt || 0).getTime()
+    )
+    .forEach((item) => {
+      if (current?.id && String(item.id || "").trim() === String(current.id || "").trim()) {
+        return;
+      }
+
+      const fingerprint = buildStyleProfileFingerprint(item);
+      if (!fingerprint || seenFingerprints.has(fingerprint)) {
+        return;
+      }
+
+      seenFingerprints.add(fingerprint);
+      dedupedVersions.push({ ...item, status: "archived" });
+    });
+
+  return {
+    draft,
+    current: current ? { ...current, status: "active" } : null,
+    versions: dedupedVersions
+  };
+}
+
 export function buildStyleProfileDraft(successSamples = [], options = {}) {
   const sourceSamples = (Array.isArray(successSamples) ? successSamples : [])
     .filter((item) => getSuccessSampleWeight(item) >= 2)
@@ -113,6 +178,22 @@ export function buildStyleProfileDraft(successSamples = [], options = {}) {
   };
 }
 
+export function buildAutoStyleProfileState(profileState = {}, successSamples = [], options = {}) {
+  const draft = buildStyleProfileDraft(successSamples, options);
+  const nextState = confirmStyleProfileDraft(
+    {
+      ...profileState,
+      draft
+    },
+    {
+      topic: options.topic,
+      name: options.name
+    }
+  );
+
+  return sanitizeStyleProfileState(nextState);
+}
+
 export function confirmStyleProfileDraft(profileState = {}, overrides = {}) {
   const draft = profileState?.draft;
 
@@ -144,11 +225,11 @@ export function confirmStyleProfileDraft(profileState = {}, overrides = {}) {
     versions.push(current);
   }
 
-  return {
+  return sanitizeStyleProfileState({
     draft: null,
     current,
     versions
-  };
+  });
 }
 
 export function updateStyleProfileDraft(profileState = {}, updates = {}) {
@@ -172,10 +253,39 @@ export function updateStyleProfileDraft(profileState = {}, updates = {}) {
     updatedAt: new Date(nextUpdatedAtMs).toISOString()
   };
 
-  return {
+  return sanitizeStyleProfileState({
     ...profileState,
     draft: nextDraft
+  });
+}
+
+export function updateActiveStyleProfile(profileState = {}, updates = {}) {
+  const current = getActiveStyleProfile(profileState);
+
+  if (!current) {
+    const error = new Error("当前没有可编辑的风格画像。");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const now = new Date().toISOString();
+  const nextCurrent = {
+    ...current,
+    topic: normalizeTopic(updates.topic || current.topic),
+    tone: normalizeEditableProfileText(updates.tone, current.tone),
+    titleStyle: normalizeEditableProfileText(updates.titleStyle, current.titleStyle),
+    bodyStructure: normalizeEditableProfileText(updates.bodyStructure, current.bodyStructure),
+    preferredTags: normalizeEditablePreferredTags(updates.preferredTags, current.preferredTags),
+    updatedAt: now
   };
+  const versions = normalizeVersions(profileState).map((item) => (item.id === nextCurrent.id ? nextCurrent : item));
+
+  return sanitizeStyleProfileState({
+    ...profileState,
+    draft: null,
+    current: nextCurrent,
+    versions
+  });
 }
 
 export function getActiveStyleProfile(profileState = {}, profileId = "") {
@@ -209,11 +319,11 @@ export function setActiveStyleProfileVersion(profileState = {}, profileId = "") 
     updatedAt: now
   };
 
-  return {
+  return sanitizeStyleProfileState({
     ...profileState,
     current: nextCurrent,
     versions: versions.map((item) => (item.id === id ? nextCurrent : { ...item, status: "archived" }))
-  };
+  });
 }
 
 export function scoreContentAgainstStyleProfile(content = {}, profile = null) {

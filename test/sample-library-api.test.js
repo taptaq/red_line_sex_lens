@@ -301,6 +301,62 @@ test("sample library DELETE returns 404 when the canonical record does not exist
   });
 });
 
+test("sample library POST can create a canonical note record from plain content fields before nesting", async (t) => {
+  await withTempSampleLibraryApi(t, async () => {
+    const created = await invokeRoute("POST", "/api/sample-library", {
+      title: "平铺标题",
+      body: "平铺正文",
+      coverText: "平铺封面",
+      collectionType: "科普",
+      tags: ["关系", "沟通"]
+    });
+
+    assert.equal(created.status, 200);
+    assert.equal(created.ok, true);
+    assert.equal(created.item.note.title, "平铺标题");
+    assert.equal(created.item.note.body, "平铺正文");
+    assert.equal(created.item.note.coverText, "平铺封面");
+    assert.equal(created.item.note.collectionType, "科普");
+    assert.deepEqual(created.item.note.tags, ["关系", "沟通"]);
+  });
+});
+
+test("sample library create and patch routes return the canonical merged record even when note fingerprints collapse", async (t) => {
+  await withTempSampleLibraryApi(t, async () => {
+    await invokeRoute("POST", "/api/sample-library", {
+      note: {
+        title: "模板化标题",
+        body: "模板化正文",
+        tags: ["科普"]
+      }
+    });
+
+    const second = await invokeRoute("POST", "/api/sample-library", {
+      note: {
+        title: "待折叠标题",
+        body: "待折叠正文",
+        tags: ["草稿"]
+      }
+    });
+
+    const patched = await invokeRoute("PATCH", "/api/sample-library", {
+      id: second.item.id,
+      note: {
+        title: "模板化标题",
+        body: "模板化正文",
+        tags: ["科普"]
+      }
+    });
+
+    assert.equal(second.status, 200);
+    assert.equal(patched.status, 200);
+    const listed = await invokeRoute("GET", "/api/sample-library");
+    assert.equal(listed.items.length, 1);
+    assert.equal(patched.item.id, listed.items[0].id);
+    assert.equal(patched.item.note.title, "模板化标题");
+  });
+});
+
 async function invokeRoute(method, pathname, body = null) {
   const request = new EventEmitter();
   request.method = method;

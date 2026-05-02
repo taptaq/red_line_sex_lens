@@ -88,6 +88,128 @@ test("style profile API returns 400 when updating draft without an existing draf
   });
 });
 
+test("style profile draft route auto-confirms profile from current success samples", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "style-profile-api-autogen-"));
+  const originals = {
+    styleProfile: paths.styleProfile,
+    noteRecords: paths.noteRecords,
+    successSamples: paths.successSamples,
+    noteLifecycle: paths.noteLifecycle
+  };
+
+  paths.styleProfile = path.join(tempDir, "style-profile.json");
+  paths.noteRecords = path.join(tempDir, "note-records.json");
+  paths.successSamples = path.join(tempDir, "success-samples.json");
+  paths.noteLifecycle = path.join(tempDir, "note-lifecycle.json");
+
+  await fs.writeFile(paths.styleProfile, "{}\n", "utf8");
+  await fs.writeFile(
+    paths.noteRecords,
+    `${JSON.stringify(
+      [
+        {
+          id: "record-featured",
+          source: "generation_final",
+          stage: "published_reference",
+          note: {
+            title: "高权重参考样本",
+            body: "这是一篇更完整的经验正文。".repeat(8),
+            tags: ["关系", "科普"]
+          },
+          reference: {
+            enabled: true,
+            tier: "featured",
+            selectedBy: "auto"
+          },
+          publish: {
+            status: "positive_performance"
+          }
+        }
+      ],
+      null,
+      2
+    )}\n`,
+    "utf8"
+  );
+
+  t.after(async () => {
+    Object.assign(paths, originals);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  const result = await invokeRoute("POST", "/api/style-profile/draft", {
+    topic: "自动沉淀画像"
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.ok, true);
+  assert.equal(result.profile.current.status, "active");
+  assert.equal(result.profile.current.topic, "自动沉淀画像");
+  assert.equal(result.profile.draft, null);
+});
+
+test("style profile draft route does not append duplicate versions when semantic content is unchanged", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "style-profile-api-dedupe-"));
+  const originals = {
+    styleProfile: paths.styleProfile,
+    noteRecords: paths.noteRecords,
+    successSamples: paths.successSamples,
+    noteLifecycle: paths.noteLifecycle
+  };
+
+  paths.styleProfile = path.join(tempDir, "style-profile.json");
+  paths.noteRecords = path.join(tempDir, "note-records.json");
+  paths.successSamples = path.join(tempDir, "success-samples.json");
+  paths.noteLifecycle = path.join(tempDir, "note-lifecycle.json");
+
+  await fs.writeFile(paths.styleProfile, "{}\n", "utf8");
+  await fs.writeFile(
+    paths.noteRecords,
+    `${JSON.stringify(
+      [
+        {
+          id: "record-featured",
+          source: "generation_final",
+          stage: "published_reference",
+          note: {
+            title: "高权重参考样本",
+            body: "这是一篇更完整的经验正文。".repeat(8),
+            tags: ["关系", "科普"]
+          },
+          reference: {
+            enabled: true,
+            tier: "featured",
+            selectedBy: "auto"
+          },
+          publish: {
+            status: "positive_performance"
+          }
+        }
+      ],
+      null,
+      2
+    )}\n`,
+    "utf8"
+  );
+
+  t.after(async () => {
+    Object.assign(paths, originals);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  const first = await invokeRoute("POST", "/api/style-profile/draft", {
+    topic: "自动沉淀画像"
+  });
+  const second = await invokeRoute("POST", "/api/style-profile/draft", {
+    topic: "自动沉淀画像"
+  });
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.equal(second.profile.versions.length, 1);
+  assert.equal(second.profile.current.topic, "自动沉淀画像");
+});
+
 async function invokeRoute(method, pathname, body = null) {
   const request = new EventEmitter();
   request.method = method;

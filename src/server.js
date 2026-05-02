@@ -17,6 +17,7 @@ import {
 import { analyzePost } from "./analyzer.js";
 import {
   appendRewritePairs,
+  deleteReviewBenchmarkSampleById,
   loadAnalyzeTagOptions,
   loadCollectionTypes,
   loadFalsePositiveLog,
@@ -27,7 +28,9 @@ import {
   loadSummary,
   loadStyleProfile,
   loadSuccessSamples,
+  deleteCompatibilityItemById,
   saveAnalyzeTagOptions,
+  saveCompatibilityItems,
   saveCollectionTypes,
   saveFalsePositiveLog,
   saveNoteLifecycle,
@@ -61,6 +64,8 @@ import { generateNoteCandidates, repairGenerationCandidate, scoreGenerationCandi
 import { recognizeFeedbackScreenshot, rewritePostForCompliance, suggestFeedbackCandidates } from "./glm.js";
 import { buildRewritePairRecord, isMeaningfulRewritePairRecord } from "./rewrite-pairs.js";
 import {
+  buildReviewBenchmarkSampleFromFields,
+  buildReviewBenchmarkSampleFromNoteRecord,
   choosePreferredReviewBenchmarkSource,
   findMatchingReviewBenchmarkSample,
   normalizeReviewBenchmarkSource,
@@ -68,10 +73,11 @@ import {
 } from "./review-benchmark.js";
 import { mergeRuleAndSemanticAnalysis, runSemanticReview } from "./semantic-review.js";
 import {
-  buildStyleProfileDraft,
+  buildAutoStyleProfileState,
   confirmStyleProfileDraft,
   getActiveStyleProfile,
   setActiveStyleProfileVersion,
+  updateActiveStyleProfile,
   updateStyleProfileDraft
 } from "./style-profile.js";
 import { createSampleLibraryRecord, findSampleLibraryRecord, patchSampleLibraryRecord } from "./sample-library.js";
@@ -148,6 +154,122 @@ async function deleteItemsById(request, response, { loader, saver, notFoundMessa
 
   await saver(next);
   return sendItemsResponse(response, loader);
+}
+
+async function upsertCompatibilityItems(response, request, {
+  kind,
+  loader,
+  buildRecord,
+  upsertRecords,
+  findItem
+}) {
+  const payload = await readBody(request);
+  const current = await loader();
+  const nextRecord = buildRecord(payload);
+  const next = upsertRecords(current, [nextRecord]);
+  await saveCompatibilityItems(next, { kind });
+  const items = await loader();
+  const item = findItem(items, nextRecord) || items[items.length - 1] || null;
+
+  return sendJson(response, 200, {
+    ok: true,
+    item,
+    items
+  });
+}
+
+async function upsertReviewBenchmarkItem(response, request) {
+  const rawPayload = await readBody(request);
+  const payload = buildReviewBenchmarkSamplePayload(rawPayload);
+
+  if (!rawPayload?.noteRecord && Object.prototype.hasOwnProperty.call(rawPayload || {}, "collectionType")) {
+    payload.input.collectionType = assertValidCollectionType(rawPayload?.collectionType, await loadAvailableCollectionTypes());
+  }
+
+  assertReviewBenchmarkSamplePayload(payload, { sourceProvided: rawPayload?.source !== undefined });
+  const current = await loadReviewBenchmarkSamples();
+  const duplicate = findMatchingReviewBenchmarkSample(current, payload);
+
+  if (duplicate) {
+    const merged = normalizeReviewBenchmarkSample({
+      ...duplicate,
+      source: choosePreferredReviewBenchmarkSource(duplicate.source, payload.source),
+      updatedAt: new Date().toISOString()
+    });
+    const next = current.map((item) => (item.id === duplicate.id ? merged : item));
+    await saveReviewBenchmarkSamples(next);
+    const items = await loadReviewBenchmarkSamples();
+    const item = items.find((entry) => entry.id === merged.id) || merged;
+    return sendJson(response, 200, {
+      ok: true,
+      duplicate: true,
+      item,
+      items
+    });
+  }
+
+  const next = [...current, payload];
+  await saveReviewBenchmarkSamples(next);
+  const items = await loadReviewBenchmarkSamples();
+  return sendJson(response, 200, {
+    ok: true,
+    duplicate: false,
+    item: items[items.length - 1] || null,
+    items
+  });
+}
+
+async function persistSampleLibraryRecord(payload = {}) {
+  const normalizedPayload = await normalizeSampleLibraryPayloadCollectionType(payload);
+  const nextRecord = createSampleLibraryRecord(normalizedPayload);
+  const items = await saveNoteRecords([...(await loadNoteRecords()), nextRecord]);
+  const item = findSampleLibraryRecord(items, nextRecord) || items[items.length - 1] || null;
+  const shouldRefreshStyleProfile = item?.reference?.enabled === true;
+  const profile = shouldRefreshStyleProfile ? await refreshAutoStyleProfile() : await loadStyleProfile();
+
+  return { item, items, profile };
+}
+
+async function patchSampleLibraryRecordAndReturn(payload = {}) {
+  const normalizedPayload = await normalizeSampleLibraryPayloadCollectionType(payload);
+  const id = String(normalizedPayload?.id || "").trim();
+  const current = await loadNoteRecords();
+  const index = current.findIndex((item) => String(item.id || "").trim() === id);
+
+  if (index === -1) {
+    const error = new Error("未找到要更新的样本库记录。");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const next = [...current];
+  next[index] = patchSampleLibraryRecord(current[index], normalizedPayload);
+  const items = await saveNoteRecords(next);
+  const item = findSampleLibraryRecord(items, next[index]) || null;
+  const referenceChanged =
+    Object.prototype.hasOwnProperty.call(normalizedPayload || {}, "reference") ||
+    (normalizedPayload?.publish && (item?.reference?.enabled === true || current[index]?.reference?.enabled === true));
+  const profile = referenceChanged ? await refreshAutoStyleProfile() : await loadStyleProfile();
+
+  return { item, items, profile };
+}
+
+async function deleteSampleLibraryRecordAndReturn(id) {
+  const targetId = String(id || "").trim();
+  const current = await loadNoteRecords();
+  const removed = current.find((item) => String(item.id || "").trim() === targetId) || null;
+  const next = current.filter((item) => String(item.id || "").trim() !== targetId);
+
+  if (next.length === current.length) {
+    const error = new Error("未找到要删除的样本库记录。");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  await saveNoteRecords(next);
+  const profile = removed?.reference?.enabled === true ? await refreshAutoStyleProfile() : await loadStyleProfile();
+
+  return { items: next, profile };
 }
 
 export function lifecycleRecordToReferenceSample(item = {}) {
@@ -249,17 +371,22 @@ function parseBenchmarkTags(tags = []) {
 }
 
 function buildReviewBenchmarkSamplePayload(payload = {}) {
-  return {
+  if (payload?.noteRecord && typeof payload.noteRecord === "object") {
+    return buildReviewBenchmarkSampleFromNoteRecord(payload.noteRecord, {
+      expectedType: payload.expectedType,
+      sourceType: payload?.source?.type || payload?.sourceType || "sample_library"
+    });
+  }
+
+  return buildReviewBenchmarkSampleFromFields({
     expectedType: String(payload.expectedType || "").trim(),
     source: normalizeReviewBenchmarkSource(payload.source),
-    input: {
-      title: String(payload.title || "").trim(),
-      body: String(payload.body || "").trim(),
-      coverText: String(payload.coverText || "").trim(),
-      collectionType: String(payload.collectionType || "").trim(),
-      tags: parseBenchmarkTags(payload.tags)
-    }
-  };
+    title: payload.title,
+    body: payload.body,
+    coverText: payload.coverText,
+    collectionType: payload.collectionType,
+    tags: parseBenchmarkTags(payload.tags)
+  });
 }
 
 function isAllowedBenchmarkExpectedType(value = "") {
@@ -318,6 +445,24 @@ function assertRunnableReviewBenchmarkSamples(items = []) {
 }
 
 let reviewBenchmarkHarnessRunner = runReviewBenchmarkHarness;
+
+async function refreshAutoStyleProfile({ topic = "", name = "" } = {}) {
+  const [currentProfile, successSamples] = await Promise.all([loadStyleProfile(), loadSuccessSamples()]);
+
+  if (!successSamples.length) {
+    return currentProfile;
+  }
+
+  const currentTopic = String(currentProfile?.current?.topic || "").trim();
+  const currentName = String(currentProfile?.current?.name || "").trim();
+  const nextProfile = buildAutoStyleProfileState(currentProfile, successSamples, {
+    topic: String(topic || "").trim() || currentTopic,
+    name: String(name || "").trim() || currentName
+  });
+
+  await saveStyleProfile(nextProfile);
+  return nextProfile;
+}
 
 export function setReviewBenchmarkHarnessRunnerForTests(runner) {
   const previous = reviewBenchmarkHarnessRunner;
@@ -1004,84 +1149,38 @@ async function handleRequest(request, response) {
   }
 
   if (request.method === "POST" && url.pathname === "/api/success-samples") {
-    const payload = await readBody(request);
-    const current = await loadSuccessSamples();
-    const nextRecord = buildSuccessSampleRecord(payload);
-    const next = upsertSuccessSampleRecords(current, [nextRecord]);
-    await saveSuccessSamples(next);
-    const items = await loadSuccessSamples();
-    const item = items.find((entry) => isSameSuccessSample(entry, nextRecord)) || items[items.length - 1] || null;
-    return sendJson(response, 200, {
-      ok: true,
-      item,
-      items
+    return upsertCompatibilityItems(response, request, {
+      kind: "success",
+      loader: loadSuccessSamples,
+      buildRecord: buildSuccessSampleRecord,
+      upsertRecords: upsertSuccessSampleRecords,
+      findItem: (items, nextRecord) => items.find((entry) => isSameSuccessSample(entry, nextRecord))
     });
   }
 
   if (request.method === "POST" && url.pathname === "/api/note-lifecycle") {
-    const payload = await readBody(request);
-    const current = await loadNoteLifecycle();
-    const nextRecord = buildLifecycleRecord(payload);
-    const next = upsertLifecycleRecords(current, [nextRecord]);
-    await saveNoteLifecycle(next);
-    const items = await loadNoteLifecycle();
-    const item = items.find((entry) => isSameLifecycleItem(entry, nextRecord)) || items[items.length - 1] || null;
-    return sendJson(response, 200, {
-      ok: true,
-      item,
-      items
+    return upsertCompatibilityItems(response, request, {
+      kind: "lifecycle",
+      loader: loadNoteLifecycle,
+      buildRecord: buildLifecycleRecord,
+      upsertRecords: upsertLifecycleRecords,
+      findItem: (items, nextRecord) => items.find((entry) => isSameLifecycleItem(entry, nextRecord))
     });
   }
 
   if (request.method === "POST" && url.pathname === "/api/sample-library") {
-    const payload = await normalizeSampleLibraryPayloadCollectionType(await readBody(request));
-    const nextRecord = createSampleLibraryRecord(payload);
-    const items = await saveNoteRecords([...(await loadNoteRecords()), nextRecord]);
-    const item = findSampleLibraryRecord(items, nextRecord) || items[items.length - 1] || null;
+    const payload = await readBody(request);
+    const { item, items, profile } = await persistSampleLibraryRecord(payload);
     return sendJson(response, 200, {
       ok: true,
       item,
-      items
+      items,
+      profile
     });
   }
 
   if (request.method === "POST" && url.pathname === "/api/review-benchmark") {
-    const rawPayload = await readBody(request);
-    const payload = buildReviewBenchmarkSamplePayload(rawPayload);
-    if (Object.prototype.hasOwnProperty.call(rawPayload || {}, "collectionType")) {
-      payload.input.collectionType = assertValidCollectionType(rawPayload?.collectionType, await loadAvailableCollectionTypes());
-    }
-    assertReviewBenchmarkSamplePayload(payload, { sourceProvided: rawPayload?.source !== undefined });
-    const current = await loadReviewBenchmarkSamples();
-    const duplicate = findMatchingReviewBenchmarkSample(current, payload);
-
-    if (duplicate) {
-      const merged = normalizeReviewBenchmarkSample({
-        ...duplicate,
-        source: choosePreferredReviewBenchmarkSource(duplicate.source, payload.source),
-        updatedAt: new Date().toISOString()
-      });
-      const next = current.map((item) => (item.id === duplicate.id ? merged : item));
-      await saveReviewBenchmarkSamples(next);
-      const items = await loadReviewBenchmarkSamples();
-      const item = items.find((entry) => entry.id === merged.id) || merged;
-      return sendJson(response, 200, {
-        ok: true,
-        duplicate: true,
-        item,
-        items
-      });
-    }
-
-    const next = [...current, payload];
-    await saveReviewBenchmarkSamples(next);
-    const items = await loadReviewBenchmarkSamples();
-    return sendJson(response, 200, {
-      ok: true,
-      duplicate: false,
-      item: items[items.length - 1] || null,
-      items
-    });
+    return upsertReviewBenchmarkItem(response, request);
   }
 
   if (request.method === "POST" && url.pathname === "/api/collection-types") {
@@ -1116,21 +1215,14 @@ async function handleRequest(request, response) {
 
   if (request.method === "POST" && url.pathname === "/api/style-profile/draft") {
     const payload = await readBody(request);
-    const samples = await loadSuccessSamples();
-    const current = await loadStyleProfile();
-    const draft = buildStyleProfileDraft(samples, {
+    const profile = await refreshAutoStyleProfile({
       topic: payload?.topic,
       name: payload?.name
     });
-    const profile = {
-      ...current,
-      draft
-    };
-    await saveStyleProfile(profile);
     return sendJson(response, 200, {
       ok: true,
       profile,
-      draft
+      draft: null
     });
   }
 
@@ -1175,9 +1267,11 @@ async function handleRequest(request, response) {
     const profile =
       payload?.action === "activate"
         ? setActiveStyleProfileVersion(current, payload?.id)
+        : payload?.action === "confirm-current"
+          ? updateActiveStyleProfile(current, payload?.profile || payload || {})
         : payload?.action === "update-draft"
           ? updateStyleProfileDraft(current, payload?.profile || payload || {})
-        : confirmStyleProfileDraft(current, payload?.profile || payload || {});
+          : confirmStyleProfileDraft(current, payload?.profile || payload || {});
     await saveStyleProfile(profile);
     return sendJson(response, 200, {
       ok: true,
@@ -1210,25 +1304,13 @@ async function handleRequest(request, response) {
   }
 
   if (request.method === "PATCH" && url.pathname === "/api/sample-library") {
-    const payload = await normalizeSampleLibraryPayloadCollectionType(await readBody(request));
-    const id = String(payload?.id || "").trim();
-    const current = await loadNoteRecords();
-    const index = current.findIndex((item) => String(item.id || "").trim() === id);
-
-    if (index === -1) {
-      const error = new Error("未找到要更新的样本库记录。");
-      error.statusCode = 404;
-      throw error;
-    }
-
-    const next = [...current];
-    next[index] = patchSampleLibraryRecord(current[index], payload);
-    const items = await saveNoteRecords(next);
-    const item = findSampleLibraryRecord(items, next[index]) || null;
+    const payload = await readBody(request);
+    const { item, items, profile } = await patchSampleLibraryRecordAndReturn(payload);
     return sendJson(response, 200, {
       ok: true,
       item,
-      items
+      items,
+      profile
     });
   }
 
@@ -1308,44 +1390,39 @@ async function handleRequest(request, response) {
   }
 
   if (request.method === "DELETE" && url.pathname === "/api/success-samples") {
-    return deleteItemsById(request, response, {
-      loader: loadSuccessSamples,
-      saver: saveSuccessSamples,
-      notFoundMessage: "未找到要删除的成功样本。"
+    const payload = await readBody(request);
+    const items = await deleteCompatibilityItemById(payload?.id, { kind: "success" });
+    return sendJson(response, 200, {
+      ok: true,
+      items
     });
   }
 
   if (request.method === "DELETE" && url.pathname === "/api/review-benchmark") {
     const payload = await readBody(request);
-    const current = await loadReviewBenchmarkSamples();
-    const next = current.filter((item) => String(item.id || "").trim() !== String(payload?.id || "").trim());
-
-    if (next.length === current.length) {
-      const error = new Error("未找到要删除的基准样本。");
-      error.statusCode = 404;
-      throw error;
-    }
-
-    await saveReviewBenchmarkSamples(next);
+    const items = await deleteReviewBenchmarkSampleById(payload?.id);
     return sendJson(response, 200, {
       ok: true,
-      items: next
+      items
     });
   }
 
   if (request.method === "DELETE" && url.pathname === "/api/note-lifecycle") {
-    return deleteItemsById(request, response, {
-      loader: loadNoteLifecycle,
-      saver: saveNoteLifecycle,
-      notFoundMessage: "未找到要删除的笔记生命周期记录。"
+    const payload = await readBody(request);
+    const items = await deleteCompatibilityItemById(payload?.id, { kind: "lifecycle" });
+    return sendJson(response, 200, {
+      ok: true,
+      items
     });
   }
 
   if (request.method === "DELETE" && url.pathname === "/api/sample-library") {
-    return deleteItemsById(request, response, {
-      loader: loadNoteRecords,
-      saver: saveNoteRecords,
-      notFoundMessage: "未找到要删除的样本库记录。"
+    const payload = await readBody(request);
+    const { items, profile } = await deleteSampleLibraryRecordAndReturn(payload?.id);
+    return sendJson(response, 200, {
+      ok: true,
+      items,
+      profile
     });
   }
 

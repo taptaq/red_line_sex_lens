@@ -940,6 +940,300 @@ test("runSemanticReview falls back to official DeepSeek after DMXAPI returns rea
   );
 });
 
+test("runSemanticReview accepts final JSON embedded in Mimo reasoning_content", async () => {
+  await withEnv(
+    {
+      GLM_API_KEY: "",
+      DASHSCOPE_API_KEY: "",
+      DEEPSEEK_API_KEY: "deepseek-test",
+      DMXAPI_API_KEY: "dmxapi-test",
+      DEEPSEEK_SEMANTIC_MODEL: "deepseek-v4-flash",
+      DEEPSEEK_DMXAPI_MODEL: "mimo-v2.5-free"
+    },
+    async () => {
+      const calls = [];
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async (url, options = {}) => {
+        const body = JSON.parse(String(options.body || "{}"));
+        calls.push({ url: String(url), model: body.model });
+
+        if (String(url) === "https://www.dmxapi.cn/v1/chat/completions" && body.model !== "mimo-v2.5-free") {
+          return createJsonResponse(500, { error: { message: "non-deepseek dmxapi unavailable" } });
+        }
+
+        if (
+          String(url) === "https://www.dmxapi.cn/v1/chat/completions" &&
+          body.model === "mimo-v2.5-free"
+        ) {
+          return createJsonResponse(200, {
+            model: "mimo-v2.5-free",
+            choices: [
+              {
+                message: {
+                  content: [],
+                  reasoning_content: [
+                    { type: "text", text: "先分析语义风险，再决定输出结构。" },
+                    {
+                      type: "text",
+                      text:
+                        '最终输出：```json\n{"verdict":"observe","confidence":0.71,"categories":["边界表达"],"reasons":["mimo reasoning 内含最终 JSON"],"implicitSignals":[],"safeSignals":["沟通语境"],"summary":"mimo reasoning parse success","suggestion":""}\n```'
+                    }
+                  ]
+                }
+              }
+            ]
+          });
+        }
+
+        return createJsonResponse(200, {
+          model: "deepseek-v4-flash",
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  verdict: "manual_review",
+                  confidence: 0.91,
+                  categories: ["不应触发回退"],
+                  reasons: ["这条结果不该被使用"],
+                  implicitSignals: [],
+                  safeSignals: [],
+                  summary: "unexpected fallback",
+                  suggestion: ""
+                })
+              }
+            }
+          ]
+        });
+      };
+
+      try {
+        const { runSemanticReview } = await importFresh("../src/semantic-review.js");
+        const result = await runSemanticReview({
+          input: { title: "测试标题", body: "测试正文", tags: ["关系"] },
+          analysis: { verdict: "manual_review", hits: [], suggestions: [] }
+        });
+
+        assert.equal(result.status, "ok");
+        assert.equal(result.review.provider, "mimo");
+        assert.equal(result.review.model, "mimo-v2.5-free");
+        assert.equal(result.review.verdict, "observe");
+        assert.deepEqual(result.review.reasons, ["mimo reasoning 内含最终 JSON"]);
+        assert.equal(
+          calls.filter(
+            (call) =>
+              call.url === "https://www.dmxapi.cn/v1/chat/completions" &&
+              call.model === "mimo-v2.5-free"
+          ).length,
+          1
+        );
+        assert.equal(
+          calls.some(
+            (call) => call.url === "https://api.deepseek.com/chat/completions" && call.model === "deepseek-v4-flash"
+          ),
+          false
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    }
+  );
+});
+
+test("runSemanticReview accepts final JSON embedded in Mimo choice-level reasoning_content", async () => {
+  await withEnv(
+    {
+      GLM_API_KEY: "",
+      DASHSCOPE_API_KEY: "",
+      DEEPSEEK_API_KEY: "deepseek-test",
+      DMXAPI_API_KEY: "dmxapi-test",
+      DEEPSEEK_SEMANTIC_MODEL: "deepseek-v4-flash",
+      DEEPSEEK_DMXAPI_MODEL: "mimo-v2.5-free"
+    },
+    async () => {
+      const calls = [];
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async (url, options = {}) => {
+        const body = JSON.parse(String(options.body || "{}"));
+        calls.push({ url: String(url), model: body.model });
+
+        if (String(url) === "https://www.dmxapi.cn/v1/chat/completions" && body.model !== "mimo-v2.5-free") {
+          return createJsonResponse(500, { error: { message: "non-deepseek dmxapi unavailable" } });
+        }
+
+        if (
+          String(url) === "https://www.dmxapi.cn/v1/chat/completions" &&
+          body.model === "mimo-v2.5-free"
+        ) {
+          return createJsonResponse(200, {
+            model: "mimo-v2.5-free",
+            choices: [
+              {
+                message: {
+                  content: []
+                },
+                reasoning_content: [
+                  { type: "text", text: "先分析语义风险，再决定输出结构。" },
+                  {
+                    type: "text",
+                    text:
+                      '最终输出：```json\n{"verdict":"observe","confidence":0.73,"categories":["边界表达"],"reasons":["mimo choice reasoning 内含最终 JSON"],"implicitSignals":[],"safeSignals":["沟通语境"],"summary":"mimo choice reasoning parse success","suggestion":""}\n```'
+                  }
+                ]
+              }
+            ]
+          });
+        }
+
+        return createJsonResponse(200, {
+          model: "deepseek-v4-flash",
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  verdict: "manual_review",
+                  confidence: 0.91,
+                  categories: ["不应触发回退"],
+                  reasons: ["这条结果不该被使用"],
+                  implicitSignals: [],
+                  safeSignals: [],
+                  summary: "unexpected fallback",
+                  suggestion: ""
+                })
+              }
+            }
+          ]
+        });
+      };
+
+      try {
+        const { runSemanticReview } = await importFresh("../src/semantic-review.js");
+        const result = await runSemanticReview({
+          input: { title: "测试标题", body: "测试正文", tags: ["关系"] },
+          analysis: { verdict: "manual_review", hits: [], suggestions: [] }
+        });
+
+        assert.equal(result.status, "ok");
+        assert.equal(result.review.provider, "mimo");
+        assert.equal(result.review.model, "mimo-v2.5-free");
+        assert.equal(result.review.verdict, "observe");
+        assert.deepEqual(result.review.reasons, ["mimo choice reasoning 内含最终 JSON"]);
+        assert.equal(
+          calls.some(
+            (call) => call.url === "https://api.deepseek.com/chat/completions" && call.model === "deepseek-v4-flash"
+          ),
+          false
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    }
+  );
+});
+
+test("runSemanticReview sends structured json_schema format to Mimo DMXAPI and accepts message.parsed", async () => {
+  await withEnv(
+    {
+      GLM_API_KEY: "",
+      DASHSCOPE_API_KEY: "",
+      DEEPSEEK_API_KEY: "deepseek-test",
+      DMXAPI_API_KEY: "dmxapi-test",
+      DEEPSEEK_SEMANTIC_MODEL: "deepseek-v4-flash",
+      DEEPSEEK_DMXAPI_MODEL: "mimo-v2.5-free"
+    },
+    async () => {
+      const calls = [];
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async (url, options = {}) => {
+        const body = JSON.parse(String(options.body || "{}"));
+        calls.push({ url: String(url), body });
+
+        if (String(url) === "https://www.dmxapi.cn/v1/chat/completions" && body.model === "mimo-v2.5-free") {
+          if (body.response_format?.type === "json_schema") {
+            return createJsonResponse(200, {
+              model: "mimo-v2.5-free",
+              choices: [
+                {
+                  message: {
+                    content: [],
+                    parsed: {
+                      verdict: "observe",
+                      confidence: 0.78,
+                      categories: ["边界表达"],
+                      reasons: ["mimo structured output parsed success"],
+                      implicitSignals: [],
+                      safeSignals: ["沟通语境"],
+                      summary: "mimo parsed payload success",
+                      suggestion: ""
+                    }
+                  }
+                }
+              ]
+            });
+          }
+
+          return createJsonResponse(200, {
+            model: "mimo-v2.5-free",
+            choices: [
+              {
+                message: {
+                  content: [],
+                  reasoning_content: [{ type: "text", text: "只返回了思考过程，没有最终 JSON。" }]
+                }
+              }
+            ]
+          });
+        }
+
+        return createJsonResponse(200, {
+          model: "deepseek-v4-flash",
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  verdict: "manual_review",
+                  confidence: 0.91,
+                  categories: ["不应触发回退"],
+                  reasons: ["这条结果不该被使用"],
+                  implicitSignals: [],
+                  safeSignals: [],
+                  summary: "unexpected fallback",
+                  suggestion: ""
+                })
+              }
+            }
+          ]
+        });
+      };
+
+      try {
+        const { runSemanticReview } = await importFresh("../src/semantic-review.js");
+        const result = await runSemanticReview({
+          input: { title: "测试标题", body: "测试正文", tags: ["关系"] },
+          analysis: { verdict: "manual_review", hits: [], suggestions: [] },
+          modelSelection: "mimo"
+        });
+
+        assert.equal(result.status, "ok");
+        assert.equal(result.review.provider, "mimo");
+        assert.equal(result.review.model, "mimo-v2.5-free");
+        assert.equal(result.review.verdict, "observe");
+        assert.deepEqual(result.review.reasons, ["mimo structured output parsed success"]);
+        const mimoCall = calls.find(
+          (call) =>
+            call.url === "https://www.dmxapi.cn/v1/chat/completions" &&
+            call.body.model === "mimo-v2.5-free"
+        );
+        assert.ok(mimoCall);
+        assert.equal(mimoCall.body.response_format?.type, "json_schema");
+        assert.equal(mimoCall.body.response_format?.json_schema?.name, "semantic_review");
+        assert.equal(calls.some((call) => call.url === "https://api.deepseek.com/chat/completions"), false);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    }
+  );
+});
+
 test("runCrossModelReview sends a larger default token budget to reduce truncated JSON", async () => {
   await withEnv(
     {

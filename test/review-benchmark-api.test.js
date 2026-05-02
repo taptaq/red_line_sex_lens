@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { paths } from "../src/config.js";
+import { buildNoteRecord } from "../src/note-records.js";
 import {
   safeHandleRequest,
   setReviewBenchmarkHarnessRunnerForTests
@@ -167,6 +168,43 @@ test("review benchmark API does not create duplicate samples and preserves sourc
     assert.deepEqual(duplicate.item.source, {
       type: "sample_library",
       recordId: "note-001"
+    });
+  });
+});
+
+test("review benchmark API can create a sample directly from a canonical note record payload", async (t) => {
+  await withTempReviewBenchmarkApi(t, async () => {
+    const created = await invokeRoute("POST", "/api/review-benchmark", {
+      expectedType: "误报样本",
+      noteRecord: buildNoteRecord({
+        id: "note-bridge-001",
+        note: {
+          title: "桥接标题",
+          body: "桥接正文",
+          coverText: "桥接封面",
+          collectionType: "科普",
+          tags: ["关系", "沟通"]
+        }
+      }),
+      source: {
+        type: "sample_library",
+        recordId: "note-bridge-001"
+      }
+    });
+
+    assert.equal(created.status, 200);
+    assert.equal(created.ok, true);
+    assert.equal(created.item.expectedType, "false_positive");
+    assert.deepEqual(created.item.source, {
+      type: "sample_library",
+      recordId: "note-bridge-001"
+    });
+    assert.deepEqual(created.item.input, {
+      title: "桥接标题",
+      body: "桥接正文",
+      coverText: "桥接封面",
+      collectionType: "科普",
+      tags: ["关系", "沟通"]
     });
   });
 });

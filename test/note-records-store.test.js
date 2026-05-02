@@ -8,6 +8,7 @@ import { paths } from "../src/config.js";
 import {
   loadNoteLifecycle,
   loadNoteRecords,
+  replaceNoteRecordCompatibilityView,
   loadSuccessSamples,
   saveNoteLifecycle,
   saveNoteRecords,
@@ -273,6 +274,42 @@ test("note records store round-trips canonical records", async (t) => {
     assert.equal(stored.length, 1);
     assert.deepEqual(stored[0], record);
   });
+});
+
+test("replaceNoteRecordCompatibilityView applies shared success/lifecycle reconciliation rules", () => {
+  const mergedCanonical = buildNoteRecord({
+    id: "canonical-1",
+    source: "generation_final",
+    stage: "published",
+    note: {
+      title: "统一兼容标题",
+      body: "统一兼容正文",
+      tags: ["科普"]
+    },
+    publish: {
+      status: "positive_performance",
+      metrics: { likes: 88, favorites: 21, comments: 6 },
+      notes: "生命周期表现"
+    },
+    reference: {
+      enabled: true,
+      tier: "featured",
+      selectedBy: "manual",
+      notes: "参考样本备注"
+    }
+  });
+
+  const successRemoved = replaceNoteRecordCompatibilityView([mergedCanonical], [], "success");
+  const lifecycleRemoved = replaceNoteRecordCompatibilityView([mergedCanonical], [], "lifecycle");
+
+  assert.equal(successRemoved.length, 1);
+  assert.equal(successRemoved[0].reference.enabled, false);
+  assert.equal(successRemoved[0].publish.status, "positive_performance");
+
+  assert.equal(lifecycleRemoved.length, 1);
+  assert.equal(lifecycleRemoved[0].reference.enabled, true);
+  assert.equal(lifecycleRemoved[0].reference.tier, "featured");
+  assert.equal(lifecycleRemoved[0].publish.status, "published_passed");
 });
 
 test("saving lifecycle view persists canonical note records in unified storage", async (t) => {

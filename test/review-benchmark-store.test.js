@@ -6,6 +6,8 @@ import path from "node:path";
 
 import { paths } from "../src/config.js";
 import { loadReviewBenchmarkSamples, saveReviewBenchmarkSamples } from "../src/data-store.js";
+import { buildReviewBenchmarkSampleFromFields, buildReviewBenchmarkSampleFromNoteRecord } from "../src/review-benchmark.js";
+import { buildNoteRecord } from "../src/note-records.js";
 
 async function withTempBenchmarkPath(t, run) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "review-benchmark-store-"));
@@ -52,10 +54,18 @@ test("saveReviewBenchmarkSamples normalizes expectedType and input content befor
         expectedType: "success",
         createdAt: raw[0].createdAt,
         updatedAt: raw[0].updatedAt,
+        note: {
+          title: "标题",
+          body: "正文内容",
+          coverText: "封面文案",
+          collectionType: "",
+          tags: ["沟通", "关系"]
+        },
         input: {
           title: "标题",
           body: "正文内容",
           coverText: "封面文案",
+          collectionType: "",
           tags: ["沟通", "关系"]
         }
       }
@@ -87,10 +97,18 @@ test("loadReviewBenchmarkSamples normalizes stored samples after reading", async
         expectedType: "success",
         createdAt: "2026-04-28T10:00:00.000Z",
         updatedAt: "2026-04-28T12:00:00.000Z",
+        note: {
+          title: "经验分享",
+          body: "这是正文。",
+          coverText: "封面摘要",
+          collectionType: "",
+          tags: ["经验", "科普"]
+        },
         input: {
           title: "经验分享",
           body: "这是正文。",
           coverText: "封面摘要",
+          collectionType: "",
           tags: ["经验", "科普"]
         }
       }
@@ -217,4 +235,82 @@ test("saveReviewBenchmarkSamples normalizes source metadata", async (t) => {
       recordId: "fp-001"
     });
   });
+});
+
+test("review benchmark can derive a normalized sample from a canonical note record", () => {
+  const sample = buildReviewBenchmarkSampleFromNoteRecord(
+    buildNoteRecord({
+      id: "note-001",
+      note: {
+        title: "样本库标题",
+        body: "样本库正文",
+        coverText: "封面摘要",
+        collectionType: "科普",
+        tags: ["关系", "沟通"]
+      }
+    }),
+    {
+      expectedType: "误报样本",
+      sourceType: "sample_library"
+    }
+  );
+
+  assert.equal(sample.expectedType, "false_positive");
+  assert.equal(sample.source.type, "sample_library");
+  assert.equal(sample.source.recordId, "note-001");
+  assert.deepEqual(sample.input, {
+    title: "样本库标题",
+    body: "样本库正文",
+    coverText: "封面摘要",
+    collectionType: "科普",
+    tags: ["关系", "沟通"]
+  });
+});
+
+test("review benchmark manual fields can be normalized through canonical note-record shape first", () => {
+  const sample = buildReviewBenchmarkSampleFromFields({
+    title: " 手动标题 ",
+    body: " 手动正文 ",
+    coverText: " 手动封面 ",
+    collectionType: " 科普 ",
+    tags: ["关系", "关系", "沟通"],
+    expectedType: "正常通过样本",
+    source: {
+      type: "manual"
+    }
+  });
+
+  assert.equal(sample.expectedType, "success");
+  assert.deepEqual(sample.source, { type: "manual" });
+  assert.deepEqual(sample.input, {
+    title: "手动标题",
+    body: "手动正文",
+    coverText: "手动封面",
+    collectionType: "科普",
+    tags: ["关系", "沟通"]
+  });
+});
+
+test("review benchmark exposes a note-like canonical content shape alongside expectedType", () => {
+  const sample = buildReviewBenchmarkSampleFromFields({
+    title: "结构化标题",
+    body: "结构化正文",
+    coverText: "结构化封面",
+    collectionType: "科普",
+    tags: ["关系", "沟通"],
+    expectedType: "误报样本",
+    source: {
+      type: "manual"
+    }
+  });
+
+  assert.deepEqual(sample.note, {
+    title: "结构化标题",
+    body: "结构化正文",
+    coverText: "结构化封面",
+    collectionType: "科普",
+    tags: ["关系", "沟通"]
+  });
+  assert.deepEqual(sample.input, sample.note);
+  assert.equal(sample.expectedType, "false_positive");
 });

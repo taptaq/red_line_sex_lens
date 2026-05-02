@@ -182,25 +182,55 @@ test("confirming a false positive sample creates a whitelist counterexample cand
   });
 });
 
-test("admin page exposes a false positive samples tab and pane", async () => {
+test("admin page exposes one feedback center pane that contains false positive maintenance", async () => {
   const [indexHtml, appJs] = await Promise.all([
     fs.readFile(path.join(process.cwd(), "web/index.html"), "utf8"),
     fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8")
   ]);
 
-  assert.match(indexHtml, /data-tab-target="false-positive-log-pane"/);
+  assert.match(indexHtml, /id="feedback-advanced-panel"/);
+  assert.match(indexHtml, /快速回流/);
+  assert.match(indexHtml, /高级识别/);
+  assert.match(indexHtml, /data-tab-target="feedback-center-pane"/);
+  assert.doesNotMatch(indexHtml, /data-tab-target="false-positive-log-pane"[^>]*>误报样本</);
+  assert.doesNotMatch(indexHtml, /data-tab-target="feedback-log-pane"[^>]*>反馈日志</);
+  assert.match(indexHtml, /id="feedback-center-pane"/);
+  assert.match(indexHtml, /违规反馈/);
+  assert.match(indexHtml, /误报案例/);
+  assert.match(indexHtml, /待优先处理/);
+  assert.match(indexHtml, /feedback-priority-pill/);
+  assert.match(indexHtml, /id="feedback-priority-list"/);
+  assert.match(indexHtml, /id="feedback-log-secondary-list"/);
+  assert.match(indexHtml, /id="false-positive-pending-list"/);
+  assert.match(indexHtml, /id="false-positive-history-list"/);
+  assert.match(indexHtml, /id="feedback-log-list"/);
   assert.match(indexHtml, /id="false-positive-log-list"/);
   assert.match(appJs, /renderFalsePositiveLog|false-positive-log-list/);
+  assert.match(appJs, /renderFeedbackLog|feedback-log-list/);
+  assert.match(appJs, /feedback-item-status/);
   assert.match(appJs, /benchmark_mismatch/);
+  assert.match(appJs, /send-feedback-to-review-queue/);
+  assert.match(appJs, /send-feedback-to-false-positive/);
+  assert.match(appJs, /加入规则复核/);
+  assert.match(appJs, /记录为误报案例/);
+  assert.match(appJs, /反馈推荐动作/);
+  assert.match(appJs, /推荐沉淀规则/);
+  assert.match(appJs, /推荐记为误报/);
+  assert.match(appJs, /先人工判断/);
+  assert.match(appJs, /feedback-priority-list/);
+  assert.match(appJs, /feedback-log-secondary-list/);
+  assert.match(appJs, /false-positive-pending-list/);
+  assert.match(appJs, /false-positive-history-list/);
 });
 
-test("recording a false positive sample refreshes the false positive log list in the UI", async () => {
+test("recording a false positive sample refreshes the feedback center and keeps false positive list visible", async () => {
   const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
 
   assert.match(appJs, /apiJson\("\/api\/false-positive-log"/);
   assert.match(appJs, /renderFalsePositiveLog\(response\.items \|\| \[\]\)/);
-  assert.match(appJs, /activateTab\("false-positive-log-pane"\)/);
-  assert.match(appJs, /false-positive-log-pane"\)\?\.scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
+  assert.match(appJs, /ensureSupportWorkspaceOpen\(\)/);
+  assert.match(appJs, /activateTab\("data-maintenance", "feedback-center-pane"\)/);
+  assert.match(appJs, /feedback-center-pane"\)\?\.scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
 });
 
 async function invokeRoute(method, pathname, body = null) {

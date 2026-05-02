@@ -12,6 +12,7 @@ import {
 } from "./note-records.js";
 import { normalizeReviewBenchmarkSample } from "./review-benchmark.js";
 import { isMeaningfulRewritePairRecord } from "./rewrite-pairs.js";
+import { sanitizeStyleProfileState } from "./style-profile.js";
 import { withSampleWeight } from "./sample-weight.js";
 
 async function readJson(filePath, fallback) {
@@ -463,20 +464,29 @@ export async function loadNoteLifecycle() {
     .map((item) => noteRecordToLifecycleRecord(item));
 }
 
-export async function saveNoteLifecycle(items) {
-  const current = await loadNoteRecords();
-  const incoming = collapseNoteRecordsByCompatibility(
-    dedupeNoteRecords((Array.isArray(items) ? items : []).map((item) => migrateLifecycleToNoteRecord(item)))
-  );
+export function replaceNoteRecordCompatibilityView(current = [], incoming = [], kind = "success") {
   const remainingIncoming = [...incoming];
   const next = [];
+  const isSuccessKind = kind === "success";
 
-  for (const existing of current) {
+  for (const existing of Array.isArray(current) ? current : []) {
     const matchIndex = remainingIncoming.findIndex((item) => noteRecordsMatch(existing, item));
 
     if (matchIndex >= 0) {
       const [replacement] = remainingIncoming.splice(matchIndex, 1);
-      next.push(mergeLifecycleIntoRecord(existing, replacement));
+      next.push(isSuccessKind ? mergeSuccessIntoRecord(existing, replacement) : mergeLifecycleIntoRecord(existing, replacement));
+      continue;
+    }
+
+    if (isSuccessKind) {
+      if (!normalizeNoteRecordReference(existing).enabled) {
+        next.push(existing);
+        continue;
+      }
+
+      if (hasLifecycleCompat(existing)) {
+        next.push(stripReferenceFromRecord(existing));
+      }
       continue;
     }
 
@@ -494,7 +504,15 @@ export async function saveNoteLifecycle(items) {
     next.push(item);
   }
 
-  await saveNoteRecords(next);
+  return next;
+}
+
+export async function saveNoteLifecycle(items) {
+  const current = await loadNoteRecords();
+  const incoming = collapseNoteRecordsByCompatibility(
+    dedupeNoteRecords((Array.isArray(items) ? items : []).map((item) => migrateLifecycleToNoteRecord(item)))
+  );
+  await saveNoteRecords(replaceNoteRecordCompatibilityView(current, incoming, "lifecycle"));
 }
 
 export async function saveSuccessSamples(items) {
@@ -502,41 +520,43 @@ export async function saveSuccessSamples(items) {
   const incoming = collapseNoteRecordsByCompatibility(
     dedupeNoteRecords((Array.isArray(items) ? items : []).map((item) => migrateSuccessSampleToNoteRecord(item)))
   );
-  const remainingIncoming = [...incoming];
-  const next = [];
+  await saveNoteRecords(replaceNoteRecordCompatibilityView(current, incoming, "success"));
+}
 
-  for (const existing of current) {
-    const matchIndex = remainingIncoming.findIndex((item) => noteRecordsMatch(existing, item));
-
-    if (matchIndex >= 0) {
-      const [replacement] = remainingIncoming.splice(matchIndex, 1);
-      next.push(mergeSuccessIntoRecord(existing, replacement));
-      continue;
-    }
-
-    if (!normalizeNoteRecordReference(existing).enabled) {
-      next.push(existing);
-      continue;
-    }
-
-    if (hasLifecycleCompat(existing)) {
-      next.push(stripReferenceFromRecord(existing));
-    }
+export async function saveCompatibilityItems(items, { kind = "success" } = {}) {
+  if (kind === "lifecycle") {
+    await saveNoteLifecycle(items);
+    return;
   }
 
-  for (const item of remainingIncoming) {
-    next.push(item);
+  await saveSuccessSamples(items);
+}
+
+function compatibilityNotFoundMessage(kind = "success") {
+  return kind === "lifecycle" ? "未找到要删除的笔记生命周期记录。" : "未找到要删除的成功样本。";
+}
+
+export async function deleteCompatibilityItemById(id, { kind = "success" } = {}) {
+  const targetId = normalizeString(id);
+  const currentItems = kind === "lifecycle" ? await loadNoteLifecycle() : await loadSuccessSamples();
+  const nextItems = currentItems.filter((item) => normalizeString(item.id) !== targetId);
+
+  if (nextItems.length === currentItems.length) {
+    const error = new Error(compatibilityNotFoundMessage(kind));
+    error.statusCode = 404;
+    throw error;
   }
 
-  await saveNoteRecords(next);
+  await saveCompatibilityItems(nextItems, { kind });
+  return kind === "lifecycle" ? loadNoteLifecycle() : loadSuccessSamples();
 }
 
 export async function loadStyleProfile() {
-  return readJson(paths.styleProfile, {});
+  return sanitizeStyleProfileState(await readJson(paths.styleProfile, {}));
 }
 
 export async function saveStyleProfile(profile) {
-  await writeJson(paths.styleProfile, profile && typeof profile === "object" ? profile : {});
+  await writeJson(paths.styleProfile, sanitizeStyleProfileState(profile && typeof profile === "object" ? profile : {}));
 }
 
 export async function loadCollectionTypes() {
@@ -594,12 +614,13 @@ export async function saveFalsePositiveLog(items) {
 }
 
 export async function loadSummary() {
-  const [seed, custom, feedback, reviewQueue, noteLifecycle] = await Promise.all([
+  const [seed, custom, feedback, reviewQueue, noteLifecycle, noteRecords] = await Promise.all([
     readJson(paths.lexiconSeed, []),
     readJson(paths.lexiconCustom, []),
     readJson(paths.feedbackLog, []),
     readJson(paths.reviewQueue, []),
-    loadNoteLifecycle()
+    loadNoteLifecycle(),
+    loadNoteRecords()
   ]);
 
   return {
@@ -607,7 +628,8 @@ export async function loadSummary() {
     customLexiconCount: custom.length,
     feedbackCount: feedback.length,
     reviewQueueCount: reviewQueue.length,
-    noteLifecycleCount: noteLifecycle.length
+    noteLifecycleCount: noteLifecycle.length,
+    sampleLibraryCount: noteRecords.length
   };
 }
 
@@ -664,4 +686,19 @@ export async function loadReviewBenchmarkSamples() {
 export async function saveReviewBenchmarkSamples(items) {
   const normalized = ensureUniqueReviewBenchmarkIds((Array.isArray(items) ? items : []).map((item) => normalizeReviewBenchmarkSample(item)));
   await writeJson(paths.reviewBenchmark, normalized);
+}
+
+export async function deleteReviewBenchmarkSampleById(id) {
+  const targetId = normalizeString(id);
+  const current = await loadReviewBenchmarkSamples();
+  const next = current.filter((item) => normalizeString(item.id) !== targetId);
+
+  if (next.length === current.length) {
+    const error = new Error("未找到要删除的基准样本。");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  await saveReviewBenchmarkSamples(next);
+  return next;
 }

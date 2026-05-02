@@ -1102,13 +1102,15 @@ function buildRoutedRequestBodies({ model, temperature, maxTokens, messages, res
     max_tokens: maxTokens,
     messages
   };
+  const normalizedResponseFormat =
+    responseFormat && typeof responseFormat === "object" ? responseFormat : responseFormat ? { type: responseFormat } : null;
 
   if (useDmxapi) {
-    return responseFormat
+    return normalizedResponseFormat
       ? [
           {
             ...baseRequestBody,
-            response_format: { type: responseFormat },
+            response_format: normalizedResponseFormat,
             stream: false
           },
           {
@@ -1124,11 +1126,11 @@ function buildRoutedRequestBodies({ model, temperature, maxTokens, messages, res
         ];
   }
 
-  return responseFormat
+  return normalizedResponseFormat
     ? [
         {
           ...baseRequestBody,
-          response_format: { type: responseFormat }
+          response_format: normalizedResponseFormat
         },
         baseRequestBody
       ]
@@ -1139,11 +1141,20 @@ function parseJsonChatResult({ data, candidate, fallbackParser, providerLabel })
   const choice = data?.choices?.[0] || null;
   const rawMessage = choice?.message || choice || null;
   const rawContent = rawMessage?.content ?? choice?.text ?? data?.output_text ?? "";
+  const rawReasoning =
+    rawMessage?.reasoning_content ??
+    rawMessage?.reasoning ??
+    choice?.reasoning_content ??
+    choice?.reasoning ??
+    data?.reasoning_content ??
+    data?.reasoning ??
+    "";
   const message = flattenContent(rawMessage || rawContent);
-  const reasoningText = flattenContent(rawMessage?.reasoning_content || rawMessage?.reasoning || "");
+  const reasoningText = flattenContent(rawReasoning);
   const parsed =
     tryParseJsonFromUnknown(rawMessage) ||
     tryParseJsonFromUnknown(rawContent) ||
+    tryParseJsonFromUnknown(rawReasoning) ||
     tryParseJsonFromUnknown(choice?.text) ||
     tryParseJsonFromUnknown(data?.output_text);
 
