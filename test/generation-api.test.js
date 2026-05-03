@@ -92,12 +92,15 @@ test("generation prompt context includes collection type", () => {
     mode: "from_scratch",
     brief: {
       collectionType: "科普",
+      lengthMode: "long",
       topic: "沟通",
       constraints: "温和"
     }
   });
 
   assert.match(messages[1].content, /合集类型：科普/);
+  assert.match(messages[1].content, /长文档/);
+  assert.match(messages[1].content, /1100-1600 字/);
 });
 
 test("published final generation drafts become weighted references for the next generation", () => {

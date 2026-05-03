@@ -172,6 +172,15 @@ function normalizeStringList(items = []) {
   return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
 }
 
+function normalizeReasonList(items = []) {
+  return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter((item) => {
+    if (!item) return false;
+    if (/^一句话原因(?:\d+)?$/.test(item)) return false;
+    if (/^原因\d+$/.test(item)) return false;
+    return true;
+  }))];
+}
+
 function summarizeAnalysis(analysis = {}) {
   const hits = Array.isArray(analysis.hits) ? analysis.hits : [];
 
@@ -204,7 +213,7 @@ function buildMessages(input = {}, analysis = {}) {
         '  "verdict": "hard_block | manual_review | observe | pass",',
         '  "confidence": 0.0,',
         '  "categories": ["风险类别1"],',
-        '  "reasons": ["一句话原因1", "一句话原因2"],',
+        '  "reasons": ["简明具体的原因A", "简明具体的原因B"],',
         '  "implicitSignals": ["隐含导流/擦边/暗示等信号，没有就空数组"],',
         '  "safeSignals": ["教育/沟通/科普等正向信号，没有就空数组"],',
         '  "summary": "一句话总结这段内容的真实语义风险",',
@@ -237,7 +246,7 @@ function normalizeSemanticPayload(payload, provider, model) {
     verdict: normalizeVerdict(payload?.verdict),
     confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : null,
     categories: normalizeStringList(payload?.categories),
-    reasons: normalizeStringList(payload?.reasons),
+    reasons: normalizeReasonList(payload?.reasons),
     implicitSignals: normalizeStringList(payload?.implicitSignals),
     safeSignals: normalizeStringList(payload?.safeSignals),
     summary: String(payload?.summary || "").trim(),

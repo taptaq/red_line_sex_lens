@@ -143,6 +143,15 @@ function normalizeStringList(items = []) {
   return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
 }
 
+function normalizeReasonList(items = []) {
+  return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter((item) => {
+    if (!item) return false;
+    if (/^一句话原因(?:\d+)?$/.test(item)) return false;
+    if (/^原因\d+$/.test(item)) return false;
+    return true;
+  }))];
+}
+
 function normalizeReviewPayload(payload, provider, model) {
   const confidence = Number(payload?.confidence);
 
@@ -152,7 +161,7 @@ function normalizeReviewPayload(payload, provider, model) {
     verdict: normalizeVerdict(payload?.verdict),
     confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : null,
     categories: normalizeStringList(payload?.categories),
-    reasons: normalizeStringList(payload?.reasons),
+    reasons: normalizeReasonList(payload?.reasons),
     falsePositiveRisk: String(payload?.falsePositiveRisk || "").trim(),
     falseNegativeRisk: String(payload?.falseNegativeRisk || "").trim(),
     summary: String(payload?.summary || "").trim()
@@ -180,7 +189,7 @@ function buildMessages(input, analysis) {
         '  "verdict": "hard_block | manual_review | observe | pass",',
         '  "confidence": 0.0,',
         '  "categories": ["风险类别1"],',
-        '  "reasons": ["一句话原因1", "一句话原因2"],',
+        '  "reasons": ["简明具体的原因A", "简明具体的原因B"],',
         '  "falsePositiveRisk": "如果当前规则检测可能偏严，这里说明原因，没有就留空",',
         '  "falseNegativeRisk": "如果当前规则检测可能漏掉风险，这里说明原因，没有就留空",',
         '  "summary": "一句话总结复判结论"',

@@ -216,6 +216,11 @@ test("style profile draft supports inline manual editing controls and update flo
     'if (action === "confirm-style-profile") {',
     'if (action === "activate-style-profile") {'
   );
+  const styleProfileConfirmCurrentBranch = sliceBetween(
+    appJs,
+    'if (updateAction === "confirm-current") {',
+    "const updated = await apiJson"
+  );
 
   assert.match(appJs, /styleProfileDraftEditing:\s*false/);
   assert.match(appJs, /styleProfileDraftForm:\s*\{/);
@@ -232,7 +237,10 @@ test("style profile draft supports inline manual editing controls and update flo
   assert.match(renderSource, /name="preferredTags"/);
   assert.match(styleProfileActionArea, /save-style-profile-draft/);
   assert.doesNotMatch(styleProfileActionArea, /revealStyleProfilePane\(/);
-  assert.match(styleProfileConfirmBranch, /action:\s*"update-draft"/);
+  assert.match(styleProfileConfirmBranch, /appState\.styleProfileState\?\.draft \? "update-draft" : "confirm-current"/);
+  assert.match(styleProfileConfirmBranch, /action:\s*updateAction/);
+  assert.match(styleProfileConfirmBranch, /if \(updateAction === "confirm-current"\) \{/);
+  assert.doesNotMatch(styleProfileConfirmCurrentBranch, /body:\s*JSON\.stringify\(\{\}\)/);
   assert.match(renderSource, /draft \|\| isDraftEditing/);
   assert.match(renderSource, /cancel-style-profile-draft/);
   assert.match(appJs, /edit-style-profile-draft/);

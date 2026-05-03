@@ -103,6 +103,11 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(indexHtml, /name="collectionType"/);
   assert.match(indexHtml, /id="analyze-collection-type-select"/);
   assert.match(indexHtml, /id="generation-collection-type-select"/);
+  assert.match(indexHtml, /id="generation-advanced-panel"/);
+  assert.match(indexHtml, /高级偏好/);
+  assert.match(indexHtml, /name="lengthMode"/);
+  assert.match(indexHtml, /短文（默认，&lt;1000字）/);
+  assert.match(indexHtml, /长文（&gt;1000字）/);
   assert.match(indexHtml, /id="support-workspace-panel"/);
   assert.match(indexHtml, /低频维护与人工复核/);
   assert.doesNotMatch(indexHtml, /<details id="support-workspace-panel"[^>]*\sopen[>\s]/);
@@ -167,6 +172,7 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /function\s+getAnalyzeActionRequirementMessage\s*\(/);
   assert.match(appJs, /function\s+syncFeedbackActions\s*\(/);
   assert.match(appJs, /function\s+getGenerationRequirementMessage\s*\(/);
+  assert.match(appJs, /lengthMode:\s*String\(form\.get\("lengthMode"\) \|\| "short"\)\.trim\(\) \|\| "short"/);
   assert.match(appJs, /function\s+syncGenerationActions\s*\(/);
   assert.match(appJs, /function\s+getRewritePairRequirementMessage\s*\(/);
   assert.match(appJs, /function\s+syncRewritePairActions\s*\(/);
@@ -263,7 +269,7 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /class="lifecycle-metrics-grid"/);
   assert.match(styles, /\.lifecycle-primary-grid\s*\{/);
   assert.match(styles, /\.lifecycle-metrics-grid\s*\{/);
-  assert.match(styles, /grid-template-columns:\s*minmax\(220px,\s*1\.1fr\)\s*minmax\(180px,\s*0\.9fr\)/);
+  assert.match(styles, /grid-template-columns:\s*minmax\(0,\s*1\.1fr\)\s*minmax\(0,\s*0\.9fr\)/);
   assert.match(styles, /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(140px,\s*1fr\)\)/);
   assert.match(styles, /\.workflow-assistant-actions\s+\.button\s*\{/);
   assert.match(styles, /white-space:\s*normal/);

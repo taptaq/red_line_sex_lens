@@ -41,12 +41,22 @@ export function buildGenerationMessages({
   styleProfile = null,
   referenceSamples = []
 } = {}) {
+  const lengthMode = String(brief.lengthMode || "short").trim() === "long" ? "long" : "short";
+  const lengthInstruction =
+    lengthMode === "long"
+      ? "长文档：正文控制在 1100-1600 字，信息更完整，但仍然要自然分段，每段 2-4 句，避免一整坨长段。"
+      : "短文档：正文控制在 600-950 字，表达紧凑但不能干瘪，同样要自然分段，每段 2-4 句。";
   return [
     {
       role: "system",
       content: [
         "你是小红书内容生成助手，目标是生成合规、自然、符合账号风格的笔记。",
         "不要帮助规避平台审核，不要输出低俗擦边、导流、夸大承诺或教程化敏感内容。",
+        "标题一定要吸睛，带一点高反差，但不能低俗、不能标题党过头。",
+        "正文要像真人在说话，要有人味、自然感、大白话感，不要像说明书或模板稿。",
+        "表达围绕内太空主题展开，敏感词尽量转成自然的内太空黑话表达，但不要为了隐晦而写得难懂。",
+        "可以适当加 emoji，但不要堆太多，点到为止。",
+        "不要输出一大段长文不分段，必须注意阅读节奏和段落呼吸感。",
         "请生成 3 个候选：safe、natural、expressive。",
         "只返回 JSON。"
       ].join("\n")
@@ -56,6 +66,7 @@ export function buildGenerationMessages({
       content: [
         `生成模式：${mode === "draft_optimize" ? "草稿优化" : "从零生成"}`,
         `合集类型：${brief.collectionType || ""}`,
+        `文案长度偏好：${lengthMode === "long" ? "长文档" : "短文档"}`,
         `主题：${brief.topic || ""}`,
         `卖点：${brief.sellingPoints || ""}`,
         `目标人群：${brief.audience || ""}`,
@@ -70,6 +81,15 @@ export function buildGenerationMessages({
         "",
         "可参考成功样本：",
         stringifyReferenceSamples(referenceSamples),
+        "",
+        "生成规则：",
+        "1. 标题一定要吸睛、高反差，让人想点开，但不能显得油腻、夸张或低俗。",
+        "2. 正文必须分段清楚，读起来顺，不要一整段铺到底。",
+        "3. 语气自然，像真实的人在分享，用大白话，减少机器感。",
+        "4. 适当加入 emoji，起点缀作用，不要密集堆砌。",
+        "5. 维持内太空主题氛围；涉及敏感表达时，优先用自然的内太空黑话替代。",
+        "6. 不要写成教程化敏感步骤，不要出现明显导流、露骨挑逗或夸大承诺。",
+        `7. ${lengthInstruction}`,
         "",
         "输出格式：",
         "{",

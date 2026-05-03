@@ -135,8 +135,26 @@ test("model performance summary recommends stable models per scene without chang
     assert.equal(summary.recommendations.semantic_review.provider, "glm");
     assert.equal(summary.recommendations.semantic_review.model, "glm-5.1-free");
     assert.equal(summary.recommendations.semantic_review.reason, "历史调用更稳定");
-    assert.equal(summary.recommendations.rewrite.provider, "kimi");
+    assert.equal(summary.recommendations.rewrite, undefined);
     assert.equal(typeof summary.recommendations.semantic_review.score, "number");
+  });
+});
+
+test("model performance summary skips recommendations when scene history is too sparse to compare models", async (t) => {
+  await withTempModelPerformance(t, async () => {
+    await recordModelCall({
+      scene: "semantic_review",
+      provider: "glm",
+      route: "dmxapi",
+      routeLabel: "DMXAPI",
+      model: "glm-5.1-free",
+      status: "ok",
+      durationMs: 1300
+    });
+
+    const summary = await buildModelPerformanceSummary();
+
+    assert.deepEqual(summary.recommendations, {});
   });
 });
 

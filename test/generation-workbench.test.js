@@ -13,6 +13,7 @@ test("buildGenerationMessages includes mode, style profile, success samples, and
     brief: {
       topic: "亲密关系沟通",
       sellingPoints: "温和、科普、可执行",
+      lengthMode: "short",
       audience: "刚进入关系的人",
       constraints: "不要营销感"
     },
@@ -33,6 +34,15 @@ test("buildGenerationMessages includes mode, style profile, success samples, and
   assert.match(combined, /温和克制/);
   assert.match(combined, /成功标题/);
   assert.match(combined, /只返回 JSON/);
+  assert.match(combined, /标题一定要吸睛/);
+  assert.match(combined, /高反差/);
+  assert.match(combined, /适当加 emoji/);
+  assert.match(combined, /内太空/);
+  assert.match(combined, /黑话/);
+  assert.match(combined, /大白话/);
+  assert.match(combined, /不要输出一大段长文不分段/);
+  assert.match(combined, /短文档/);
+  assert.match(combined, /600-950 字/);
 });
 
 test("generateNoteCandidates normalizes three candidate variants from an injected generator", async () => {

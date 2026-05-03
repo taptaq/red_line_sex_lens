@@ -1351,6 +1351,16 @@ async function attemptRoutedProviderRoute({
           model
         });
 
+        const shouldRetryWithoutResponseFormat =
+          Boolean(requestBody.response_format) &&
+          /只返回了思考过程|没有最终.*JSON|没有输出最终.*JSON|not an? valid JSON|invalid JSON|返回的结果不是有效 JSON|response_format|json_object|json schema|structured output|unsupported|invalid parameter|不支持/i.test(
+            String(lastError?.message || "")
+          );
+
+        if (shouldRetryWithoutResponseFormat) {
+          continue requestBodyLoop;
+        }
+
         if (attempt === 0) {
           await sleep(250);
           continue;
@@ -1665,7 +1675,7 @@ async function callChatJson({
         ]
       : [baseRequestBody];
 
-    for (const requestBody of requestBodies) {
+    requestBodyLoop: for (const requestBody of requestBodies) {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const response = await fetch(providerEndpoint, {
           method: "POST",
@@ -1728,6 +1738,16 @@ async function callChatJson({
       }
 
       if (!parsed) {
+        const shouldRetryWithoutResponseFormat =
+          Boolean(requestBody.response_format) &&
+          /只返回了思考过程|没有最终.*JSON|没有输出最终.*JSON|not an? valid JSON|invalid JSON|返回的结果不是有效 JSON|response_format|json_object|json schema|structured output|unsupported|invalid parameter|不支持/i.test(
+            `${message || ""}\n${reasoningText || ""}`
+          );
+
+        if (shouldRetryWithoutResponseFormat) {
+          continue requestBodyLoop;
+        }
+
         if (attempt === 0) {
           await sleep(250);
           continue;

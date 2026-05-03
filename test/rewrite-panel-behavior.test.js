@@ -157,6 +157,19 @@ test("workflow assistant prioritizes progressing the main publishing path before
   assert.match(renderSource, /actionItems\.length/);
 });
 
+test("workflow assistant routes sample library and feedback actions to their target panes", async () => {
+  const source = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const start = source.indexOf("async function runWorkflowAction(action = \"\")");
+  const end = source.indexOf("const analyzeForm = byId(\"analyze-form\");", start);
+  const runWorkflowActionSource = source.slice(start, end);
+
+  assert.match(runWorkflowActionSource, /action === "open-sample-library"/);
+  assert.match(runWorkflowActionSource, /setSampleLibraryCreateFormOpen\(true\)/);
+  assert.match(runWorkflowActionSource, /sample-library-create-form-shell/);
+  assert.match(runWorkflowActionSource, /action === "open-feedback-center"/);
+  assert.match(runWorkflowActionSource, /revealFeedbackCenterDetails\(/);
+});
+
 test("rewrite result panel renders round-by-round retry guidance", async () => {
   const source = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
   const start = source.indexOf("function renderRewriteResult(");

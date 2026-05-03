@@ -144,11 +144,14 @@ function calculateRecommendationScore(item = {}) {
 
 function buildSceneRecommendations(records = []) {
   const sceneGroups = new Map();
+  const sceneModelGroups = new Map();
 
   for (const record of records) {
     const scene = record.scene || "unknown";
     const key = [scene, record.provider, record.route, record.model].join("|");
     sceneGroups.set(key, [...(sceneGroups.get(key) || []), record]);
+    const sceneModelKey = [scene, record.provider, record.model].join("|");
+    sceneModelGroups.set(scene, new Set([...(sceneModelGroups.get(scene) || []), sceneModelKey]));
   }
 
   const recommendations = {};
@@ -156,6 +159,12 @@ function buildSceneRecommendations(records = []) {
   for (const recordsForGroup of sceneGroups.values()) {
     const summary = summarizeGroup(recordsForGroup);
     const scene = summary.scenes[0] || "unknown";
+    const sceneModelCount = sceneModelGroups.get(scene)?.size || 0;
+
+    if (sceneModelCount < 2) {
+      continue;
+    }
+
     const score = calculateRecommendationScore(summary);
     const candidate = {
       scene,

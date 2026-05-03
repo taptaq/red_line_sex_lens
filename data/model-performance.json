@@ -1,7 +1,7 @@
 [
   {
-    "id": "model-call-1777650797017-1d28f0",
-    "createdAt": "2026-05-01T15:53:17.017Z",
+    "id": "model-call-1777736003229-51644c",
+    "createdAt": "2026-05-02T15:33:23.229Z",
     "scene": "semantic_review",
     "provider": "glm",
     "route": "dmxapi",
@@ -14,8 +14,8 @@
     "message": "non-deepseek dmxapi unavailable"
   },
   {
-    "id": "model-call-1777650797017-191bba",
-    "createdAt": "2026-05-01T15:53:17.017Z",
+    "id": "model-call-1777736003230-e3dd88",
+    "createdAt": "2026-05-02T15:33:23.230Z",
     "scene": "semantic_review",
     "provider": "qwen",
     "route": "dmxapi",
@@ -28,8 +28,8 @@
     "message": "non-deepseek dmxapi unavailable"
   },
   {
-    "id": "model-call-1777650797018-ac17d3",
-    "createdAt": "2026-05-01T15:53:17.018Z",
+    "id": "model-call-1777736003230-cc2bd6",
+    "createdAt": "2026-05-02T15:33:23.230Z",
     "scene": "semantic_review",
     "provider": "minimax",
     "route": "dmxapi",
@@ -42,8 +42,8 @@
     "message": "non-deepseek dmxapi unavailable"
   },
   {
-    "id": "model-call-1777650797270-811284",
-    "createdAt": "2026-05-01T15:53:17.270Z",
+    "id": "model-call-1777736003482-b080f7",
+    "createdAt": "2026-05-02T15:33:23.482Z",
     "scene": "semantic_review",
     "provider": "mimo",
     "route": "dmxapi",
@@ -56,8 +56,8 @@
     "message": "Mimo DMXAPI 只返回了思考过程，没有输出最终结果 JSON。"
   },
   {
-    "id": "model-call-1777650797271-bc8e1b",
-    "createdAt": "2026-05-01T15:53:17.271Z",
+    "id": "model-call-1777736003483-12e1da",
+    "createdAt": "2026-05-02T15:33:23.483Z",
     "scene": "semantic_review",
     "provider": "deepseek",
     "route": "official",
@@ -70,8 +70,8 @@
     "message": ""
   },
   {
-    "id": "model-call-1777650797274-23ea56",
-    "createdAt": "2026-05-01T15:53:17.274Z",
+    "id": "model-call-1777736003489-d3230f",
+    "createdAt": "2026-05-02T15:33:23.489Z",
     "scene": "semantic_review",
     "provider": "glm",
     "route": "dmxapi",
@@ -84,8 +84,8 @@
     "message": "non-deepseek dmxapi unavailable"
   },
   {
-    "id": "model-call-1777650797274-172d37",
-    "createdAt": "2026-05-01T15:53:17.274Z",
+    "id": "model-call-1777736003490-b6f046",
+    "createdAt": "2026-05-02T15:33:23.490Z",
     "scene": "semantic_review",
     "provider": "qwen",
     "route": "dmxapi",
@@ -98,8 +98,8 @@
     "message": "non-deepseek dmxapi unavailable"
   },
   {
-    "id": "model-call-1777650797275-50ea72",
-    "createdAt": "2026-05-01T15:53:17.275Z",
+    "id": "model-call-1777736003491-4dec6c",
+    "createdAt": "2026-05-02T15:33:23.491Z",
     "scene": "semantic_review",
     "provider": "minimax",
     "route": "dmxapi",
@@ -112,8 +112,22 @@
     "message": "non-deepseek dmxapi unavailable"
   },
   {
-    "id": "model-call-1777650797275-9faa41",
-    "createdAt": "2026-05-01T15:53:17.275Z",
+    "id": "model-call-1777736003492-56aea5",
+    "createdAt": "2026-05-02T15:33:23.492Z",
+    "scene": "semantic_review",
+    "provider": "mimo",
+    "route": "dmxapi",
+    "routeLabel": "DMXAPI",
+    "model": "mimo-v2.5-free",
+    "status": "ok",
+    "errorType": "",
+    "statusCode": 0,
+    "durationMs": 1,
+    "message": ""
+  },
+  {
+    "id": "model-call-1777736003495-a27b49",
+    "createdAt": "2026-05-02T15:33:23.495Z",
     "scene": "semantic_review",
     "provider": "mimo",
     "route": "dmxapi",
@@ -126,8 +140,8 @@
     "message": ""
   },
   {
-    "id": "model-call-1777650797278-aff9a0",
-    "createdAt": "2026-05-01T15:53:17.278Z",
+    "id": "model-call-1777736003498-97b781",
+    "createdAt": "2026-05-02T15:33:23.498Z",
     "scene": "semantic_review",
     "provider": "glm",
     "route": "dmxapi",
@@ -136,12 +150,12 @@
     "status": "error",
     "errorType": "server_error",
     "statusCode": 500,
-    "durationMs": 0,
+    "durationMs": 1,
     "message": "non-deepseek dmxapi unavailable"
   },
   {
-    "id": "model-call-1777650797278-d4af7c",
-    "createdAt": "2026-05-01T15:53:17.278Z",
+    "id": "model-call-1777736003499-3651de",
+    "createdAt": "2026-05-02T15:33:23.499Z",
     "scene": "semantic_review",
     "provider": "qwen",
     "route": "dmxapi",
@@ -154,8 +168,8 @@
     "message": "non-deepseek dmxapi unavailable"
   },
   {
-    "id": "model-call-1777650797278-901f69",
-    "createdAt": "2026-05-01T15:53:17.278Z",
+    "id": "model-call-1777736003500-92168c",
+    "createdAt": "2026-05-02T15:33:23.500Z",
     "scene": "semantic_review",
     "provider": "minimax",
     "route": "dmxapi",
@@ -168,8 +182,8 @@
     "message": "non-deepseek dmxapi unavailable"
   },
   {
-    "id": "model-call-1777650797279-f321c3",
-    "createdAt": "2026-05-01T15:53:17.279Z",
+    "id": "model-call-1777736003501-cb7ad4",
+    "createdAt": "2026-05-02T15:33:23.501Z",
     "scene": "semantic_review",
     "provider": "mimo",
     "route": "dmxapi",
@@ -182,8 +196,8 @@
     "message": ""
   },
   {
-    "id": "model-call-1777650797281-0a694e",
-    "createdAt": "2026-05-01T15:53:17.281Z",
+    "id": "model-call-1777736003503-0c6cbb",
+    "createdAt": "2026-05-02T15:33:23.503Z",
     "scene": "semantic_review",
     "provider": "mimo",
     "route": "dmxapi",
@@ -196,8 +210,22 @@
     "message": ""
   },
   {
-    "id": "model-call-1777650797286-cbea1e",
-    "createdAt": "2026-05-01T15:53:17.286Z",
+    "id": "model-call-1777736003506-e951e5",
+    "createdAt": "2026-05-02T15:33:23.506Z",
+    "scene": "semantic_review",
+    "provider": "mimo",
+    "route": "dmxapi",
+    "routeLabel": "DMXAPI",
+    "model": "mimo-v2.5-free",
+    "status": "ok",
+    "errorType": "",
+    "statusCode": 0,
+    "durationMs": 0,
+    "message": ""
+  },
+  {
+    "id": "model-call-1777736003511-c7b3f6",
+    "createdAt": "2026-05-02T15:33:23.511Z",
     "scene": "cross_review",
     "provider": "deepseek",
     "route": "official",
@@ -206,12 +234,12 @@
     "status": "ok",
     "errorType": "",
     "statusCode": 0,
-    "durationMs": 0,
+    "durationMs": 1,
     "message": ""
   },
   {
-    "id": "model-call-1777650797289-014fb2",
-    "createdAt": "2026-05-01T15:53:17.289Z",
+    "id": "model-call-1777736003514-77f2af",
+    "createdAt": "2026-05-02T15:33:23.514Z",
     "scene": "unknown",
     "provider": "deepseek",
     "route": "official",
@@ -220,21 +248,7 @@
     "status": "ok",
     "errorType": "",
     "statusCode": 0,
-    "durationMs": 1,
+    "durationMs": 0,
     "message": ""
-  },
-  {
-    "id": "model-call-1777694861703-baad73",
-    "createdAt": "2026-05-02T04:07:41.703Z",
-    "scene": "semantic_review",
-    "provider": "mimo",
-    "route": "dmxapi",
-    "routeLabel": "DMXAPI",
-    "model": "mimo-v2.5-free",
-    "status": "error",
-    "errorType": "json_error",
-    "statusCode": 502,
-    "durationMs": 23710,
-    "message": "Mimo DMXAPI 只返回了思考过程，没有输出最终结果 JSON。"
   }
 ]

@@ -216,6 +216,14 @@ function revealFeedbackCenterPane() {
   byId("feedback-center-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+function revealFeedbackCenterDetails() {
+  revealFeedbackCenterPane();
+  byId("feedback-center-pane")?.querySelector(".feedback-advanced-panel")?.scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
+}
+
 function revealRulesMaintenancePane(targetId = "custom-lexicon-pane") {
   ensureSupportWorkspaceOpen();
   revealSampleLibraryPane();
@@ -1023,9 +1031,7 @@ function renderWorkflowAssistant() {
   if (title) title.textContent = state.title;
   if (description) description.textContent = state.description;
   if (actions) {
-    actions.innerHTML = actionItems.length
-      ? actionItems.map(workflowActionButton).join("")
-      : '<span class="workflow-assistant-empty">等待输入内容</span>';
+    actions.innerHTML = actionItems.length ? actionItems.map(workflowActionButton).join("") : "";
   }
 
   if (timeline) {
@@ -3883,6 +3889,7 @@ function getGenerationPayload() {
     collectionType: String(form.get("collectionType") || "").trim(),
     brief: {
       collectionType: String(form.get("collectionType") || "").trim(),
+      lengthMode: String(form.get("lengthMode") || "short").trim() || "short",
       topic: String(form.get("topic") || "").trim(),
       sellingPoints: String(form.get("sellingPoints") || "").trim(),
       audience: String(form.get("audience") || "").trim(),
@@ -4012,17 +4019,6 @@ async function handleSummaryAction(action) {
     revealNoteLifecyclePane();
     return;
   }
-
-  if (action === "open-feedback-center") {
-    ensureSupportWorkspaceOpen();
-    revealFeedbackCenterPane();
-    return;
-  }
-
-  if (action === "open-sample-library") {
-    ensureSupportWorkspaceOpen();
-    revealSampleLibraryPane();
-  }
 }
 
 function getRecommendedGenerationCandidate() {
@@ -4140,6 +4136,21 @@ async function runWorkflowAction(action = "") {
 
   if (action === "open-lifecycle") {
     revealNoteLifecyclePane();
+    return;
+  }
+
+  if (action === "open-sample-library") {
+    ensureSupportWorkspaceOpen();
+    revealSampleLibraryPane();
+    setSampleLibraryCreateFormOpen(true);
+    byId("sample-library-create-form-shell")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  if (action === "open-feedback-center") {
+    ensureSupportWorkspaceOpen();
+    revealFeedbackCenterDetails();
+    return;
   }
 }
 
@@ -5895,10 +5906,25 @@ document.addEventListener("click", async (event) => {
     if (action === "confirm-style-profile") {
       if (appState.styleProfileDraftEditing) {
         const container = button.closest(".style-profile-card");
+        const updateAction = appState.styleProfileState?.draft ? "update-draft" : "confirm-current";
+
+        if (updateAction === "confirm-current") {
+          const response = await apiJson("/api/style-profile", {
+            method: "PATCH",
+            body: JSON.stringify({
+              action: "confirm-current",
+              profile: buildStyleProfileDraftPayload(container)
+            })
+          });
+          exitStyleProfileDraftEditMode();
+          renderStyleProfile(response.profile || {});
+          return;
+        }
+
         const updated = await apiJson("/api/style-profile", {
           method: "PATCH",
           body: JSON.stringify({
-            action: "update-draft",
+            action: updateAction,
             profile: buildStyleProfileDraftPayload(container)
           })
         });
