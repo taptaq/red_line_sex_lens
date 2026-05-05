@@ -3,16 +3,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-test("analyze tag picker source includes dropdown state and preset tag toggle helpers", async () => {
+test("analyze form source uses dropdown helpers for tag selection", async () => {
   const source = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
-  const helperStartAnchor = "function setAnalyzeTagDropdownOpen(";
-  const helperEndAnchor = "function toggleAnalyzePresetTag(";
-  const helperStart = source.indexOf(helperStartAnchor);
-  const helperEnd = source.indexOf(helperEndAnchor);
+  const helperStart = source.indexOf("function setAnalyzeTagDropdownOpen(");
+  const helperEnd = source.indexOf("function initializeAnalyzeTagPicker(", helperStart);
 
   assert.notEqual(helperStart, -1, "expected setAnalyzeTagDropdownOpen helper to exist");
-  assert.notEqual(helperEnd, -1, "expected toggleAnalyzePresetTag helper to exist");
-  assert.ok(helperStart < helperEnd, "expected helper slice to run from dropdown setter to preset toggle");
+  assert.notEqual(helperEnd, -1, "expected initializeAnalyzeTagPicker helper to exist");
 
   const helperSource = source.slice(helperStart, helperEnd);
 
@@ -22,17 +19,31 @@ test("analyze tag picker source includes dropdown state and preset tag toggle he
   assert.match(helperSource, /aria-expanded/);
 });
 
-test("analyze tag picker source still serializes tags through the hidden input", async () => {
+test("analyze form source serializes tags through the hidden input", async () => {
   const source = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const helperStart = source.indexOf("function setAnalyzeTagDropdownOpen(");
+  const helperEnd = source.indexOf("function initializeAnalyzeTagPicker(", helperStart);
 
-  assert.match(source, /hiddenInput\.value = joinCSV\(normalized\)/);
-  assert.match(source, /buildAnalyzeTagSelectionMarkup\(normalized\)/);
-  assert.match(source, /addAnalyzeTagOption\(customInput\.value\)/);
+  assert.notEqual(helperStart, -1, "expected setAnalyzeTagDropdownOpen helper to exist");
+  assert.notEqual(helperEnd, -1, "expected initializeAnalyzeTagPicker helper to exist");
+
+  const helperSource = source.slice(helperStart, helperEnd);
+
+  assert.match(helperSource, /hiddenInput\.value\s*=\s*joinCSV\(/);
+  assert.match(helperSource, /buildAnalyzeTagSelectionMarkup\(/);
+  assert.doesNotMatch(helperSource, /tags:\s*String\(form\.get\("tags"\) \|\| ""\)\.trim\(\)/);
 });
 
-test("analyze tag picker source supports deleting custom dropdown tag options", async () => {
+test("analyze form source restores custom option maintenance in the picker", async () => {
   const source = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const helperStart = source.indexOf("function setAnalyzeTagDropdownOpen(");
+  const helperEnd = source.indexOf("function initializeAnalyzeTagPicker(", helperStart);
 
-  assert.match(source, /function removeAnalyzeTagOption\(/);
-  assert.match(source, /data-tag-delete=/);
+  assert.notEqual(helperStart, -1, "expected setAnalyzeTagDropdownOpen helper to exist");
+  assert.notEqual(helperEnd, -1, "expected initializeAnalyzeTagPicker helper to exist");
+
+  const helperSource = source.slice(helperStart, helperEnd);
+
+  assert.match(helperSource, /function removeAnalyzeTagOption\(/);
+  assert.match(helperSource, /data-tag-delete=/);
 });
