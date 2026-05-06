@@ -20,5 +20,6 @@ export const paths = {
   collectionTypes: path.join(dataDir, "collection-types.json"),
   noteLifecycle: path.join(dataDir, "note-lifecycle.json"),
   noteRecords: path.join(dataDir, "note-records.json"),
-  analyzeTagOptions: path.join(dataDir, "analyze-tag-options.json")
+  analyzeTagOptions: path.join(dataDir, "analyze-tag-options.json"),
+  innerSpaceTerms: path.join(dataDir, "inner-space-terms.json")
 };

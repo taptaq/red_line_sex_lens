@@ -2,6 +2,7 @@ import { analyzePost } from "./analyzer.js";
 import { runCrossModelReview } from "./cross-review.js";
 import { deriveFailureReasonTags } from "./feedback.js";
 import { callRoutedTextProviderJson, rewritePostForCompliance } from "./glm.js";
+import { formatInnerSpaceTermsPrompt } from "./inner-space-terms.js";
 import { getRewriteProviderSelection, getRewriteSelectionModel } from "./model-selection.js";
 import { ensureArray } from "./normalizer.js";
 import { runSemanticReview } from "./semantic-review.js";
@@ -39,13 +40,15 @@ export function buildGenerationMessages({
   brief = {},
   draft = {},
   styleProfile = null,
-  referenceSamples = []
+  referenceSamples = [],
+  innerSpaceTerms = []
 } = {}) {
   const lengthMode = String(brief.lengthMode || "short").trim() === "long" ? "long" : "short";
   const lengthInstruction =
     lengthMode === "long"
       ? "长文档：正文控制在 1100-1600 字，信息更完整，但仍然要自然分段，每段 2-4 句，避免一整坨长段。"
       : "短文档：正文控制在 600-950 字，表达紧凑但不能干瘪，同样要自然分段，每段 2-4 句。";
+  const terminologyPrompt = formatInnerSpaceTermsPrompt(innerSpaceTerms);
   return [
     {
       role: "system",
@@ -82,6 +85,8 @@ export function buildGenerationMessages({
         "可参考成功样本：",
         stringifyReferenceSamples(referenceSamples),
         "",
+        terminologyPrompt,
+        terminologyPrompt ? "" : "",
         "生成规则：",
         "1. 标题一定要吸睛、高反差，让人想点开，但不能显得油腻、夸张或低俗。",
         "2. 正文必须分段清楚，读起来顺，不要一整段铺到底。",
@@ -174,10 +179,11 @@ export async function generateNoteCandidates({
   draft = {},
   styleProfile = null,
   referenceSamples = [],
+  innerSpaceTerms = [],
   modelSelection = "auto",
   generateJson = generateJsonWithModel
 } = {}) {
-  const messages = buildGenerationMessages({ mode, brief, draft, styleProfile, referenceSamples });
+  const messages = buildGenerationMessages({ mode, brief, draft, styleProfile, referenceSamples, innerSpaceTerms });
   const payload = await generateJson({ messages, modelSelection });
   const candidates = ensureArray(payload.candidates).map(normalizeGenerationCandidate).slice(0, 3);
 
@@ -283,12 +289,14 @@ function shouldRepairCandidate(analysis = {}, crossReview = null) {
 export async function repairGenerationCandidate({
   candidate = {},
   analysis = {},
-  modelSelection = "auto"
+  modelSelection = "auto",
+  innerSpaceTerms = []
 } = {}) {
   return rewritePostForCompliance({
     input: candidate,
     analysis,
-    modelSelection
+    modelSelection,
+    innerSpaceTerms
   });
 }
 
@@ -297,6 +305,7 @@ export async function scoreGenerationCandidates({
   styleProfile = null,
   brief = {},
   modelSelection = {},
+  innerSpaceTerms = [],
   analyzeCandidate = analyzePost,
   semanticReviewCandidate = runSemanticReview,
   crossReviewCandidate = runCrossModelReview,
@@ -342,7 +351,8 @@ export async function scoreGenerationCandidates({
           candidate,
           analysis: mergedAnalysis,
           crossReview,
-          modelSelection: modelSelection.rewrite
+          modelSelection: modelSelection.rewrite,
+          innerSpaceTerms
         });
         finalDraft = {
           ...normalizeGenerationCandidate(

@@ -446,6 +446,21 @@ test("frontend exposes a calibrated-history replay action in system calibration"
   assert.match(appJs, /受影响样本/);
 });
 
+test("frontend exposes an inner-space terminology workspace for rewrite and generation guidance", async () => {
+  const { indexHtml, appJs } = await readFrontendFiles();
+
+  assert.match(indexHtml, /id="inner-space-terms-pane"/);
+  assert.match(indexHtml, /id="inner-space-terms-form"/);
+  assert.match(indexHtml, /id="inner-space-terms-list"/);
+  assert.match(indexHtml, /内太空术语表/);
+  assert.match(indexHtml, /适用合集/);
+  assert.match(appJs, /\/api\/admin\/inner-space-terms/);
+  assert.match(appJs, /function renderInnerSpaceTermsList\s*\(/);
+  assert.match(appJs, /inner-space-terms-form/);
+  assert.match(appJs, /inner-space-terms-result/);
+  assert.match(appJs, /delete-inner-space-term/);
+});
+
 test("frontend exposes platform outcome shortcuts from analysis rewrite and generation results", async () => {
   const { appJs } = await readFrontendFiles();
   const analysisStart = appJs.indexOf("function renderAnalysis(");

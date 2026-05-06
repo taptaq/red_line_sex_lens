@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { abstractReasonPhraseLabels, feedbackContextCategories } from "./feedback.js";
 import { filterProviderConfigsBySelection, getRewriteProviderSelection, getRewriteSelectionModel } from "./model-selection.js";
+import { formatInnerSpaceTermsPrompt } from "./inner-space-terms.js";
 import { buildXhsHumanizerSystemRules, buildXhsHumanizerUserRequirements } from "./xhs-humanizer-rules.js";
 
 const glmEndpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
@@ -692,11 +693,12 @@ function buildPreviewText(value, maxLength = 240) {
   }
 }
 
-export function buildRewriteMessages({ input = {}, analysis = {}, semantic = null } = {}) {
+export function buildRewriteMessages({ input = {}, analysis = {}, semantic = null, innerSpaceTerms = [] } = {}) {
   const retryGuidance = analysis?.retryGuidance && typeof analysis.retryGuidance === "object" ? analysis.retryGuidance : null;
   const retryHistory = Array.isArray(analysis?.retryHistory)
     ? analysis.retryHistory.slice(-rewriteGenerationConfig.retryHistoryLimit)
     : [];
+  const terminologyPrompt = formatInnerSpaceTermsPrompt(innerSpaceTerms);
 
   return [
     {
@@ -764,6 +766,7 @@ export function buildRewriteMessages({ input = {}, analysis = {}, semantic = nul
               }))
             )}`
           : "",
+        terminologyPrompt,
         "",
         "改写偏好补充：",
         "1. 不要把所有内容都改成统一的官方科普腔。",
@@ -776,11 +779,12 @@ export function buildRewriteMessages({ input = {}, analysis = {}, semantic = nul
   ];
 }
 
-export function buildPatchMessages({ input = {}, analysis = {}, semantic = null } = {}) {
+export function buildPatchMessages({ input = {}, analysis = {}, semantic = null, innerSpaceTerms = [] } = {}) {
   const retryGuidance = analysis?.retryGuidance && typeof analysis.retryGuidance === "object" ? analysis.retryGuidance : null;
   const retryHistory = Array.isArray(analysis?.retryHistory)
     ? analysis.retryHistory.slice(-rewriteGenerationConfig.retryHistoryLimit)
     : [];
+  const terminologyPrompt = formatInnerSpaceTermsPrompt(innerSpaceTerms);
   const compactHits = Array.isArray(analysis?.hits)
     ? analysis.hits.slice(0, 4).map((item) => ({
         category: String(item?.category || "").trim(),
@@ -849,15 +853,17 @@ export function buildPatchMessages({ input = {}, analysis = {}, semantic = null 
                 focusPoints: item.focusPoints
               }))
             )}`
-          : ""
+          : "",
+        terminologyPrompt
       ].join("\n")
     }
   ];
 }
 
-export function buildHumanizerMessages({ input = {}, analysis = {}, semantic = null, baseRewrite = {} } = {}) {
+export function buildHumanizerMessages({ input = {}, analysis = {}, semantic = null, baseRewrite = {}, innerSpaceTerms = [] } = {}) {
   const systemRules = buildXhsHumanizerSystemRules();
   const userRequirements = buildXhsHumanizerUserRequirements();
+  const terminologyPrompt = formatInnerSpaceTermsPrompt(innerSpaceTerms);
 
   return [
     {
@@ -892,7 +898,8 @@ export function buildHumanizerMessages({ input = {}, analysis = {}, semantic = n
         `上一轮改写说明：${String(baseRewrite.rewriteNotes || "")}`,
         `当前风险结论：${String(analysis.finalVerdict || analysis.verdict || "")}`,
         `语义风险摘要：${String(semantic?.summary || "")}`,
-        `语义风险原因：${JSON.stringify(semantic?.reasons || [])}`
+        `语义风险原因：${JSON.stringify(semantic?.reasons || [])}`,
+        terminologyPrompt
       ].join("\n")
     }
   ];
@@ -2351,7 +2358,7 @@ export async function suggestFeedbackCandidates({
   throw createGlmError("候选补充缺少可用模型配置。", 400);
 }
 
-export async function rewritePostForCompliance({ input = {}, analysis = {}, modelSelection = "auto" }) {
+export async function rewritePostForCompliance({ input = {}, analysis = {}, modelSelection = "auto", innerSpaceTerms = [] }) {
   const semantic = analysis?.semanticReview?.status === "ok" ? analysis.semanticReview.review : null;
   const rewriteProviderConfig = getRewriteProviderConfig(modelSelection);
   const rewriteFallbackModel = rewriteProviderConfig.models[0] || getDefaultTextModel();
@@ -2364,7 +2371,9 @@ export async function rewritePostForCompliance({ input = {}, analysis = {}, mode
     missingKeyMessage: `改写功能缺少 ${rewriteProviderConfig.envKey} 环境变量。`,
     fallbackParser: salvageRewritePayload,
     scene: usePatchMode ? "rewrite_patch" : "rewrite",
-    messages: usePatchMode ? buildPatchMessages({ input, analysis, semantic }) : buildRewriteMessages({ input, analysis, semantic })
+    messages: usePatchMode
+      ? buildPatchMessages({ input, analysis, semantic, innerSpaceTerms })
+      : buildRewriteMessages({ input, analysis, semantic, innerSpaceTerms })
   });
 
   const normalizedRewrite = normalizeRewriteResult(
@@ -2391,7 +2400,7 @@ export async function rewritePostForCompliance({ input = {}, analysis = {}, mode
       missingKeyMessage: `改写后人味化缺少 ${rewriteProviderConfig.envKey} 环境变量。`,
       fallbackParser: salvageRewritePayload,
       scene: "rewrite_humanizer",
-      messages: buildHumanizerMessages({ input, analysis, semantic, baseRewrite })
+      messages: buildHumanizerMessages({ input, analysis, semantic, baseRewrite, innerSpaceTerms })
     });
 
     const humanizedRewrite = normalizeRewriteResult(

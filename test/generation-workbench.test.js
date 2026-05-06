@@ -26,6 +26,14 @@ test("buildGenerationMessages includes mode, style profile, success samples, and
     },
     referenceSamples: [
       { title: "成功标题", body: "成功正文", tier: "featured", tags: ["亲密关系"] }
+    ],
+    innerSpaceTerms: [
+      {
+        term: "小飞船",
+        literal: "震动棒",
+        preferredUsage: "轻松分享场景可自然替换",
+        example: "今晚只想驾驶快乐飞船去月球散步。"
+      }
     ]
   });
 
@@ -39,6 +47,8 @@ test("buildGenerationMessages includes mode, style profile, success samples, and
   assert.match(combined, /适当加 emoji/);
   assert.match(combined, /内太空/);
   assert.match(combined, /黑话/);
+  assert.match(combined, /小飞船/);
+  assert.match(combined, /震动棒/);
   assert.match(combined, /大白话/);
   assert.match(combined, /不要输出一大段长文不分段/);
   assert.match(combined, /短文档/);

@@ -2,6 +2,7 @@ import {
   loadCustomLexicon,
   loadFeedbackLog,
   loadFalsePositiveLog,
+  loadInnerSpaceTerms,
   loadNoteLifecycle,
   loadReviewQueue,
   loadSeedLexicon,
@@ -10,11 +11,13 @@ import {
   saveCustomLexicon,
   saveFeedbackLog,
   saveFalsePositiveLog,
+  saveInnerSpaceTerms,
   saveReviewQueue,
   saveSeedLexicon,
   saveWhitelist
 } from "./data-store.js";
 import { buildFalsePositiveAudit, getCandidatePhraseIssue, isValidLexiconCandidatePhrase } from "./feedback.js";
+import { sanitizeInnerSpaceTerm } from "./inner-space-terms.js";
 import { buildRuleChangePreview } from "./rule-preview.js";
 
 export function normalizeLexiconLevel(value = "", riskLevel = "manual_review") {
@@ -184,14 +187,15 @@ function enrichReviewQueueItem(item, histories = {}) {
 }
 
 export async function loadAdminData() {
-  const [seedLexicon, customLexicon, feedbackLog, reviewQueue, falsePositiveLog, successSamples, noteLifecycle] = await Promise.all([
+  const [seedLexicon, customLexicon, feedbackLog, reviewQueue, falsePositiveLog, successSamples, noteLifecycle, innerSpaceTerms] = await Promise.all([
     loadSeedLexicon(),
     loadCustomLexicon(),
     loadFeedbackLog(),
     loadReviewQueue(),
     loadFalsePositiveLog(),
     loadSuccessSamples(),
-    loadNoteLifecycle()
+    loadNoteLifecycle(),
+    loadInnerSpaceTerms()
   ]);
 
   return {
@@ -212,8 +216,34 @@ export async function loadAdminData() {
         noteLifecycle
       })
     ),
-    falsePositiveLog: falsePositiveLog.map(enrichFalsePositiveLogItem)
+    falsePositiveLog: falsePositiveLog.map(enrichFalsePositiveLogItem),
+    innerSpaceTerms
   };
+}
+
+export async function addInnerSpaceTerm(entry = {}) {
+  const current = await loadInnerSpaceTerms();
+  const sanitized = sanitizeInnerSpaceTerm(entry);
+
+  if (current.some((item) => item.id === sanitized.id)) {
+    throw createError(`术语 ID 已存在：${sanitized.id}`);
+  }
+
+  await saveInnerSpaceTerms([...current, sanitized]);
+  return sanitized;
+}
+
+export async function deleteInnerSpaceTerm(id = "") {
+  const targetId = String(id || "").trim();
+  const current = await loadInnerSpaceTerms();
+  const next = current.filter((item) => String(item.id || "").trim() !== targetId);
+
+  if (next.length === current.length) {
+    throw createError("未找到要删除的术语项。", 404);
+  }
+
+  await saveInnerSpaceTerms(next);
+  return next;
 }
 
 export async function confirmFalsePositiveLogEntry(id, userNotes = "") {

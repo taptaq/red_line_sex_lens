@@ -10,6 +10,7 @@ import {
   migrateLifecycleToNoteRecord,
   migrateSuccessSampleToNoteRecord
 } from "./note-records.js";
+import { sanitizeInnerSpaceTerms } from "./inner-space-terms.js";
 import { sanitizeStyleProfileState } from "./style-profile.js";
 import { withSampleWeight } from "./sample-weight.js";
 
@@ -589,6 +590,14 @@ export async function loadCustomLexicon() {
 
 export async function saveCustomLexicon(items) {
   await writeJson(paths.lexiconCustom, items);
+}
+
+export async function loadInnerSpaceTerms() {
+  return sanitizeInnerSpaceTerms(await readJson(paths.innerSpaceTerms, []));
+}
+
+export async function saveInnerSpaceTerms(items) {
+  await writeJson(paths.innerSpaceTerms, sanitizeInnerSpaceTerms(items));
 }
 
 export async function saveFeedbackLog(items) {

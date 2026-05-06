@@ -4,10 +4,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   addLexiconEntry,
+  addInnerSpaceTerm,
   confirmFalsePositiveLogEntry,
   createWhitelistCandidatesFromFalsePositive,
   deleteFeedbackEntry,
   deleteFalsePositiveLogEntry,
+  deleteInnerSpaceTerm,
   deleteLexiconEntry,
   deleteReviewQueueItem,
   loadAdminData,
@@ -17,6 +19,7 @@ import { analyzePost } from "./analyzer.js";
 import {
   loadCollectionTypes,
   loadFalsePositiveLog,
+  loadInnerSpaceTerms,
   loadNoteLifecycle,
   loadNoteRecords,
   loadReviewQueue,
@@ -51,6 +54,7 @@ import { runCrossModelReview } from "./cross-review.js";
 import { generateNoteCandidates, repairGenerationCandidate, scoreGenerationCandidates } from "./generation-workbench.js";
 import { recognizeFeedbackScreenshot, rewritePostForCompliance, suggestFeedbackCandidates } from "./glm.js";
 import { mergeRuleAndSemanticAnalysis, runSemanticReview } from "./semantic-review.js";
+import { filterInnerSpaceTerms } from "./inner-space-terms.js";
 import {
   buildAutoStyleProfileState,
   getActiveStyleProfile,
@@ -466,6 +470,7 @@ export async function rewriteUntilAccepted({
   beforeAnalysis = {},
   modelSelection = {},
   maxAttempts = 3,
+  innerSpaceTerms = [],
   rewritePost = rewritePostForCompliance,
   analyzeMerged = buildMergedAnalysis,
   crossReview = runCrossModelReview
@@ -484,7 +489,8 @@ export async function rewriteUntilAccepted({
     latestRewrite = await rewritePost({
       input: currentInput,
       analysis: currentAnalysis,
-      modelSelection: modelSelection.rewrite
+      modelSelection: modelSelection.rewrite,
+      innerSpaceTerms
     });
 
     const rewrittenInput = buildRewriteInputFromPayload(latestRewrite);
@@ -804,11 +810,15 @@ async function handleRequest(request, response) {
     const beforeAnalysis = await buildMergedAnalysis(payload, {
       modelSelection: modelSelection.semantic
     });
+    const innerSpaceTerms = filterInnerSpaceTerms(await loadInnerSpaceTerms(), {
+      collectionType: payload?.collectionType
+    });
     const rewriteResult = await rewriteUntilAccepted({
       input: payload,
       beforeAnalysis,
       modelSelection,
-      maxAttempts: 3
+      maxAttempts: 3,
+      innerSpaceTerms
     });
 
     return sendJson(response, 200, {
@@ -835,15 +845,22 @@ async function handleRequest(request, response) {
       ...(payload?.brief && typeof payload.brief === "object" ? payload.brief : {}),
       collectionType
     };
-    const [profileState, successSamples, noteLifecycle] = await Promise.all([loadStyleProfile(), loadSuccessSamples(), loadNoteLifecycle()]);
+    const [profileState, successSamples, noteLifecycle, innerSpaceTermsRaw] = await Promise.all([
+      loadStyleProfile(),
+      loadSuccessSamples(),
+      loadNoteLifecycle(),
+      loadInnerSpaceTerms()
+    ]);
     const styleProfile = getActiveStyleProfile(profileState);
     const referenceSamples = buildGenerationReferenceSamples({ successSamples, noteLifecycle }).slice(0, 12);
+    const innerSpaceTerms = filterInnerSpaceTerms(innerSpaceTermsRaw, { collectionType });
     const generation = await generateNoteCandidates({
       mode: payload?.mode,
       brief,
       draft: payload?.draft,
       styleProfile,
       referenceSamples,
+      innerSpaceTerms,
       modelSelection: generationModelSelection,
       generateJson: Array.isArray(payload?.mockCandidates)
         ? async () => ({ candidates: payload.mockCandidates, provider: "mock", model: "mock-generation" })
@@ -854,6 +871,7 @@ async function handleRequest(request, response) {
       styleProfile,
       brief: payload?.brief,
       modelSelection,
+      innerSpaceTerms,
       repairCandidate: repairGenerationCandidate
     });
 
@@ -1072,10 +1090,22 @@ async function handleRequest(request, response) {
     return sendJson(response, 200, { ok: true, entry });
   }
 
+  if (request.method === "POST" && url.pathname === "/api/admin/inner-space-terms") {
+    const payload = await readBody(request);
+    const entry = await addInnerSpaceTerm(payload?.entry);
+    return sendJson(response, 200, { ok: true, entry });
+  }
+
   if (request.method === "DELETE" && url.pathname === "/api/admin/lexicon") {
     const payload = await readBody(request);
     await deleteLexiconEntry(payload.scope, payload.id);
     return sendJson(response, 200, { ok: true });
+  }
+
+  if (request.method === "DELETE" && url.pathname === "/api/admin/inner-space-terms") {
+    const payload = await readBody(request);
+    const items = await deleteInnerSpaceTerm(payload?.id);
+    return sendJson(response, 200, { ok: true, items });
   }
 
   if (request.method === "DELETE" && url.pathname === "/api/admin/feedback") {

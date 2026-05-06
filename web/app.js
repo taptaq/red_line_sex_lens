@@ -60,6 +60,14 @@ function lexiconLevelLabel(level) {
   return "二级词库";
 }
 
+function innerSpaceTermCategoryLabel(category) {
+  if (category === "actions") return "操作篇";
+  if (category === "states") return "状态篇";
+  if (category === "map") return "地形篇";
+  if (category === "protocol") return "协议篇";
+  return "装备篇";
+}
+
 function inferLexiconLevel(level, riskLevel) {
   const text = String(level || "").trim().toLowerCase();
 
@@ -352,6 +360,7 @@ const sampleLibraryApi = "/api/sample-library";
 const sampleLibraryPdfImportParseApi = "/api/sample-library/pdf-import/parse";
 const sampleLibraryPdfImportCommitApi = "/api/sample-library/pdf-import/commit";
 const sampleLibraryCalibrationReplayApi = "/api/sample-library/calibration-replay";
+const innerSpaceTermsApi = "/api/admin/inner-space-terms";
 
 async function loadAnalyzeCustomTagOptions() {
   try {
@@ -3216,9 +3225,57 @@ function renderReviewQueueAdmin(items) {
     : '<div class="result-card muted">当前没有待维护的复核项</div>';
 }
 
+function renderInnerSpaceTermsList(items = []) {
+  const node = byId("inner-space-terms-list");
+
+  if (!node) {
+    return;
+  }
+
+  node.innerHTML = Array.isArray(items) && items.length
+    ? items
+        .slice()
+        .sort((left, right) => Number(right.priority || 0) - Number(left.priority || 0))
+        .map(
+          (item) => `
+            <article class="admin-item">
+              <div class="item-head">
+                <div>
+                  <strong>${escapeHtml(item.term || "未命名术语")}</strong>
+                  <p>${escapeHtml(item.literal || item.metaphor || "等待补充术语说明")}</p>
+                </div>
+                <div class="meta-row">
+                  <span class="meta-pill">${escapeHtml(innerSpaceTermCategoryLabel(item.category))}</span>
+                  <span class="meta-pill">优先级 ${escapeHtml(String(item.priority || 0))}</span>
+                </div>
+              </div>
+              <div class="meta-row">
+                <span class="meta-pill">${escapeHtml((item.aliases || []).join("、") || "无别名")}</span>
+                <span class="meta-pill">${escapeHtml((item.collectionTypes || []).join("、") || "全部合集")}</span>
+              </div>
+              <p>${escapeHtml(item.preferredUsage || "暂无推荐用法")}</p>
+              <p>${escapeHtml(item.example || "暂无示例句")}</p>
+              <div class="item-actions">
+                <button
+                  type="button"
+                  class="button button-danger button-small"
+                  data-action="delete-inner-space-term"
+                  data-id="${escapeHtml(item.id || "")}"
+                >
+                  删除
+                </button>
+              </div>
+            </article>
+          `
+        )
+        .join("")
+    : '<div class="result-card muted">当前没有术语项</div>';
+}
+
 function renderAdminData(data) {
   renderLexiconList("seed-lexicon-list", data.seedLexicon, "seed");
   renderLexiconList("custom-lexicon-list", data.customLexicon, "custom");
+  renderInnerSpaceTermsList(data.innerSpaceTerms || []);
   renderFeedbackLog(data.feedbackLog);
   renderFalsePositiveLog(data.falsePositiveLog || []);
 }
@@ -5330,6 +5387,47 @@ byId("custom-lexicon-form").addEventListener("submit", (event) =>
   handleLexiconSubmit(event, "custom", "custom-lexicon-result", "保存中...")
 );
 
+byId("inner-space-terms-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submitButton = form.querySelector('button[type="submit"]');
+  setButtonBusy(submitButton, true, "保存中...");
+
+  try {
+    const formData = new FormData(form);
+    await apiJson(innerSpaceTermsApi, {
+      method: "POST",
+      body: JSON.stringify({
+        entry: {
+          term: formData.get("term"),
+          aliases: splitCSV(formData.get("aliases")),
+          category: formData.get("category"),
+          collectionTypes: splitCSV(formData.get("collectionTypes")),
+          literal: formData.get("literal"),
+          metaphor: formData.get("metaphor"),
+          preferredUsage: formData.get("preferredUsage"),
+          avoidUsage: formData.get("avoidUsage"),
+          example: formData.get("example"),
+          priority: formData.get("priority")
+        }
+      })
+    });
+    form.reset();
+    const priorityInput = form.querySelector('[name="priority"]');
+    if (priorityInput) {
+      priorityInput.value = "80";
+    }
+    byId("inner-space-terms-result").innerHTML = '<div class="result-card-shell">术语已保存，后续改写和生成会优先参考它。</div>';
+    await refreshAll();
+  } catch (error) {
+    byId("inner-space-terms-result").innerHTML = `
+      <div class="result-card-shell muted">${escapeHtml(error.message || "保存术语失败")}</div>
+    `;
+  } finally {
+    setButtonBusy(submitButton, false);
+  }
+});
+
 byId("sample-library-create-button").addEventListener("click", () => {
   const shell = byId("sample-library-create-form-shell");
   setSampleLibraryCreateFormOpen(Boolean(shell?.hidden));
@@ -5715,6 +5813,15 @@ document.addEventListener("click", async (event) => {
         method: "DELETE",
         body: JSON.stringify({
           scope: button.dataset.scope,
+          id: button.dataset.id
+        })
+      });
+    }
+
+    if (action === "delete-inner-space-term") {
+      await apiJson(innerSpaceTermsApi, {
+        method: "DELETE",
+        body: JSON.stringify({
           id: button.dataset.id
         })
       });

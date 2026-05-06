@@ -24,13 +24,24 @@ test("rewrite prompt requires preserving full body instead of shortening into a 
       hits: [],
       suggestions: []
     },
-    semantic: null
+    semantic: null,
+    innerSpaceTerms: [
+      {
+        term: "轨道对接",
+        literal: "性行为",
+        preferredUsage: "适合轻松隐喻表达",
+        example: "虽然我也想轨道对接，但目前的队友质量堪忧。"
+      }
+    ]
   });
 
   const userPrompt = String(messages[1]?.content || "");
 
   assert.ok(rewriteGenerationConfig.baseMaxTokens >= 2200);
   assert.match(userPrompt, /不要把正文缩成摘要|不要明显缩短正文篇幅|尽量保留原文的信息量和段落结构/);
+  assert.match(userPrompt, /内太空术语参考/);
+  assert.match(userPrompt, /轨道对接/);
+  assert.match(userPrompt, /性行为/);
 });
 
 test("rewrite prompt includes retry guidance when a previous round still needs manual review", () => {
