@@ -26,7 +26,7 @@
 
 - 本地规则检测：基于种子词库、自定义词库、白名单和组合规则判断内容风险。
 - 语义复判：对规则结果进行模型复核，识别隐晦表达、擦边语境和误报可能。
-- 多模型交叉复判：支持 GLM、Qwen、MiniMax、DeepSeek、Mimo 等 provider 参与复核。
+- 多模型交叉复判：支持 GLM、Qwen、MiniMax、DeepSeek 等 provider 参与复核。
 - 合规改写：根据检测结果进行多轮改写，尽量保留原文信息量和表达风格。
 - 生成新内容：支持从零起稿或基于草稿优化，并推荐更稳的一版。
 - 工作流助手：根据当前内容状态、回流积压和样本库卡点，推荐下一步动作。
@@ -89,20 +89,27 @@ npm run server
 - `规则维护`
   自定义词库和种子词库已经降级到折叠区。
 - `系统校准`
-  基准评测和模型看板已经降级到样本库里的系统校准区。
+  基准评测、模型看板、历史回放验证和批量复盘队列都已经降级到样本库里的系统校准区。
 
 样本库当前已经改成步骤式维护：
 
 1. `基础内容`
 2. `参考属性`
 3. `生命周期属性`
+4. `预判复盘`
 
 样本列表会直接提示每条记录当前的 `卡点`，例如：
 
 - `卡点：基础内容`
 - `卡点：参考属性`
 - `卡点：生命周期`
-- `已完成主流程`
+- `卡点：预判复盘`
+- `已完成校准闭环`
+
+此外，样本列表和系统校准区现在还会补充两类校准辅助信息：
+
+- 列表里直接显示 `待复盘 / 已命中 / 有偏差` 和预判风险 pill。
+- `系统校准` 折叠区里可以运行历史回放验证，并查看批量复盘队列。
 
 ## 项目结构
 
@@ -224,7 +231,6 @@ export DMXAPI_API_KEY="你的 DMXAPI 密钥"
 
 - `glm / kimi / qwen / deepseek` 文本 helper 默认按 `DMXAPI -> 官方接口` 顺序调用。
 - `minimax` 当前是 `DMXAPI-only` provider。
-- `mimo` 是独立 provider，默认模型为 `mimo-v2.5-free`。
 - 官方 `deepseek` 仍单独展示，默认模型为 `deepseek-v4-flash`。
 - 如果没有设置 `DMXAPI_API_KEY`，会自动跳过 DMXAPI，直接走各 provider 官方接口。
 - DMXAPI 文本请求使用非流式模式，不设置 `stream: true`。
@@ -241,7 +247,6 @@ export GLM_DMXAPI_MODEL="glm-5.1-free"
 export KIMI_DMXAPI_MODEL="kimi-k2.6-free"
 export QWEN_DMXAPI_MODEL="qwen3.5-plus-free"
 export MINIMAX_DMXAPI_MODEL="MiniMax-M2.7-free"
-export MIMO_DMXAPI_MODEL="mimo-v2.5-free"
 
 export QWEN_FEEDBACK_MODEL="qwen-plus"
 export QWEN_CROSS_REVIEW_MODEL="qwen-plus"

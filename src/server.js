@@ -9,38 +9,26 @@ import {
   deleteFeedbackEntry,
   deleteFalsePositiveLogEntry,
   deleteLexiconEntry,
-  deleteRewritePairEntry,
   deleteReviewQueueItem,
   loadAdminData,
   promoteReviewQueueItem
 } from "./admin.js";
 import { analyzePost } from "./analyzer.js";
 import {
-  appendRewritePairs,
-  deleteReviewBenchmarkSampleById,
-  loadAnalyzeTagOptions,
   loadCollectionTypes,
   loadFalsePositiveLog,
   loadNoteLifecycle,
   loadNoteRecords,
-  loadReviewBenchmarkSamples,
   loadReviewQueue,
   loadSummary,
   loadStyleProfile,
   loadSuccessSamples,
-  deleteCompatibilityItemById,
-  saveAnalyzeTagOptions,
-  saveCompatibilityItems,
-  saveCollectionTypes,
   saveFalsePositiveLog,
-  saveNoteLifecycle,
   saveNoteRecords,
-  saveReviewBenchmarkSamples,
   saveStyleProfile,
-  saveSuccessSamples,
   upsertFeedbackEntries
 } from "./data-store.js";
-import { assertValidCollectionType, buildCollectionTypeOptions, normalizeCollectionType } from "./collection-types.js";
+import { assertValidCollectionType, buildCollectionTypeOptions } from "./collection-types.js";
 import {
   buildAnalysisSnapshot,
   buildFalsePositiveAudit,
@@ -62,31 +50,22 @@ import {
 import { runCrossModelReview } from "./cross-review.js";
 import { generateNoteCandidates, repairGenerationCandidate, scoreGenerationCandidates } from "./generation-workbench.js";
 import { recognizeFeedbackScreenshot, rewritePostForCompliance, suggestFeedbackCandidates } from "./glm.js";
-import { buildRewritePairRecord, isMeaningfulRewritePairRecord } from "./rewrite-pairs.js";
-import {
-  buildReviewBenchmarkSampleFromFields,
-  buildReviewBenchmarkSampleFromNoteRecord,
-  choosePreferredReviewBenchmarkSource,
-  findMatchingReviewBenchmarkSample,
-  normalizeReviewBenchmarkSource,
-  normalizeReviewBenchmarkSample
-} from "./review-benchmark.js";
 import { mergeRuleAndSemanticAnalysis, runSemanticReview } from "./semantic-review.js";
 import {
   buildAutoStyleProfileState,
-  confirmStyleProfileDraft,
   getActiveStyleProfile,
-  setActiveStyleProfileVersion,
-  updateActiveStyleProfile,
-  updateStyleProfileDraft
 } from "./style-profile.js";
-import { createSampleLibraryRecord, findSampleLibraryRecord, patchSampleLibraryRecord } from "./sample-library.js";
-import { buildSuccessSampleRecord, isSameSuccessSample, upsertSuccessSampleRecords } from "./success-samples.js";
-import { buildLifecycleRecord, updateLifecyclePublishResult, upsertLifecycleRecords } from "./note-lifecycle.js";
+import { normalizePdfImportCommitItem, parsePdfImportFiles } from "./pdf-sample-import.js";
+import {
+  buildSampleLibraryImportDuplicateKey,
+  buildSampleLibraryImportPayload,
+  createSampleLibraryRecord,
+  findSampleLibraryRecord,
+  patchSampleLibraryRecord
+} from "./sample-library.js";
+import { replayCalibratedSamples } from "./calibration-replay.js";
 import { rankSamplesByWeight, withSampleWeight } from "./sample-weight.js";
-import { buildModelPerformanceSummary } from "./model-performance.js";
 import { paths, webDir } from "./config.js";
-import { runReviewBenchmarkHarness } from "./evals/review-benchmark-harness.js";
 
 const host = "127.0.0.1";
 const port = 3030;
@@ -113,25 +92,6 @@ function getWebAssetContentType(filePath) {
   return null;
 }
 
-function sanitizeAnalyzeTagOptions(options) {
-  const seen = new Set();
-  const normalized = [];
-  const source = Array.isArray(options) ? options : [];
-
-  for (const item of source) {
-    const tag = String(item || "").trim();
-
-    if (!tag || seen.has(tag)) {
-      continue;
-    }
-
-    seen.add(tag);
-    normalized.push(tag);
-  }
-
-  return normalized.slice(0, 200);
-}
-
 async function sendItemsResponse(response, loader) {
   const items = await loader();
   return sendJson(response, 200, {
@@ -156,78 +116,17 @@ async function deleteItemsById(request, response, { loader, saver, notFoundMessa
   return sendItemsResponse(response, loader);
 }
 
-async function upsertCompatibilityItems(response, request, {
-  kind,
-  loader,
-  buildRecord,
-  upsertRecords,
-  findItem
-}) {
-  const payload = await readBody(request);
-  const current = await loader();
-  const nextRecord = buildRecord(payload);
-  const next = upsertRecords(current, [nextRecord]);
-  await saveCompatibilityItems(next, { kind });
-  const items = await loader();
-  const item = findItem(items, nextRecord) || items[items.length - 1] || null;
-
-  return sendJson(response, 200, {
-    ok: true,
-    item,
-    items
-  });
-}
-
-async function upsertReviewBenchmarkItem(response, request) {
-  const rawPayload = await readBody(request);
-  const payload = buildReviewBenchmarkSamplePayload(rawPayload);
-
-  if (!rawPayload?.noteRecord && Object.prototype.hasOwnProperty.call(rawPayload || {}, "collectionType")) {
-    payload.input.collectionType = assertValidCollectionType(rawPayload?.collectionType, await loadAvailableCollectionTypes());
-  }
-
-  assertReviewBenchmarkSamplePayload(payload, { sourceProvided: rawPayload?.source !== undefined });
-  const current = await loadReviewBenchmarkSamples();
-  const duplicate = findMatchingReviewBenchmarkSample(current, payload);
-
-  if (duplicate) {
-    const merged = normalizeReviewBenchmarkSample({
-      ...duplicate,
-      source: choosePreferredReviewBenchmarkSource(duplicate.source, payload.source),
-      updatedAt: new Date().toISOString()
-    });
-    const next = current.map((item) => (item.id === duplicate.id ? merged : item));
-    await saveReviewBenchmarkSamples(next);
-    const items = await loadReviewBenchmarkSamples();
-    const item = items.find((entry) => entry.id === merged.id) || merged;
-    return sendJson(response, 200, {
-      ok: true,
-      duplicate: true,
-      item,
-      items
-    });
-  }
-
-  const next = [...current, payload];
-  await saveReviewBenchmarkSamples(next);
-  const items = await loadReviewBenchmarkSamples();
-  return sendJson(response, 200, {
-    ok: true,
-    duplicate: false,
-    item: items[items.length - 1] || null,
-    items
-  });
-}
-
 async function persistSampleLibraryRecord(payload = {}) {
   const normalizedPayload = await normalizeSampleLibraryPayloadCollectionType(payload);
   const nextRecord = createSampleLibraryRecord(normalizedPayload);
   const items = await saveNoteRecords([...(await loadNoteRecords()), nextRecord]);
   const item = findSampleLibraryRecord(items, nextRecord) || items[items.length - 1] || null;
   const shouldRefreshStyleProfile = item?.reference?.enabled === true;
-  const profile = shouldRefreshStyleProfile ? await refreshAutoStyleProfile() : await loadStyleProfile();
+  if (shouldRefreshStyleProfile) {
+    await refreshAutoStyleProfile();
+  }
 
-  return { item, items, profile };
+  return { item, items };
 }
 
 async function patchSampleLibraryRecordAndReturn(payload = {}) {
@@ -249,9 +148,11 @@ async function patchSampleLibraryRecordAndReturn(payload = {}) {
   const referenceChanged =
     Object.prototype.hasOwnProperty.call(normalizedPayload || {}, "reference") ||
     (normalizedPayload?.publish && (item?.reference?.enabled === true || current[index]?.reference?.enabled === true));
-  const profile = referenceChanged ? await refreshAutoStyleProfile() : await loadStyleProfile();
+  if (referenceChanged) {
+    await refreshAutoStyleProfile();
+  }
 
-  return { item, items, profile };
+  return { item, items };
 }
 
 async function deleteSampleLibraryRecordAndReturn(id) {
@@ -267,9 +168,11 @@ async function deleteSampleLibraryRecordAndReturn(id) {
   }
 
   await saveNoteRecords(next);
-  const profile = removed?.reference?.enabled === true ? await refreshAutoStyleProfile() : await loadStyleProfile();
+  if (removed?.reference?.enabled === true) {
+    await refreshAutoStyleProfile();
+  }
 
-  return { items: next, profile };
+  return { items: next };
 }
 
 export function lifecycleRecordToReferenceSample(item = {}) {
@@ -334,6 +237,64 @@ async function normalizeSampleLibraryPayloadCollectionType(payload = {}) {
   };
 }
 
+async function validatePdfImportCommitItems(items = []) {
+  const selectedItems = (Array.isArray(items) ? items : []).filter((item) => item?.selected === true);
+  const validatedPayloads = [];
+  const currentRecords = await loadNoteRecords();
+  const existingDuplicateKeys = new Set(
+    currentRecords.map((record) =>
+      buildSampleLibraryImportDuplicateKey({
+        title: record?.note?.title,
+        body: record?.note?.body,
+        coverText: record?.note?.coverText
+      })
+    )
+  );
+  const batchDuplicateKeys = new Set();
+
+  for (const [index, item] of selectedItems.entries()) {
+    const normalized = normalizePdfImportCommitItem(item);
+
+    if (!normalized.title || !normalized.body || !normalized.collectionType) {
+      const error = new Error(`第 ${index + 1} 条已勾选导入项缺少标题、正文或合集类型。`);
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const duplicateKey = buildSampleLibraryImportDuplicateKey(normalized);
+
+    if (existingDuplicateKeys.has(duplicateKey)) {
+      const error = new Error(`第 ${index + 1} 条已勾选导入项与已有学习样本重复。`);
+      error.statusCode = 409;
+      throw error;
+    }
+
+    if (batchDuplicateKeys.has(duplicateKey)) {
+      const error = new Error(`第 ${index + 1} 条已勾选导入项与本批其他导入项重复。`);
+      error.statusCode = 409;
+      throw error;
+    }
+
+    batchDuplicateKeys.add(duplicateKey);
+
+    const importPayload = buildSampleLibraryImportPayload(normalized);
+
+    try {
+      validatedPayloads.push(await normalizeSampleLibraryPayloadCollectionType(importPayload));
+    } catch (error) {
+      if (Number(error?.statusCode) === 400) {
+        const collectionError = new Error(`第 ${index + 1} 条已勾选导入项的合集类型无效或未选择。`);
+        collectionError.statusCode = 400;
+        throw collectionError;
+      }
+
+      throw error;
+    }
+  }
+
+  return validatedPayloads;
+}
+
 function normalizeComparableText(value = "") {
   return String(value || "").trim();
 }
@@ -362,90 +323,6 @@ function isSameLifecycleItem(left = {}, right = {}) {
   return Boolean(leftCoverText && rightCoverText && leftCoverText === rightCoverText);
 }
 
-function parseBenchmarkTags(tags = []) {
-  if (Array.isArray(tags)) {
-    return uniqueStrings(tags);
-  }
-
-  return uniqueStrings(String(tags || "").split(/[,\n]/));
-}
-
-function buildReviewBenchmarkSamplePayload(payload = {}) {
-  if (payload?.noteRecord && typeof payload.noteRecord === "object") {
-    return buildReviewBenchmarkSampleFromNoteRecord(payload.noteRecord, {
-      expectedType: payload.expectedType,
-      sourceType: payload?.source?.type || payload?.sourceType || "sample_library"
-    });
-  }
-
-  return buildReviewBenchmarkSampleFromFields({
-    expectedType: String(payload.expectedType || "").trim(),
-    source: normalizeReviewBenchmarkSource(payload.source),
-    title: payload.title,
-    body: payload.body,
-    coverText: payload.coverText,
-    collectionType: payload.collectionType,
-    tags: parseBenchmarkTags(payload.tags)
-  });
-}
-
-function isAllowedBenchmarkExpectedType(value = "") {
-  return [
-    "violation",
-    "false_positive",
-    "success",
-    "违规样本",
-    "误报样本",
-    "正常样本",
-    "成功样本",
-    "正常通过样本"
-  ].includes(String(value || "").trim());
-}
-
-function assertReviewBenchmarkSamplePayload(payload = {}, options = {}) {
-  if (!payload?.input?.title) {
-    const error = new Error("基准样本标题不能为空。");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  if (!payload?.input?.body) {
-    const error = new Error("基准样本正文不能为空。");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  if (!isAllowedBenchmarkExpectedType(payload.expectedType)) {
-    const error = new Error("基准样本预期类型无效，请选择违规样本、误报样本或正常通过样本。");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  if (options.sourceProvided && payload.source === null) {
-    const error = new Error("基准样本来源无效，请使用手动录入、样本库或误报日志。");
-    error.statusCode = 400;
-    throw error;
-  }
-}
-
-function assertRunnableReviewBenchmarkSamples(items = []) {
-  const invalidItem = (Array.isArray(items) ? items : []).find(
-    (item) => !["violation", "false_positive", "success"].includes(String(item?.expectedType || "").trim())
-  );
-
-  if (!invalidItem) {
-    return;
-  }
-
-  const error = new Error(
-    `存在预期类型无效的基准样本：${String(invalidItem.id || invalidItem?.input?.title || "未命名样本").trim() || "未命名样本"}`
-  );
-  error.statusCode = 400;
-  throw error;
-}
-
-let reviewBenchmarkHarnessRunner = runReviewBenchmarkHarness;
-
 async function refreshAutoStyleProfile({ topic = "", name = "" } = {}) {
   const [currentProfile, successSamples] = await Promise.all([loadStyleProfile(), loadSuccessSamples()]);
 
@@ -462,12 +339,6 @@ async function refreshAutoStyleProfile({ topic = "", name = "" } = {}) {
 
   await saveStyleProfile(nextProfile);
   return nextProfile;
-}
-
-export function setReviewBenchmarkHarnessRunnerForTests(runner) {
-  const previous = reviewBenchmarkHarnessRunner;
-  reviewBenchmarkHarnessRunner = typeof runner === "function" ? runner : runReviewBenchmarkHarness;
-  return previous;
 }
 
 function sendJson(response, statusCode, payload) {
@@ -856,36 +727,6 @@ async function appendFeedbackAndQueue(payload, { modelSelection = {} } = {}) {
   };
 }
 
-async function appendRewritePair(payload) {
-  const before = payload?.before || {};
-  const after = payload?.after || {};
-
-  if (!isMeaningfulRewritePairRecord({ before, after })) {
-    const error = new Error("改写样本不能为空，至少填写改写前或改写后的标题、正文、封面文案、标签之一。");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const [beforeAnalysis, afterAnalysis] = await Promise.all([
-    buildMergedAnalysis(before),
-    buildMergedAnalysis(after)
-  ]);
-  const record = buildRewritePairRecord({
-    ...payload,
-    before,
-    after,
-    beforeAnalysis,
-    afterAnalysis
-  });
-  await appendRewritePairs([record]);
-
-  return {
-    record,
-    beforeAnalysis,
-    afterAnalysis
-  };
-}
-
 async function handleRequest(request, response) {
   const url = new URL(request.url, `http://${request.headers.host}`);
 
@@ -929,22 +770,6 @@ async function handleRequest(request, response) {
     });
   }
 
-  if (request.method === "GET" && url.pathname === "/api/success-samples") {
-    return sendItemsResponse(response, loadSuccessSamples);
-  }
-
-  if (request.method === "GET" && url.pathname === "/api/review-benchmark") {
-    const items = await loadReviewBenchmarkSamples();
-    return sendJson(response, 200, {
-      ok: true,
-      items
-    });
-  }
-
-  if (request.method === "GET" && url.pathname === "/api/note-lifecycle") {
-    return sendItemsResponse(response, loadNoteLifecycle);
-  }
-
   if (request.method === "GET" && url.pathname === "/api/sample-library") {
     return sendItemsResponse(response, loadNoteRecords);
   }
@@ -956,35 +781,11 @@ async function handleRequest(request, response) {
     });
   }
 
-  if (request.method === "GET" && url.pathname === "/api/style-profile") {
-    const profile = await loadStyleProfile();
-    return sendJson(response, 200, {
-      ok: true,
-      profile
-    });
-  }
-
-  if (request.method === "GET" && url.pathname === "/api/analyze-tag-options") {
-    const options = await loadAnalyzeTagOptions();
-    return sendJson(response, 200, {
-      ok: true,
-      options
-    });
-  }
-
   if (request.method === "GET" && url.pathname === "/api/model-options") {
     return sendJson(response, 200, {
       ok: true,
       ...buildModelSelectionOptionsPayload(),
       ...buildFeedbackModelSelectionOptionsPayload()
-    });
-  }
-
-  if (request.method === "GET" && url.pathname === "/api/model-performance") {
-    const summary = await buildModelPerformanceSummary();
-    return sendJson(response, 200, {
-      ok: true,
-      summary
     });
   }
 
@@ -1027,6 +828,7 @@ async function handleRequest(request, response) {
   if (request.method === "POST" && url.pathname === "/api/generate-note") {
     const payload = await readBody(request);
     const modelSelection = normalizeModelSelectionState(payload?.modelSelection);
+    const generationModelSelection = modelSelection.generation || modelSelection.rewrite;
     const collectionOptions = await loadAvailableCollectionTypes();
     const collectionType = assertValidCollectionType(payload?.collectionType || payload?.brief?.collectionType, collectionOptions);
     const brief = {
@@ -1034,7 +836,7 @@ async function handleRequest(request, response) {
       collectionType
     };
     const [profileState, successSamples, noteLifecycle] = await Promise.all([loadStyleProfile(), loadSuccessSamples(), loadNoteLifecycle()]);
-    const styleProfile = getActiveStyleProfile(profileState, payload?.styleProfileId);
+    const styleProfile = getActiveStyleProfile(profileState);
     const referenceSamples = buildGenerationReferenceSamples({ successSamples, noteLifecycle }).slice(0, 12);
     const generation = await generateNoteCandidates({
       mode: payload?.mode,
@@ -1042,7 +844,7 @@ async function handleRequest(request, response) {
       draft: payload?.draft,
       styleProfile,
       referenceSamples,
-      modelSelection: modelSelection.rewrite,
+      modelSelection: generationModelSelection,
       generateJson: Array.isArray(payload?.mockCandidates)
         ? async () => ({ candidates: payload.mockCandidates, provider: "mock", model: "mock-generation" })
         : undefined
@@ -1148,81 +950,51 @@ async function handleRequest(request, response) {
     });
   }
 
-  if (request.method === "POST" && url.pathname === "/api/success-samples") {
-    return upsertCompatibilityItems(response, request, {
-      kind: "success",
-      loader: loadSuccessSamples,
-      buildRecord: buildSuccessSampleRecord,
-      upsertRecords: upsertSuccessSampleRecords,
-      findItem: (items, nextRecord) => items.find((entry) => isSameSuccessSample(entry, nextRecord))
-    });
-  }
-
-  if (request.method === "POST" && url.pathname === "/api/note-lifecycle") {
-    return upsertCompatibilityItems(response, request, {
-      kind: "lifecycle",
-      loader: loadNoteLifecycle,
-      buildRecord: buildLifecycleRecord,
-      upsertRecords: upsertLifecycleRecords,
-      findItem: (items, nextRecord) => items.find((entry) => isSameLifecycleItem(entry, nextRecord))
-    });
-  }
-
   if (request.method === "POST" && url.pathname === "/api/sample-library") {
     const payload = await readBody(request);
-    const { item, items, profile } = await persistSampleLibraryRecord(payload);
+    const { item, items } = await persistSampleLibraryRecord(payload);
     return sendJson(response, 200, {
       ok: true,
       item,
-      items,
-      profile
+      items
     });
   }
 
-  if (request.method === "POST" && url.pathname === "/api/review-benchmark") {
-    return upsertReviewBenchmarkItem(response, request);
+  if (request.method === "POST" && url.pathname === "/api/sample-library/pdf-import/parse") {
+    const payload = await readBody(request);
+    const items = await parsePdfImportFiles(payload?.files || []);
+    return sendJson(response, 200, {
+      ok: true,
+      items
+    });
   }
 
-  if (request.method === "POST" && url.pathname === "/api/collection-types") {
+  if (request.method === "POST" && url.pathname === "/api/sample-library/pdf-import/commit") {
     const payload = await readBody(request);
-    const current = await loadCollectionTypes();
-    const nextName = normalizeCollectionType(payload?.name);
+    const validatedPayloads = await validatePdfImportCommitItems(payload?.items);
+    const createdItems = [];
 
-    if (!nextName) {
-      const error = new Error("合集类型名称不能为空。");
-      error.statusCode = 400;
-      throw error;
+    for (const validatedPayload of validatedPayloads) {
+      const { item: saved } = await persistSampleLibraryRecord(validatedPayload);
+      createdItems.push(saved);
     }
 
-    const nextCustom = uniqueStrings([...current.custom, nextName]);
-    await saveCollectionTypes({ custom: nextCustom });
-
     return sendJson(response, 200, {
       ok: true,
-      options: buildCollectionTypeOptions(nextCustom)
+      createdCount: createdItems.length,
+      items: createdItems
     });
   }
 
-  if (request.method === "POST" && url.pathname === "/api/review-benchmark/run") {
-    const samples = await loadReviewBenchmarkSamples();
-    assertRunnableReviewBenchmarkSamples(samples);
-    const result = await reviewBenchmarkHarnessRunner({
-      filePath: paths.reviewBenchmark,
-      samples
-    });
-    return sendJson(response, 200, result);
-  }
-
-  if (request.method === "POST" && url.pathname === "/api/style-profile/draft") {
+  if (request.method === "POST" && url.pathname === "/api/sample-library/calibration-replay") {
     const payload = await readBody(request);
-    const profile = await refreshAutoStyleProfile({
-      topic: payload?.topic,
-      name: payload?.name
+    const records = await loadNoteRecords();
+    const result = replayCalibratedSamples(records, {
+      mode: payload?.mode
     });
     return sendJson(response, 200, {
       ok: true,
-      profile,
-      draft: null
+      result
     });
   }
 
@@ -1261,56 +1033,13 @@ async function handleRequest(request, response) {
     });
   }
 
-  if (request.method === "PATCH" && url.pathname === "/api/style-profile") {
+  if (request.method === "PATCH" && url.pathname === "/api/sample-library") {
     const payload = await readBody(request);
-    const current = await loadStyleProfile();
-    const profile =
-      payload?.action === "activate"
-        ? setActiveStyleProfileVersion(current, payload?.id)
-        : payload?.action === "confirm-current"
-          ? updateActiveStyleProfile(current, payload?.profile || payload || {})
-        : payload?.action === "update-draft"
-          ? updateStyleProfileDraft(current, payload?.profile || payload || {})
-          : confirmStyleProfileDraft(current, payload?.profile || payload || {});
-    await saveStyleProfile(profile);
-    return sendJson(response, 200, {
-      ok: true,
-      profile
-    });
-  }
-
-  if (request.method === "PATCH" && url.pathname === "/api/note-lifecycle") {
-    const payload = await readBody(request);
-    const current = await loadNoteLifecycle();
-    const id = String(payload?.id || "").trim();
-    const index = current.findIndex((item) => String(item.id || "").trim() === id);
-
-    if (index === -1) {
-      const error = new Error("未找到要更新的笔记生命周期记录。");
-      error.statusCode = 404;
-      throw error;
-    }
-
-    const next = [...current];
-    next[index] = updateLifecyclePublishResult(current[index], payload);
-    await saveNoteLifecycle(next);
-    const items = await loadNoteLifecycle();
-    const item = items.find((entry) => String(entry.id || "").trim() === id) || items.find((entry) => isSameLifecycleItem(entry, next[index])) || null;
+    const { item, items } = await patchSampleLibraryRecordAndReturn(payload);
     return sendJson(response, 200, {
       ok: true,
       item,
       items
-    });
-  }
-
-  if (request.method === "PATCH" && url.pathname === "/api/sample-library") {
-    const payload = await readBody(request);
-    const { item, items, profile } = await patchSampleLibraryRecordAndReturn(payload);
-    return sendJson(response, 200, {
-      ok: true,
-      item,
-      items,
-      profile
     });
   }
 
@@ -1337,28 +1066,6 @@ async function handleRequest(request, response) {
     });
   }
 
-  if (request.method === "POST" && url.pathname === "/api/rewrite-pairs") {
-    const payload = await readBody(request);
-    const result = await appendRewritePair(payload);
-    return sendJson(response, 200, {
-      ok: true,
-      record: result.record,
-      beforeAnalysis: result.beforeAnalysis,
-      afterAnalysis: result.afterAnalysis
-    });
-  }
-
-  if (request.method === "POST" && url.pathname === "/api/analyze-tag-options") {
-    const payload = await readBody(request);
-    const options = sanitizeAnalyzeTagOptions(payload?.options);
-    await saveAnalyzeTagOptions(options);
-
-    return sendJson(response, 200, {
-      ok: true,
-      options
-    });
-  }
-
   if (request.method === "POST" && url.pathname === "/api/admin/lexicon") {
     const payload = await readBody(request);
     const entry = await addLexiconEntry(payload.scope, payload.entry);
@@ -1377,52 +1084,18 @@ async function handleRequest(request, response) {
     return sendJson(response, 200, { ok: true });
   }
 
-  if (request.method === "DELETE" && url.pathname === "/api/admin/rewrite-pairs") {
-    const payload = await readBody(request);
-    await deleteRewritePairEntry(payload.id, payload.createdAt);
-    return sendJson(response, 200, { ok: true });
-  }
-
   if (request.method === "DELETE" && url.pathname === "/api/admin/review-queue") {
     const payload = await readBody(request);
     await deleteReviewQueueItem(payload.id);
     return sendJson(response, 200, { ok: true });
   }
 
-  if (request.method === "DELETE" && url.pathname === "/api/success-samples") {
-    const payload = await readBody(request);
-    const items = await deleteCompatibilityItemById(payload?.id, { kind: "success" });
-    return sendJson(response, 200, {
-      ok: true,
-      items
-    });
-  }
-
-  if (request.method === "DELETE" && url.pathname === "/api/review-benchmark") {
-    const payload = await readBody(request);
-    const items = await deleteReviewBenchmarkSampleById(payload?.id);
-    return sendJson(response, 200, {
-      ok: true,
-      items
-    });
-  }
-
-  if (request.method === "DELETE" && url.pathname === "/api/note-lifecycle") {
-    const payload = await readBody(request);
-    const items = await deleteCompatibilityItemById(payload?.id, { kind: "lifecycle" });
-    return sendJson(response, 200, {
-      ok: true,
-      items
-    });
-  }
-
   if (request.method === "DELETE" && url.pathname === "/api/sample-library") {
     const payload = await readBody(request);
-    const { items, profile } = await deleteSampleLibraryRecordAndReturn(payload?.id);
+    const { items } = await deleteSampleLibraryRecordAndReturn(payload?.id);
     return sendJson(response, 200, {
       ok: true,
-      items,
-      profile
+      items
     });
   }
 

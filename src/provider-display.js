@@ -1,33 +1,17 @@
 import "./env.js";
 
-const mimoDmxapiModel = String(process.env.MIMO_DMXAPI_MODEL || process.env.DEEPSEEK_DMXAPI_MODEL || "mimo-v2.5-free").trim();
-
 export function providerDisplayLabel(provider = "") {
   if (provider === "kimi") return "Kimi";
   if (provider === "glm") return "智谱 GLM";
   if (provider === "qwen") return "通义千问";
   if (provider === "minimax") return "MiniMax";
   if (provider === "deepseek") return "深度求索";
-  if (provider === "mimo") return "Mimo";
+  if (provider === "dmxapi_text") return "DMXAPI";
   return String(provider || "").trim() || "未标记模型";
 }
 
 export function resolveDisplayProvider({ provider = "", route = "", model = "" } = {}) {
   const normalizedProvider = String(provider || "").trim();
-  const normalizedRoute = String(route || "").trim();
-  const normalizedModel = String(model || "").trim();
-
-  if (
-    normalizedProvider === "deepseek" &&
-    normalizedRoute === "dmxapi" &&
-    normalizedModel &&
-    normalizedModel === mimoDmxapiModel
-  ) {
-    return {
-      provider: "mimo",
-      label: providerDisplayLabel("mimo")
-    };
-  }
 
   return {
     provider: normalizedProvider,

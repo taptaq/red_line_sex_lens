@@ -18,6 +18,7 @@ import { buildLifecycleRecord } from "../src/note-lifecycle.js";
 import {
   buildNoteFingerprint,
   buildNoteRecord,
+  normalizeLearningSampleType,
   dedupeNoteRecords,
   mergeNoteRecords,
   migrateLifecycleToNoteRecord,
@@ -205,6 +206,53 @@ test("mergeNoteRecords preserves existing publish and reference details during p
   assert.equal(merged.reference.notes, "人工精选");
 });
 
+test("note records normalize and merge prediction calibration details", () => {
+  const existing = buildNoteRecord({
+    note: { title: "预判样本", body: "正文" },
+    calibration: {
+      prediction: {
+        predictedStatus: "published_passed",
+        predictedRiskLevel: "low",
+        predictedPerformanceTier: "medium",
+        confidence: "72",
+        reason: "结构稳定",
+        model: "gpt-5.4",
+        createdAt: "2026-05-01T08:00:00.000Z"
+      }
+    }
+  });
+
+  const merged = mergeNoteRecords(existing, {
+    note: { title: "预判样本", body: "正文" },
+    calibration: {
+      retro: {
+        actualPerformanceTier: "high",
+        predictionMatched: true,
+        missReason: "判断命中",
+        validatedSignals: "开头强, 标签准确",
+        invalidatedSignals: ["疑似过长"],
+        shouldBecomeReference: true,
+        ruleImprovementCandidate: "保留这个标题结构",
+        notes: "发布后表现稳定",
+        reviewedAt: "2026-05-04"
+      }
+    }
+  });
+
+  assert.equal(merged.calibration.prediction.predictedStatus, "published_passed");
+  assert.equal(merged.calibration.prediction.predictedRiskLevel, "low");
+  assert.equal(merged.calibration.prediction.predictedPerformanceTier, "medium");
+  assert.equal(merged.calibration.prediction.confidence, 72);
+  assert.equal(merged.calibration.prediction.reason, "结构稳定");
+  assert.equal(merged.calibration.prediction.model, "gpt-5.4");
+  assert.equal(merged.calibration.retro.actualPerformanceTier, "high");
+  assert.equal(merged.calibration.retro.predictionMatched, true);
+  assert.deepEqual(merged.calibration.retro.validatedSignals, ["开头强", "标签准确"]);
+  assert.deepEqual(merged.calibration.retro.invalidatedSignals, ["疑似过长"]);
+  assert.equal(merged.calibration.retro.shouldBecomeReference, true);
+  assert.equal(merged.calibration.retro.ruleImprovementCandidate, "保留这个标题结构");
+});
+
 test("dedupeNoteRecords picks a deterministic id for duplicate records with different source ids", () => {
   const leftFirst = dedupeNoteRecords([
     migrateSuccessSampleToNoteRecord({
@@ -245,6 +293,42 @@ test("buildNoteFingerprint is stable across tag ordering and whitespace", () => 
     buildNoteFingerprint({ title: " 标题 ", body: "正文", coverText: "", tags: ["b", "a"] }),
     buildNoteFingerprint({ title: "标题", body: "正文", coverText: "", tags: ["a", "b", "a"] })
   );
+});
+
+test("learning sample types normalize into canonical note-record metadata", () => {
+  assert.equal(normalizeLearningSampleType("good_sample"), "good_sample");
+  assert.equal(normalizeLearningSampleType("false_positive"), "false_positive");
+  assert.equal(normalizeLearningSampleType("missed_violation"), "missed_violation");
+  assert.equal(normalizeLearningSampleType("rewrite_success"), "rewrite_success");
+  assert.equal(normalizeLearningSampleType("observe"), "observe");
+  assert.equal(normalizeLearningSampleType(""), "");
+
+  const goodSample = buildNoteRecord({
+    sampleType: "good_sample",
+    note: { title: "好样本", body: "通过且表现好" }
+  });
+  const falsePositive = buildNoteRecord({
+    sampleType: "false_positive",
+    note: { title: "误判样本", body: "平台放行" }
+  });
+  const missedViolation = buildNoteRecord({
+    sampleType: "missed_violation",
+    note: { title: "漏判样本", body: "平台违规" }
+  });
+  const rewriteSuccess = buildNoteRecord({
+    sampleType: "rewrite_success",
+    note: { title: "改写成功样本", body: "改写后通过" }
+  });
+  const observeSample = buildNoteRecord({
+    sampleType: "observe",
+    note: { title: "待观察样本", body: "平台通过但一般" }
+  });
+
+  assert.equal(goodSample.sampleType, "good_sample");
+  assert.equal(falsePositive.sampleType, "false_positive");
+  assert.equal(missedViolation.sampleType, "missed_violation");
+  assert.equal(rewriteSuccess.sampleType, "rewrite_success");
+  assert.equal(observeSample.sampleType, "observe");
 });
 
 test("note records store round-trips canonical records", async (t) => {

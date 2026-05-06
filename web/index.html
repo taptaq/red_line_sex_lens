@@ -25,26 +25,11 @@
         <article class="panel analyzer-panel">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">内容检测台</p>
-              <h2>内容检测与改写</h2>
+              <p class="eyebrow">内容工作台</p>
+              <h2>检测、改写与生成</h2>
             </div>
-            <p class="section-note">按一条主链路推进：输入 -> 检测 -> 改写 / 复判 -> 最终稿 -> 发布回填。</p>
+            <p class="section-note">围绕一篇内容推进：先检测，再改写或生成，最后回填真实结果。</p>
           </div>
-          <section class="workflow-assistant-card" id="workflow-assistant" aria-live="polite">
-            <div class="workflow-assistant-copy">
-              <span class="model-scope-kicker">下一步建议</span>
-              <strong id="workflow-assistant-title">先输入一篇笔记</strong>
-              <p id="workflow-assistant-description">系统会根据当前结果推荐下一步，避免你在检测、改写、复判和生命周期之间来回找。</p>
-            </div>
-            <ol class="workflow-timeline" id="workflow-timeline" aria-label="笔记处理进度">
-              <li class="is-active">输入</li>
-              <li>检测</li>
-              <li>改写/复判</li>
-              <li>最终稿</li>
-              <li>发布回填</li>
-            </ol>
-            <div class="workflow-assistant-actions" id="workflow-assistant-actions"></div>
-          </section>
           <div class="tab-strip main-workbench-tab-strip" role="tablist" aria-label="主工作台模式切换">
             <button type="button" class="tab-button" data-tab-group="main-workbench" data-tab-target="analyze-workbench-pane">内容检测</button>
             <button type="button" class="tab-button" data-tab-group="main-workbench" data-tab-target="generation-workbench-pane">生成新内容</button>
@@ -78,45 +63,33 @@
                       <select name="collectionType" id="analyze-collection-type-select" required>
                         <option value="">请选择合集类型</option>
                       </select>
-                      <button type="button" class="button button-ghost button-small" id="analyze-collection-type-add">新增合集</button>
                     </label>
-                    <div>
-                      <span>标签</span>
-                      <div class="tag-picker" id="analyze-tag-picker">
-                        <input type="hidden" name="tags" id="analyze-tags-value" />
-                        <div class="tag-picker-trigger-shell">
-                          <button
-                            type="button"
-                            class="tag-picker-trigger"
-                            id="analyze-tag-trigger"
-                            aria-expanded="false"
-                            aria-controls="analyze-tag-dropdown"
-                          >
-                            <span class="tag-picker-trigger-head">
-                              <span class="tag-picker-trigger-label">标签</span>
-                              <span class="tag-picker-trigger-caret" aria-hidden="true">▾</span>
-                            </span>
-                            <span
-                              id="analyze-tag-selected"
-                              class="tag-picker-selected"
-                              role="group"
-                              aria-label="已选标签"
-                              aria-live="polite"
-                            >
-                              <span class="tag-picker-empty">尚未选择标签</span>
-                            </span>
-                          </button>
+                    <div class="tag-picker field-wide" id="analyze-tag-picker">
+                      <input type="hidden" name="tags" id="analyze-tags-value" />
+                      <button
+                        type="button"
+                        class="tag-picker-trigger"
+                        id="analyze-tag-trigger"
+                        aria-expanded="false"
+                        aria-controls="analyze-tag-dropdown"
+                      >
+                        <span class="tag-picker-trigger-head">
+                          <span class="tag-picker-trigger-label">标签</span>
+                          <span class="tag-picker-trigger-caret" aria-hidden="true">▾</span>
+                        </span>
+                        <span id="analyze-tag-selected" class="tag-picker-selected" role="group" aria-label="已选标签" aria-live="polite">
+                          <span class="tag-picker-empty">尚未选择标签</span>
+                        </span>
+                      </button>
+                      <div class="tag-picker-dropdown" id="analyze-tag-dropdown" hidden>
+                        <div class="tag-picker-dropdown-head">
+                          <strong>选择预置标签</strong>
+                          <button type="button" class="tag-picker-clear" id="analyze-tag-clear">清空</button>
                         </div>
-                        <div class="tag-picker-dropdown" id="analyze-tag-dropdown" hidden>
-                          <div class="tag-picker-dropdown-head">
-                            <strong>选择预置标签</strong>
-                            <button type="button" class="tag-picker-clear" id="analyze-tag-clear">清空</button>
-                          </div>
-                          <div class="tag-picker-options" id="analyze-tag-options"></div>
-                          <div class="tag-picker-custom">
-                            <input type="text" id="analyze-tag-custom" placeholder="输入自定义标签" />
-                            <button type="button" class="button button-ghost button-small" id="analyze-tag-add">添加</button>
-                          </div>
+                        <div class="tag-picker-options" id="analyze-tag-options"></div>
+                        <div class="tag-picker-custom">
+                          <input type="text" id="analyze-tag-custom" placeholder="输入自定义标签" />
+                          <button type="button" class="button button-ghost button-small" id="analyze-tag-add">添加</button>
                         </div>
                       </div>
                     </div>
@@ -140,7 +113,7 @@
                         <select id="semantic-model-selection" name="semanticModelSelection" class="model-action-select">
                           <option value="auto">默认自动 / 加载中...</option>
                         </select>
-                        <p class="model-recommendation-hint" id="semantic-model-recommendation">模型建议加载中</p>
+                        <p class="helper-text">按当前语义复判模型选择执行，不再根据历史调用表现自动推荐。</p>
                         <button type="submit" class="button button-ghost" id="analyze-button" disabled>运行检测</button>
                       </div>
                     </div>
@@ -152,7 +125,7 @@
                         <select id="rewrite-model-selection" name="rewriteModelSelection" class="model-action-select">
                           <option value="auto">默认自动 / 加载中...</option>
                         </select>
-                        <p class="model-recommendation-hint" id="rewrite-model-recommendation">模型建议加载中</p>
+                        <p class="helper-text">改写仍由你手动选择模型，不再展示基于历史表现的动态建议。</p>
                         <button type="button" class="button button-ghost" id="rewrite-button" disabled>一键合规改写</button>
                       </div>
                     </div>
@@ -161,6 +134,7 @@
                   <details id="advanced-judgement-panel" class="admin-accordion advanced-judgement-panel">
                     <summary class="advanced-judgement-summary">高级判断</summary>
                     <div class="admin-accordion-body">
+                      <p class="helper-text">只在结论接近或有分歧时再展开，日常先走检测、改写和生命周期回填。</p>
                       <div class="model-action-card advanced-judgement-card">
                         <label for="cross-review-model-selection" class="model-action-label">
                           <span>交叉复判模型</span>
@@ -169,7 +143,7 @@
                           <select id="cross-review-model-selection" name="crossReviewModelSelection" class="model-action-select">
                             <option value="group">默认模型组 / 加载中...</option>
                           </select>
-                          <p class="model-recommendation-hint" id="cross-review-model-recommendation">模型建议加载中</p>
+                          <p class="helper-text">交叉复判只保留独立模型组选择，不再根据历史表现给出推荐。</p>
                           <button type="button" class="button button-ghost" id="cross-review-button" disabled>模型交叉复判</button>
                         </div>
                       </div>
@@ -219,18 +193,17 @@
                   </div>
                 </div>
                 <form id="generation-workbench-form" class="stacked-form form-grid">
-                  <label class="field-wide">
-                    <span>风格画像</span>
-                    <select name="styleProfileId" id="generation-style-profile-select">
-                      <option value="">当前默认画像</option>
-                    </select>
-                  </label>
                   <label>
                     <span>合集类型</span>
                     <select name="collectionType" id="generation-collection-type-select" required>
                       <option value="">请选择合集类型</option>
                     </select>
-                    <button type="button" class="button button-ghost button-small" id="generation-collection-type-add">新增合集</button>
+                  </label>
+                  <label>
+                    <span>生成模型</span>
+                    <select name="generationModelSelection" id="generation-model-selection">
+                      <option value="auto">默认自动 / 加载中...</option>
+                    </select>
                   </label>
                   <label>
                     <span>生成模式</span>
@@ -366,15 +339,15 @@
         </article>
       </section>
 
-      <!-- ③ 支撑区：人工复核 + 数据维护 -->
+      <!-- ③ 学习区：回流 / 样本 / 规则 -->
       <details id="support-workspace-panel" class="panel support-workspace-panel admin-accordion">
         <summary class="support-workspace-summary">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">低频维护区</p>
-              <h2>低频维护与人工复核</h2>
+              <p class="eyebrow">学习样本</p>
+              <h2>误判与好样本回流</h2>
             </div>
-            <p class="section-note">把人工复核、样本维护和系统校准收进这里，默认不打断主工作台。</p>
+            <p class="section-note">把平台反馈、误判样本和好样本收进同一处，让检测和生成持续变准。</p>
           </div>
         </summary>
         <div class="admin-accordion-body">
@@ -393,15 +366,15 @@
             <article class="panel data-panel panel-sticky">
               <div class="section-heading">
                 <div>
-                  <p class="eyebrow">数据维护台</p>
-                  <h2>词库与日志</h2>
+                  <p class="eyebrow">学习样本</p>
+                  <h2>反馈与样本</h2>
                 </div>
-                <p class="section-note">把低频维护收进单面板，当前只展示一个分区，减少页面高度。</p>
+                <p class="section-note">日常只处理回流、好样本和发布结果；需要补规则或做阶段检查时，再展开下面的维护区。</p>
               </div>
               <!-- Tab 分组：词库/日志 ｜ 样本/画像 用分隔符隔开 -->
               <div class="tab-strip" role="tablist" aria-label="数据维护分区">
                 <button type="button" class="tab-button" data-tab-group="data-maintenance" data-tab-target="feedback-center-pane">回流中心</button>
-                <button type="button" class="tab-button" data-tab-group="data-maintenance" data-tab-target="sample-library-pane">样本库</button>
+                <button type="button" class="tab-button" data-tab-group="data-maintenance" data-tab-target="sample-library-pane">学习样本</button>
               </div>
               <div class="tab-panels">
             <section class="tab-panel" id="feedback-center-pane" data-tab-group="data-maintenance">
@@ -412,7 +385,7 @@
               <div id="rules-maintenance-shortcuts" class="admin-panel-block rules-maintenance-shortcuts">
                 <div class="tab-panel-head">
                   <strong>需要补规则？</strong>
-                  <span>词库还在，已收进样本库里的规则维护区；这里给你保留一个快捷入口。</span>
+                  <span>如果某条回流已经能确定要补规则，这里给你一个直达入口。</span>
                 </div>
                 <div class="rules-maintenance-shortcut-actions">
                   <button type="button" class="button button-ghost" data-summary-action="open-custom-lexicon">打开自定义词库</button>
@@ -433,7 +406,7 @@
               <div class="admin-panel-block">
                 <div class="tab-panel-head">
                   <strong>违规反馈</strong>
-                  <span>查看全部真实违规反馈、规则复盘信号与命中摘要。</span>
+                  <span>查看全部真实违规反馈、误报状态和命中摘要。</span>
                 </div>
                 <div id="feedback-log-list" class="admin-list"></div>
                 <div id="feedback-log-secondary-list" class="admin-list"></div>
@@ -451,8 +424,8 @@
 
             <section class="tab-panel" id="sample-library-pane" data-tab-group="data-maintenance">
               <div class="tab-panel-head">
-                <strong>样本库</strong>
-                <span>先新增一条样本记录，再在同一条记录里补参考属性和发布结果，减少并列入口。</span>
+                <strong>学习样本</strong>
+                <span>统一沉淀好样本、误判样本和发布结果，减少并列入口。</span>
               </div>
               <section id="sample-library-daily-panel" class="admin-panel-block sample-library-daily-panel">
                 <div class="tab-panel-head">
@@ -469,6 +442,9 @@
                       <span>筛选</span>
                       <select id="sample-library-filter">
                         <option value="all">全部</option>
+                        <option value="calibration_pending">待复盘</option>
+                        <option value="calibration_matched">已命中</option>
+                        <option value="calibration_mismatch">有偏差</option>
                         <option value="incomplete">待补全</option>
                         <option value="reference">已成参考</option>
                         <option value="published">已跟踪发布</option>
@@ -488,8 +464,18 @@
                     aria-controls="sample-library-create-form-shell"
                     aria-expanded="false"
                   >
-                    新增样本记录
+                    新增学习样本
                   </button>
+                  <button
+                    type="button"
+                    class="button button-ghost"
+                    id="sample-library-import-button"
+                    aria-controls="sample-library-import-block"
+                    aria-expanded="false"
+                  >
+                    批量导入 PDF
+                  </button>
+                  <input id="sample-library-import-input" type="file" accept="application/pdf,.pdf" multiple hidden />
                 </div>
                 <div class="sample-library-create-block" id="sample-library-create-form-shell" hidden>
                   <div class="admin-panel-body">
@@ -511,7 +497,6 @@
                         <select name="collectionType" id="sample-library-collection-type-select" required>
                           <option value="">请选择合集类型</option>
                         </select>
-                        <button type="button" class="button button-ghost button-small" id="sample-library-collection-type-add">新增合集</button>
                       </label>
                       <label>
                         <span>标签</span>
@@ -524,7 +509,7 @@
                         <button type="button" class="button button-ghost" id="sample-library-prefill-rewrite">
                           从当前改写填充
                         </button>
-                        <button type="submit" class="button button-alt">保存样本记录</button>
+                        <button type="submit" class="button button-alt">保存学习样本</button>
                       </div>
                       <p class="helper-text action-gate-hint" id="sample-library-prefill-action-hint" aria-live="polite"></p>
                       <p class="helper-text action-gate-hint" id="sample-library-create-action-hint" aria-live="polite"></p>
@@ -532,6 +517,11 @@
                   </div>
                   <div id="sample-library-create-result" class="result-card muted">等待操作</div>
                 </div>
+                <section class="sample-library-import-block" id="sample-library-import-block" hidden>
+                  <div class="admin-panel-body stack">
+                    <div id="sample-library-import-result" class="result-card muted">等待导入 PDF</div>
+                  </div>
+                </section>
                 <div class="sample-library-workspace" id="sample-library-workspace">
                   <aside class="sample-library-record-list">
                     <div class="sample-library-list-head">
@@ -541,7 +531,7 @@
                     <div id="sample-library-record-list" class="admin-list"></div>
                   </aside>
                   <section id="sample-library-detail" class="sample-library-detail">
-                    <div id="sample-library-detail-header" class="result-card muted">请选择左侧样本，或先新增一条记录。</div>
+                    <div id="sample-library-detail-header" class="result-card muted">请选择左侧学习样本，或先新增一条记录。</div>
                     <section id="sample-library-base-section" class="sample-library-detail-section" data-sample-library-step="base">
                       <div class="sample-library-section-head">
                         <div>
@@ -569,6 +559,15 @@
                         <span class="meta-pill">未回填</span>
                       </div>
                     </section>
+                    <section id="sample-library-calibration-section" class="sample-library-detail-section" data-sample-library-step="calibration">
+                      <div class="sample-library-section-head">
+                        <div>
+                          <strong>预判复盘</strong>
+                          <p>记录发布前判断，并在真实数据回来后校准。</p>
+                        </div>
+                        <span class="meta-pill">未校准</span>
+                      </div>
+                    </section>
                   </section>
                 </div>
               </section>
@@ -576,108 +575,12 @@
                 <summary class="system-calibration-summary">
                   <div class="tab-panel-head">
                     <strong>扩展维护</strong>
-                    <span>把改写对照、风格画像和系统校准收在这里，只有需要复盘或调校时再展开。</span>
+                    <span>把低频维护项收在这里，需要补规则或做阶段检查时再展开。</span>
                   </div>
                 </summary>
                 <div class="admin-accordion-body">
-                  <section id="rewrite-pairs-pane" class="admin-panel-block">
-                    <div class="tab-panel-head">
-                      <strong>改写对照样本</strong>
-                      <span>把改写前后对照收进样本库内部，只在需要复盘哪些改法更稳时再展开维护。</span>
-                    </div>
-                    <div class="admin-panel-body">
-                      <form id="rewrite-pair-form" class="stack">
-                        <label>
-                          <span>样本名称</span>
-                          <input type="text" name="name" placeholder="例如：导流文案改写通过样本" />
-                        </label>
-                        <label>
-                          <span>修改前平台原因</span>
-                          <input type="text" name="beforePlatformReason" placeholder="例如：疑似导流 / 涉及低俗暗示" />
-                        </label>
-                        <label>
-                          <span>改写策略</span>
-                          <input type="text" name="rewriteStrategy" placeholder="例如：删除导流动作词，改为科普表达" />
-                        </label>
-                        <label>
-                          <span>哪些修改最有效</span>
-                          <textarea
-                            name="effectiveChanges"
-                            rows="3"
-                            placeholder="例如：去掉&quot;私信我/完整版&quot;，弱化刺激性描述，标题改成关系教育语境"
-                          ></textarea>
-                        </label>
-                        <div class="columns">
-                          <div class="rewrite-sample-column">
-                            <h3>修改前</h3>
-                            <label>
-                              <span>标题</span>
-                              <input type="text" name="beforeTitle" placeholder="修改前标题" />
-                            </label>
-                            <label>
-                              <span>正文</span>
-                              <textarea name="beforeBody" rows="8" placeholder="修改前正文"></textarea>
-                            </label>
-                            <label>
-                              <span>封面文案</span>
-                              <input type="text" name="beforeCoverText" placeholder="修改前封面文案" />
-                            </label>
-                            <label>
-                              <span>标签</span>
-                              <input type="text" name="beforeTags" placeholder="标签1, 标签2" />
-                            </label>
-                          </div>
-                          <div class="rewrite-sample-column">
-                            <h3>修改后</h3>
-                            <label>
-                              <span>标题</span>
-                              <input type="text" name="afterTitle" placeholder="修改后标题" />
-                            </label>
-                            <label>
-                              <span>正文</span>
-                              <textarea name="afterBody" rows="8" placeholder="修改后正文"></textarea>
-                            </label>
-                            <label>
-                              <span>封面文案</span>
-                              <input type="text" name="afterCoverText" placeholder="修改后封面文案" />
-                            </label>
-                            <label>
-                              <span>标签</span>
-                              <input type="text" name="afterTags" placeholder="标签1, 标签2" />
-                            </label>
-                          </div>
-                        </div>
-                        <div class="inline-actions inline-actions-row">
-                          <button type="button" class="button button-ghost" id="rewrite-pair-prefill" disabled>
-                            从当前改写结果填充
-                          </button>
-                          <button type="submit" class="button button-alt">保存改写样本</button>
-                        </div>
-                        <p class="helper-text action-gate-hint" id="rewrite-pair-prefill-hint" aria-live="polite"></p>
-                        <p class="helper-text action-gate-hint" id="rewrite-pair-action-hint" aria-live="polite"></p>
-                      </form>
-                    </div>
-                    <div id="rewrite-pair-result" class="result-card muted">等待操作</div>
-                    <div id="rewrite-pair-list" class="admin-list"></div>
-                  </section>
                   <div class="admin-panel-block">
-                    <div class="tab-panel-head">
-                      <strong>风格画像</strong>
-                      <span>默认随参考样本自动沉淀；只有需要校准时，再做人工编辑。</span>
-                    </div>
-                    <div class="admin-panel-body">
-                      <label>
-                        <span>画像主题</span>
-                        <input id="style-profile-topic" placeholder="例如：亲密关系科普 / 产品软植入" />
-                      </label>
-                      <button type="button" class="button" id="style-profile-draft-button">
-                        立即刷新自动画像
-                      </button>
-                      <p class="helper-text action-gate-hint" id="style-profile-action-hint" aria-live="polite"></p>
-                    </div>
-                    <div id="style-profile-result" class="admin-list"></div>
-                  </div>
-                  <details id="rules-maintenance-panel" class="admin-panel-block admin-accordion rules-maintenance-panel">
+                    <details id="rules-maintenance-panel" class="admin-panel-block admin-accordion rules-maintenance-panel">
                     <summary class="rules-maintenance-summary">
                       <div class="tab-panel-head">
                         <strong>规则维护</strong>
@@ -791,108 +694,45 @@
                         </div>
                       </section>
                     </div>
-                  </details>
-                  <details id="system-calibration-panel" class="admin-panel-block admin-accordion system-calibration-panel">
-                    <summary class="system-calibration-summary">
-                      <div class="tab-panel-head">
-                        <strong>系统校准</strong>
-                        <span>把基准评测和模型看板收在这里，作为主流程下游的校准能力。</span>
-                      </div>
-                    </summary>
-                    <div class="admin-accordion-body system-calibration-body">
-                      <section id="review-benchmark-pane">
-                      <div class="tab-panel-head">
-                        <strong>基准评测</strong>
-                        <span>手动逐条录入回归样本，验证检测链路是否稳定。</span>
-                      </div>
-                      <div class="review-benchmark-toolbar">
-                        <div class="review-benchmark-toolbar-filters">
-                          <label>
-                            <span>视角</span>
-                            <select id="review-benchmark-view-filter">
-                              <option value="all">全部样本</option>
-                              <option value="mismatches">仅看最近未命中</option>
-                            </select>
-                          </label>
-                          <label>
-                            <span>合集</span>
-                            <select id="review-benchmark-collection-filter">
-                              <option value="all">全部合集</option>
-                            </select>
-                          </label>
-                          <label>
-                            <span>类型</span>
-                            <select id="review-benchmark-type-filter">
-                              <option value="all">全部类型</option>
-                              <option value="violation">违规样本</option>
-                              <option value="false_positive">误报样本</option>
-                              <option value="success">正常通过样本</option>
-                            </select>
-                          </label>
-                          <label>
-                            <span>来源</span>
-                            <select id="review-benchmark-source-filter">
-                              <option value="all">全部来源</option>
-                              <option value="manual">手动录入</option>
-                              <option value="sample_library">样本库</option>
-                              <option value="false_positive_log">误报日志</option>
-                              <option value="legacy">历史样本</option>
-                            </select>
-                          </label>
-                        </div>
-                        <div id="review-benchmark-list-count" class="meta-pill">0 条 · 全部类型 · 全部来源</div>
-                      </div>
-                      <div class="admin-panel-body">
-                        <form id="review-benchmark-form" class="stack compact-form">
-                          <label>
-                            <span>标题</span>
-                            <input type="text" name="title" placeholder="基准样本标题" />
-                          </label>
-                          <label>
-                            <span>正文</span>
-                            <textarea name="body" rows="4" placeholder="输入用于回归评测的正文"></textarea>
-                          </label>
-                          <label>
-                            <span>合集类型</span>
-                            <select name="collectionType" id="review-benchmark-collection-type-select" required>
-                              <option value="">请选择合集类型</option>
-                            </select>
-                            <button type="button" class="button button-ghost button-small" id="review-benchmark-collection-type-add">新增合集</button>
-                          </label>
-                          <label>
-                            <span>标签</span>
-                            <input type="text" name="tags" placeholder="标签1, 标签2" />
-                          </label>
-                          <label>
-                            <span>预期类型</span>
-                            <select name="expectedType">
-                              <option value="violation">违规样本</option>
-                              <option value="false_positive">误报样本</option>
-                              <option value="success">正常通过样本</option>
-                            </select>
-                          </label>
-                          <div class="inline-actions inline-actions-row">
-                            <button type="submit" class="button button-alt">保存基准样本</button>
-                            <button type="button" class="button button-ghost" id="review-benchmark-run-button">运行基准评测</button>
+                    </details>
+                  </div>
+                      <details id="system-calibration-panel" class="admin-panel-block admin-accordion system-calibration-panel">
+                        <summary class="system-calibration-summary">
+                          <div class="tab-panel-head">
+                            <strong>系统校准</strong>
+                            <span>把阶段性回归检查收在这里，需要集中检查时再展开。</span>
                           </div>
-                          <p class="helper-text action-gate-hint" id="review-benchmark-action-hint" aria-live="polite"></p>
-                        </form>
-                      </div>
-                      <div id="review-benchmark-result" class="result-card muted">等待操作</div>
-                      <div id="review-benchmark-list" class="admin-list"></div>
-                      </section>
-                      <section id="model-performance-pane">
-                        <div class="tab-panel-head">
-                          <strong>模型表现看板</strong>
-                          <span>统计每个模型路由的成功率、超时率、JSON 错误率和平均耗时。</span>
+                        </summary>
+                        <div class="admin-accordion-body system-calibration-body">
+                          <section class="sample-library-calibration-replay">
+                            <div class="tab-panel-head">
+                              <strong>历史回放验证</strong>
+                              <span>先用已有校准样本回放一遍当前判断基线，再决定是否继续调规则。</span>
+                            </div>
+                            <div class="item-actions">
+                              <button
+                                type="button"
+                                class="button button-ghost button-small"
+                                id="sample-library-calibration-replay-run"
+                                data-action="run-sample-library-calibration-replay"
+                              >
+                                运行历史回放
+                              </button>
+                            </div>
+                            <div id="sample-library-calibration-replay-result" class="result-card muted">等待运行历史回放</div>
+                          </section>
+                          <section class="sample-library-calibration-queue">
+                            <div class="tab-panel-head">
+                              <strong>批量复盘队列</strong>
+                              <span>优先处理已发布未复盘和高置信偏差样本，减少来回翻找。</span>
+                            </div>
+                            <div id="sample-library-calibration-review-queue" class="admin-list"></div>
+                          </section>
                         </div>
-                        <div id="model-performance-result" class="admin-list"></div>
-                      </section>
+                      </details>
                     </div>
                   </details>
-                </div>
-              </details>
-            </section>
+                </section>
 
               </div>
             </article>

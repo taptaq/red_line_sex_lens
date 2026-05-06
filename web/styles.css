@@ -1347,6 +1347,32 @@ li + li {
   min-width: 0;
 }
 
+.sample-library-calibration-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.sample-library-calibration-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border: 1px solid rgba(54, 43, 31, 0.1);
+  border-radius: 20px;
+  background: rgba(255, 250, 241, 0.58);
+}
+
+.sample-library-calibration-head {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.sample-library-calibration-head p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
 .model-action-grid {
   display: grid;
   gap: 1rem;
@@ -1499,6 +1525,74 @@ li + li {
   margin-top: -0.15rem;
 }
 
+.sample-library-import-block {
+  margin-top: 1rem;
+}
+
+.sample-library-import-list {
+  display: grid;
+  gap: 0.875rem;
+}
+
+.sample-library-import-card {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 251, 244, 0.8), rgba(248, 238, 222, 0.62));
+}
+
+.sample-library-import-advanced {
+  margin-top: -0.1rem;
+}
+
+.sample-library-import-advanced-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.sample-library-import-advanced-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.sample-library-import-advanced-body {
+  background: rgba(255, 251, 244, 0.52);
+}
+
+.sample-library-import-advanced-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.sample-library-import-advanced-section {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border: 1px solid rgba(54, 43, 31, 0.08);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(251, 244, 232, 0.7));
+}
+
+.sample-library-import-advanced-head {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.sample-library-import-advanced-head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
 .sample-library-workspace {
   display: grid;
   grid-template-columns: minmax(250px, 0.78fr) minmax(0, 1.62fr);
@@ -1560,6 +1654,68 @@ li + li {
   color: var(--accent);
   font-size: 0.88rem;
   font-weight: 700;
+}
+
+.sample-library-calibration-pill {
+  border-color: rgba(100, 113, 91, 0.18);
+  background: rgba(100, 113, 91, 0.1);
+  color: #4c5d46;
+}
+
+.sample-library-calibration-pill.is-calibration_pending {
+  border-color: rgba(184, 138, 58, 0.22);
+  background: rgba(242, 208, 140, 0.16);
+  color: #8f6430;
+}
+
+.sample-library-calibration-pill.is-calibration_matched {
+  border-color: rgba(100, 113, 91, 0.24);
+  background: rgba(100, 113, 91, 0.14);
+  color: #42513d;
+}
+
+.sample-library-calibration-pill.is-calibration_mismatch {
+  border-color: rgba(184, 93, 61, 0.22);
+  background: rgba(184, 93, 61, 0.12);
+  color: #9a5539;
+}
+
+.sample-library-calibration-pill.is-risk {
+  border-style: dashed;
+}
+
+.sample-library-calibration-queue {
+  display: grid;
+  gap: 1rem;
+}
+
+.sample-library-calibration-replay {
+  display: grid;
+  gap: 1rem;
+}
+
+.sample-library-calibration-replay-preview {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.sample-library-calibration-queue-card {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.sample-library-calibration-queue-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.sample-library-calibration-queue-head p {
+  margin: 0.3rem 0 0;
+  color: var(--muted);
+  line-height: 1.58;
+  overflow-wrap: anywhere;
 }
 
 .sample-library-detail {
@@ -2597,6 +2753,8 @@ li + li {
   .model-action-grid,
   .feedback-model-grid,
   .lifecycle-update-grid,
+  .sample-library-import-advanced-grid,
+  .sample-library-calibration-grid,
   .inline-actions-row,
   .review-provider-grid,
   .cross-review-stats,
@@ -2625,6 +2783,15 @@ li + li {
 
   .false-positive-admin-actions {
     width: 100%;
+  }
+
+  .sample-library-import-advanced-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sample-library-import-advanced-status {
+    justify-content: flex-start;
   }
 
   /* 小屏页头：品牌栏单独一行，统计卡换行排列 */

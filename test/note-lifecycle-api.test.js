@@ -33,7 +33,7 @@ async function withTempLifecycleApi(t, run) {
   return run();
 }
 
-test("note lifecycle API creates, upserts, lists, and updates publish results", async (t) => {
+test("note lifecycle compatibility routes are fully removed", async (t) => {
   await withTempLifecycleApi(t, async () => {
     const created = await invokeRoute("POST", "/api/note-lifecycle", {
       source: "analysis",
@@ -48,32 +48,13 @@ test("note lifecycle API creates, upserts, lists, and updates publish results", 
       }
     });
 
-    assert.equal(created.status, 200);
-    assert.equal(created.ok, true);
-    assert.equal(created.items.length, 1);
-    assert.equal(created.item.publishResult.label, "未发布");
-
-    const replaced = await invokeRoute("POST", "/api/note-lifecycle", {
-      source: "rewrite",
-      note: {
-        title: "亲密关系科普",
-        body: "这是一篇更稳的科普草稿。",
-        tags: ["科普"]
-      },
-      rewriteSnapshot: {
-        model: "glm-5.1-free"
-      }
-    });
-
-    assert.equal(replaced.items.length, 1);
-    assert.equal(replaced.items[0].source, "rewrite");
-    assert.equal(replaced.items[0].note.body, "这是一篇更稳的科普草稿。");
+    assert.equal(created.status, 404);
 
     const listed = await invokeRoute("GET", "/api/note-lifecycle");
-    assert.equal(listed.items.length, 1);
+    assert.equal(listed.status, 404);
 
     const patched = await invokeRoute("PATCH", "/api/note-lifecycle", {
-      id: listed.items[0].id,
+      id: "missing-id",
       publishStatus: "positive_performance",
       metrics: {
         likes: 36,
@@ -83,129 +64,15 @@ test("note lifecycle API creates, upserts, lists, and updates publish results", 
       notes: "发出后表现稳定"
     });
 
-    assert.equal(patched.item.status, "positive_performance");
-    assert.equal(patched.item.publishResult.label, "过审且表现好");
-    assert.equal(patched.item.publishResult.metrics.likes, 36);
+    assert.equal(patched.status, 404);
 
     const adminData = await loadAdminData();
-    assert.equal(adminData.noteLifecycle.length, 1);
-    assert.equal(adminData.noteLifecycle[0].publishResult.label, "过审且表现好");
-  });
-});
-
-test("recommended generation final draft enters lifecycle and gains weight after publish feedback", async (t) => {
-  await withTempLifecycleApi(t, async () => {
-    const created = await invokeRoute("POST", "/api/note-lifecycle", {
-      source: "generation_final",
-      note: {
-        title: "最终推荐稿标题",
-        body: "这是一篇最终推荐稿正文。",
-        coverText: "封面",
-        tags: ["科普"]
-      },
-      generationSnapshot: {
-        id: "candidate-safe-1",
-        scores: { total: 92 }
-      }
+    assert.equal(Object.hasOwn(adminData, "noteLifecycle"), false);
+    const deleted = await invokeRoute("DELETE", "/api/note-lifecycle", {
+      id: "missing-id"
     });
-
-    assert.equal(created.status, 200);
-    assert.equal(created.item.source, "generation_final");
-    assert.equal(created.item.stage, "generated");
-    assert.ok(created.item.sampleWeight > 0);
-
-    const patched = await invokeRoute("PATCH", "/api/note-lifecycle", {
-      id: created.item.id,
-      publishStatus: "positive_performance",
-      metrics: {
-        likes: 88,
-        favorites: 21,
-        comments: 6
-      },
-      notes: "最终推荐稿发布后表现好"
-    });
-
-    assert.equal(patched.item.source, "generation_final");
-    assert.equal(patched.item.status, "positive_performance");
-    assert.ok(patched.item.sampleWeight > created.item.sampleWeight);
-  });
-});
-
-test("note lifecycle POST returns merged publish facts from unified storage when a success sample already exists", async (t) => {
-  await withTempLifecycleApi(t, async () => {
-    const success = await invokeRoute("POST", "/api/success-samples", {
-      title: "统一兼容标题",
-      body: "统一兼容正文",
-      tier: "featured",
-      metrics: { likes: 20, favorites: 6, comments: 2 }
-    });
-
-    const created = await invokeRoute("POST", "/api/note-lifecycle", {
-      source: "rewrite",
-      note: {
-        title: "统一兼容标题",
-        body: "统一兼容正文",
-        tags: ["科普"]
-      },
-      rewriteSnapshot: {
-        model: "glm-5.1-free"
-      }
-    });
-
-    const listed = await invokeRoute("GET", "/api/note-lifecycle");
-    const adminData = await loadAdminData();
-    const records = await loadNoteRecords();
-
-    assert.equal(created.status, 200);
-    assert.equal(created.item.id, listed.items[0].id);
-    assert.equal(created.item.id, records[0].id);
-    assert.equal(created.item.status, "published_passed");
-    assert.equal(created.item.publishResult.label, "已发布通过");
-    assert.equal(created.items.length, 1);
-    assert.equal(created.items[0].status, "published_passed");
-    assert.equal(listed.items[0].status, "published_passed");
-    assert.equal(adminData.noteLifecycle.length, 1);
-    assert.equal(adminData.noteLifecycle[0].status, "published_passed");
-    assert.equal(success.item.id, listed.items[0].id);
-  });
-});
-
-test("note lifecycle PATCH can downgrade merged publish status when platform feedback turns negative", async (t) => {
-  await withTempLifecycleApi(t, async () => {
-    await invokeRoute("POST", "/api/success-samples", {
-      title: "回退状态标题",
-      body: "回退状态正文",
-      tier: "featured",
-      metrics: { likes: 20, favorites: 6, comments: 2 }
-    });
-
-    const created = await invokeRoute("POST", "/api/note-lifecycle", {
-      source: "generation_final",
-      note: {
-        title: "回退状态标题",
-        body: "回退状态正文",
-        tags: ["科普"]
-      }
-    });
-
-    const patched = await invokeRoute("PATCH", "/api/note-lifecycle", {
-      id: created.item.id,
-      publishStatus: "violation",
-      metrics: {
-        likes: 0,
-        favorites: 0,
-        comments: 0
-      },
-      notes: "平台反馈违规"
-    });
-
-    const listed = await invokeRoute("GET", "/api/note-lifecycle");
-    const adminData = await loadAdminData();
-
-    assert.equal(patched.item.status, "violation");
-    assert.equal(patched.item.publishResult.label, "平台判违规");
-    assert.equal(listed.items[0].status, "violation");
-    assert.equal(adminData.noteLifecycle[0].status, "violation");
+    assert.equal(deleted.status, 404);
+    assert.equal((await loadNoteRecords()).length, 0);
   });
 });
 
@@ -244,6 +111,7 @@ async function invokeRoute(method, pathname, body = null) {
   await handleRequest(request, response);
   return {
     status: response.status,
-    ...(response.body ? JSON.parse(response.body) : {})
+    ...(response.headers["Content-Type"]?.includes("application/json") && response.body ? JSON.parse(response.body) : {}),
+    rawBody: response.body
   };
 }

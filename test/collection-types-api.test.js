@@ -34,19 +34,13 @@ test("collection type API returns predefined plus saved custom options", async (
   });
 });
 
-test("collection type API saves a new custom option once", async (t) => {
+test("collection type API no longer accepts creating new custom options", async (t) => {
   await withTempCollectionTypesApi(t, async () => {
     const created = await invokeRoute("POST", "/api/collection-types", {
       name: "新系列实验室"
     });
-    const duplicated = await invokeRoute("POST", "/api/collection-types", {
-      name: " 新系列实验室 "
-    });
 
-    assert.equal(created.status, 200);
-    assert.equal(created.ok, true);
-    assert.equal(created.options.includes("新系列实验室"), true);
-    assert.equal(duplicated.options.filter((item) => item === "新系列实验室").length, 1);
+    assert.equal(created.status, 404);
   });
 });
 
@@ -81,8 +75,16 @@ async function invokeRoute(method, pathname, body = null) {
     return { status: finished.status };
   }
 
+  let parsedBody = {};
+
+  try {
+    parsedBody = JSON.parse(finished.body);
+  } catch {
+    parsedBody = { body: finished.body };
+  }
+
   return {
     status: finished.status,
-    ...JSON.parse(finished.body)
+    ...parsedBody
   };
 }

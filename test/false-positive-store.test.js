@@ -40,7 +40,7 @@ test('load/save false positive log persists normalized entries', async (t) => {
 
   const persisted = JSON.parse(await fs.readFile(tempFile, 'utf8'));
   assert.equal(persisted[0].id, 'fp-1');
-  assert.equal(persisted[0].source, 'benchmark_mismatch');
+  assert.equal(persisted[0].source, 'false_positive_reflow');
   assert.equal(persisted[0].status, 'platform_passed_pending');
   assert.equal(persisted[0].confidence, 'pending');
   assert.equal(persisted[0].sourceQuality, 'unknown');
@@ -53,7 +53,7 @@ test('load/save false positive log persists normalized entries', async (t) => {
 
   const loaded = await loadFalsePositiveLog();
   assert.equal(loaded[0].id, 'fp-1');
-  assert.equal(loaded[0].source, 'benchmark_mismatch');
+  assert.equal(loaded[0].source, 'false_positive_reflow');
   assert.equal(loaded[0].status, 'platform_passed_pending');
   assert.equal(loaded[0].confidence, 'pending');
   assert.equal(loaded[0].sourceQuality, 'unknown');
@@ -63,6 +63,28 @@ test('load/save false positive log persists normalized entries', async (t) => {
   assert.equal(loaded[0].coverText, '封面文案');
   assert.equal(loaded[0].userNotes, '人工备注');
   assert.deepEqual(loaded[0].tags, ['关系沟通', '健康表达']);
+});
+
+test('loadFalsePositiveLog migrates legacy benchmark mismatch source to false positive reflow', async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'false-positive-log-legacy-'));
+  const tempFile = path.join(tempDir, 'false-positive-log.json');
+  const originalPath = paths.falsePositiveLog;
+  paths.falsePositiveLog = tempFile;
+
+  t.after(async () => {
+    paths.falsePositiveLog = originalPath;
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  await fs.writeFile(
+    tempFile,
+    `${JSON.stringify([{ id: 'fp-legacy-1', source: 'benchmark_mismatch', title: '旧误报样本' }], null, 2)}\n`,
+    'utf8'
+  );
+
+  const loaded = await loadFalsePositiveLog();
+
+  assert.equal(loaded[0].source, 'false_positive_reflow');
 });
 
 test('false positive weights prefer confirmed entries with clearer provenance', () => {

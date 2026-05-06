@@ -4,9 +4,54 @@ function hasOwn(object, key) {
   return Object.prototype.hasOwnProperty.call(object, key);
 }
 
+function normalizeString(value) {
+  return String(value || "").trim();
+}
+
 function stripClientIdentityFields(payload = {}) {
   const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...rest } = payload || {};
   return rest;
+}
+
+export function buildSampleLibraryImportPayload(item = {}) {
+  const reference = item.reference && typeof item.reference === "object" ? item.reference : {};
+  const publish = item.publish && typeof item.publish === "object" ? item.publish : {};
+
+  return {
+    source: "manual",
+    stage: "draft",
+    sampleType: "",
+    note: {
+      title: item.title,
+      body: item.body,
+      coverText: item.coverText || item.title || "",
+      collectionType: item.collectionType,
+      tags: item.tags
+    },
+    publish: {
+      status: publish.status || "not_published",
+      notes: publish.notes || "",
+      publishedAt: publish.publishedAt || "",
+      platformReason: publish.platformReason || "",
+      metrics: {
+        likes: item.likes,
+        favorites: item.favorites,
+        comments: item.comments
+      }
+    },
+    reference: {
+      enabled: reference.enabled === true,
+      tier: reference.enabled === true ? reference.tier || "passed" : "",
+      selectedBy: "",
+      notes: reference.notes || ""
+    }
+  };
+}
+
+export function buildSampleLibraryImportDuplicateKey(item = {}) {
+  return [normalizeString(item.title), normalizeString(item.body), normalizeString(item.coverText)]
+    .map((value) => value.toLowerCase())
+    .join("::");
 }
 
 export function createSampleLibraryRecord(payload = {}) {
@@ -49,7 +94,12 @@ export function patchSampleLibraryRecord(current = {}, payload = {}) {
       ...existing.publish,
       metrics: { ...(existing.publish?.metrics || {}) }
     },
-    snapshots: { ...existing.snapshots }
+    snapshots: { ...existing.snapshots },
+    calibration: {
+      ...(existing.calibration || {}),
+      prediction: { ...(existing.calibration?.prediction || {}) },
+      retro: { ...(existing.calibration?.retro || {}) }
+    }
   };
 
   if (hasOwn(payload, "source")) {
@@ -58,6 +108,10 @@ export function patchSampleLibraryRecord(current = {}, payload = {}) {
 
   if (hasOwn(payload, "stage")) {
     next.stage = payload.stage;
+  }
+
+  if (hasOwn(payload, "sampleType")) {
+    next.sampleType = payload.sampleType;
   }
 
   if (payload.note && typeof payload.note === "object") {
@@ -131,6 +185,21 @@ export function patchSampleLibraryRecord(current = {}, payload = {}) {
     }
     if (hasOwn(payload.snapshots, "crossReview")) {
       next.snapshots.crossReview = payload.snapshots.crossReview;
+    }
+  }
+
+  if (payload.calibration && typeof payload.calibration === "object") {
+    if (payload.calibration.prediction && typeof payload.calibration.prediction === "object") {
+      next.calibration.prediction = {
+        ...next.calibration.prediction,
+        ...payload.calibration.prediction
+      };
+    }
+    if (payload.calibration.retro && typeof payload.calibration.retro === "object") {
+      next.calibration.retro = {
+        ...next.calibration.retro,
+        ...payload.calibration.retro
+      };
     }
   }
 

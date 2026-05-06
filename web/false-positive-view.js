@@ -65,7 +65,7 @@ function falsePositiveAuditLabel(audit) {
 }
 
 function falsePositiveSourceLabel(source) {
-  if (source === "benchmark_mismatch") return "基准未命中回流";
+  if (source === "false_positive_reflow") return "误报回流";
   return "";
 }
 
@@ -179,14 +179,6 @@ export function buildFalsePositiveEntryMarkup(item = {}) {
             <p>${escapeHtml(item.status === "platform_passed_confirmed" ? "该样本已过观察期确认，可作为更强的偏严证据。" : "该样本仍在观察期，建议继续留意平台是否维持放行。")}</p>
           </div>
           <div class="false-positive-admin-actions">
-            <button
-              type="button"
-              class="button button-small"
-              data-action="add-false-positive-to-benchmark"
-              data-id="${escapeHtml(item.id)}"
-            >
-              加入基准评测
-            </button>
             ${
               item.status !== "platform_passed_confirmed"
                 ? `

@@ -81,3 +81,13 @@ test("rewrite provider falls back to glm when REWRITE_PROVIDER is unsupported", 
     process.env.REWRITE_PROVIDER = previousProvider;
   }
 });
+
+test("rewrite provider uses DMXAPI-only routing for standalone model selections", () => {
+  const config = getRewriteProviderConfig("gpt-5.4");
+
+  assert.equal(config.provider, "dmxapi_text");
+  assert.equal(config.envKey, "DMXAPI_API_KEY");
+  assert.match(config.endpoint, /dmxapi/);
+  assert.deepEqual(config.models, ["gpt-5.4"]);
+  assert.equal(config.routeMode, "dmxapi_only");
+});

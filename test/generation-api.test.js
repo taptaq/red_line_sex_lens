@@ -9,6 +9,7 @@ import { paths } from "../src/config.js";
 import { loadNoteLifecycle, loadSuccessSamples } from "../src/data-store.js";
 import { buildGenerationReferenceSamples, handleRequest } from "../src/server.js";
 import { buildGenerationMessages } from "../src/generation-workbench.js";
+import { normalizeModelSelectionState } from "../src/model-selection.js";
 
 async function withTempGenerationData(t, run) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "generation-api-"));
@@ -32,8 +33,7 @@ async function withTempGenerationData(t, run) {
       {
         current: { id: "profile-default", status: "active", topic: "默认", preferredTags: ["沟通"], tone: "温和" },
         versions: [
-          { id: "profile-default", status: "active", topic: "默认", preferredTags: ["沟通"], tone: "温和" },
-          { id: "profile-alt", status: "archived", topic: "体验", preferredTags: ["体验"], tone: "体验向" }
+          { id: "profile-default", status: "active", topic: "默认", preferredTags: ["沟通"], tone: "温和" }
         ],
         draft: null
       },
@@ -70,12 +70,11 @@ test("generation endpoint returns candidates with recommendation metadata", asyn
   });
 });
 
-test("generation endpoint can use a selected style profile version", async (t) => {
+test("generation endpoint always uses the current active style profile", async (t) => {
   await withTempGenerationData(t, async () => {
     const result = await invokeRoute("POST", "/api/generate-note", {
       mode: "from_scratch",
       collectionType: "疗愈指南",
-      styleProfileId: "profile-alt",
       brief: { topic: "体验", constraints: "克制" },
       mockCandidates: [
         { variant: "safe", title: "体验标题", body: "完整正文".repeat(40), coverText: "封面", tags: ["体验"] }
@@ -83,8 +82,22 @@ test("generation endpoint can use a selected style profile version", async (t) =
     });
 
     assert.equal(result.status, 200);
-    assert.equal(result.scoredCandidates[0].style.reasons.some((item) => /体验/.test(item)), true);
+    assert.equal(result.scoredCandidates[0].style.score > 0, true);
   });
+});
+
+test("generation selection normalization keeps generation separate and allows value-only fallback to rewrite", () => {
+  const explicitGeneration = normalizeModelSelectionState({
+    rewrite: "glm",
+    generation: "kimi"
+  });
+  const fallbackGeneration = normalizeModelSelectionState({
+    rewrite: "deepseek"
+  });
+
+  assert.equal(explicitGeneration.generation, "kimi");
+  assert.equal(fallbackGeneration.rewrite, "deepseek");
+  assert.equal(fallbackGeneration.generation, "auto");
 });
 
 test("generation prompt context includes collection type", () => {

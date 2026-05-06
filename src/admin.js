@@ -4,7 +4,6 @@ import {
   loadFalsePositiveLog,
   loadNoteLifecycle,
   loadReviewQueue,
-  loadRewritePairs,
   loadSeedLexicon,
   loadSuccessSamples,
   loadWhitelist,
@@ -12,7 +11,6 @@ import {
   saveFeedbackLog,
   saveFalsePositiveLog,
   saveReviewQueue,
-  saveRewritePairs,
   saveSeedLexicon,
   saveWhitelist
 } from "./data-store.js";
@@ -186,12 +184,11 @@ function enrichReviewQueueItem(item, histories = {}) {
 }
 
 export async function loadAdminData() {
-  const [seedLexicon, customLexicon, feedbackLog, reviewQueue, rewritePairs, falsePositiveLog, successSamples, noteLifecycle] = await Promise.all([
+  const [seedLexicon, customLexicon, feedbackLog, reviewQueue, falsePositiveLog, successSamples, noteLifecycle] = await Promise.all([
     loadSeedLexicon(),
     loadCustomLexicon(),
     loadFeedbackLog(),
     loadReviewQueue(),
-    loadRewritePairs(),
     loadFalsePositiveLog(),
     loadSuccessSamples(),
     loadNoteLifecycle()
@@ -211,15 +208,11 @@ export async function loadAdminData() {
       enrichReviewQueueItem(item, {
         feedbackLog,
         falsePositiveLog,
-        rewritePairs,
         successSamples,
         noteLifecycle
       })
     ),
-    rewritePairs,
-    falsePositiveLog: falsePositiveLog.map(enrichFalsePositiveLogItem),
-    successSamples,
-    noteLifecycle
+    falsePositiveLog: falsePositiveLog.map(enrichFalsePositiveLogItem)
   };
 }
 
@@ -372,17 +365,6 @@ export async function deleteFeedbackEntry(noteId, createdAt) {
   }
 
   await saveFeedbackLog(next);
-}
-
-export async function deleteRewritePairEntry(id, createdAt) {
-  const current = await loadRewritePairs();
-  const next = current.filter((item) => !(item.id === id && item.createdAt === createdAt));
-
-  if (next.length === current.length) {
-    throw createError("未找到要删除的改写样本。", 404);
-  }
-
-  await saveRewritePairs(next);
 }
 
 export async function deleteReviewQueueItem(id) {

@@ -208,7 +208,7 @@ test("admin page exposes one feedback center pane that contains false positive m
   assert.match(appJs, /renderFalsePositiveLog|false-positive-log-list/);
   assert.match(appJs, /renderFeedbackLog|feedback-log-list/);
   assert.match(appJs, /feedback-item-status/);
-  assert.match(appJs, /benchmark_mismatch/);
+  assert.match(appJs, /false_positive_reflow/);
   assert.match(appJs, /send-feedback-to-review-queue/);
   assert.match(appJs, /send-feedback-to-false-positive/);
   assert.match(appJs, /加入规则复核/);

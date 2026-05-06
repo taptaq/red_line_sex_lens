@@ -3,9 +3,16 @@ import { providerDisplayLabel } from "./provider-display.js";
 
 const defaultSemanticSelection = "auto";
 const defaultRewriteSelection = "auto";
+const defaultGenerationSelection = "auto";
 const defaultCrossReviewSelection = "group";
 const defaultFeedbackScreenshotSelection = "auto";
 const defaultFeedbackSuggestionSelection = "auto";
+const standaloneDmxapiTextModels = [
+  "gemini-3.1-pro-preview-ssvip",
+  "gpt-5.4",
+  "claude-sonnet-4-6-ssvip",
+  "grok-4.2-nothinking"
+];
 
 function uniqueNonEmpty(items = []) {
   return items.filter((item, index, list) => item && list.indexOf(item) === index);
@@ -27,8 +34,12 @@ function getKimiDmxapiModel() {
   return String(process.env.KIMI_DMXAPI_MODEL || "kimi-k2.6-free").trim();
 }
 
-function getMimoDmxapiModel() {
-  return String(process.env.MIMO_DMXAPI_MODEL || process.env.DEEPSEEK_DMXAPI_MODEL || "mimo-v2.5-free").trim();
+export function getStandaloneDmxapiTextModels() {
+  return standaloneDmxapiTextModels.slice();
+}
+
+export function isStandaloneDmxapiTextModel(value = "") {
+  return standaloneDmxapiTextModels.includes(String(value || "").trim().toLowerCase());
 }
 
 function getSemanticGlmModel() {
@@ -89,8 +100,20 @@ function buildProviderOption(value, label, primaryModel, fallbackModel = "") {
   };
 }
 
+function buildStandaloneDmxapiModelOption(model) {
+  return {
+    value: model,
+    provider: "dmxapi_text",
+    label: `DMXAPI / ${model}`
+  };
+}
+
+function buildTextSelectionOptions(defaultOption, ...providerOptions) {
+  return [defaultOption, ...providerOptions, ...standaloneDmxapiTextModels.map(buildStandaloneDmxapiModelOption)];
+}
+
 export function buildModelSelectionOptionsPayload() {
-  const semantic = [
+  const semantic = buildTextSelectionOptions(
     {
       value: defaultSemanticSelection,
       provider: "",
@@ -99,11 +122,10 @@ export function buildModelSelectionOptionsPayload() {
     buildProviderOption("glm", providerDisplayLabel("glm"), getGlmDmxapiModel(), getSemanticGlmModel()),
     buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getSemanticQwenModel()),
     buildProviderOption("minimax", providerDisplayLabel("minimax"), getMiniMaxDmxapiModel()),
-    buildProviderOption("mimo", providerDisplayLabel("mimo"), getMimoDmxapiModel()),
     buildProviderOption("deepseek", providerDisplayLabel("deepseek"), "", getSemanticDeepSeekModel())
-  ];
+  );
 
-  const rewrite = [
+  const rewrite = buildTextSelectionOptions(
     {
       value: defaultRewriteSelection,
       provider: "",
@@ -113,11 +135,23 @@ export function buildModelSelectionOptionsPayload() {
     buildProviderOption("kimi", providerDisplayLabel("kimi"), getKimiDmxapiModel(), getRewriteKimiModel()),
     buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getRewriteQwenModel()),
     buildProviderOption("minimax", providerDisplayLabel("minimax"), getMiniMaxDmxapiModel()),
-    buildProviderOption("mimo", providerDisplayLabel("mimo"), getMimoDmxapiModel()),
     buildProviderOption("deepseek", providerDisplayLabel("deepseek"), "", getRewriteDeepSeekModel())
-  ];
+  );
 
-  const crossReview = [
+  const generation = buildTextSelectionOptions(
+    {
+      value: defaultGenerationSelection,
+      provider: "",
+      label: `默认自动 / 当前优先 ${providerDisplayLabel(getRewriteProviderPreference())}`
+    },
+    buildProviderOption("glm", providerDisplayLabel("glm"), getGlmDmxapiModel(), getRewriteGlmModel()),
+    buildProviderOption("kimi", providerDisplayLabel("kimi"), getKimiDmxapiModel(), getRewriteKimiModel()),
+    buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getRewriteQwenModel()),
+    buildProviderOption("minimax", providerDisplayLabel("minimax"), getMiniMaxDmxapiModel()),
+    buildProviderOption("deepseek", providerDisplayLabel("deepseek"), "", getRewriteDeepSeekModel())
+  );
+
+  const crossReview = buildTextSelectionOptions(
     {
       value: defaultCrossReviewSelection,
       provider: "",
@@ -127,13 +161,13 @@ export function buildModelSelectionOptionsPayload() {
     buildProviderOption("kimi", providerDisplayLabel("kimi"), getKimiDmxapiModel(), getRewriteKimiModel()),
     buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getCrossReviewQwenModel()),
     buildProviderOption("minimax", providerDisplayLabel("minimax"), getMiniMaxDmxapiModel()),
-    buildProviderOption("mimo", providerDisplayLabel("mimo"), getMimoDmxapiModel()),
     buildProviderOption("deepseek", providerDisplayLabel("deepseek"), "", getCrossReviewDeepSeekModel())
-  ];
+  );
 
   return {
     semantic,
     rewrite,
+    generation,
     crossReview
   };
 }
@@ -156,8 +190,8 @@ export function buildFeedbackModelSelectionOptionsPayload() {
       },
       buildProviderOption("glm", providerDisplayLabel("glm"), getGlmTextModelCandidates()[0] || getRewriteGlmModel()),
       buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getRewriteQwenModel()),
-      buildProviderOption("mimo", providerDisplayLabel("mimo"), getMimoDmxapiModel()),
-      buildProviderOption("deepseek", providerDisplayLabel("deepseek"), "", getRewriteDeepSeekModel())
+      buildProviderOption("deepseek", providerDisplayLabel("deepseek"), "", getRewriteDeepSeekModel()),
+      ...standaloneDmxapiTextModels.map(buildStandaloneDmxapiModelOption)
     ]
   };
 }
@@ -165,6 +199,7 @@ export function buildFeedbackModelSelectionOptionsPayload() {
 const allowedSelections = {
   semantic: new Set(buildModelSelectionOptionsPayload().semantic.map((item) => item.value)),
   rewrite: new Set(buildModelSelectionOptionsPayload().rewrite.map((item) => item.value)),
+  generation: new Set(buildModelSelectionOptionsPayload().generation.map((item) => item.value)),
   crossReview: new Set(buildModelSelectionOptionsPayload().crossReview.map((item) => item.value))
 };
 
@@ -175,6 +210,8 @@ function normalizeScopeSelection(scope, value) {
       ? defaultSemanticSelection
       : scope === "rewrite"
         ? defaultRewriteSelection
+        : scope === "generation"
+          ? defaultGenerationSelection
         : defaultCrossReviewSelection;
 
   return allowedSelections[scope]?.has(normalized) ? normalized : defaultValue;
@@ -186,6 +223,7 @@ export function normalizeModelSelectionState(value = {}) {
   return {
     semantic: normalizeScopeSelection("semantic", source.semantic),
     rewrite: normalizeScopeSelection("rewrite", source.rewrite),
+    generation: normalizeScopeSelection("generation", source.generation),
     crossReview: normalizeScopeSelection("crossReview", source.crossReview)
   };
 }
@@ -218,6 +256,18 @@ export function filterProviderConfigsBySelection(providerConfigs = [], selection
     return Array.isArray(providerConfigs) ? providerConfigs : [];
   }
 
+  if (isStandaloneDmxapiTextModel(normalizedSelection)) {
+    return [
+      {
+        provider: "dmxapi_text",
+        label: `DMXAPI / ${normalizedSelection}`,
+        envKey: "DMXAPI_API_KEY",
+        model: normalizedSelection,
+        routeMode: "dmxapi_only"
+      }
+    ];
+  }
+
   return (Array.isArray(providerConfigs) ? providerConfigs : []).filter(
     (item) => String(item?.provider || "").trim().toLowerCase() === normalizedSelection
   );
@@ -225,6 +275,7 @@ export function filterProviderConfigsBySelection(providerConfigs = [], selection
 
 export function getRewriteProviderSelection(selection = "") {
   const normalizedSelection = normalizeScopeSelection("rewrite", selection);
+  if (isStandaloneDmxapiTextModel(normalizedSelection)) return "dmxapi_text";
   return normalizedSelection === defaultRewriteSelection ? getRewriteProviderPreference() : normalizedSelection;
 }
 
@@ -233,12 +284,12 @@ export function getGlmTextModelCandidates() {
 }
 
 export function getRewriteSelectionModel(selection = "") {
+  if (isStandaloneDmxapiTextModel(selection)) return String(selection || "").trim();
   const provider = getRewriteProviderSelection(selection);
 
   if (provider === "kimi") return getRewriteKimiModel();
   if (provider === "qwen") return getRewriteQwenModel();
   if (provider === "minimax") return getMiniMaxDmxapiModel();
-  if (provider === "mimo") return getMimoDmxapiModel();
   if (provider === "deepseek") return getRewriteDeepSeekModel();
   return getRewriteGlmModel();
 }

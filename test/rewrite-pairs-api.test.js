@@ -1,69 +1,33 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-
-import { paths } from "../src/config.js";
 import { handleRequest } from "../src/server.js";
 
-async function withTempRewritePairsRouteData(t, run) {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "rewrite-pairs-api-"));
-  const originals = {
-    rewritePairs: paths.rewritePairs,
-    lexiconSeed: paths.lexiconSeed,
-    lexiconCustom: paths.lexiconCustom,
-    whitelist: paths.whitelist,
-    falsePositiveLog: paths.falsePositiveLog
-  };
-
-  paths.rewritePairs = path.join(tempDir, "rewrite-pairs.json");
-  paths.lexiconSeed = path.join(tempDir, "lexicon.seed.json");
-  paths.lexiconCustom = path.join(tempDir, "lexicon.custom.json");
-  paths.whitelist = path.join(tempDir, "whitelist.json");
-  paths.falsePositiveLog = path.join(tempDir, "false-positive-log.json");
-
-  await Promise.all([
-    fs.writeFile(paths.rewritePairs, "[]\n", "utf8"),
-    fs.writeFile(paths.lexiconSeed, "[]\n", "utf8"),
-    fs.writeFile(paths.lexiconCustom, "[]\n", "utf8"),
-    fs.writeFile(paths.whitelist, "[]\n", "utf8"),
-    fs.writeFile(paths.falsePositiveLog, "[]\n", "utf8")
-  ]);
-
-  t.after(async () => {
-    Object.assign(paths, originals);
-    await fs.rm(tempDir, { recursive: true, force: true });
+test("rewrite pairs compatibility routes are fully removed", async () => {
+  const createResult = await invokeRoute("POST", "/api/rewrite-pairs", {
+    name: "",
+    before: {
+      title: "",
+      body: "",
+      coverText: "",
+      tags: []
+    },
+    after: {
+      title: "",
+      body: "",
+      coverText: "",
+      tags: []
+    }
   });
 
-  return run();
-}
+  assert.equal(createResult.status, 404);
 
-test("rewrite pairs API rejects fully blank placeholder samples", async (t) => {
-  await withTempRewritePairsRouteData(t, async () => {
-    const result = await invokeRoute("POST", "/api/rewrite-pairs", {
-      name: "",
-      before: {
-        title: "",
-        body: "",
-        coverText: "",
-        tags: []
-      },
-      after: {
-        title: "",
-        body: "",
-        coverText: "",
-        tags: []
-      }
-    });
-
-    assert.equal(result.status, 400);
-    assert.match(result.error || "", /改写样本不能为空|至少填写/);
-
-    const persisted = JSON.parse(await fs.readFile(paths.rewritePairs, "utf8"));
-    assert.deepEqual(persisted, []);
+  const deleteResult = await invokeRoute("DELETE", "/api/admin/rewrite-pairs", {
+    id: "rewrite-pair-1",
+    createdAt: "2026-05-04T00:00:00.000Z"
   });
+
+  assert.equal(deleteResult.status, 404);
 });
 
 async function invokeRoute(method, pathname, body = null) {
@@ -105,6 +69,7 @@ async function invokeRoute(method, pathname, body = null) {
 
   return {
     status: finished.status,
-    ...JSON.parse(finished.body)
+    ...(finished.headers["Content-Type"]?.includes("application/json") ? JSON.parse(finished.body) : {}),
+    rawBody: finished.body
   };
 }

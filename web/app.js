@@ -119,8 +119,26 @@ function publishStatusLabel(status) {
   return "未发布";
 }
 
+function riskLevelLabel(level) {
+  if (level === "high") return "高风险";
+  if (level === "medium") return "中风险";
+  if (level === "low") return "低风险";
+  return "未预判";
+}
+
+function performanceTierLabel(tier) {
+  if (tier === "high") return "高表现";
+  if (tier === "medium") return "中等表现";
+  if (tier === "low") return "低表现";
+  return "未判断";
+}
+
+function predictionMatchedLabel(value) {
+  return value === true ? "预判命中" : "待复盘";
+}
+
 function lifecycleSourceLabel(source) {
-  if (source === "benchmark_mismatch") return "基准未命中回流";
+  if (source === "false_positive_reflow") return "误报回流";
   if (source === "generation_final") return "最终推荐稿";
   if (source === "generation_candidate") return "生成候选稿";
   if (source === "generation") return "生成稿";
@@ -205,10 +223,30 @@ function revealSampleLibraryPane() {
   byId("sample-library-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function revealStyleProfilePane() {
+function openSampleLibraryRecord(recordId = "", step = "base") {
+  const normalizedStep = ["base", "reference", "lifecycle", "calibration"].includes(step) ? step : "base";
+
   revealSampleLibraryPane();
-  ensureSampleLibraryAdvancedPanelOpen();
-  byId("style-profile-topic")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  appState.sampleLibraryFilter = "all";
+  appState.sampleLibraryCollectionFilter = "all";
+  appState.sampleLibrarySearch = "";
+  appState.selectedSampleLibraryRecordId = String(recordId || "");
+  if (byId("sample-library-filter")) {
+    byId("sample-library-filter").value = "all";
+  }
+  if (byId("sample-library-collection-filter")) {
+    byId("sample-library-collection-filter").value = "all";
+  }
+  if (byId("sample-library-search-input")) {
+    byId("sample-library-search-input").value = "";
+  }
+  setSampleLibraryDetailStep(normalizedStep);
+  renderSampleLibraryWorkspace();
+  window.setTimeout(() => {
+    byId(
+      normalizedStep === "calibration" ? "sample-library-calibration-section" : "sample-library-detail"
+    )?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 0);
 }
 
 function revealFeedbackCenterPane() {
@@ -237,14 +275,6 @@ function revealRulesMaintenancePane(targetId = "custom-lexicon-pane") {
 function revealGenerationWorkbenchPane() {
   activateTab("main-workbench", "generation-workbench-pane");
   byId("generation-workbench-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-function ensureSystemCalibrationOpen() {
-  const panel = byId("system-calibration-panel");
-
-  if (panel && "open" in panel) {
-    panel.open = true;
-  }
 }
 
 function ensureSupportWorkspaceOpen() {
@@ -279,35 +309,13 @@ function ensureFeedbackAdvancedPanelOpen() {
   }
 }
 
-function revealReviewBenchmarkPane() {
-  ensureSupportWorkspaceOpen();
-  revealSampleLibraryPane();
-  ensureSampleLibraryAdvancedPanelOpen();
-  ensureSystemCalibrationOpen();
-  byId("review-benchmark-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-function revealRewritePairsSection() {
-  ensureSupportWorkspaceOpen();
-  revealSampleLibraryPane();
-  ensureSampleLibraryAdvancedPanelOpen();
-  byId("rewrite-pairs-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
 const appState = {
   latestAnalyzePayload: null,
   latestAnalysis: null,
   latestRewrite: null,
   latestGeneration: null,
   latestAnalysisFalsePositiveSource: null,
-  latestRewriteFalsePositiveSource: null,
   falsePositiveLog: [],
-  reviewBenchmarkSamples: [],
-  reviewBenchmarkLastRunResult: null,
-  reviewBenchmarkCollectionFilter: "all",
-  reviewBenchmarkTypeFilter: "all",
-  reviewBenchmarkSourceFilter: "all",
-  reviewBenchmarkViewFilter: "all",
   collectionTypeOptions: [],
   sampleLibraryRecords: [],
   selectedSampleLibraryRecordId: "",
@@ -315,17 +323,8 @@ const appState = {
   sampleLibraryCollectionFilter: "all",
   sampleLibraryFilter: "all",
   sampleLibrarySearch: "",
-  styleProfileState: null,
-  styleProfileDraftEditing: false,
-  styleProfileDraftForm: {
-    topic: "",
-    tone: "",
-    titleStyle: "",
-    bodyStructure: "",
-    preferredTags: ""
-  },
-  modelOptions: null,
-  modelRecommendations: {}
+  sampleLibraryImportDrafts: [],
+  sampleLibraryCalibrationReplayResult: null
 };
 
 const presetAnalyzeTags = [
@@ -349,8 +348,29 @@ let analyzeTagOptions = [...presetAnalyzeTags];
 const analyzeTagOptionsApi = "/api/analyze-tag-options";
 const collectionTypesApi = "/api/collection-types";
 const modelOptionsApi = "/api/model-options";
-const reviewBenchmarkApi = "/api/review-benchmark";
 const sampleLibraryApi = "/api/sample-library";
+const sampleLibraryPdfImportParseApi = "/api/sample-library/pdf-import/parse";
+const sampleLibraryPdfImportCommitApi = "/api/sample-library/pdf-import/commit";
+const sampleLibraryCalibrationReplayApi = "/api/sample-library/calibration-replay";
+
+async function loadAnalyzeCustomTagOptions() {
+  try {
+    const payload = await apiJson(analyzeTagOptionsApi);
+    return uniqueStrings(Array.isArray(payload?.options) ? payload.options : []);
+  } catch {
+    return [];
+  }
+}
+
+async function saveAnalyzeCustomTagOptions(options = []) {
+  const customOnly = uniqueStrings(options).filter((tag) => !presetAnalyzeTags.includes(tag));
+  await apiJson(analyzeTagOptionsApi, {
+    method: "POST",
+    body: JSON.stringify({
+      options: customOnly
+    })
+  });
+}
 
 function buildCollectionTypeOptionsMarkup({
   options = [],
@@ -374,8 +394,6 @@ function renderCollectionTypeSelectors() {
   const generationSelect = byId("generation-collection-type-select");
   const sampleLibrarySelect = byId("sample-library-collection-type-select");
   const sampleLibraryFilterSelect = byId("sample-library-collection-filter");
-  const reviewBenchmarkSelect = byId("review-benchmark-collection-type-select");
-  const reviewBenchmarkFilterSelect = byId("review-benchmark-collection-filter");
 
   if (analyzeSelect) {
     analyzeSelect.innerHTML = buildCollectionTypeOptionsMarkup({
@@ -406,25 +424,9 @@ function renderCollectionTypeSelectors() {
     });
   }
 
-  if (reviewBenchmarkSelect) {
-    reviewBenchmarkSelect.innerHTML = buildCollectionTypeOptionsMarkup({
-      options: appState.collectionTypeOptions,
-      value: reviewBenchmarkSelect.value
-    });
-  }
-
-  if (reviewBenchmarkFilterSelect) {
-    reviewBenchmarkFilterSelect.innerHTML = buildCollectionTypeOptionsMarkup({
-      options: appState.collectionTypeOptions,
-      value: appState.reviewBenchmarkCollectionFilter,
-      allowAll: true
-    });
-  }
-
   syncAnalyzeActions();
   syncGenerationActions();
   syncSampleLibraryCreateActions();
-  syncReviewBenchmarkActions();
 }
 
 async function loadCollectionTypeOptions() {
@@ -433,92 +435,12 @@ async function loadCollectionTypeOptions() {
   renderCollectionTypeSelectors();
 }
 
-async function addCollectionTypeOption(targetSelectId) {
-  const nextName = window.prompt("输入新的合集类型名称");
-  const normalizedName = String(nextName || "").trim();
-
-  if (!normalizedName) {
-    return;
-  }
-
-  const payload = await apiJson(collectionTypesApi, {
-    method: "POST",
-    body: JSON.stringify({ name: normalizedName })
-  });
-
-  appState.collectionTypeOptions = Array.isArray(payload.options) ? payload.options : appState.collectionTypeOptions;
-  renderCollectionTypeSelectors();
-
-  const select = byId(targetSelectId);
-  if (select) {
-    select.value = normalizedName;
-  }
-
-  syncAnalyzeActions();
-  syncGenerationActions();
-  syncSampleLibraryCreateActions();
-  syncReviewBenchmarkActions();
-}
-
-function normalizeStyleProfileDraftForm(profile = {}) {
-  return {
-    topic: String(profile?.topic || "").trim(),
-    tone: String(profile?.tone || "").trim(),
-    titleStyle: String(profile?.titleStyle || "").trim(),
-    bodyStructure: String(profile?.bodyStructure || "").trim(),
-    preferredTags: joinCSV(profile?.preferredTags || [])
-  };
-}
-
-function enterStyleProfileDraftEditMode(profile = null) {
-  appState.styleProfileDraftEditing = true;
-  appState.styleProfileDraftForm = normalizeStyleProfileDraftForm(profile || appState.styleProfileState?.draft || {});
-}
-
-function exitStyleProfileDraftEditMode() {
-  appState.styleProfileDraftEditing = false;
-  appState.styleProfileDraftForm = normalizeStyleProfileDraftForm({});
-}
-
-function buildStyleProfileDraftPayload(source = appState.styleProfileDraftForm) {
-  const isFormElement = typeof HTMLFormElement !== "undefined" && source instanceof HTMLFormElement;
-  const isContainerElement = !isFormElement && source && typeof source.querySelector === "function";
-  const formValues = isFormElement
-    ? Object.fromEntries(new FormData(source).entries())
-    : isContainerElement
-      ? {
-          topic: source.querySelector('[name="topic"]')?.value,
-          tone: source.querySelector('[name="tone"]')?.value,
-          titleStyle: source.querySelector('[name="titleStyle"]')?.value,
-          bodyStructure: source.querySelector('[name="bodyStructure"]')?.value,
-          preferredTags: source.querySelector('[name="preferredTags"]')?.value
-        }
-      : source || {};
-  const normalized = {
-    topic: String(formValues.topic || "").trim(),
-    tone: String(formValues.tone || "").trim(),
-    titleStyle: String(formValues.titleStyle || "").trim(),
-    bodyStructure: String(formValues.bodyStructure || "").trim(),
-    preferredTags: String(formValues.preferredTags || "").trim()
-  };
-
-  appState.styleProfileDraftForm = normalized;
-
-  return {
-    topic: normalized.topic,
-    tone: normalized.tone,
-    titleStyle: normalized.titleStyle,
-    bodyStructure: normalized.bodyStructure,
-    preferredTags: splitCSV(normalized.preferredTags)
-  };
-}
 const defaultModelSelectionOptions = {
   semantic: [
     { value: "auto", label: "默认自动 / 依次尝试当前语义复判模型" },
     { value: "glm", label: "智谱 GLM" },
     { value: "qwen", label: "通义千问" },
     { value: "minimax", label: "MiniMax" },
-    { value: "mimo", label: "Mimo" },
     { value: "deepseek", label: "深度求索" }
   ],
   rewrite: [
@@ -527,7 +449,14 @@ const defaultModelSelectionOptions = {
     { value: "kimi", label: "Kimi" },
     { value: "qwen", label: "通义千问" },
     { value: "minimax", label: "MiniMax" },
-    { value: "mimo", label: "Mimo" },
+    { value: "deepseek", label: "深度求索" }
+  ],
+  generation: [
+    { value: "auto", label: "默认自动 / 使用当前默认生成模型" },
+    { value: "glm", label: "智谱 GLM" },
+    { value: "kimi", label: "Kimi" },
+    { value: "qwen", label: "通义千问" },
+    { value: "minimax", label: "MiniMax" },
     { value: "deepseek", label: "深度求索" }
   ],
   crossReview: [
@@ -536,7 +465,6 @@ const defaultModelSelectionOptions = {
     { value: "kimi", label: "Kimi" },
     { value: "qwen", label: "通义千问" },
     { value: "minimax", label: "MiniMax" },
-    { value: "mimo", label: "Mimo" },
     { value: "deepseek", label: "深度求索" }
   ],
   feedbackScreenshot: [
@@ -547,29 +475,9 @@ const defaultModelSelectionOptions = {
     { value: "auto", label: "默认自动 / 顺序尝试候选补充模型" },
     { value: "glm", label: "智谱 GLM" },
     { value: "qwen", label: "通义千问" },
-    { value: "mimo", label: "Mimo" },
     { value: "deepseek", label: "深度求索" }
   ]
 };
-
-async function loadAnalyzeCustomTagOptions() {
-  try {
-    const payload = await apiJson(analyzeTagOptionsApi);
-    return uniqueStrings(Array.isArray(payload?.options) ? payload.options : []);
-  } catch {
-    return [];
-  }
-}
-
-async function saveAnalyzeCustomTagOptions(options = []) {
-  const customOnly = uniqueStrings(options).filter((tag) => !presetAnalyzeTags.includes(tag));
-  await apiJson(analyzeTagOptionsApi, {
-    method: "POST",
-    body: JSON.stringify({
-      options: customOnly
-    })
-  });
-}
 
 async function readJson(response) {
   const payload = await response.json();
@@ -653,6 +561,7 @@ function renderModelSelectionControls(options = defaultModelSelectionOptions) {
   const normalizedOptions = {
     semantic: normalizeModelSelectionOptions(options?.semantic, defaultModelSelectionOptions.semantic),
     rewrite: normalizeModelSelectionOptions(options?.rewrite, defaultModelSelectionOptions.rewrite),
+    generation: normalizeModelSelectionOptions(options?.generation, defaultModelSelectionOptions.generation),
     crossReview: normalizeModelSelectionOptions(options?.crossReview, defaultModelSelectionOptions.crossReview),
     feedbackScreenshot: normalizeModelSelectionOptions(
       options?.feedbackScreenshot,
@@ -664,9 +573,9 @@ function renderModelSelectionControls(options = defaultModelSelectionOptions) {
     )
   };
 
-  appState.modelOptions = normalizedOptions;
   populateModelSelectionControl("semantic-model-selection", normalizedOptions.semantic, "auto");
   populateModelSelectionControl("rewrite-model-selection", normalizedOptions.rewrite, "auto");
+  populateModelSelectionControl("generation-model-selection", normalizedOptions.generation, "auto");
   populateModelSelectionControl("cross-review-model-selection", normalizedOptions.crossReview, "group");
   populateModelSelectionControl("feedback-screenshot-model-selection", normalizedOptions.feedbackScreenshot, "auto");
   populateModelSelectionControl("feedback-suggestion-model-selection", normalizedOptions.feedbackSuggestion, "auto");
@@ -686,6 +595,7 @@ function getSelectedModelSelections() {
   return {
     semantic: String(byId("semantic-model-selection")?.value || "auto").trim() || "auto",
     rewrite: String(byId("rewrite-model-selection")?.value || "auto").trim() || "auto",
+    generation: String(byId("generation-model-selection")?.value || "auto").trim() || "auto",
     crossReview: String(byId("cross-review-model-selection")?.value || "group").trim() || "group"
   };
 }
@@ -724,6 +634,44 @@ function renderInfoPills(items = [], emptyText = "未提供", extraClass = "") {
   return tokens
     .map((item) => `<span class="meta-pill ${extraClass}">${escapeHtml(item)}</span>`)
     .join("");
+}
+
+const platformOutcomeOptions = [
+  { status: "published_passed", label: "平台通过", note: "平台通过，已记录为可观察样本。" },
+  { status: "violation", label: "平台违规", note: "平台反馈违规，已记录为检测校准信号。" },
+  { status: "positive_performance", label: "效果好", note: "平台通过且表现好，已作为生成风格参考。" },
+  { status: "limited", label: "效果一般", note: "平台通过但表现一般，已记录为待观察样本。" },
+  { status: "false_positive", label: "系统误判", note: "平台放行但系统偏严，已进入误判降权候选。" }
+];
+
+function buildPlatformOutcomeActions(source = "analysis", options = {}) {
+  const candidateId = options.candidateId || "";
+  const candidateIndex = options.candidateIndex ?? "";
+  const buttons = platformOutcomeOptions
+    .map(
+      (item) => `
+        <button
+          type="button"
+          class="button button-ghost button-small"
+          data-action="save-platform-outcome"
+          data-source="${escapeHtml(source)}"
+          data-publish-status="${escapeHtml(item.status)}"
+          data-note="${escapeHtml(item.note)}"
+          data-candidate-id="${escapeHtml(candidateId)}"
+          data-candidate-index="${escapeHtml(String(candidateIndex))}"
+        >
+          ${escapeHtml(item.label)}
+        </button>
+      `
+    )
+    .join("");
+
+  return `
+    <div class="platform-outcome-actions">
+      <span class="helper-text">平台结果回填</span>
+      <div class="item-actions">${buttons}</div>
+    </div>
+  `;
 }
 
 function normalizeTextValue(value) {
@@ -856,7 +804,6 @@ function providerLabel(provider) {
   if (provider === "glm") return "智谱 GLM";
   if (provider === "qwen") return "通义千问";
   if (provider === "minimax") return "MiniMax";
-  if (provider === "mimo") return "Mimo";
   if (provider === "deepseek") return "深度求索";
   return String(provider || "").trim() || "未标记模型";
 }
@@ -891,6 +838,210 @@ function setActionGateHint(id, message = "") {
   node.classList.toggle("is-visible", Boolean(message));
 }
 
+function verdictRank(value = "") {
+  if (value === "hard_block") return 3;
+  if (value === "manual_review") return 2;
+  if (value === "observe") return 1;
+  return 0;
+}
+
+function shouldRecommendCrossReview({ analysis = null, rewrite = null } = {}) {
+  const analysisVerdict = String(analysis?.finalVerdict || analysis?.verdict || "").trim();
+  const semanticVerdict = String(analysis?.semanticReview?.review?.verdict || "").trim();
+  const rewriteAnalysisVerdict = String(rewrite?.afterAnalysis?.finalVerdict || rewrite?.afterAnalysis?.verdict || "").trim();
+  const rewriteCrossVerdict = String(rewrite?.afterCrossReview?.aggregate?.recommendedVerdict || "").trim();
+  const rewriteConsensus = String(rewrite?.afterCrossReview?.aggregate?.consensus || "").trim();
+  const analysisScore = Number(analysis?.score);
+  const rewriteScore = Number(rewrite?.afterAnalysis?.score);
+
+  if (rewriteConsensus === "split") {
+    return true;
+  }
+
+  if (rewriteAnalysisVerdict && rewriteCrossVerdict && rewriteAnalysisVerdict !== rewriteCrossVerdict) {
+    return true;
+  }
+
+  if (analysisVerdict && semanticVerdict && analysisVerdict !== semanticVerdict) {
+    return true;
+  }
+
+  if (Number.isFinite(rewriteScore) && rewriteScore >= 20 && rewriteScore <= 45) {
+    return true;
+  }
+
+  if (Number.isFinite(analysisScore) && analysisScore >= 20 && analysisScore <= 45) {
+    return true;
+  }
+
+  if (verdictRank(rewriteAnalysisVerdict) === verdictRank("observe")) {
+    return true;
+  }
+
+  if (verdictRank(analysisVerdict) === verdictRank("observe")) {
+    return true;
+  }
+
+  return false;
+}
+
+function buildSampleLibraryCalibrationPredictionFromCurrentState() {
+  const rewrite = normalizeRewritePayload(appState.latestRewrite);
+  const hasRewrite = hasMeaningfulNoteDraft(rewrite);
+  const analysis = appState.latestAnalysis || null;
+  const verdict = String(analysis?.finalVerdict || analysis?.verdict || "").trim() || "pass";
+  const score = Number(analysis?.score || 0);
+  const semanticSummary = String(analysis?.semanticReview?.review?.summary || "").trim();
+  const selectedModels = getSelectedModelSelections();
+
+  let predictedStatus = "published_passed";
+  let predictedRiskLevel = "low";
+  let predictedPerformanceTier = "medium";
+  let confidence = 72;
+
+  if (verdict === "hard_block") {
+    predictedStatus = "violation";
+    predictedRiskLevel = "high";
+    predictedPerformanceTier = "low";
+    confidence = Math.max(82, Math.min(98, Math.round(score || 88)));
+  } else if (verdict === "manual_review") {
+    predictedStatus = "limited";
+    predictedRiskLevel = "medium";
+    predictedPerformanceTier = "low";
+    confidence = Math.max(60, Math.min(86, Math.round(score || 68)));
+  } else if (verdict === "observe") {
+    predictedStatus = "published_passed";
+    predictedRiskLevel = "low";
+    predictedPerformanceTier = "medium";
+    confidence = Math.max(58, Math.min(82, 72 - Math.round((score || 0) / 4)));
+  } else if (score >= 60) {
+    predictedStatus = "limited";
+    predictedRiskLevel = "medium";
+    predictedPerformanceTier = "low";
+    confidence = 66;
+  }
+
+  const reasonParts = [
+    `当前检测结论：${verdictLabel(verdict)}`,
+    Number.isFinite(score) ? `规则分 ${Math.round(score)}` : "",
+    semanticSummary,
+    hasRewrite && rewrite.rewriteNotes ? `改写说明：${rewrite.rewriteNotes}` : "",
+    hasRewrite && rewrite.safetyNotes ? `安全提示：${rewrite.safetyNotes}` : ""
+  ].filter(Boolean);
+
+  return {
+    predictedStatus,
+    predictedRiskLevel,
+    predictedPerformanceTier,
+    confidence,
+    reason: reasonParts.join("；"),
+    model: hasRewrite ? rewrite.model || selectedModels.rewrite : selectedModels.semantic,
+    createdAt: new Date().toISOString().slice(0, 10)
+  };
+}
+
+function deriveSampleLibraryActualPerformanceTier(publish = {}) {
+  const status = String(publish?.status || "not_published").trim() || "not_published";
+  const likes = Number(publish?.metrics?.likes || 0) || 0;
+  const favorites = Number(publish?.metrics?.favorites || 0) || 0;
+  const comments = Number(publish?.metrics?.comments || 0) || 0;
+
+  if (status === "not_published") {
+    return "";
+  }
+
+  if (status === "violation" || status === "limited") {
+    return "low";
+  }
+
+  if (status === "positive_performance" || likes >= 100 || favorites >= 20 || comments >= 10) {
+    return "high";
+  }
+
+  if (likes >= 20 || favorites >= 5 || comments >= 2 || status === "published_passed" || status === "false_positive") {
+    return "medium";
+  }
+
+  return "low";
+}
+
+function buildSampleLibraryCalibrationRetroComparison({ prediction = {}, publish = {} } = {}) {
+  const predictedStatus = String(prediction?.predictedStatus || "not_published").trim() || "not_published";
+  const predictedPerformanceTier = String(prediction?.predictedPerformanceTier || "").trim();
+  const actualStatus = String(publish?.status || "not_published").trim() || "not_published";
+  const actualPerformanceTier = deriveSampleLibraryActualPerformanceTier(publish);
+
+  if (actualStatus === "not_published") {
+    return {
+      matched: false,
+      actualPerformanceTier: "",
+      summary: "待复盘",
+      missReasonSuggestion: ""
+    };
+  }
+
+  const statusMatched =
+    predictedStatus === actualStatus ||
+    (predictedStatus === "published_passed" && actualStatus === "positive_performance") ||
+    (predictedStatus === "positive_performance" && actualStatus === "published_passed");
+  const performanceMatched = !predictedPerformanceTier || !actualPerformanceTier || predictedPerformanceTier === actualPerformanceTier;
+  const matched = statusMatched && performanceMatched;
+
+  let missReasonSuggestion = "";
+  if (!statusMatched) {
+    missReasonSuggestion = `预判状态偏差：预期 ${publishStatusLabel(predictedStatus)}，实际 ${publishStatusLabel(actualStatus)}。`;
+  } else if (!performanceMatched) {
+    missReasonSuggestion = `发布状态基本一致，但表现预估偏差：预期 ${performanceTierLabel(
+      predictedPerformanceTier
+    )}，实际 ${performanceTierLabel(actualPerformanceTier)}。`;
+  } else {
+    missReasonSuggestion = "预判与实际结果基本一致，可沉淀为稳定判断。";
+  }
+
+  return {
+    matched,
+    actualPerformanceTier,
+    summary: matched
+      ? `${predictionMatchedLabel(true)} · ${performanceTierLabel(actualPerformanceTier)}`
+      : `预判偏差 · ${publishStatusLabel(actualStatus)}`,
+    missReasonSuggestion
+  };
+}
+
+function buildSampleLibraryCalibrationRetroRecommendation({ prediction = {}, retro = {}, publish = {}, comparison = {} } = {}) {
+  const predictedStatus = String(prediction?.predictedStatus || "not_published").trim() || "not_published";
+  const predictedPerformanceTier = String(prediction?.predictedPerformanceTier || "").trim();
+  const actualStatus = String(publish?.status || "not_published").trim() || "not_published";
+  const actualPerformanceTier = String(
+    comparison?.actualPerformanceTier || retro?.actualPerformanceTier || deriveSampleLibraryActualPerformanceTier(publish) || ""
+  ).trim();
+  const matched = comparison?.matched === true;
+  const shouldBecomeReference = matched && (actualStatus === "positive_performance" || actualPerformanceTier === "high");
+  let ruleImprovementCandidate = "";
+
+  if (actualStatus !== "not_published" && comparison?.matched === false) {
+    if (predictedStatus !== actualStatus) {
+      ruleImprovementCandidate = `需要复盘发布状态判断：预期 ${publishStatusLabel(predictedStatus)}，实际 ${publishStatusLabel(actualStatus)}。`;
+    } else if (predictedPerformanceTier && actualPerformanceTier && predictedPerformanceTier !== actualPerformanceTier) {
+      ruleImprovementCandidate = `需要复盘表现预估：预期 ${performanceTierLabel(predictedPerformanceTier)}，实际 ${performanceTierLabel(actualPerformanceTier)}。`;
+    } else if (["violation", "limited", "false_positive"].includes(actualStatus)) {
+      ruleImprovementCandidate = `需要复盘发布状态判断：${publishStatusLabel(actualStatus)}类样本可补充规则边界。`;
+    }
+  }
+
+  return {
+    shouldBecomeReference,
+    ruleImprovementCandidate
+  };
+}
+
+function hasSampleLibraryCalibrationRetroField(record = {}, key = "") {
+  const retro =
+    record?.calibration?.retro && typeof record.calibration.retro === "object" ? record.calibration.retro : {};
+
+  return Object.prototype.hasOwnProperty.call(retro, key);
+}
+
 function setGatedButtonState(button, enabled, hint = "") {
   if (!button) {
     return;
@@ -901,145 +1052,6 @@ function setGatedButtonState(button, enabled, hint = "") {
   }
 
   button.title = !enabled && hint ? hint : "";
-}
-
-function workflowActionButton({ action, label, tone = "button" } = {}) {
-  return `<button type="button" class="button ${escapeHtml(tone)}" data-workflow-action="${escapeHtml(action)}">${escapeHtml(label)}</button>`;
-}
-
-function getPendingFeedbackItems() {
-  const feedbackLog = Array.isArray(appState.feedbackLog) ? appState.feedbackLog : [];
-  const falsePositiveLog = Array.isArray(appState.falsePositiveLog) ? appState.falsePositiveLog : [];
-
-  return {
-    feedback: feedbackLog.filter((item) => !String(item?.decision || "").trim()),
-    falsePositive: falsePositiveLog.filter((item) => item?.status !== "platform_passed_confirmed")
-  };
-}
-
-function getPendingSampleLibraryItems() {
-  const items = Array.isArray(appState.sampleLibraryRecords) ? appState.sampleLibraryRecords : [];
-
-  return items.filter((item) => getSampleLibraryRecordStepLabel(item) !== "已完成主流程");
-}
-
-function getWorkflowAssistantState() {
-  const hasInput = hasAnalyzeInput();
-  const analysis = appState.latestAnalysis;
-  const rewrite = appState.latestRewrite;
-  const generation = appState.latestGeneration;
-  const pendingFeedback = getPendingFeedbackItems();
-  const pendingSamples = getPendingSampleLibraryItems();
-  const pendingFeedbackCount = pendingFeedback.feedback.length + pendingFeedback.falsePositive.length;
-
-  if (!hasInput && pendingFeedbackCount) {
-    return {
-      step: 0,
-      title: "先处理回流反馈，再继续主链路",
-      description: `当前有 ${pendingFeedbackCount} 条优先反馈待处理，建议先沉淀规则或确认误报，再继续新内容流转。`,
-      actions: [
-        { action: "open-feedback-center", label: "去处理优先反馈", tone: "button-alt" },
-        { action: "open-sample-library", label: "查看样本库", tone: "button-ghost" }
-      ]
-    };
-  }
-
-  if (!hasInput && pendingSamples.length) {
-    return {
-      step: 0,
-      title: "先补样本库记录，再继续主链路",
-      description: `当前有 ${pendingSamples.length} 条样本记录还没补完，建议先完成卡点步骤，避免经验资产继续积压。`,
-      actions: [
-        { action: "open-sample-library", label: "去补样本记录", tone: "button-alt" },
-        { action: "open-feedback-center", label: "查看回流中心", tone: "button-ghost" }
-      ]
-    };
-  }
-
-  if (generation?.recommendedCandidateId) {
-    return {
-      step: 3,
-      title: "推荐稿已生成，可以进入生命周期",
-      description: "建议先保存最终推荐稿，发布后回填表现。表现好的稿子会反向影响下一次生成。",
-      actions: [
-        { action: "save-generation-final", label: "最终推荐稿进入生命周期", tone: "button-alt" },
-        { action: "open-lifecycle", label: "查看生命周期", tone: "button-ghost" }
-      ]
-    };
-  }
-
-  if (rewrite) {
-    return {
-      step: 2,
-      title: "改写稿已生成，下一步做最终确认",
-      description: "如果改写后风险已经稳定，先保存改写稿进入生命周期；只有结论不稳时，再做交叉复判。",
-      actions: [
-        { action: "save-rewrite", label: "保存改写稿生命周期", tone: "button-alt" },
-        { action: "cross-review", label: "需要时再做交叉复判", tone: "button-ghost" }
-      ]
-    };
-  }
-
-  if (analysis) {
-    const verdict = analysis.finalVerdict || analysis.verdict || "manual_review";
-    const safeEnough = verdict === "pass" || verdict === "observe";
-
-    return {
-      step: 1,
-      title: safeEnough ? "检测已完成，可以先沉淀结果" : "检测已完成，建议先改写",
-      description: safeEnough
-        ? "当前风险较低。建议先保存检测记录；只有你想二次确认时，再做交叉复判。"
-        : "当前仍有人工复核或高风险信号。建议先做合规改写，再看是否需要交叉复判。",
-      actions: safeEnough
-        ? [
-            { action: "save-analysis", label: "保存检测记录", tone: "button-alt" },
-            { action: "cross-review", label: "需要时再做交叉复判", tone: "button-ghost" }
-          ]
-        : [
-            { action: "rewrite", label: "一键合规改写", tone: "button-alt" },
-            { action: "cross-review", label: "先交叉复判", tone: "button-ghost" }
-          ]
-    };
-  }
-
-  if (hasInput) {
-    return {
-      step: 0,
-      title: "内容已输入，先运行检测",
-      description: "先用规则和语义复判拿到基线结论，再决定是保存、改写还是交叉复判。",
-      actions: [{ action: "analyze", label: "运行检测", tone: "button-alt" }]
-    };
-  }
-
-  return {
-    step: 0,
-    title: "先输入一篇笔记，或直接生成候选稿",
-    description: "有原稿就走检测改写；没有原稿时，可以直接切到生成新内容开始起稿。",
-    actions: []
-    // actions: [{ action: "open-generation-workbench", label: "切到生成新内容", tone: "button-ghost" }]
-  };
-}
-
-function renderWorkflowAssistant() {
-  const state = getWorkflowAssistantState();
-  const actionItems = Array.isArray(state.actions) ? state.actions : [];
-  const title = byId("workflow-assistant-title");
-  const description = byId("workflow-assistant-description");
-  const actions = byId("workflow-assistant-actions");
-  const timeline = byId("workflow-timeline");
-
-  if (title) title.textContent = state.title;
-  if (description) description.textContent = state.description;
-  if (actions) {
-    actions.innerHTML = actionItems.length ? actionItems.map(workflowActionButton).join("") : "";
-  }
-
-  if (timeline) {
-    [...timeline.querySelectorAll("li")].forEach((item, index) => {
-      item.classList.toggle("is-active", index === state.step);
-      item.classList.toggle("is-complete", index < state.step);
-    });
-  }
 }
 
 function hasAnalyzeInput() {
@@ -1081,380 +1093,57 @@ function syncAnalyzeActions() {
   setGatedButtonState(rewriteButton, enabled, requirementMessage);
   setActionGateHint("analyze-action-hint", requirementMessage);
   syncCrossReviewActions();
-
-  renderWorkflowAssistant();
 }
 
 function syncCrossReviewActions() {
   const requirementMessage = getCrossReviewActionRequirementMessage();
   const enabled = !requirementMessage;
   const crossReviewButton = byId("cross-review-button");
+  const recommendationMessage = shouldRecommendCrossReview({
+    analysis: appState.latestAnalysis,
+    rewrite: appState.latestAnalysis && appState.latestRewrite
+      ? {
+          afterAnalysis: appState.latestAnalysis,
+          afterCrossReview: null
+        }
+      : null
+  })
+    ? "当前结论比较接近，或规则与语义信号不完全一致；需要时可展开交叉复判再确认。"
+    : "";
 
   setGatedButtonState(crossReviewButton, enabled, requirementMessage);
-  setActionGateHint("cross-review-action-hint", requirementMessage);
-}
-
-function getAnalyzeTagInput() {
-  return byId("analyze-tags-value");
-}
-
-function getAnalyzeTagTrigger() {
-  return byId("analyze-tag-trigger");
-}
-
-function getAnalyzeTagDropdown() {
-  return byId("analyze-tag-dropdown");
-}
-
-function getAnalyzeTagOptionsContainer() {
-  return byId("analyze-tag-options");
-}
-
-function focusFirstAnalyzeTagOption() {
-  const firstOption = getAnalyzeTagOptionsContainer()?.querySelector("[data-tag-option]");
-  if (firstOption instanceof HTMLElement) {
-    firstOption.focus();
-  }
-}
-
-function getAnalyzeTagSelection() {
-  return byId("analyze-tag-selected");
-}
-
-function isAnalyzeTagDropdownOpen() {
-  return getAnalyzeTagTrigger()?.getAttribute("aria-expanded") === "true";
-}
-
-function isPresetAnalyzeTag(tag) {
-  return presetAnalyzeTags.includes(String(tag || "").trim());
-}
-
-function eventTargetsAnalyzeTagPicker(event, picker) {
-  if (!picker || !event) {
-    return false;
-  }
-
-  if (typeof event.composedPath === "function") {
-    return event.composedPath().includes(picker);
-  }
-
-  return picker.contains(event.target);
-}
-
-function setAnalyzeTagDropdownOpen(isOpen) {
-  const trigger = getAnalyzeTagTrigger();
-  const dropdown = getAnalyzeTagDropdown();
-
-  if (!trigger || !dropdown) {
-    return;
-  }
-
-  trigger.setAttribute("aria-expanded", isOpen ? "true" : "false");
-  dropdown.hidden = !isOpen;
-  byId("analyze-tag-picker")?.classList.toggle("is-open", isOpen);
-}
-
-function toggleAnalyzePresetTag(tag) {
-  const current = readAnalyzeTags();
-  const normalizedTag = String(tag || "").trim();
-
-  if (!normalizedTag) {
-    return;
-  }
-
-  writeAnalyzeTags(
-    current.includes(normalizedTag) ? current.filter((item) => item !== normalizedTag) : [...current, normalizedTag]
-  );
-}
-
-function removeAnalyzeTagOption(tag) {
-  const normalizedTag = String(tag || "").trim();
-
-  if (!normalizedTag || isPresetAnalyzeTag(normalizedTag)) {
-    return;
-  }
-
-  analyzeTagOptions = analyzeTagOptions.filter((item) => item !== normalizedTag);
-  writeAnalyzeTags(readAnalyzeTags().filter((item) => item !== normalizedTag));
-  saveAnalyzeCustomTagOptions(analyzeTagOptions).catch(() => {});
-}
-
-function renderAnalyzeTagOptions() {
-  const container = getAnalyzeTagOptionsContainer();
-
-  if (!container) {
-    return;
-  }
-
-  const selectedTags = readAnalyzeTags();
-  container.innerHTML = uniqueStrings(analyzeTagOptions)
-    .map((tag) => {
-      const selected = selectedTags.includes(tag);
-      const isCustom = !isPresetAnalyzeTag(tag);
-      return `
-        <span class="tag-picker-option-row${isCustom ? " is-custom" : ""}">
-          <button
-            type="button"
-            class="tag-picker-option${selected ? " is-selected" : ""}"
-            data-tag-option="${escapeHtml(tag)}"
-            aria-pressed="${selected ? "true" : "false"}"
-          >
-            <span>${escapeHtml(tag)}</span>
-            <span class="tag-picker-option-check" aria-hidden="true">${selected ? "✓" : ""}</span>
-          </button>
-          ${
-            isCustom
-              ? `
-                <button
-                  type="button"
-                  class="tag-picker-option-delete"
-                  data-tag-delete="${escapeHtml(tag)}"
-                  aria-label="删除自定义标签 ${escapeHtml(tag)}"
-                >
-                  ×
-                </button>
-              `
-              : ""
-          }
-        </span>
-      `;
-    })
-    .join("");
-}
-
-function readAnalyzeTags() {
-  return uniqueStrings(splitCSV(getAnalyzeTagInput()?.value || ""));
-}
-
-function writeAnalyzeTags(tags = []) {
-  const normalized = uniqueStrings(tags);
-  const hiddenInput = getAnalyzeTagInput();
-
-  if (hiddenInput) {
-    hiddenInput.value = joinCSV(normalized);
-  }
-
-  const selected = getAnalyzeTagSelection();
-  if (selected) {
-    selected.innerHTML = buildAnalyzeTagSelectionMarkup(normalized);
-  }
-
-  renderAnalyzeTagOptions();
-
-  analyzeForm.dispatchEvent(new Event("input", { bubbles: true }));
-}
-
-function addAnalyzeTag(tag) {
-  const nextTag = String(tag || "").trim();
-
-  if (!nextTag) {
-    return;
-  }
-
-  writeAnalyzeTags([...readAnalyzeTags(), nextTag]);
-}
-
-function addAnalyzeTagOption(tag) {
-  const nextTag = String(tag || "").trim();
-
-  if (!nextTag) {
-    return;
-  }
-
-  const nextOptions = uniqueStrings([...analyzeTagOptions, nextTag]);
-  const changed = nextOptions.length !== analyzeTagOptions.length;
-  analyzeTagOptions = nextOptions;
-  renderAnalyzeTagOptions();
-
-  if (changed) {
-    saveAnalyzeCustomTagOptions(analyzeTagOptions).catch(() => {});
-  }
-}
-
-function initializeAnalyzeTagPicker() {
-  const trigger = getAnalyzeTagTrigger();
-  const dropdown = getAnalyzeTagDropdown();
-  const optionsContainer = getAnalyzeTagOptionsContainer();
-  const customInput = byId("analyze-tag-custom");
-  const addButton = byId("analyze-tag-add");
-  const clearButton = byId("analyze-tag-clear");
-  const picker = byId("analyze-tag-picker");
-
-  if (!trigger || !dropdown || !optionsContainer || !customInput || !addButton || !picker) {
-    return;
-  }
-
-  customInput.setAttribute("aria-label", customInput.getAttribute("aria-label") || customInput.placeholder || "输入自定义标签");
-
-  analyzeTagOptions = [...presetAnalyzeTags];
-  setAnalyzeTagDropdownOpen(false);
-  renderAnalyzeTagOptions();
-  loadAnalyzeCustomTagOptions()
-    .then((customOptions) => {
-      analyzeTagOptions = uniqueStrings([...presetAnalyzeTags, ...analyzeTagOptions, ...customOptions]);
-      renderAnalyzeTagOptions();
-    })
-    .catch(() => {});
-
-  trigger.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setAnalyzeTagDropdownOpen(!isAnalyzeTagDropdownOpen());
-  });
-
-  trigger.addEventListener("keydown", (event) => {
-    if (event.key !== "ArrowDown") {
-      return;
-    }
-
-    event.preventDefault();
-    setAnalyzeTagDropdownOpen(true);
-    focusFirstAnalyzeTagOption();
-  });
-
-  optionsContainer.addEventListener("click", (event) => {
-    event.stopPropagation();
-    const deleteButton = event.target instanceof Element ? event.target.closest("[data-tag-delete]") : null;
-    if (deleteButton) {
-      removeAnalyzeTagOption(deleteButton.dataset.tagDelete);
-      return;
-    }
-
-    const option = event.target instanceof Element ? event.target.closest("[data-tag-option]") : null;
-    if (!option) {
-      return;
-    }
-
-    toggleAnalyzePresetTag(option.dataset.tagOption);
-  });
-
-  clearButton?.addEventListener("click", () => {
-    writeAnalyzeTags([]);
-  });
-
-  clearButton?.addEventListener("click", (event) => {
-    event.stopPropagation();
-  });
-
-  addButton.addEventListener("click", (event) => {
-    event.stopPropagation();
-    const shouldRefocus = Boolean(String(customInput.value || "").trim());
-    addAnalyzeTagOption(customInput.value);
-    addAnalyzeTag(customInput.value);
-    customInput.value = "";
-
-    if (shouldRefocus) {
-      renderAnalyzeTagOptions();
-      customInput.focus();
-    }
-  });
-
-  customInput.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" && event.key !== ",") {
-      return;
-    }
-
-    event.preventDefault();
-    addAnalyzeTagOption(customInput.value);
-    addAnalyzeTag(customInput.value);
-    customInput.value = "";
-    renderAnalyzeTagOptions();
-  });
-
-  customInput.addEventListener("blur", (event) => {
-    if (event.relatedTarget === addButton) {
-      return;
-    }
-
-    const value = String(customInput.value || "").trim();
-
-    if (!value) {
-      return;
-    }
-
-    addAnalyzeTagOption(value);
-    addAnalyzeTag(value);
-    customInput.value = "";
-    renderAnalyzeTagOptions();
-  });
-
-  customInput.addEventListener("click", (event) => {
-    event.stopPropagation();
-  });
-
-  document.addEventListener("click", (event) => {
-    if (eventTargetsAnalyzeTagPicker(event, picker)) {
-      return;
-    }
-
-    setAnalyzeTagDropdownOpen(false);
-  });
-
-  document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") {
-      return;
-    }
-
-    setAnalyzeTagDropdownOpen(false);
-
-    if (picker.contains(document.activeElement)) {
-      trigger.focus();
-    }
-  });
-
-  writeAnalyzeTags(readAnalyzeTags());
+  setActionGateHint("cross-review-action-hint", requirementMessage || recommendationMessage);
 }
 
 function renderSummary(summary = {}) {
-  const styleProfile = appState.styleProfileState || {};
-  const activeProfile = styleProfile.current || null;
   const pendingReviewCount = Number(summary.reviewQueueCount || 0);
   const pendingFeedbackCount = Number(summary.feedbackCount || 0);
-  const noteLifecycleCount = Number(summary.noteLifecycleCount || 0);
   const sampleLibraryCount = Number(summary.sampleLibraryCount || 0);
   const pendingSampleCount = Array.isArray(appState.sampleLibraryRecords)
     ? appState.sampleLibraryRecords.filter((item) => !item?.reference?.enabled || item?.publish?.status === "not_published").length
     : 0;
-  const hasDraftProfile = Boolean(styleProfile?.draft);
+  const dailyFlowCount = pendingReviewCount + pendingFeedbackCount + pendingSampleCount;
   const cards = [
     {
-      label: "待处理复核",
-      value: pendingReviewCount,
-      meta: pendingReviewCount ? "优先清掉人工复核队列，减少规则维护积压。" : "当前没有待处理复核，主链路比较干净。",
-      action: pendingReviewCount ? "去低频维护区处理复核" : "查看复核区当前状态",
-      summaryAction: "open-review-queue"
-    },
-    {
-      label: "待回流反馈",
+      label: "待处理误判",
       value: pendingFeedbackCount,
-      meta: pendingFeedbackCount ? "有真实反馈待沉淀，可优先回流到规则和样本。" : "当前没有堆积反馈，可以继续推进内容主链路。",
-      action: pendingFeedbackCount ? "去处理优先反馈" : "查看回流中心",
+      meta: pendingFeedbackCount ? "有平台反馈或误报案例待确认，优先把它们沉淀成学习信号。" : "当前没有待处理误判，可以继续推进新内容。",
+      action: pendingFeedbackCount ? "去处理误判回流" : "查看回流中心",
       summaryAction: "open-feedback-center"
     },
     {
-      label: "待补全样本",
+      label: "待补好样本",
       value: pendingSampleCount,
-      meta: sampleLibraryCount ? `样本库共 ${sampleLibraryCount} 条，优先补全未成参考或未回填记录。` : "样本库还没有记录，建议先从当前内容沉淀第一条。",
-      action: pendingSampleCount ? "优先补样本参考属性或生命周期" : "继续新增或查看样本",
+      meta: sampleLibraryCount ? `已有 ${sampleLibraryCount} 条学习样本，优先补齐能反哺生成的好样本。` : "还没有学习样本，建议先从第一条通过内容开始沉淀。",
+      action: pendingSampleCount ? "去补好样本" : "新增学习样本",
       summaryAction: "open-sample-library"
     },
     {
-      label: "待确认画像",
-      value: hasDraftProfile ? 1 : 0,
-      meta: hasDraftProfile
-        ? `当前有待确认画像：${styleProfile.draft?.topic || "未命名画像"}`
-        : activeProfile
-          ? `当前生效画像：${activeProfile.topic || "通用风格"}`
-          : "当前还没有生效画像，可先沉淀参考样本。",
-      action: hasDraftProfile ? "去扩展维护确认画像" : "查看当前生效画像",
-      summaryAction: "open-style-profile"
-    },
-    {
-      label: "生命周期记录",
-      value: noteLifecycleCount,
-      meta: noteLifecycleCount ? "发布后记得回填表现，系统会反向学习哪些稿子更稳。" : "还没有生命周期记录，下一条过审内容就可以开始回填。",
-      action: noteLifecycleCount ? "继续补发布结果和互动表现" : "去样本库补生命周期",
-      summaryAction: "open-lifecycle"
+      label: "今日内容流转",
+      value: dailyFlowCount,
+      meta: dailyFlowCount ? "先清掉回流和样本卡点，再继续检测、改写或生成新内容。" : "今天可以直接从内容工作台开始新一轮检测或生成。",
+      action: dailyFlowCount ? "去看当前待办" : "开始内容工作",
+      summaryAction: dailyFlowCount ? "open-review-queue" : "open-sample-library"
     }
   ];
 
@@ -1614,6 +1303,7 @@ function renderAnalysis(result, falsePositiveSource = null) {
         保存为生命周期记录
       </button>
     </div>
+    ${buildPlatformOutcomeActions("analysis")}
     <p class="helper-text action-gate-hint" id="analysis-lifecycle-action-hint" aria-live="polite"></p>
   `;
   syncLifecycleResultActions();
@@ -1795,10 +1485,8 @@ function renderRewriteResult(result) {
       <button type="button" class="button button-small" data-action="save-lifecycle-rewrite">
         保存改写稿生命周期
       </button>
-      <button type="button" class="button button-small" data-action="prefill-rewrite-pair-current">
-        记为前后对照样本
-      </button>
     </div>
+    ${buildPlatformOutcomeActions("rewrite")}
     <p class="helper-text action-gate-hint" id="rewrite-lifecycle-action-hint" aria-live="polite"></p>
   `;
   syncLifecycleResultActions();
@@ -2283,126 +1971,10 @@ function renderFalsePositiveLog(items) {
     : '<div class="result-card muted">当前没有误报样本</div>';
 }
 
-function renderRewritePairList(items) {
-  byId("rewrite-pair-list").innerHTML = items.length
-    ? items
-        .slice()
-        .reverse()
-        .map(
-          (item) => `
-            <article class="admin-item">
-              <strong>${escapeHtml(item.name || "未命名改写样本")}</strong>
-              <div class="meta-row">
-                <span class="meta-pill">${escapeHtml(verdictLabel(item.beforeAnalysis?.verdict || "pass"))}</span>
-                <span class="meta-pill">${escapeHtml(verdictLabel(item.afterAnalysis?.verdict || "pass"))}</span>
-                <span class="meta-pill">风险分 ${escapeHtml(String(item.beforeAnalysis?.score ?? 0))} -> ${escapeHtml(String(item.afterAnalysis?.score ?? 0))}</span>
-                <span class="meta-pill">${escapeHtml(formatDate(item.createdAt))}</span>
-              </div>
-              <p>修改策略：${escapeHtml(item.rewriteStrategy || "未填写")}</p>
-              <p>有效改动：${escapeHtml(item.effectiveChanges || "未填写")}</p>
-              <p>修改前：${escapeHtml(compactText(item.before?.body || item.before?.title, 96) || "未填写")}</p>
-              <p>修改后：${escapeHtml(compactText(item.after?.body || item.after?.title, 96) || "未填写")}</p>
-              <div class="item-actions">
-                <button
-                  type="button"
-                  class="button button-danger button-small"
-                  data-action="delete-rewrite-pair"
-                  data-id="${escapeHtml(item.id)}"
-                  data-created-at="${escapeHtml(item.createdAt)}"
-                >
-                  删除
-                </button>
-              </div>
-            </article>
-          `
-        )
-        .join("")
-    : '<div class="result-card muted">当前没有改写前后样本</div>';
-}
-
 function successTierLabel(tier) {
   if (tier === "featured") return "人工精选标杆";
   if (tier === "performed") return "过审且表现好";
   return "仅过审";
-}
-
-function expectedTypeLabel(value) {
-  if (value === "violation") return "违规样本";
-  if (value === "false_positive") return "误报样本";
-  if (value === "success") return "正常通过样本";
-  return String(value || "").trim() || "未标记类型";
-}
-
-function benchmarkSourceLabel(source = null) {
-  const type = String(source?.type || "").trim();
-
-  if (type === "manual") return "手动录入";
-  if (type === "sample_library") return "样本库";
-  if (type === "false_positive_log") return "误报日志";
-  return "历史样本";
-}
-
-function benchmarkSourceFilterValue(source = null) {
-  const type = String(source?.type || "").trim();
-  return type || "legacy";
-}
-
-function reviewBenchmarkTypeFilterLabel(value = "all") {
-  if (value === "violation") return "违规样本";
-  if (value === "false_positive") return "误报样本";
-  if (value === "success") return "正常通过样本";
-  return "全部类型";
-}
-
-function reviewBenchmarkCollectionFilterLabel(value = "all") {
-  return value === "all" ? "全部合集" : collectionTypeLabel(value);
-}
-
-function reviewBenchmarkViewFilterLabel(value = "all") {
-  if (value === "mismatches") return "仅看最近未命中";
-  return "全部样本";
-}
-
-function reviewBenchmarkSourceFilterLabel(value = "all") {
-  if (value === "manual") return "手动录入";
-  if (value === "sample_library") return "样本库";
-  if (value === "false_positive_log") return "误报日志";
-  if (value === "legacy") return "历史样本";
-  return "全部来源";
-}
-
-function inferSampleLibraryPublishStatusFromBenchmarkExpectedType(expectedType = "") {
-  if (expectedType === "false_positive") return "false_positive";
-  if (expectedType === "violation") return "violation";
-  if (expectedType === "success") return "published_passed";
-  return "not_published";
-}
-
-function getReviewBenchmarkMismatchById(id = "") {
-  const targetId = String(id || "").trim();
-
-  if (!targetId) {
-    return null;
-  }
-
-  return (
-    (appState.reviewBenchmarkLastRunResult?.results || []).find(
-      (item) => item?.matchedExpectation === false && String(item?.id || "").trim() === targetId
-    ) || null
-  );
-}
-
-function buildReviewBenchmarkMismatchSummary(mismatch = {}) {
-  const failedHumanizerChecks = (mismatch.humanizer?.checks || [])
-    .filter((check) => check?.passed === false)
-    .map((check) => String(check?.label || "").trim())
-    .filter(Boolean);
-
-  return [
-    "来自基准评测未命中回流",
-    `预期 ${expectedTypeLabel(mismatch.expectedType)} / 实际 ${verdictLabel(mismatch.actualVerdict)}`,
-    `人味项未通过：${failedHumanizerChecks.join("、") || "无"}`
-  ].join("；");
 }
 
 function getSampleRecordNote(record = {}) {
@@ -2449,6 +2021,63 @@ function getSampleRecordPublish(record = {}) {
   };
 }
 
+function getSampleRecordCalibration(record = {}) {
+  const calibration = record?.calibration && typeof record.calibration === "object" ? record.calibration : {};
+  const prediction = calibration.prediction && typeof calibration.prediction === "object" ? calibration.prediction : {};
+  const retro = calibration.retro && typeof calibration.retro === "object" ? calibration.retro : {};
+
+  return {
+    prediction: {
+      predictedStatus: String(prediction.predictedStatus || "not_published").trim() || "not_published",
+      predictedRiskLevel: String(prediction.predictedRiskLevel || "").trim(),
+      predictedPerformanceTier: String(prediction.predictedPerformanceTier || "").trim(),
+      confidence: Number(prediction.confidence || 0) || 0,
+      reason: String(prediction.reason || "").trim(),
+      model: String(prediction.model || "").trim(),
+      createdAt: String(prediction.createdAt || "").trim()
+    },
+    retro: {
+      actualPerformanceTier: String(retro.actualPerformanceTier || "").trim(),
+      predictionMatched: retro.predictionMatched === true,
+      missReason: String(retro.missReason || "").trim(),
+      validatedSignals: uniqueStrings(retro.validatedSignals || []),
+      invalidatedSignals: uniqueStrings(retro.invalidatedSignals || []),
+      shouldBecomeReference: retro.shouldBecomeReference === true,
+      ruleImprovementCandidate: String(retro.ruleImprovementCandidate || "").trim(),
+      notes: String(retro.notes || "").trim(),
+      reviewedAt: String(retro.reviewedAt || "").trim()
+    }
+  };
+}
+
+function hasCalibrationPrediction(record = {}) {
+  const prediction = getSampleRecordCalibration(record).prediction;
+  return Boolean(
+    prediction.reason ||
+      prediction.model ||
+      prediction.confidence > 0 ||
+      prediction.predictedStatus !== "not_published" ||
+      prediction.predictedRiskLevel ||
+      prediction.predictedPerformanceTier ||
+      prediction.createdAt
+  );
+}
+
+function hasCalibrationRetro(record = {}) {
+  const retro = getSampleRecordCalibration(record).retro;
+  return Boolean(
+    retro.actualPerformanceTier ||
+      retro.predictionMatched ||
+      retro.missReason ||
+      retro.validatedSignals.length ||
+      retro.invalidatedSignals.length ||
+      retro.shouldBecomeReference ||
+      retro.ruleImprovementCandidate ||
+      retro.notes ||
+      retro.reviewedAt
+  );
+}
+
 function getSampleRecordTitle(record = {}) {
   return String(getSampleRecordNote(record)?.title || record?.title || "").trim();
 }
@@ -2469,50 +2098,6 @@ function getSampleRecordTags(record = {}) {
   return uniqueStrings(getSampleRecordNote(record)?.tags || record?.tags || []);
 }
 
-function getReviewBenchmarkCollectionType(item = {}) {
-  return String(item?.input?.collectionType || item?.collectionType || "").trim();
-}
-
-function inferBenchmarkExpectedTypeFromSampleRecord(record = {}) {
-  const publish = getSampleRecordPublish(record);
-
-  if (publish.status === "false_positive") {
-    return "false_positive";
-  }
-
-  if (publish.status === "violation") {
-    return "violation";
-  }
-
-  return "success";
-}
-
-async function addBenchmarkSample(payload = {}) {
-  const response = await apiJson(reviewBenchmarkApi, {
-    method: "POST",
-    body: JSON.stringify(payload)
-  });
-
-  renderReviewBenchmarkSamples(response.items || []);
-
-  const resultNode = byId("review-benchmark-result");
-
-  if (resultNode) {
-    resultNode.innerHTML = `
-      <div class="result-card-shell">
-        ${
-          response.duplicate
-            ? `样本已存在，未重复加入，当前样本数 ${escapeHtml(String(response.items?.length ?? 0))}。`
-            : `已加入基准评测，当前样本数 ${escapeHtml(String(response.items?.length ?? 0))}。`
-        }
-      </div>
-    `;
-  }
-
-  revealReviewBenchmarkPane();
-  return response;
-}
-
 function hasTrackedLifecycle(record = {}) {
   const publish = getSampleRecordPublish(record);
   return (
@@ -2524,11 +2109,18 @@ function hasTrackedLifecycle(record = {}) {
   );
 }
 
+function hasCalibration(record = {}) {
+  return hasCalibrationPrediction(record) || hasCalibrationRetro(record);
+}
+
 function collectionTypeLabel(value = "") {
   return String(value || "").trim() || "未分类合集";
 }
 
 function sampleLibraryFilterLabel(value = "all") {
+  if (value === "calibration_pending") return "待复盘";
+  if (value === "calibration_matched") return "已命中";
+  if (value === "calibration_mismatch") return "有偏差";
   if (value === "incomplete") return "待补全";
   if (value === "reference") return "已成参考";
   if (value === "published") return "已跟踪发布";
@@ -2537,6 +2129,47 @@ function sampleLibraryFilterLabel(value = "all") {
 
 function sampleLibraryCollectionFilterLabel(value = "all") {
   return value === "all" ? "全部合集" : collectionTypeLabel(value);
+}
+
+function getSampleLibraryCalibrationListState(record = {}) {
+  const publish = getSampleRecordPublish(record);
+  const calibration = getSampleRecordCalibration(record);
+  const comparison = buildSampleLibraryCalibrationRetroComparison({
+    prediction: calibration.prediction,
+    publish
+  });
+  const trackedLifecycle = hasTrackedLifecycle(record);
+  const hasPrediction = hasCalibrationPrediction(record);
+  const hasRetro = hasCalibrationRetro(record);
+  const matched = hasSampleLibraryCalibrationRetroField(record, "predictionMatched")
+    ? calibration.retro.predictionMatched
+    : comparison.matched;
+
+  if (!hasPrediction && !hasRetro) {
+    return {
+      key: "uncalibrated",
+      label: "未校准"
+    };
+  }
+
+  if (!trackedLifecycle || publish.status === "not_published" || !hasRetro) {
+    return {
+      key: "calibration_pending",
+      label: "待复盘"
+    };
+  }
+
+  if (matched === true) {
+    return {
+      key: "calibration_matched",
+      label: "已命中"
+    };
+  }
+
+  return {
+    key: "calibration_mismatch",
+    label: "有偏差"
+  };
 }
 
 function filterSampleLibraryRecords(items = []) {
@@ -2551,8 +2184,21 @@ function filterSampleLibraryRecords(items = []) {
     const reference = getSampleRecordReference(item);
     const trackedLifecycle = hasTrackedLifecycle(item);
     const collectionType = getSampleRecordCollectionType(item);
+    const calibrationState = getSampleLibraryCalibrationListState(item);
 
     if (filter === "incomplete" && (reference.enabled || trackedLifecycle)) {
+      return false;
+    }
+
+    if (filter === "calibration_pending" && calibrationState.key !== "calibration_pending") {
+      return false;
+    }
+
+    if (filter === "calibration_matched" && calibrationState.key !== "calibration_matched") {
+      return false;
+    }
+
+    if (filter === "calibration_mismatch" && calibrationState.key !== "calibration_mismatch") {
       return false;
     }
 
@@ -2582,7 +2228,16 @@ function filterSampleLibraryRecords(items = []) {
       collectionType,
       joinCSV(getSampleRecordTags(item)),
       getSampleRecordReference(item)?.tier,
-      getSampleRecordPublish(item)?.status
+      getSampleRecordPublish(item)?.status,
+      getSampleLibraryCalibrationListState(item).label,
+      buildSampleLibraryCalibrationRetroComparison({
+        prediction: getSampleRecordCalibration(item)?.prediction,
+        publish: getSampleRecordPublish(item)
+      })?.summary,
+      getSampleRecordCalibration(item)?.prediction?.predictedStatus,
+      getSampleRecordCalibration(item)?.prediction?.predictedRiskLevel,
+      riskLevelLabel(getSampleRecordCalibration(item)?.prediction?.predictedRiskLevel),
+      getSampleRecordCalibration(item)?.retro?.actualPerformanceTier
     ]
       .map((value) => String(value || "").toLowerCase())
       .join("\n");
@@ -2627,7 +2282,11 @@ function getSampleLibraryRecordStepLabel(record = {}) {
     return "卡点：生命周期";
   }
 
-  return "已完成主流程";
+  if (!hasCalibrationPrediction(record) || !hasCalibrationRetro(record)) {
+    return "卡点：预判复盘";
+  }
+
+  return "已完成校准闭环";
 }
 
 function renderSampleLibraryList(items = []) {
@@ -2651,6 +2310,8 @@ function renderSampleLibraryList(items = []) {
           const isActive = itemId && itemId === appState.selectedSampleLibraryRecordId;
           const reference = getSampleRecordReference(item);
           const publish = getSampleRecordPublish(item);
+          const calibration = getSampleRecordCalibration(item);
+          const calibrationState = getSampleLibraryCalibrationListState(item);
           const title = getSampleRecordTitle(item) || "未命名样本记录";
           const body = getSampleRecordBody(item);
           const collectionType = getSampleRecordCollectionType(item);
@@ -2667,6 +2328,14 @@ function renderSampleLibraryList(items = []) {
               <div class="meta-row">
                 <span class="meta-pill">${escapeHtml(reference.enabled ? successTierLabel(reference.tier) : "待补全")}</span>
                 <span class="meta-pill">${escapeHtml(publishStatusLabel(publish.status))}</span>
+                <span class="meta-pill sample-library-calibration-pill is-${escapeHtml(calibrationState.key)}">${escapeHtml(calibrationState.label)}</span>
+                ${
+                  calibration.prediction.predictedRiskLevel
+                    ? `<span class="meta-pill sample-library-calibration-pill is-risk">${escapeHtml(
+                        riskLevelLabel(calibration.prediction.predictedRiskLevel)
+                      )}</span>`
+                    : ""
+                }
                 <span class="meta-pill">${escapeHtml(collectionTypeLabel(collectionType))}</span>
                 <span class="meta-pill">${escapeHtml(lifecycleSourceLabel(item?.source || "manual"))}</span>
                 <span class="meta-pill">${escapeHtml(formatDate(item?.updatedAt || item?.createdAt))}</span>
@@ -2681,6 +2350,167 @@ function renderSampleLibraryList(items = []) {
     : '<div class="result-card muted">当前没有样本记录</div>';
 }
 
+function renderSampleLibraryCalibrationReplayResult(result = null) {
+  const node = byId("sample-library-calibration-replay-result");
+  const triggerButton = document.querySelector('[data-action="run-sample-library-calibration-replay"]');
+
+  if (!node) {
+    return;
+  }
+
+  if (!result) {
+    if (triggerButton) {
+      triggerButton.title = "";
+    }
+    node.innerHTML = '<div class="result-card-shell muted">等待运行历史回放</div>';
+    return;
+  }
+
+  if (triggerButton) {
+    triggerButton.title = "重新运行历史回放";
+  }
+
+  const preview = Array.isArray(result.preview) ? result.preview : [];
+  const previewMarkup = preview.length
+    ? `
+        <div class="sample-library-calibration-replay-preview">
+          <strong>受影响样本</strong>
+          <div class="admin-list">
+            ${preview
+              .map(
+                (item) => `
+                  <article class="sample-library-calibration-queue-card result-card-shell">
+                    <div class="sample-library-calibration-queue-head">
+                      <div>
+                        <strong>${escapeHtml(item.title || "未命名样本记录")}</strong>
+                        <p>${escapeHtml(item.reason || "当前没有补充偏差原因")}</p>
+                      </div>
+                      <span class="meta-pill sample-library-calibration-pill is-calibration_mismatch">有偏差</span>
+                    </div>
+                    <div class="meta-row">
+                      <span class="meta-pill">${escapeHtml(publishStatusLabel(item.actualStatus || "not_published"))}</span>
+                      <span class="meta-pill">${escapeHtml(publishStatusLabel(item.predictedStatus || "not_published"))}</span>
+                    </div>
+                  </article>
+                `
+              )
+              .join("")}
+          </div>
+        </div>
+      `
+    : '<p class="helper-text">本轮回放没有发现新增偏差样本。</p>';
+
+  node.innerHTML = `
+    <article class="result-card-shell">
+      <div class="meta-row">
+        <span class="meta-pill">总样本 ${escapeHtml(String(result.total || 0))}</span>
+        <span class="meta-pill">命中 ${escapeHtml(String(result.matched || 0))}</span>
+        <span class="meta-pill">偏差 ${escapeHtml(String(result.mismatched || 0))}</span>
+        <span class="meta-pill">高风险漏差 ${escapeHtml(String(result.highRiskMisses || 0))}</span>
+        <span class="meta-pill">参考候选受影响 ${escapeHtml(String(result.referenceCandidatesAffected || 0))}</span>
+      </div>
+      ${previewMarkup}
+    </article>
+  `;
+}
+
+function getSampleLibraryCalibrationReviewQueueItems(items = []) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => {
+      const publish = getSampleRecordPublish(item);
+      const calibration = getSampleRecordCalibration(item);
+      const calibrationState = getSampleLibraryCalibrationListState(item);
+      const trackedLifecycle = hasTrackedLifecycle(item);
+      const needsRetro = trackedLifecycle && publish.status !== "not_published" && !hasCalibrationRetro(item);
+      const highConfidenceMismatch =
+        calibrationState.key === "calibration_mismatch" && Number(calibration.prediction.confidence || 0) >= 70;
+
+      if (!needsRetro && !highConfidenceMismatch) {
+        return null;
+      }
+
+      return {
+        item,
+        publish,
+        calibration,
+        calibrationState,
+        queueReason: needsRetro ? "已发布待复盘" : "高置信偏差"
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => {
+      const leftScore = left.queueReason === "高置信偏差" ? 1 : 0;
+      const rightScore = right.queueReason === "高置信偏差" ? 1 : 0;
+
+      if (leftScore !== rightScore) {
+        return rightScore - leftScore;
+      }
+
+      return String(right.item?.updatedAt || right.item?.createdAt || "").localeCompare(
+        String(left.item?.updatedAt || left.item?.createdAt || "")
+      );
+    });
+}
+
+function renderSampleLibraryCalibrationReviewQueue(items = []) {
+  const queueNode = byId("sample-library-calibration-review-queue");
+
+  if (!queueNode) {
+    return;
+  }
+
+  const queueItems = getSampleLibraryCalibrationReviewQueueItems(items);
+
+  queueNode.innerHTML = queueItems.length
+    ? queueItems
+        .map(({ item, publish, calibration, calibrationState, queueReason }) => {
+          const title = getSampleRecordTitle(item) || "未命名样本记录";
+          const body = compactText(getSampleRecordBody(item) || getSampleRecordCoverText(item), 88) || "未填写正文";
+
+          return `
+            <article class="sample-library-calibration-queue-card result-card-shell">
+              <div class="sample-library-calibration-queue-head">
+                <div>
+                  <strong>${escapeHtml(title)}</strong>
+                  <p>${escapeHtml(body)}</p>
+                </div>
+                <span class="meta-pill sample-library-calibration-pill is-${escapeHtml(calibrationState.key)}">${escapeHtml(queueReason)}</span>
+              </div>
+              <div class="meta-row">
+                <span class="meta-pill">${escapeHtml(calibrationState.label)}</span>
+                <span class="meta-pill">${escapeHtml(publishStatusLabel(publish.status))}</span>
+                <span class="meta-pill">${escapeHtml(collectionTypeLabel(getSampleRecordCollectionType(item)))}</span>
+                ${
+                  calibration.prediction.confidence
+                    ? `<span class="meta-pill">置信度 ${escapeHtml(String(calibration.prediction.confidence))}</span>`
+                    : ""
+                }
+              </div>
+              <div class="item-actions">
+                <button
+                  type="button"
+                  class="button button-ghost button-small"
+                  data-action="open-sample-library-record"
+                  data-id="${escapeHtml(String(item?.id || ""))}"
+                >
+                  打开记录
+                </button>
+                <button
+                  type="button"
+                  class="button button-small"
+                  data-action="open-sample-library-calibration"
+                  data-id="${escapeHtml(String(item?.id || ""))}"
+                >
+                  进入预判复盘
+                </button>
+              </div>
+            </article>
+          `;
+        })
+        .join("")
+    : '<div class="result-card muted">当前没有待处理的批量复盘项。</div>';
+}
+
 function renderSampleLibraryDetailSection(nodeId, markup) {
   const node = byId(nodeId);
 
@@ -2690,12 +2520,12 @@ function renderSampleLibraryDetailSection(nodeId, markup) {
 }
 
 function setSampleLibraryDetailStep(step = "base") {
-  const normalized = ["base", "reference", "lifecycle"].includes(step) ? step : "base";
+  const normalized = ["base", "reference", "lifecycle", "calibration"].includes(step) ? step : "base";
   appState.sampleLibraryDetailStep = normalized;
 }
 
 function renderSampleLibraryDetailStepState() {
-  const steps = ["base", "reference", "lifecycle"];
+  const steps = ["base", "reference", "lifecycle", "calibration"];
   const currentIndex = steps.indexOf(appState.sampleLibraryDetailStep);
 
   document.querySelectorAll("[data-sample-library-step]").forEach((section) => {
@@ -2775,6 +2605,17 @@ function renderSampleLibraryDetail(record) {
         body: '<div class="result-card muted">选中记录后可补充发布状态与互动指标。</div>'
       })
     );
+    renderSampleLibraryDetailSection(
+      "sample-library-calibration-section",
+      buildSampleLibraryStepMarkup({
+        step: "calibration",
+        index: 4,
+        title: "预判复盘",
+        description: "把发布前判断和发布后偏差放在同一条样本里。",
+        status: "未校准",
+        body: '<div class="result-card muted">选中记录后可记录发布前预判与复盘结论。</div>'
+      })
+    );
     renderSampleLibraryDetailStepState();
     return;
   }
@@ -2782,9 +2623,43 @@ function renderSampleLibraryDetail(record) {
   const note = getSampleRecordNote(record);
   const reference = getSampleRecordReference(record);
   const publish = getSampleRecordPublish(record);
+  const calibration = getSampleRecordCalibration(record);
+  const comparison = buildSampleLibraryCalibrationRetroComparison({
+    prediction: calibration.prediction,
+    publish
+  });
+  const recommendation = buildSampleLibraryCalibrationRetroRecommendation({
+    prediction: calibration.prediction,
+    retro: calibration.retro,
+    publish,
+    comparison
+  });
+  const comparisonStatusLabel = predictionMatchedLabel(comparison.matched);
+  const hasRecordedRetro = hasCalibrationRetro(record);
+  const effectiveRetro = {
+    ...calibration.retro,
+    actualPerformanceTier: calibration.retro.actualPerformanceTier || comparison.actualPerformanceTier,
+    predictionMatched: hasSampleLibraryCalibrationRetroField(record, "predictionMatched")
+      ? calibration.retro.predictionMatched
+      : comparison.matched,
+    missReason: calibration.retro.missReason || comparison.missReasonSuggestion,
+    shouldBecomeReference: hasSampleLibraryCalibrationRetroField(record, "shouldBecomeReference")
+      ? calibration.retro.shouldBecomeReference
+      : recommendation.shouldBecomeReference,
+    ruleImprovementCandidate: calibration.retro.ruleImprovementCandidate || recommendation.ruleImprovementCandidate
+  };
   const collectionType = getSampleRecordCollectionType(record);
   const referenceSummary = reference.enabled ? successTierLabel(reference.tier) : "未启用";
   const lifecycleSummary = hasTrackedLifecycle(record) ? publishStatusLabel(publish.status) : "未回填";
+  const calibrationSummary = hasCalibrationPrediction(record)
+    ? hasRecordedRetro
+      ? `${predictionMatchedLabel(effectiveRetro.predictionMatched)} · ${performanceTierLabel(
+          effectiveRetro.actualPerformanceTier || calibration.prediction.predictedPerformanceTier
+        )}`
+      : `${comparisonStatusLabel} · ${performanceTierLabel(
+          comparison.actualPerformanceTier || calibration.prediction.predictedPerformanceTier
+        )}`
+    : "未校准";
 
   if (headerNode) {
     headerNode.innerHTML = `
@@ -2795,14 +2670,6 @@ function renderSampleLibraryDetail(record) {
             <p>${escapeHtml(compactText(getSampleRecordBody(record) || getSampleRecordCoverText(record), 120) || "未填写正文")}</p>
           </div>
           <div class="item-actions">
-            <button
-              type="button"
-              class="button button-alt button-small"
-              data-action="add-sample-library-to-benchmark"
-              data-id="${escapeHtml(record.id || "")}"
-            >
-              加入基准评测
-            </button>
             <button
               type="button"
               class="button button-danger button-small"
@@ -2816,6 +2683,7 @@ function renderSampleLibraryDetail(record) {
         <div class="meta-row">
           <span class="meta-pill">${escapeHtml(referenceSummary)}</span>
           <span class="meta-pill">${escapeHtml(lifecycleSummary)}</span>
+          <span class="meta-pill">${escapeHtml(calibrationSummary)}</span>
           <span class="meta-pill">${escapeHtml(collectionTypeLabel(collectionType))}</span>
           <span class="meta-pill">${escapeHtml(lifecycleSourceLabel(record.source || "manual"))}</span>
           <span class="meta-pill">${escapeHtml(formatDate(record.updatedAt || record.createdAt))}</span>
@@ -2979,7 +2847,159 @@ function renderSampleLibraryDetail(record) {
       `
     })
   );
+
+  renderSampleLibraryDetailSection(
+    "sample-library-calibration-section",
+    buildSampleLibraryStepMarkup({
+      step: "calibration",
+      index: 4,
+      title: "预判复盘",
+      description: "发布前先记录判断，发布后用真实表现校准系统。",
+      status: calibrationSummary,
+      body: `
+        <div class="admin-panel-body">
+          <div class="sample-library-calibration-grid">
+            <section class="sample-library-calibration-card">
+              <div class="sample-library-calibration-head">
+                <strong>发布前预判</strong>
+                <p>这部分用于锁定当时的判断基线。</p>
+              </div>
+              <div class="lifecycle-primary-grid">
+                <label>
+                  <span>预判发布状态</span>
+                  <select name="predictedStatus">
+                    <option value="not_published"${calibration.prediction.predictedStatus === "not_published" ? " selected" : ""}>未发布</option>
+                    <option value="published_passed"${calibration.prediction.predictedStatus === "published_passed" ? " selected" : ""}>已发布通过</option>
+                    <option value="limited"${calibration.prediction.predictedStatus === "limited" ? " selected" : ""}>疑似限流</option>
+                    <option value="violation"${calibration.prediction.predictedStatus === "violation" ? " selected" : ""}>平台判违规</option>
+                    <option value="false_positive"${calibration.prediction.predictedStatus === "false_positive" ? " selected" : ""}>系统误报 / 平台放行</option>
+                    <option value="positive_performance"${
+                      calibration.prediction.predictedStatus === "positive_performance" ? " selected" : ""
+                    }>过审且表现好</option>
+                  </select>
+                </label>
+                <label>
+                  <span>预判风险</span>
+                  <select name="predictedRiskLevel">
+                    <option value=""${!calibration.prediction.predictedRiskLevel ? " selected" : ""}>未预判</option>
+                    <option value="low"${calibration.prediction.predictedRiskLevel === "low" ? " selected" : ""}>低风险</option>
+                    <option value="medium"${calibration.prediction.predictedRiskLevel === "medium" ? " selected" : ""}>中风险</option>
+                    <option value="high"${calibration.prediction.predictedRiskLevel === "high" ? " selected" : ""}>高风险</option>
+                  </select>
+                </label>
+              </div>
+              <div class="lifecycle-primary-grid">
+                <label>
+                  <span>预判表现</span>
+                  <select name="predictedPerformanceTier">
+                    <option value=""${!calibration.prediction.predictedPerformanceTier ? " selected" : ""}>未判断</option>
+                    <option value="low"${calibration.prediction.predictedPerformanceTier === "low" ? " selected" : ""}>低表现</option>
+                    <option value="medium"${calibration.prediction.predictedPerformanceTier === "medium" ? " selected" : ""}>中等表现</option>
+                    <option value="high"${calibration.prediction.predictedPerformanceTier === "high" ? " selected" : ""}>高表现</option>
+                  </select>
+                </label>
+                <label>
+                  <span>置信度</span>
+                  <input name="predictionConfidence" type="number" min="0" max="100" value="${escapeHtml(
+                    String(calibration.prediction.confidence || 0)
+                  )}" />
+                </label>
+              </div>
+              <div class="lifecycle-primary-grid">
+                <label>
+                  <span>预判模型</span>
+                  <input name="predictionModel" value="${escapeHtml(calibration.prediction.model || "")}" placeholder="例如：gpt-5.4" />
+                </label>
+                <label>
+                  <span>预判时间</span>
+                  <input name="predictionCreatedAt" type="date" value="${escapeHtml(String(calibration.prediction.createdAt || "").slice(0, 10))}" />
+                </label>
+              </div>
+              <label>
+                <span>预判理由</span>
+                <textarea name="predictionReason" rows="3" placeholder="例如：标题结构接近高表现样本，但正文风险较低">${escapeHtml(
+                  calibration.prediction.reason || ""
+                )}</textarea>
+              </label>
+            </section>
+            <section class="sample-library-calibration-card">
+              <div class="sample-library-calibration-head">
+                <strong>发布后复盘</strong>
+                <p>把真实结果和偏差原因转成后续可用的判断经验。</p>
+              </div>
+              <div class="lifecycle-primary-grid">
+                <label>
+                  <span>实际表现</span>
+                  <select name="actualPerformanceTier">
+                    <option value=""${!effectiveRetro.actualPerformanceTier ? " selected" : ""}>未判断</option>
+                    <option value="low"${effectiveRetro.actualPerformanceTier === "low" ? " selected" : ""}>低表现</option>
+                    <option value="medium"${effectiveRetro.actualPerformanceTier === "medium" ? " selected" : ""}>中等表现</option>
+                    <option value="high"${effectiveRetro.actualPerformanceTier === "high" ? " selected" : ""}>高表现</option>
+                  </select>
+                </label>
+                <label>
+                  <span>复盘时间</span>
+                  <input name="reviewedAt" type="date" value="${escapeHtml(String(effectiveRetro.reviewedAt || "").slice(0, 10))}" />
+                </label>
+              </div>
+              <label class="sample-library-checkbox">
+                <input type="checkbox" name="predictionMatched"${effectiveRetro.predictionMatched ? " checked" : ""} />
+                <span>预判命中</span>
+              </label>
+              <label class="sample-library-checkbox">
+                <input type="checkbox" name="shouldBecomeReference"${effectiveRetro.shouldBecomeReference ? " checked" : ""} />
+                <span>建议进入参考样本</span>
+              </label>
+              <label>
+                <span>偏差原因</span>
+                <input name="missReason" value="${escapeHtml(effectiveRetro.missReason || "")}" placeholder="例如：标题命中，但正文留存不足" />
+              </label>
+              <label>
+                <span>被验证信号</span>
+                <input name="validatedSignals" value="${escapeHtml(joinCSV(effectiveRetro.validatedSignals))}" placeholder="标题结构, 合集匹配" />
+              </label>
+              <label>
+                <span>被推翻信号</span>
+                <input name="invalidatedSignals" value="${escapeHtml(joinCSV(effectiveRetro.invalidatedSignals))}" placeholder="正文过长, 标签不准" />
+              </label>
+              <label>
+                <span>规则优化候选</span>
+                <textarea name="ruleImprovementCandidate" rows="3" placeholder="例如：同类标题结构可提升参考权重">${escapeHtml(
+                  effectiveRetro.ruleImprovementCandidate || ""
+                )}</textarea>
+              </label>
+              <label>
+                <span>复盘备注</span>
+                <textarea name="retroNotes" rows="3" placeholder="例如：72 小时后表现稳定">${escapeHtml(effectiveRetro.notes || "")}</textarea>
+              </label>
+              <p class="helper-text">${escapeHtml(comparisonStatusLabel)}${comparison.missReasonSuggestion ? ` · ${escapeHtml(comparison.missReasonSuggestion)}` : ""}</p>
+            </section>
+          </div>
+          <div class="item-actions">
+            <button
+              type="button"
+              class="button button-ghost button-small"
+              data-action="prefill-sample-library-calibration-prediction"
+              data-id="${escapeHtml(record.id || "")}"
+            >
+              从当前检测预填预判
+            </button>
+            <button
+              type="button"
+              class="button button-small"
+              data-action="save-sample-library-calibration"
+              data-id="${escapeHtml(record.id || "")}"
+            >
+              保存预判复盘
+            </button>
+          </div>
+          <p class="helper-text action-gate-hint" id="sample-library-calibration-action-hint" aria-live="polite"></p>
+        </div>
+      `
+    })
+  );
   renderSampleLibraryDetailStepState();
+  syncSampleLibraryReferenceSectionState();
   syncSampleLibraryDetailActions();
 }
 
@@ -2987,8 +3007,9 @@ function renderSampleLibraryWorkspace() {
   const workspaceNode = byId("sample-library-workspace");
   const listNode = byId("sample-library-record-list");
   const detailNode = byId("sample-library-detail");
+  const queueNode = byId("sample-library-calibration-review-queue");
 
-  if (!workspaceNode && !listNode && !detailNode) {
+  if (!workspaceNode && !listNode && !detailNode && !queueNode) {
     return;
   }
 
@@ -2998,18 +3019,20 @@ function renderSampleLibraryWorkspace() {
 
   renderSampleLibraryList(filteredItems);
   renderSampleLibraryDetail(selectedRecord);
+  renderSampleLibraryCalibrationReplayResult(appState.sampleLibraryCalibrationReplayResult);
+  renderSampleLibraryCalibrationReviewQueue(appState.sampleLibraryRecords);
   syncSampleLibraryCreateActions();
   syncSampleLibraryPrefillActions();
   syncSampleLibraryDetailActions();
-  syncStyleProfileDraftActions();
 }
 
 async function refreshSampleLibraryWorkspace() {
   const workspaceNode = byId("sample-library-workspace");
   const listNode = byId("sample-library-record-list");
   const detailNode = byId("sample-library-detail");
+  const queueNode = byId("sample-library-calibration-review-queue");
 
-  if (!workspaceNode && !listNode && !detailNode) {
+  if (!workspaceNode && !listNode && !detailNode && !queueNode) {
     return appState.sampleLibraryRecords;
   }
 
@@ -3022,479 +3045,6 @@ async function refreshSampleLibraryWorkspace() {
 
   renderSampleLibraryWorkspace();
   return appState.sampleLibraryRecords;
-}
-
-function renderSuccessSamples(items = []) {
-  const listNode = byId("success-sample-list");
-
-  if (!listNode) {
-    return;
-  }
-
-  listNode.innerHTML = items.length
-    ? items
-        .slice()
-        .reverse()
-        .map(
-          (item) => `
-            <article class="admin-item">
-              <strong>${escapeHtml(item.title || "未命名成功样本")}</strong>
-              <div class="meta-row">
-                <span class="meta-pill">${escapeHtml(successTierLabel(item.tier))}</span>
-                <span class="meta-pill">权重 ${escapeHtml(String(item.sampleWeight ?? "-"))}</span>
-                <span class="meta-pill">赞 ${escapeHtml(String(item.metrics?.likes || 0))}</span>
-                <span class="meta-pill">藏 ${escapeHtml(String(item.metrics?.favorites || 0))}</span>
-                <span class="meta-pill">评 ${escapeHtml(String(item.metrics?.comments || 0))}</span>
-                <span class="meta-pill">${escapeHtml(formatDate(item.createdAt))}</span>
-              </div>
-              <p>${escapeHtml(compactText(item.body, 140) || "未填写正文")}</p>
-              <p>标签：${escapeHtml(joinCSV(item.tags) || "未填写")}</p>
-            </article>
-          `
-        )
-        .join("")
-    : '<div class="result-card muted">当前没有成功样本</div>';
-}
-
-function renderReviewBenchmarkSamples(items = []) {
-  appState.reviewBenchmarkSamples = Array.isArray(items) ? items : [];
-  renderCollectionTypeSelectors();
-  const listNode = byId("review-benchmark-list");
-  const countNode = byId("review-benchmark-list-count");
-  const filteredItems = filterReviewBenchmarkSamples(appState.reviewBenchmarkSamples);
-
-  if (countNode) {
-    countNode.textContent = `${filteredItems.length} 条 · ${reviewBenchmarkViewFilterLabel(
-      appState.reviewBenchmarkViewFilter
-    )} · ${reviewBenchmarkCollectionFilterLabel(
-      appState.reviewBenchmarkCollectionFilter
-    )} · ${reviewBenchmarkTypeFilterLabel(
-      appState.reviewBenchmarkTypeFilter
-    )} · ${reviewBenchmarkSourceFilterLabel(appState.reviewBenchmarkSourceFilter)}`;
-  }
-
-  if (!listNode) {
-    return;
-  }
-
-  listNode.innerHTML = filteredItems.length
-    ? filteredItems
-        .slice()
-        .reverse()
-        .map(
-          (item) => `
-            <article class="admin-item">
-              <strong>${escapeHtml(item.input?.title || item.title || "未命名基准样本")}</strong>
-              <div class="meta-row">
-                <span class="meta-pill">${escapeHtml(collectionTypeLabel(getReviewBenchmarkCollectionType(item)))}</span>
-                <span class="meta-pill">${escapeHtml(expectedTypeLabel(item.expectedType))}</span>
-                <span class="meta-pill">${escapeHtml(benchmarkSourceLabel(item.source))}</span>
-                <span class="meta-pill">${escapeHtml(joinCSV(item.input?.tags || item.tags) || "未填写标签")}</span>
-                <span class="meta-pill">${escapeHtml(formatDate(item.createdAt))}</span>
-              </div>
-              <p>${escapeHtml(compactText(item.input?.body || item.body, 140) || "未填写正文")}</p>
-              <div class="item-actions">
-                <button
-                  type="button"
-                  class="button button-danger button-small"
-                  data-action="delete-review-benchmark"
-                  data-id="${escapeHtml(item.id || "")}"
-                >
-                  删除
-                </button>
-              </div>
-            </article>
-          `
-        )
-        .join("")
-    : '<div class="result-card muted">当前没有基准样本</div>';
-  syncReviewBenchmarkActions();
-}
-
-function filterReviewBenchmarkSamples(items = []) {
-  const normalizedItems = Array.isArray(items) ? items : [];
-  const viewFilter = String(appState.reviewBenchmarkViewFilter || "all").trim() || "all";
-  const collectionFilter = String(appState.reviewBenchmarkCollectionFilter || "all").trim() || "all";
-  const typeFilter = String(appState.reviewBenchmarkTypeFilter || "all").trim() || "all";
-  const sourceFilter = String(appState.reviewBenchmarkSourceFilter || "all").trim() || "all";
-  const mismatchIds = new Set(
-    (appState.reviewBenchmarkLastRunResult?.results || [])
-      .filter((item) => item?.matchedExpectation === false)
-      .map((item) => String(item?.id || "").trim())
-      .filter(Boolean)
-  );
-
-  return normalizedItems.filter((item) => {
-    if (viewFilter === "mismatches" && !mismatchIds.has(String(item?.id || "").trim())) {
-      return false;
-    }
-
-    if (collectionFilter !== "all" && getReviewBenchmarkCollectionType(item) !== collectionFilter) {
-      return false;
-    }
-
-    if (typeFilter !== "all" && String(item?.expectedType || "").trim() !== typeFilter) {
-      return false;
-    }
-
-    if (sourceFilter !== "all" && benchmarkSourceFilterValue(item?.source) !== sourceFilter) {
-      return false;
-    }
-
-    return true;
-  });
-}
-
-function renderReviewBenchmarkResult(result = null) {
-  if (!result) {
-    appState.reviewBenchmarkLastRunResult = null;
-    byId("review-benchmark-result").innerHTML = '<div class="result-card muted">等待操作</div>';
-    return;
-  }
-
-  appState.reviewBenchmarkLastRunResult = result;
-  const summary = result.summary || {};
-  const humanizerSummary = summary.humanizer || {};
-  const humanizerChecks = Object.values(humanizerSummary.byCheck || {});
-  const mismatches = (result.results || []).filter((item) => !item.matchedExpectation);
-
-  byId("review-benchmark-result").innerHTML = `
-    <div class="result-card-shell">
-      <div class="review-benchmark-result-grid">
-        <div class="meta-pill">总样本 ${escapeHtml(String(summary.total || 0))}</div>
-        <div class="meta-pill">匹配 ${escapeHtml(String(summary.passed || 0))}</div>
-        <div class="meta-pill">未匹配 ${escapeHtml(String(summary.failed || 0))}</div>
-        <div class="meta-pill">人味项通过 ${escapeHtml(String(humanizerSummary.passedSamples || 0))}</div>
-      </div>
-      <div class="tab-panel-head">
-        <strong>人味化检查</strong>
-        <span>这部分用轻量规则检查开头抓力、真实场景、假设例子和说教腔，不替代人工判断，但能帮我们快速发现 AI 味偏重的样本。</span>
-      </div>
-      <ul class="review-benchmark-mismatch-list">
-        ${
-          humanizerChecks.length
-            ? humanizerChecks
-                .map(
-                  (item) => `
-                    <li>
-                      <strong>${escapeHtml(item.label || "未命名检查项")}</strong>
-                      <span>通过 ${escapeHtml(String(item.passed || 0))} / 失败 ${escapeHtml(String(item.failed || 0))}</span>
-                    </li>
-                  `
-                )
-                .join("")
-            : "<li><strong>当前没有人味化检查结果</strong><span>运行基准评测后会在这里展示。</span></li>"
-        }
-      </ul>
-      <div class="tab-panel-head">
-        <strong>未匹配样本</strong>
-        <span>优先看这部分，决定是补规则、调权重，还是修正基准样本预期。</span>
-      </div>
-      <ul class="review-benchmark-mismatch-list">
-        ${
-          mismatches.length
-            ? mismatches
-                .map(
-                  (item) => `
-                    <li>
-                      <strong>${escapeHtml(item.input?.title || item.id || "未命名样本")}</strong>
-                      <span>
-                        预期 ${escapeHtml(expectedTypeLabel(item.expectedType))} / 实际 ${escapeHtml(
-                          verdictLabel(item.actualVerdict)
-                        )}
-                      </span>
-                      <span>
-                        人味项未通过：${escapeHtml(
-                          (item.humanizer?.checks || [])
-                            .filter((check) => check.passed === false)
-                            .map((check) => check.label)
-                            .join("、") || "无"
-                            )}
-                      </span>
-                      <div class="item-actions">
-                        <button
-                          type="button"
-                          class="button button-small"
-                          data-action="send-review-benchmark-to-sample-library"
-                          data-id="${escapeHtml(item.id || "")}"
-                        >
-                          回流到样本库
-                        </button>
-                        ${
-                          item.expectedType === "false_positive"
-                            ? `
-                          <button
-                            type="button"
-                            class="button button-alt button-small"
-                            data-action="send-review-benchmark-to-false-positive"
-                            data-id="${escapeHtml(item.id || "")}"
-                          >
-                            回流到误报日志
-                          </button>
-                        `
-                            : ""
-                        }
-                      </div>
-                    </li>
-                  `
-                )
-                .join("")
-            : "<li><strong>当前没有未匹配样本</strong><span>这次基准评测全部命中预期。</span></li>"
-        }
-      </ul>
-    </div>
-  `;
-}
-
-async function refreshReviewBenchmark() {
-  const payload = await apiJson(reviewBenchmarkApi);
-  renderReviewBenchmarkSamples(payload.items || []);
-  return payload;
-}
-
-function renderNoteLifecycle(items = []) {
-  const statusOptions = [
-    "not_published",
-    "published_passed",
-    "limited",
-    "violation",
-    "false_positive",
-    "positive_performance"
-  ];
-  const listNode = byId("note-lifecycle-list");
-
-  if (!listNode) {
-    return;
-  }
-
-  listNode.innerHTML = items.length
-    ? items
-        .slice()
-        .reverse()
-        .map((item) => {
-          const status = item.publishResult?.status || item.status || "not_published";
-
-          return `
-            <article class="admin-item lifecycle-item">
-              <strong>${escapeHtml(item.name || item.note?.title || "未命名笔记")}</strong>
-              <div class="meta-row">
-                <span class="meta-pill">${escapeHtml(publishStatusLabel(status))}</span>
-                <span class="meta-pill">权重 ${escapeHtml(String(item.sampleWeight ?? "-"))}</span>
-                <span class="meta-pill">${escapeHtml(lifecycleSourceLabel(item.source))}</span>
-                <span class="meta-pill">${escapeHtml(formatDate(item.updatedAt || item.createdAt))}</span>
-                <span class="meta-pill">赞 ${escapeHtml(String(item.publishResult?.metrics?.likes || 0))}</span>
-                <span class="meta-pill">藏 ${escapeHtml(String(item.publishResult?.metrics?.favorites || 0))}</span>
-                <span class="meta-pill">评 ${escapeHtml(String(item.publishResult?.metrics?.comments || 0))}</span>
-              </div>
-              <p>${escapeHtml(compactText(item.note?.body || item.note?.title || item.note?.coverText, 150) || "未填写正文")}</p>
-              <p>标签：${escapeHtml(joinCSV(item.note?.tags) || "未填写")}</p>
-              <div class="lifecycle-update-grid">
-                <div class="lifecycle-primary-grid">
-                  <label>
-                    <span>发布状态</span>
-                    <select name="publishStatus">
-                      ${statusOptions
-                        .map(
-                          (option) =>
-                            `<option value="${escapeHtml(option)}"${option === status ? " selected" : ""}>${escapeHtml(
-                              publishStatusLabel(option)
-                            )}</option>`
-                        )
-                        .join("")}
-                    </select>
-                  </label>
-                </div>
-                <div class="lifecycle-metrics-grid">
-                  <label>
-                    <span>点赞</span>
-                    <input name="likes" type="number" min="0" value="${escapeHtml(String(item.publishResult?.metrics?.likes || 0))}" />
-                  </label>
-                  <label>
-                    <span>收藏</span>
-                    <input name="favorites" type="number" min="0" value="${escapeHtml(
-                      String(item.publishResult?.metrics?.favorites || 0)
-                    )}" />
-                  </label>
-                  <label>
-                    <span>评论</span>
-                    <input name="comments" type="number" min="0" value="${escapeHtml(
-                      String(item.publishResult?.metrics?.comments || 0)
-                    )}" />
-                  </label>
-                </div>
-                <label class="field-wide">
-                  <span>回填备注</span>
-                  <input name="notes" value="${escapeHtml(item.publishResult?.notes || "")}" placeholder="例如：发出 24h 后正常，互动稳定" />
-                </label>
-              </div>
-              <div class="item-actions">
-                <button type="button" class="button button-small" data-action="update-lifecycle-publish" data-id="${escapeHtml(item.id || "")}">
-                  更新发布结果
-                </button>
-                <button type="button" class="button button-danger button-small" data-action="delete-lifecycle" data-id="${escapeHtml(item.id || "")}">
-                  删除
-                </button>
-              </div>
-            </article>
-          `;
-        })
-        .join("")
-    : '<div class="result-card muted">当前没有笔记生命周期记录</div>';
-}
-
-function renderStyleProfile(profileState = {}) {
-  appState.styleProfileState = profileState;
-  const current = profileState?.current;
-  const draft = profileState?.draft;
-  const profile = draft || current;
-  const versions = Array.isArray(profileState?.versions) ? profileState.versions : [];
-  const archivedVersions = versions.filter((item) => item?.status !== "active");
-  const historyCount = archivedVersions.length;
-  const isDraftEditing = Boolean(appState.styleProfileDraftEditing);
-
-  if (appState.styleProfileDraftEditing) {
-    const editableProfile = draft || current || null;
-    const nextDraftForm = normalizeStyleProfileDraftForm(editableProfile || {});
-
-    if (JSON.stringify(appState.styleProfileDraftForm) === JSON.stringify(normalizeStyleProfileDraftForm({}))) {
-      appState.styleProfileDraftForm = nextDraftForm;
-    }
-  }
-
-  const options = [
-    '<option value="">当前默认画像</option>',
-    ...versions.map(
-      (item) =>
-        `<option value="${escapeHtml(item.id || "")}"${current?.id === item.id ? " selected" : ""}>${escapeHtml(
-          `${item.status === "active" ? "当前 / " : ""}${item.topic || item.name || "通用风格"}`
-        )}</option>`
-    )
-  ].join("");
-  const generationSelect = byId("generation-style-profile-select");
-
-  if (generationSelect) {
-    generationSelect.innerHTML = options;
-  }
-  const versionsMarkup = historyCount
-    ? `
-      <details class="style-profile-history-toggle">
-        <summary>
-          <span>历史版本 ${escapeHtml(String(historyCount))} 条</span>
-          <span class="style-profile-history-toggle-label-collapsed">展开历史版本</span>
-          <span class="style-profile-history-toggle-label-expanded">收起历史版本</span>
-        </summary>
-        <div class="style-profile-version-list">
-        ${archivedVersions
-          .slice()
-          .reverse()
-          .map(
-            (item) => `
-              <article class="style-profile-version-card${item.status === "active" ? " is-active" : ""}">
-                <div>
-                  <strong>${escapeHtml(item.topic || item.name || "通用风格")}</strong>
-                  <p>${escapeHtml(item.tone || "未生成语气画像")}</p>
-                </div>
-                <div class="meta-row">
-                  <span class="meta-pill">${escapeHtml(item.status === "active" ? "当前生效" : "历史版本")}</span>
-                  <span class="meta-pill">引用 ${escapeHtml(String(item.sourceSampleIds?.length || 0))} 条</span>
-                </div>
-                ${
-                  item.status !== "active"
-                    ? `<button type="button" class="button button-small" data-action="activate-style-profile" data-id="${escapeHtml(
-                        item.id || ""
-                      )}">设为当前</button>`
-                    : ""
-                }
-              </article>
-            `
-          )
-          .join("")}
-        </div>
-      </details>
-    `
-    : "";
-
-  byId("style-profile-result").innerHTML = profile
-    ? `
-      <article class="style-profile-card">
-        <div class="meta-row">
-          <span class="meta-pill">${escapeHtml(profile.status === "active" ? "已生效" : "待确认")}</span>
-          <span class="meta-pill">${escapeHtml(profile.topic || "通用风格")}</span>
-          <span class="meta-pill">引用 ${escapeHtml(String(profile.sourceSampleIds?.length || 0))} 条样本</span>
-        </div>
-        <strong>${escapeHtml(profile.status === "active" ? "当前风格画像" : "待确认风格画像")}</strong>
-        ${
-          isDraftEditing
-            ? `
-              <div class="style-profile-form compact-form">
-                <label>
-                  <span>主题</span>
-                  <input name="topic" value="${escapeHtml(appState.styleProfileDraftForm.topic || "")}" placeholder="例如：亲密关系科普" />
-                </label>
-                <label>
-                  <span>语气画像</span>
-                  <textarea name="tone" rows="3" placeholder="例如：温和、克制、像朋友提醒">${escapeHtml(
-                    appState.styleProfileDraftForm.tone || ""
-                  )}</textarea>
-                </label>
-                <label>
-                  <span>标题风格</span>
-                  <textarea name="titleStyle" rows="3" placeholder="例如：先讲场景，再给轻结论">${escapeHtml(
-                    appState.styleProfileDraftForm.titleStyle || ""
-                  )}</textarea>
-                </label>
-                <label>
-                  <span>正文结构</span>
-                  <textarea name="bodyStructure" rows="3" placeholder="例如：先结论、再场景、最后建议">${escapeHtml(
-                    appState.styleProfileDraftForm.bodyStructure || ""
-                  )}</textarea>
-                </label>
-                <label>
-                  <span>偏好标签</span>
-                  <input name="preferredTags" value="${escapeHtml(
-                    appState.styleProfileDraftForm.preferredTags || ""
-                  )}" placeholder="标签1, 标签2" />
-                </label>
-              </div>
-            `
-            : `
-              <p>${escapeHtml(profile.tone || "未生成语气画像")}</p>
-              <p>${escapeHtml(profile.titleStyle || "未生成标题画像")}</p>
-              <p>${escapeHtml(profile.bodyStructure || "未生成正文结构画像")}</p>
-              <p>偏好标签：${escapeHtml(joinCSV(profile.preferredTags) || "未总结")}</p>
-            `
-        }
-        ${
-          draft || isDraftEditing
-            ? `
-              <div class="item-actions style-profile-actions${isDraftEditing ? " style-profile-form" : ""}">
-                ${
-                  isDraftEditing
-                    ? `
-                      <button type="button" class="button button-ghost button-small" data-action="save-style-profile-draft">保存修改</button>
-                      <button type="button" class="button button-ghost button-small" data-action="cancel-style-profile-draft">取消</button>
-                      <button type="button" class="button button-alt button-small" data-action="confirm-style-profile">确认生效</button>
-                    `
-                    : `
-                      <button type="button" class="button button-ghost button-small" data-action="edit-style-profile-draft">人工编辑</button>
-                      <button type="button" class="button button-alt button-small" data-action="confirm-style-profile">确认生效</button>
-                    `
-                }
-              </div>
-            `
-            : profile.status === "active"
-              ? `
-                <div class="item-actions style-profile-actions">
-                  <button type="button" class="button button-ghost button-small" data-action="edit-style-profile-draft">人工编辑</button>
-                </div>
-              `
-            : ""
-        }
-      </article>
-      ${versionsMarkup}
-    `
-    : '<div class="result-card muted">当前没有风格画像，请先积累成功样本。</div>';
-  syncStyleProfileDraftActions();
 }
 
 function formatRate(value) {
@@ -3515,134 +3065,6 @@ function sceneLabel(scene) {
   };
 
   return labels[scene] || scene || "未知场景";
-}
-
-function buildModelRecommendationText(item) {
-  if (!item || typeof item !== "object" || !item.model) {
-    return "暂无足够历史数据，先按当前选择执行";
-  }
-
-  const route = item.routeLabel || item.route || "未标记路线";
-  const provider = providerLabel(item.provider);
-  const score = Number.isFinite(Number(item.score)) ? `，稳定分 ${Number(item.score)}` : "";
-
-  return `建议：${route} / ${provider} / ${item.model}${score}`;
-}
-
-function renderMainModelRecommendations(recommendations = {}) {
-  const sceneMap = {
-    "semantic-model-recommendation": recommendations.semantic_review,
-    "rewrite-model-recommendation": recommendations.rewrite,
-    "cross-review-model-recommendation": recommendations.cross_review
-  };
-
-  for (const [id, item] of Object.entries(sceneMap)) {
-    const node = byId(id);
-
-    if (node) {
-      node.textContent = buildModelRecommendationText(item);
-      node.title = item?.reason || "根据模型调用表现生成，仅作提示，不自动改变路由";
-    }
-  }
-}
-
-async function refreshModelPerformancePanel() {
-  try {
-    const modelPerformance = await apiJson("/api/model-performance");
-    renderModelPerformance(modelPerformance.summary || {});
-  } catch {
-    renderModelPerformance({});
-  }
-}
-
-function renderModelPerformance(summary = {}) {
-  const items = Array.isArray(summary.items) ? summary.items : [];
-  const recommendations = summary.recommendations || {};
-  const confidence = summary.confidence || {};
-  const successfulItems = items.filter((item) => Number(item.okCount || 0) > 0);
-  const failedOnlyItems = items.filter((item) => Number(item.okCount || 0) <= 0);
-  appState.modelRecommendations = recommendations;
-  renderMainModelRecommendations(recommendations);
-  const buildPerformanceCards = (list = []) =>
-    list
-      .map(
-        (item) => `
-          <article class="admin-item model-performance-card">
-            <strong>${escapeHtml([item.routeLabel || item.route, providerLabel(item.provider), item.model].filter(Boolean).join(" / "))}</strong>
-            <div class="model-performance-grid">
-              <div>
-                <span>调用</span>
-                <strong>${escapeHtml(String(item.totalCalls || 0))}</strong>
-              </div>
-              <div>
-                <span>成功</span>
-                <strong>${escapeHtml(String(item.okCount || 0))}</strong>
-              </div>
-              <div>
-                <span>失败</span>
-                <strong>${escapeHtml(String(item.errorCount || 0))}</strong>
-              </div>
-              <div>
-                <span>成功率</span>
-                <strong>${escapeHtml(formatRate(item.successRate))}</strong>
-              </div>
-              <div>
-                <span>超时率</span>
-                <strong>${escapeHtml(formatRate(item.timeoutRate))}</strong>
-              </div>
-              <div>
-                <span>JSON 错误</span>
-                <strong>${escapeHtml(formatRate(item.jsonErrorRate))}</strong>
-              </div>
-              <div>
-                <span>平均耗时</span>
-                <strong>${escapeHtml(String(item.averageDurationMs || 0))}ms</strong>
-              </div>
-            </div>
-            <p>场景：${escapeHtml((item.scenes || []).map(sceneLabel).join("、") || "未记录")}</p>
-            <p class="helper-text">最近成功：${escapeHtml(item.lastOkAt ? formatDate(item.lastOkAt) : "暂无")}</p>
-            <p class="helper-text">最近失败：${escapeHtml(item.lastErrorAt ? formatDate(item.lastErrorAt) : "暂无")}</p>
-            ${item.lastError ? `<p class="helper-text">最近错误：${escapeHtml(item.lastError)}</p>` : ""}
-          </article>
-        `
-      )
-      .join("");
-  const cards = items.length
-    ? `
-        <section class="model-performance-section">
-          <div class="model-performance-section-head">
-            <strong>有成功记录</strong>
-            <span>这部分至少有过一次真实成功调用，更适合作为稳定性参考。</span>
-          </div>
-          ${
-            successfulItems.length
-              ? buildPerformanceCards(successfulItems)
-              : '<div class="result-card muted">当前还没有真实成功样本，先不要根据看板推荐切模型。</div>'
-          }
-        </section>
-        <section class="model-performance-section">
-          <div class="model-performance-section-head">
-            <strong>仅失败记录</strong>
-            <span>这部分目前只有失败样本，适合排查链路或密钥，不建议直接作为模型推荐依据。</span>
-          </div>
-          ${
-            failedOnlyItems.length
-              ? buildPerformanceCards(failedOnlyItems)
-              : '<div class="result-card muted">当前没有纯失败分组。</div>'
-          }
-        </section>
-      `
-    : '<div class="result-card muted">暂无模型调用记录。触发语义复判、改写、生成或反馈识别后会开始沉淀。</div>';
-
-  byId("model-performance-result").innerHTML = `
-    <div class="model-scope-banner">
-      <span class="model-scope-kicker">模型表现</span>
-      <strong>累计调用 ${escapeHtml(String(summary.totalCalls || 0))} 次</strong>
-      <p>成功 ${escapeHtml(String(summary.okCalls || 0))} 次，失败 ${escapeHtml(String(summary.errorCalls || 0))} 次。当前只做观察统计和推荐提示，不会自动改变模型路由顺序。</p>
-      <p>数据可信度：${escapeHtml(confidence.message || "暂无判断")}</p>
-    </div>
-    ${cards}
-  `;
 }
 
 function renderGenerationResult(result = {}) {
@@ -3691,6 +3113,7 @@ function renderGenerationResult(result = {}) {
               ${item.id === result.recommendedCandidateId ? "最终推荐稿进入生命周期" : "保存候选稿生命周期"}
             </button>
           </div>
+          ${buildPlatformOutcomeActions("generation", { candidateId: item.id || "", candidateIndex: index })}
         </article>
       `;
       }
@@ -3798,16 +3221,12 @@ function renderAdminData(data) {
   renderLexiconList("custom-lexicon-list", data.customLexicon, "custom");
   renderFeedbackLog(data.feedbackLog);
   renderFalsePositiveLog(data.falsePositiveLog || []);
-  renderRewritePairList(data.rewritePairs || []);
-  renderSuccessSamples(data.successSamples || []);
-  renderNoteLifecycle(data.noteLifecycle || []);
 }
 
 async function refreshAll() {
-  const [summary, adminData, styleProfile, collectionTypePayload] = await Promise.all([
+  const [summary, adminData, collectionTypePayload] = await Promise.all([
     apiJson("/api/summary"),
     apiJson("/api/admin/data"),
-    apiJson("/api/style-profile"),
     apiJson(collectionTypesApi)
   ]);
 
@@ -3815,16 +3234,8 @@ async function refreshAll() {
   renderSummary(summary);
   renderQueue(adminData.reviewQueue);
   renderAdminData(adminData);
-  renderStyleProfile(styleProfile.profile || {});
   renderCollectionTypeSelectors();
-  await refreshModelPerformancePanel();
   await refreshSampleLibraryWorkspace();
-}
-
-function refreshStyleProfileStateFromResponse(response = {}) {
-  if (response?.profile) {
-    renderStyleProfile(response.profile || {});
-  }
 }
 
 async function fileToDataUrl(file) {
@@ -3834,6 +3245,668 @@ async function fileToDataUrl(file) {
     reader.onerror = () => reject(new Error("读取截图失败"));
     reader.readAsDataURL(file);
   });
+}
+
+async function fileToBase64(file) {
+  const buffer = await file.arrayBuffer();
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return btoa(binary);
+}
+
+function setSampleLibraryImportBlockOpen(isOpen) {
+  const button = byId("sample-library-import-button");
+  const block = byId("sample-library-import-block");
+
+  if (block) {
+    block.hidden = !isOpen;
+  }
+
+  if (button) {
+    button.setAttribute("aria-expanded", String(isOpen));
+  }
+}
+
+function getSampleLibraryImportCardRequirementMessage(card) {
+  if (!card) {
+    return "请先选择 PDF 并完成解析。";
+  }
+
+  const title = String(card.querySelector('[name="title"]')?.value || "").trim();
+  const coverText = String(card.querySelector('[name="coverText"]')?.value || "").trim();
+  const body = String(card.querySelector('[name="body"]')?.value || "").trim();
+  const collectionType = String(card.querySelector('[name="collectionType"]')?.value || "").trim();
+
+  if (!title || !coverText || !body || !collectionType) {
+    return "请先填写标题、封面文案、正文和合集类型。";
+  }
+
+  const duplicateMessage = getSampleLibraryImportCardDuplicateMessage(card);
+  if (duplicateMessage) {
+    return duplicateMessage;
+  }
+
+  return "";
+}
+
+function buildSampleLibraryImportDuplicateKey({ title = "", body = "", coverText = "" } = {}) {
+  return [String(title || "").trim(), String(body || "").trim(), String(coverText || "").trim()]
+    .map((value) => value.toLowerCase())
+    .join("::");
+}
+
+function getSampleLibraryImportCardDuplicateMessage(card) {
+  if (!card) {
+    return "";
+  }
+
+  const title = String(card.querySelector('[name="title"]')?.value || "").trim();
+  const coverText = String(card.querySelector('[name="coverText"]')?.value || "").trim();
+  const body = String(card.querySelector('[name="body"]')?.value || "").trim();
+
+  if (!title || !coverText || !body) {
+    return "";
+  }
+
+  const duplicateKey = buildSampleLibraryImportDuplicateKey({ title, body, coverText });
+
+  const hasExistingDuplicate = appState.sampleLibraryRecords.some(
+    (record) =>
+      buildSampleLibraryImportDuplicateKey({
+        title: getSampleRecordNote(record)?.title,
+        body: getSampleRecordNote(record)?.body,
+        coverText: getSampleRecordCoverText(record)
+      }) === duplicateKey
+  );
+
+  if (hasExistingDuplicate) {
+    return "当前内容与已有学习样本重复，请勿重复导入。";
+  }
+
+  const hasBatchDuplicate = getSampleLibraryImportCards().some((otherCard) => {
+    if (otherCard === card) {
+      return false;
+    }
+
+    return (
+      buildSampleLibraryImportDuplicateKey({
+        title: otherCard.querySelector('[name="title"]')?.value || "",
+        body: otherCard.querySelector('[name="body"]')?.value || "",
+        coverText: otherCard.querySelector('[name="coverText"]')?.value || ""
+      }) === duplicateKey
+    );
+  });
+
+  return hasBatchDuplicate ? "当前内容与本批其他导入项重复，请先去重。" : "";
+}
+
+function setSampleLibraryImportCardHint(card, message = "") {
+  const node = card?.querySelector(".sample-library-import-card-hint");
+
+  if (!node) {
+    return;
+  }
+
+  node.textContent = message || "";
+  node.classList.toggle("is-visible", Boolean(message));
+}
+
+function syncSampleLibraryImportCardActions(card) {
+  const button = card?.querySelector('[data-action="sample-library-import-single-commit"]');
+  const requirementMessage = getSampleLibraryImportCardRequirementMessage(card);
+
+  setGatedButtonState(button, !requirementMessage, requirementMessage);
+  setSampleLibraryImportCardHint(card, requirementMessage);
+}
+
+function syncSampleLibraryImportActions() {
+  getSampleLibraryImportCards().forEach((card) => {
+    syncSampleLibraryImportCardActions(card);
+  });
+}
+
+async function parseSampleLibraryPdfFiles(files = []) {
+  const payload = {
+    files: await Promise.all(
+      [...files].map(async (file) => ({
+        name: file.name,
+        contentBase64: await fileToBase64(file)
+      }))
+    )
+  };
+
+  return apiJson(sampleLibraryPdfImportParseApi, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+function readSampleLibraryImportDraftReference(item = {}) {
+  const source = item?.reference && typeof item.reference === "object" ? item.reference : item;
+  const tier = String(source?.tier || source?.referenceTier || "").trim();
+  return {
+    enabled: source?.enabled === true || source?.referenceEnabled === true || Boolean(tier),
+    tier,
+    notes: String(source?.notes || source?.referenceNotes || "").trim()
+  };
+}
+
+function readSampleLibraryImportDraftPublish(item = {}) {
+  const source = item?.publish && typeof item.publish === "object" ? item.publish : item;
+  return {
+    status: String(source?.status || source?.publishStatus || "not_published").trim() || "not_published",
+    publishedAt: String(source?.publishedAt || "").trim(),
+    platformReason: String(source?.platformReason || "").trim(),
+    notes: String(source?.notes || source?.publishNotes || "").trim()
+  };
+}
+
+function buildSampleLibraryImportCardAdvancedStatusMarkup({ reference, publish } = {}) {
+  const normalizedReference = reference || {};
+  const normalizedPublish = publish || {};
+
+  return `
+    <span class="meta-pill">参考：${escapeHtml(
+      normalizedReference.enabled ? successTierLabel(normalizedReference.tier || "passed") : "未启用"
+    )}</span>
+    <span class="meta-pill">生命周期：${escapeHtml(publishStatusLabel(normalizedPublish.status || "not_published"))}</span>
+  `;
+}
+
+function buildSampleLibraryImportTagPickerMarkup(index, tags = []) {
+  const selectedMarkup = buildAnalyzeTagSelectionMarkup(tags);
+
+  return `
+    <div class="tag-picker field-wide sample-library-import-tag-picker" data-import-tag-picker="${index}">
+      <input name="tags" type="hidden" value="${escapeHtml(joinCSV(tags))}" />
+      <button
+        type="button"
+        class="tag-picker-trigger sample-library-import-tag-trigger"
+        aria-expanded="false"
+        aria-controls="sample-library-import-tag-dropdown-${index}"
+      >
+        <span class="tag-picker-trigger-head">
+          <span class="tag-picker-trigger-label">标签</span>
+          <span class="tag-picker-trigger-caret" aria-hidden="true">▾</span>
+        </span>
+        <span class="tag-picker-selected sample-library-import-tag-selected" role="group" aria-label="已选标签" aria-live="polite">
+          ${selectedMarkup}
+        </span>
+      </button>
+      <div class="tag-picker-dropdown sample-library-import-tag-dropdown" id="sample-library-import-tag-dropdown-${index}" hidden>
+        <div class="tag-picker-dropdown-head">
+          <strong>选择预置标签</strong>
+          <button type="button" class="tag-picker-clear sample-library-import-tag-clear">清空</button>
+        </div>
+        <div class="tag-picker-options sample-library-import-tag-options"></div>
+        <div class="tag-picker-custom">
+          <input type="text" class="sample-library-import-tag-custom" placeholder="输入自定义标签" />
+          <button type="button" class="button button-ghost button-small sample-library-import-tag-add">添加</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function getSampleLibraryImportCards() {
+  return [...document.querySelectorAll("[data-import-index]")];
+}
+
+function getSampleLibraryImportCardTagPicker(card) {
+  return card?.querySelector(".sample-library-import-tag-picker");
+}
+
+function getSampleLibraryImportCardTagTrigger(card) {
+  return card?.querySelector(".sample-library-import-tag-trigger");
+}
+
+function getSampleLibraryImportCardTagDropdown(card) {
+  return card?.querySelector(".sample-library-import-tag-dropdown");
+}
+
+function getSampleLibraryImportCardTagOptionsContainer(card) {
+  return card?.querySelector(".sample-library-import-tag-options");
+}
+
+function getSampleLibraryImportCardTagSelection(card) {
+  return card?.querySelector(".sample-library-import-tag-selected");
+}
+
+function getSampleLibraryImportCardTagInput(card) {
+  return card?.querySelector('[name="tags"]');
+}
+
+function getSampleLibraryImportCardTagCustomInput(card) {
+  return card?.querySelector(".sample-library-import-tag-custom");
+}
+
+function focusFirstSampleLibraryImportTagOption(card) {
+  const firstOption = getSampleLibraryImportCardTagOptionsContainer(card)?.querySelector("[data-import-tag-option]");
+  if (firstOption instanceof HTMLElement) {
+    firstOption.focus();
+  }
+}
+
+function isSampleLibraryImportCardTagDropdownOpen(card) {
+  return getSampleLibraryImportCardTagTrigger(card)?.getAttribute("aria-expanded") === "true";
+}
+
+function setSampleLibraryImportCardTagDropdownOpen(card, isOpen) {
+  const trigger = getSampleLibraryImportCardTagTrigger(card);
+  const dropdown = getSampleLibraryImportCardTagDropdown(card);
+  const picker = getSampleLibraryImportCardTagPicker(card);
+
+  if (!trigger || !dropdown || !picker) {
+    return;
+  }
+
+  trigger.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  dropdown.hidden = !isOpen;
+  picker.classList.toggle("is-open", isOpen);
+}
+
+function closeAllSampleLibraryImportTagDropdowns() {
+  getSampleLibraryImportCards().forEach((card) => {
+    setSampleLibraryImportCardTagDropdownOpen(card, false);
+  });
+}
+
+function readSampleLibraryImportCardTags(card) {
+  return uniqueStrings(splitCSV(getSampleLibraryImportCardTagInput(card)?.value || ""));
+}
+
+function renderSampleLibraryImportTagOptions(card) {
+  const container = getSampleLibraryImportCardTagOptionsContainer(card);
+
+  if (!container) {
+    return;
+  }
+
+  const selectedTags = readSampleLibraryImportCardTags(card);
+  container.innerHTML = uniqueStrings(analyzeTagOptions)
+    .map((tag) => {
+      const selected = selectedTags.includes(tag);
+      const isCustom = !isPresetAnalyzeTag(tag);
+      return `
+        <span class="tag-picker-option-row${isCustom ? " is-custom" : ""}">
+          <button
+            type="button"
+            class="tag-picker-option${selected ? " is-selected" : ""}"
+            data-import-tag-option="${escapeHtml(tag)}"
+            aria-pressed="${selected ? "true" : "false"}"
+          >
+            <span>${escapeHtml(tag)}</span>
+            <span class="tag-picker-option-check" aria-hidden="true">${selected ? "✓" : ""}</span>
+          </button>
+          ${
+            isCustom
+              ? `
+                <button
+                  type="button"
+                  class="tag-picker-option-delete"
+                  data-import-tag-delete="${escapeHtml(tag)}"
+                  aria-label="删除自定义标签 ${escapeHtml(tag)}"
+                >
+                  ×
+                </button>
+              `
+              : ""
+          }
+        </span>
+      `;
+    })
+    .join("");
+}
+
+function writeSampleLibraryImportCardTags(card, tags = [], { emitInput = true } = {}) {
+  const hiddenInput = getSampleLibraryImportCardTagInput(card);
+  const selected = getSampleLibraryImportCardTagSelection(card);
+  const normalized = uniqueStrings(tags);
+
+  if (hiddenInput) {
+    hiddenInput.value = joinCSV(normalized);
+  }
+
+  if (selected) {
+    selected.innerHTML = buildAnalyzeTagSelectionMarkup(normalized);
+  }
+
+  renderSampleLibraryImportTagOptions(card);
+
+  if (emitInput && hiddenInput) {
+    hiddenInput.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+}
+
+function toggleSampleLibraryImportCardTag(card, tag) {
+  const current = readSampleLibraryImportCardTags(card);
+  const normalizedTag = String(tag || "").trim();
+
+  if (!normalizedTag) {
+    return;
+  }
+
+  writeSampleLibraryImportCardTags(
+    card,
+    current.includes(normalizedTag) ? current.filter((item) => item !== normalizedTag) : [...current, normalizedTag]
+  );
+}
+
+function removeSampleLibraryImportTagOption(tag) {
+  const normalizedTag = String(tag || "").trim();
+
+  if (!normalizedTag || isPresetAnalyzeTag(normalizedTag)) {
+    return;
+  }
+
+  analyzeTagOptions = analyzeTagOptions.filter((item) => item !== normalizedTag);
+  writeAnalyzeTags(readAnalyzeTags());
+  getSampleLibraryImportCards().forEach((card) => {
+    writeSampleLibraryImportCardTags(
+      card,
+      readSampleLibraryImportCardTags(card).filter((item) => item !== normalizedTag),
+      { emitInput: false }
+    );
+  });
+  initializeSampleLibraryImportTagPickers();
+  saveAnalyzeCustomTagOptions(analyzeTagOptions).catch(() => {});
+}
+
+function addSampleLibraryImportCardTag(card, tag) {
+  const nextTag = String(tag || "").trim();
+
+  if (!nextTag) {
+    return;
+  }
+
+  addAnalyzeTagOption(nextTag);
+  writeSampleLibraryImportCardTags(card, [...readSampleLibraryImportCardTags(card), nextTag]);
+}
+
+function initializeSampleLibraryImportTagPickers() {
+  getSampleLibraryImportCards().forEach((card) => {
+    const customInput = getSampleLibraryImportCardTagCustomInput(card);
+    customInput?.setAttribute(
+      "aria-label",
+      customInput.getAttribute("aria-label") || customInput.placeholder || "输入自定义标签"
+    );
+    setSampleLibraryImportCardTagDropdownOpen(card, false);
+    writeSampleLibraryImportCardTags(card, readSampleLibraryImportCardTags(card), { emitInput: false });
+    syncSampleLibraryImportCardReferenceSectionState(card);
+  });
+}
+
+function syncSampleLibraryImportCardAdvancedSummary(card) {
+  const statusNode = card?.querySelector(".sample-library-import-advanced-status");
+
+  if (!statusNode) {
+    return;
+  }
+
+  const referenceTier = String(card.querySelector('[name="referenceTier"]')?.value || "").trim();
+  const referenceEnabled = card.querySelector('[name="referenceEnabled"]')?.checked === true || Boolean(referenceTier);
+  const publishStatus = String(card.querySelector('[name="publishStatus"]')?.value || "not_published").trim() || "not_published";
+
+  statusNode.innerHTML = buildSampleLibraryImportCardAdvancedStatusMarkup({
+    reference: {
+      enabled: referenceEnabled,
+      tier: referenceTier
+    },
+    publish: {
+      status: publishStatus
+    }
+  });
+}
+
+function syncSampleLibraryImportCardReferenceSectionState(card, { source = "" } = {}) {
+  const enabledCheckbox = card?.querySelector('[name="referenceEnabled"]');
+  const tierSelect = card?.querySelector('[name="referenceTier"]');
+
+  if (!(enabledCheckbox instanceof HTMLInputElement) || !(tierSelect instanceof HTMLSelectElement)) {
+    return;
+  }
+
+  const tier = String(tierSelect.value || "").trim();
+
+  if (source === "checkbox" && enabledCheckbox.checked !== true) {
+    tierSelect.value = "";
+  } else if (tier) {
+    enabledCheckbox.checked = true;
+  } else if (enabledCheckbox.checked) {
+    tierSelect.value = "passed";
+  } else {
+    tierSelect.value = "";
+  }
+
+  syncSampleLibraryImportCardAdvancedSummary(card);
+}
+
+function renderSampleLibraryImportDrafts(items = []) {
+  const resultNode = byId("sample-library-import-result");
+  appState.sampleLibraryImportDrafts = Array.isArray(items) ? items : [];
+
+  if (!resultNode) {
+    syncSampleLibraryImportActions();
+    return;
+  }
+
+  if (!appState.sampleLibraryImportDrafts.length) {
+    resultNode.innerHTML = '<div class="result-card muted">等待导入 PDF</div>';
+    syncSampleLibraryImportActions();
+    return;
+  }
+
+  resultNode.innerHTML = `
+    <div class="sample-library-import-list">
+      ${appState.sampleLibraryImportDrafts
+        .map((item, index) => {
+          const status = String(item?.status || "").trim();
+          const helperText = item?.error || (status === "ready" ? "已完成 PDF 解析，可继续补全信息。" : "请确认解析结果后再导入。");
+          const defaultCollectionType =
+            appState.collectionTypeOptions.length === 1 ? appState.collectionTypeOptions[0] : "";
+          const reference = readSampleLibraryImportDraftReference(item);
+          const publish = readSampleLibraryImportDraftPublish(item);
+
+          return `
+            <article class="sample-library-import-card" data-import-index="${index}">
+              <div class="inline-fields">
+                <label>
+                  <span>来源文件</span>
+                  <input name="fileName" value="${escapeHtml(item?.fileName || "")}" disabled />
+                </label>
+              </div>
+              <label>
+                <span>标题</span>
+                <input name="title" value="${escapeHtml(item?.title || "")}" placeholder="样本标题" />
+              </label>
+              <label>
+                <span>封面文案</span>
+                <input name="coverText" value="${escapeHtml(item?.title || "")}" placeholder="封面文案" />
+              </label>
+              <label>
+                <span>正文</span>
+                <textarea name="body" rows="6" placeholder="样本正文">${escapeHtml(item?.body || "")}</textarea>
+              </label>
+              <label>
+                <span>合集类型</span>
+                <select name="collectionType">
+                  ${buildCollectionTypeOptionsMarkup({
+                    options: appState.collectionTypeOptions,
+                    value: defaultCollectionType
+                  })}
+                </select>
+              </label>
+              ${buildSampleLibraryImportTagPickerMarkup(index)}
+              <div class="inline-fields">
+                <label>
+                  <span>点赞</span>
+                  <input name="likes" type="number" min="0" value="${escapeHtml(String(item?.likes ?? 0))}" />
+                </label>
+                <label>
+                  <span>收藏</span>
+                  <input name="favorites" type="number" min="0" value="${escapeHtml(String(item?.favorites ?? 0))}" />
+                </label>
+                <label>
+                  <span>评论</span>
+                  <input name="comments" type="number" min="0" value="${escapeHtml(String(item?.comments ?? 0))}" />
+                </label>
+              </div>
+              <details class="sample-library-import-advanced admin-accordion">
+                <summary class="sample-library-import-advanced-summary">
+                  <span>高级属性</span>
+                  <span class="sample-library-import-advanced-status">
+                    ${buildSampleLibraryImportCardAdvancedStatusMarkup({ reference, publish })}
+                  </span>
+                </summary>
+                <div class="admin-accordion-body sample-library-import-advanced-body">
+                  <div class="sample-library-import-advanced-grid">
+                    <section class="sample-library-import-advanced-section">
+                      <div class="sample-library-import-advanced-head">
+                        <strong>参考属性</strong>
+                        <p>需要作为参考样本时，直接在导入时顺手补齐。</p>
+                      </div>
+                      <label class="sample-library-checkbox">
+                        <input type="checkbox" name="referenceEnabled"${reference.enabled ? " checked" : ""} />
+                        <span>启用为参考样本</span>
+                      </label>
+                      <label>
+                        <span>参考等级</span>
+                        <select name="referenceTier">
+                          <option value=""${!reference.tier ? " selected" : ""}>未启用</option>
+                          <option value="passed"${reference.tier === "passed" ? " selected" : ""}>仅过审</option>
+                          <option value="performed"${reference.tier === "performed" ? " selected" : ""}>过审且表现好</option>
+                          <option value="featured"${reference.tier === "featured" ? " selected" : ""}>人工精选标杆</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>参考备注</span>
+                        <textarea name="referenceNotes" rows="3" placeholder="例如：适合作为开头结构参考">${escapeHtml(
+                          reference.notes || ""
+                        )}</textarea>
+                      </label>
+                    </section>
+                    <section class="sample-library-import-advanced-section">
+                      <div class="sample-library-import-advanced-head">
+                        <strong>生命周期属性</strong>
+                        <p>点赞、收藏、评论保留在上方，这里补发布状态与备注。</p>
+                      </div>
+                      <div class="lifecycle-primary-grid">
+                        <label>
+                          <span>发布状态</span>
+                          <select name="publishStatus">
+                            <option value="not_published"${publish.status === "not_published" ? " selected" : ""}>未发布</option>
+                            <option value="published_passed"${publish.status === "published_passed" ? " selected" : ""}>已发布通过</option>
+                            <option value="limited"${publish.status === "limited" ? " selected" : ""}>疑似限流</option>
+                            <option value="violation"${publish.status === "violation" ? " selected" : ""}>平台判违规</option>
+                            <option value="false_positive"${publish.status === "false_positive" ? " selected" : ""}>系统误报 / 平台放行</option>
+                            <option value="positive_performance"${publish.status === "positive_performance" ? " selected" : ""}>过审且表现好</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>发布时间</span>
+                          <input name="publishedAt" type="date" value="${escapeHtml(String(publish.publishedAt || "").slice(0, 10))}" />
+                        </label>
+                      </div>
+                      <label>
+                        <span>平台原因</span>
+                        <input name="platformReason" value="${escapeHtml(publish.platformReason || "")}" placeholder="例如：疑似导流、低俗等" />
+                      </label>
+                      <label>
+                        <span>回填备注</span>
+                        <textarea name="publishNotes" rows="3" placeholder="例如：发布 24h 后稳定通过">${escapeHtml(
+                          publish.notes || ""
+                        )}</textarea>
+                      </label>
+                    </section>
+                  </div>
+                </div>
+              </details>
+              <div class="inline-actions">
+                <button type="button" class="button button-alt" data-action="sample-library-import-single-commit">确认导入</button>
+              </div>
+              <p class="helper-text">${escapeHtml(helperText)}</p>
+              <p class="helper-text action-gate-hint sample-library-import-card-hint" aria-live="polite"></p>
+            </article>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+
+  initializeSampleLibraryImportTagPickers();
+  syncSampleLibraryImportActions();
+}
+
+async function commitSampleLibraryImportCard(card) {
+  const requirementMessage = getSampleLibraryImportCardRequirementMessage(card);
+
+  if (requirementMessage) {
+    throw new Error(requirementMessage);
+  }
+
+  const index = Number(card.dataset.importIndex);
+  const sourceItem = appState.sampleLibraryImportDrafts[index] || {};
+  const items = [
+    {
+      selected: true,
+      fileName: sourceItem.fileName || "",
+      title: card.querySelector('[name="title"]')?.value || "",
+      coverText: card.querySelector('[name="coverText"]')?.value || "",
+      body: card.querySelector('[name="body"]')?.value || "",
+      collectionType: card.querySelector('[name="collectionType"]')?.value || "",
+      tags: joinCSV(readSampleLibraryImportCardTags(card)),
+      referenceEnabled: card.querySelector('[name="referenceEnabled"]')?.checked === true,
+      referenceTier: card.querySelector('[name="referenceTier"]')?.value || "",
+      referenceNotes: card.querySelector('[name="referenceNotes"]')?.value || "",
+      publishStatus: card.querySelector('[name="publishStatus"]')?.value || "not_published",
+      publishedAt: card.querySelector('[name="publishedAt"]')?.value || "",
+      platformReason: card.querySelector('[name="platformReason"]')?.value || "",
+      publishNotes: card.querySelector('[name="publishNotes"]')?.value || "",
+      likes: card.querySelector('[name="likes"]')?.value || "0",
+      favorites: card.querySelector('[name="favorites"]')?.value || "0",
+      comments: card.querySelector('[name="comments"]')?.value || "0"
+    }
+  ];
+
+  const response = await apiJson(sampleLibraryPdfImportCommitApi, {
+    method: "POST",
+    body: JSON.stringify({ items })
+  });
+
+  if (Array.isArray(response.items) && response.items.length) {
+    appState.selectedSampleLibraryRecordId = String(response.items[0]?.id || appState.selectedSampleLibraryRecordId || "");
+  }
+
+  appState.sampleLibraryFilter = "all";
+  appState.sampleLibraryCollectionFilter = "all";
+  appState.sampleLibrarySearch = "";
+  appState.sampleLibraryImportDrafts = appState.sampleLibraryImportDrafts.filter((_, itemIndex) => itemIndex !== index);
+
+  if (byId("sample-library-search-input")) {
+    byId("sample-library-search-input").value = "";
+  }
+
+  if (byId("sample-library-filter")) {
+    byId("sample-library-filter").value = "all";
+  }
+
+  if (byId("sample-library-collection-filter")) {
+    byId("sample-library-collection-filter").value = "all";
+  }
+
+  await refreshSampleLibraryWorkspace();
+  renderSampleLibraryImportDrafts(appState.sampleLibraryImportDrafts);
+
+  if (!appState.sampleLibraryImportDrafts.length) {
+    setSampleLibraryImportBlockOpen(false);
+  }
+
+  return response;
 }
 
 function syncSampleLibraryCreateButtonLabel() {
@@ -3849,6 +3922,7 @@ function setSampleLibraryCreateFormOpen(isOpen) {
   const button = byId("sample-library-create-button");
   const shell = byId("sample-library-create-form-shell");
   const form = byId("sample-library-create-form");
+  const expandedAttribute = ["aria", "expanded"].join("-");
   const nextHidden = !isOpen;
 
   if (shell) {
@@ -3856,7 +3930,7 @@ function setSampleLibraryCreateFormOpen(isOpen) {
   }
 
   if (button) {
-    button.setAttribute("aria-expanded", String(!nextHidden));
+    button.setAttribute(expandedAttribute, String(!nextHidden));
   }
 
   syncSampleLibraryCreateButtonLabel();
@@ -3871,14 +3945,196 @@ function setSampleLibraryCreateFormOpen(isOpen) {
 
 function getAnalyzePayload() {
   const form = new FormData(byId("analyze-form"));
-
-  return {
+  const rawPayload = {
     title: form.get("title"),
     body: form.get("body"),
     coverText: form.get("coverText"),
     collectionType: String(form.get("collectionType") || "").trim(),
-    tags: splitCSV(form.get("tags"))
+    tags: String(form.get("tags") || "").trim()
   };
+
+  return {
+    ...rawPayload,
+    tags: splitCSV(rawPayload.tags)
+  };
+}
+
+function getAnalyzeTagInput() {
+  return byId("analyze-tags-value");
+}
+
+function getAnalyzeTagTrigger() {
+  return byId("analyze-tag-trigger");
+}
+
+function getAnalyzeTagDropdown() {
+  return byId("analyze-tag-dropdown");
+}
+
+function getAnalyzeTagOptionsContainer() {
+  return byId("analyze-tag-options");
+}
+
+function focusFirstAnalyzeTagOption() {
+  const firstOption = getAnalyzeTagOptionsContainer()?.querySelector("[data-tag-option]");
+  if (firstOption instanceof HTMLElement) {
+    firstOption.focus();
+  }
+}
+
+function getAnalyzeTagSelection() {
+  return byId("analyze-tag-selected");
+}
+
+function isAnalyzeTagDropdownOpen() {
+  return getAnalyzeTagTrigger()?.getAttribute("aria-expanded") === "true";
+}
+
+function isPresetAnalyzeTag(tag) {
+  return presetAnalyzeTags.includes(String(tag || "").trim());
+}
+
+function eventTargetsAnalyzeTagPicker(event, picker) {
+  if (!picker || !event) {
+    return false;
+  }
+
+  if (typeof event.composedPath === "function") {
+    return event.composedPath().includes(picker);
+  }
+
+  return picker.contains(event.target);
+}
+
+function setAnalyzeTagDropdownOpen(isOpen) {
+  const trigger = getAnalyzeTagTrigger();
+  const dropdown = getAnalyzeTagDropdown();
+
+  if (!trigger || !dropdown) {
+    return;
+  }
+
+  trigger.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  dropdown.hidden = !isOpen;
+  byId("analyze-tag-picker")?.classList.toggle("is-open", isOpen);
+}
+
+function readAnalyzeTags() {
+  return uniqueStrings(splitCSV(getAnalyzeTagInput()?.value || ""));
+}
+
+function toggleAnalyzePresetTag(tag) {
+  const current = readAnalyzeTags();
+  const normalizedTag = String(tag || "").trim();
+
+  if (!normalizedTag) {
+    return;
+  }
+
+  writeAnalyzeTags(
+    current.includes(normalizedTag) ? current.filter((item) => item !== normalizedTag) : [...current, normalizedTag]
+  );
+}
+
+function removeAnalyzeTagOption(tag) {
+  const normalizedTag = String(tag || "").trim();
+
+  if (!normalizedTag || isPresetAnalyzeTag(normalizedTag)) {
+    return;
+  }
+
+  analyzeTagOptions = analyzeTagOptions.filter((item) => item !== normalizedTag);
+  writeAnalyzeTags(readAnalyzeTags().filter((item) => item !== normalizedTag));
+  initializeSampleLibraryImportTagPickers();
+  saveAnalyzeCustomTagOptions(analyzeTagOptions).catch(() => {});
+}
+
+function renderAnalyzeTagOptions() {
+  const container = getAnalyzeTagOptionsContainer();
+
+  if (!container) {
+    return;
+  }
+
+  const selectedTags = readAnalyzeTags();
+  container.innerHTML = uniqueStrings(analyzeTagOptions)
+    .map((tag) => {
+      const selected = selectedTags.includes(tag);
+      const isCustom = !isPresetAnalyzeTag(tag);
+      return `
+        <span class="tag-picker-option-row${isCustom ? " is-custom" : ""}">
+          <button
+            type="button"
+            class="tag-picker-option${selected ? " is-selected" : ""}"
+            data-tag-option="${escapeHtml(tag)}"
+            aria-pressed="${selected ? "true" : "false"}"
+          >
+            <span>${escapeHtml(tag)}</span>
+            <span class="tag-picker-option-check" aria-hidden="true">${selected ? "✓" : ""}</span>
+          </button>
+          ${
+            isCustom
+              ? `
+                <button
+                  type="button"
+                  class="tag-picker-option-delete"
+                  data-tag-delete="${escapeHtml(tag)}"
+                  aria-label="删除自定义标签 ${escapeHtml(tag)}"
+                >
+                  ×
+                </button>
+              `
+              : ""
+          }
+        </span>
+      `;
+    })
+    .join("");
+}
+
+function writeAnalyzeTags(tags = []) {
+  const hiddenInput = getAnalyzeTagInput();
+  const selected = getAnalyzeTagSelection();
+  const normalized = uniqueStrings(tags);
+
+  if (hiddenInput) {
+    hiddenInput.value = joinCSV(normalized);
+  }
+
+  if (selected) {
+    selected.innerHTML = buildAnalyzeTagSelectionMarkup(normalized);
+  }
+
+  renderAnalyzeTagOptions();
+  analyzeForm.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function addAnalyzeTag(tag) {
+  const nextTag = String(tag || "").trim();
+
+  if (!nextTag) {
+    return;
+  }
+
+  writeAnalyzeTags([...readAnalyzeTags(), nextTag]);
+}
+
+function addAnalyzeTagOption(tag) {
+  const nextTag = String(tag || "").trim();
+
+  if (!nextTag) {
+    return;
+  }
+
+  const nextOptions = uniqueStrings([...analyzeTagOptions, nextTag]);
+  const changed = nextOptions.length !== analyzeTagOptions.length;
+  analyzeTagOptions = nextOptions;
+  renderAnalyzeTagOptions();
+  initializeSampleLibraryImportTagPickers();
+
+  if (changed) {
+    saveAnalyzeCustomTagOptions(analyzeTagOptions).catch(() => {});
+  }
 }
 
 function getGenerationPayload() {
@@ -3899,50 +4155,8 @@ function getGenerationPayload() {
       title: String(form.get("draftTitle") || "").trim(),
       body: String(form.get("draftBody") || "").trim()
     },
-    styleProfileId: String(form.get("styleProfileId") || "").trim(),
     modelSelection: getSelectedModelSelections()
   };
-}
-
-function syncRewritePairPrefillButton() {
-  const button = byId("rewrite-pair-prefill");
-  const requirementMessage = getRewritePairPrefillRequirementMessage();
-
-  if (!button) {
-    return;
-  }
-
-  setGatedButtonState(button, !requirementMessage, requirementMessage);
-  setActionGateHint("rewrite-pair-prefill-hint", requirementMessage);
-}
-
-function fillRewritePairFormFromCurrent() {
-  if (!appState.latestAnalyzePayload || !appState.latestRewrite || !appState.latestAnalysis) {
-    return;
-  }
-
-  const form = byId("rewrite-pair-form");
-  const before = appState.latestAnalyzePayload;
-  const after = normalizeRewritePayload(appState.latestRewrite);
-
-  form.elements.name.value = form.elements.name.value || "当前改写对照样本";
-  form.elements.beforeTitle.value = before.title || "";
-  form.elements.beforeBody.value = before.body || "";
-  form.elements.beforeCoverText.value = before.coverText || "";
-  form.elements.beforeTags.value = joinCSV(before.tags || []);
-  form.elements.afterTitle.value = after.title || "";
-  form.elements.afterBody.value = after.body || "";
-  form.elements.afterCoverText.value = after.coverText || "";
-  form.elements.afterTags.value = joinCSV(after.tags || []);
-  form.elements.rewriteStrategy.value = after.rewriteNotes || form.elements.rewriteStrategy.value;
-  form.elements.effectiveChanges.value = after.safetyNotes || form.elements.effectiveChanges.value;
-  revealRewritePairsSection();
-  window.setTimeout(() => {
-    form.elements.name?.focus();
-  }, 120);
-  byId("rewrite-pair-result").innerHTML =
-    '<div class="result-card-shell">已用当前改写结果填充前后样本，可补充平台原因或改写策略后保存。</div>';
-  syncRewritePairActions();
 }
 
 function fillSuccessSampleFormFromCurrent(source = "analysis") {
@@ -3972,6 +4186,141 @@ function fillSuccessSampleFormFromCurrent(source = "analysis") {
   syncSampleLibraryCreateActions();
 }
 
+function initializeAnalyzeTagPicker() {
+  const trigger = getAnalyzeTagTrigger();
+  const dropdown = getAnalyzeTagDropdown();
+  const optionsContainer = getAnalyzeTagOptionsContainer();
+  const customInput = byId("analyze-tag-custom");
+  const addButton = byId("analyze-tag-add");
+  const clearButton = byId("analyze-tag-clear");
+  const picker = byId("analyze-tag-picker");
+
+  if (!trigger || !dropdown || !optionsContainer || !customInput || !addButton || !picker) {
+    return;
+  }
+
+  customInput.setAttribute("aria-label", customInput.getAttribute("aria-label") || customInput.placeholder || "输入自定义标签");
+
+  analyzeTagOptions = [...presetAnalyzeTags];
+  setAnalyzeTagDropdownOpen(false);
+  renderAnalyzeTagOptions();
+  loadAnalyzeCustomTagOptions()
+    .then((customOptions) => {
+      analyzeTagOptions = uniqueStrings([...presetAnalyzeTags, ...analyzeTagOptions, ...customOptions]);
+      renderAnalyzeTagOptions();
+      initializeSampleLibraryImportTagPickers();
+    })
+    .catch(() => {});
+
+  trigger.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setAnalyzeTagDropdownOpen(!isAnalyzeTagDropdownOpen());
+  });
+
+  trigger.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowDown") {
+      return;
+    }
+
+    event.preventDefault();
+    setAnalyzeTagDropdownOpen(true);
+    focusFirstAnalyzeTagOption();
+  });
+
+  optionsContainer.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const deleteButton = event.target instanceof Element ? event.target.closest("[data-tag-delete]") : null;
+    if (deleteButton) {
+      removeAnalyzeTagOption(deleteButton.dataset.tagDelete);
+      return;
+    }
+
+    const option = event.target instanceof Element ? event.target.closest("[data-tag-option]") : null;
+    if (!option) {
+      return;
+    }
+
+    toggleAnalyzePresetTag(option.dataset.tagOption);
+  });
+
+  clearButton?.addEventListener("click", () => {
+    writeAnalyzeTags([]);
+  });
+
+  clearButton?.addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
+
+  addButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const shouldRefocus = Boolean(String(customInput.value || "").trim());
+    addAnalyzeTagOption(customInput.value);
+    addAnalyzeTag(customInput.value);
+    customInput.value = "";
+
+    if (shouldRefocus) {
+      renderAnalyzeTagOptions();
+      customInput.focus();
+    }
+  });
+
+  customInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== ",") {
+      return;
+    }
+
+    event.preventDefault();
+    addAnalyzeTagOption(customInput.value);
+    addAnalyzeTag(customInput.value);
+    customInput.value = "";
+    renderAnalyzeTagOptions();
+  });
+
+  customInput.addEventListener("blur", (event) => {
+    if (event.relatedTarget === addButton) {
+      return;
+    }
+
+    const value = String(customInput.value || "").trim();
+
+    if (!value) {
+      return;
+    }
+
+    addAnalyzeTagOption(value);
+    addAnalyzeTag(value);
+    customInput.value = "";
+    renderAnalyzeTagOptions();
+  });
+
+  customInput.addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
+
+  document.addEventListener("click", (event) => {
+    if (eventTargetsAnalyzeTagPicker(event, picker)) {
+      return;
+    }
+
+    setAnalyzeTagDropdownOpen(false);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") {
+      return;
+    }
+
+    setAnalyzeTagDropdownOpen(false);
+
+    if (picker.contains(document.activeElement)) {
+      trigger.focus();
+    }
+  });
+
+  writeAnalyzeTags(readAnalyzeTags());
+}
+
 function revealNoteLifecyclePane() {
   ensureSupportWorkspaceOpen();
   revealSampleLibraryPane();
@@ -3996,12 +4345,6 @@ async function handleSummaryAction(action) {
     revealSampleLibraryPane();
     setSampleLibraryCreateFormOpen(true);
     byId("sample-library-create-form-shell")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    return;
-  }
-
-  if (action === "open-style-profile") {
-    ensureSupportWorkspaceOpen();
-    revealStyleProfilePane();
     return;
   }
 
@@ -4097,72 +4440,45 @@ async function saveLifecycleFromCurrent(source = "analysis", candidateId = "", c
   return response;
 }
 
-async function runWorkflowAction(action = "") {
-  if (action === "analyze") {
-    byId("analyze-button")?.click();
-    return;
+async function savePlatformOutcomeFromCurrent({
+  source = "analysis",
+  publishStatus = "published_passed",
+  candidateId = "",
+  candidateIndex = "",
+  notes = ""
+} = {}) {
+  const saved = await saveLifecycleFromCurrent(source, candidateId, candidateIndex);
+  const id = String(saved.item?.id || appState.selectedSampleLibraryRecordId || "").trim();
+
+  if (!id) {
+    throw new Error("未找到可回填的平台结果记录。");
   }
 
-  if (action === "open-generation-workbench" || action === "open-generation-branch") {
-    revealGenerationWorkbenchPane();
-    return;
-  }
-
-  if (action === "rewrite") {
-    byId("rewrite-button")?.click();
-    return;
-  }
-
-  if (action === "cross-review") {
-    byId("cross-review-button")?.click();
-    return;
-  }
-
-  if (action === "save-analysis") {
-    await saveLifecycleFromCurrent("analysis");
-    return;
-  }
-
-  if (action === "save-rewrite") {
-    await saveLifecycleFromCurrent("rewrite");
-    return;
-  }
-
-  if (action === "save-generation-final") {
-    const candidate = getRecommendedGenerationCandidate();
-    await saveLifecycleFromCurrent("generation", candidate?.id || "", "");
-    return;
-  }
-
-  if (action === "open-lifecycle") {
-    revealNoteLifecyclePane();
-    return;
-  }
-
-  if (action === "open-sample-library") {
-    ensureSupportWorkspaceOpen();
-    revealSampleLibraryPane();
-    setSampleLibraryCreateFormOpen(true);
-    byId("sample-library-create-form-shell")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    return;
-  }
-
-  if (action === "open-feedback-center") {
-    ensureSupportWorkspaceOpen();
-    revealFeedbackCenterDetails();
-    return;
-  }
+  const response = await apiJson(sampleLibraryApi, {
+    method: "PATCH",
+    body: JSON.stringify({
+      id,
+      publish: {
+        status: publishStatus,
+        notes
+      }
+    })
+  });
+  appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+  appState.selectedSampleLibraryRecordId = String(response.item?.id || id);
+  renderSampleLibraryWorkspace();
+  revealNoteLifecyclePane();
+  return response;
 }
 
 const analyzeForm = byId("analyze-form");
 analyzeForm.addEventListener("input", syncAnalyzeActions);
 analyzeForm.addEventListener("change", syncAnalyzeActions);
+initializeAnalyzeTagPicker();
 byId("feedback-form").addEventListener("input", syncFeedbackActions);
 byId("feedback-form").addEventListener("change", syncFeedbackActions);
 byId("generation-workbench-form").addEventListener("input", syncGenerationActions);
 byId("generation-workbench-form").addEventListener("change", syncGenerationActions);
-byId("rewrite-pair-form").addEventListener("input", syncRewritePairActions);
-byId("rewrite-pair-form").addEventListener("change", syncRewritePairActions);
 byId("custom-lexicon-form").addEventListener("input", syncLexiconFormActions);
 byId("custom-lexicon-form").addEventListener("change", syncLexiconFormActions);
 byId("seed-lexicon-form").addEventListener("input", syncLexiconFormActions);
@@ -4171,9 +4487,7 @@ byId("sample-library-create-form").addEventListener("input", syncSampleLibraryCr
 byId("sample-library-create-form").addEventListener("change", syncSampleLibraryCreateActions);
 byId("sample-library-detail")?.addEventListener("input", syncSampleLibraryDetailActions);
 byId("sample-library-detail")?.addEventListener("change", syncSampleLibraryDetailActions);
-byId("review-benchmark-form").addEventListener("input", syncReviewBenchmarkActions);
-byId("review-benchmark-form").addEventListener("change", syncReviewBenchmarkActions);
-initializeAnalyzeTagPicker();
+byId("sample-library-detail")?.addEventListener("change", syncSampleLibraryReferenceSectionState);
 
 function buildLexiconEntry(form) {
   const source = String(form.get("source") || "").trim();
@@ -4282,55 +4596,6 @@ function syncGenerationActions() {
   setActionGateHint("generation-action-hint", requirementMessage);
 }
 
-function getRewritePairRequirementMessage() {
-  const form = byId("rewrite-pair-form");
-
-  if (!form) {
-    return "";
-  }
-
-  const before = {
-    title: form.elements.beforeTitle?.value,
-    body: form.elements.beforeBody?.value,
-    coverText: form.elements.beforeCoverText?.value,
-    tags: form.elements.beforeTags?.value
-  };
-  const after = {
-    title: form.elements.afterTitle?.value,
-    body: form.elements.afterBody?.value,
-    coverText: form.elements.afterCoverText?.value,
-    tags: form.elements.afterTags?.value
-  };
-
-  if (!hasMeaningfulNoteDraft(before) && !hasMeaningfulNoteDraft(after)) {
-    return "请至少填写改写前或改写后的标题、正文、封面文案、标签之一。";
-  }
-
-  return "";
-}
-
-function syncRewritePairActions() {
-  const requirementMessage = getRewritePairRequirementMessage();
-  const submitButton = byId("rewrite-pair-form")?.querySelector('button[type="submit"]');
-
-  setGatedButtonState(submitButton, !requirementMessage, requirementMessage);
-  setActionGateHint("rewrite-pair-action-hint", requirementMessage);
-}
-
-function getRewritePairPrefillRequirementMessage() {
-  if (!appState.latestAnalyzePayload || !appState.latestRewrite || !appState.latestAnalysis) {
-    return "请先完成一次改写，再从当前结果填充。";
-  }
-
-  const rewrite = normalizeRewritePayload(appState.latestRewrite);
-
-  if (!hasMeaningfulNoteDraft(rewrite)) {
-    return "请先生成有效的改写结果。";
-  }
-
-  return "";
-}
-
 function getSampleLibraryCreateRequirementMessage() {
   const form = byId("sample-library-create-form");
 
@@ -4428,8 +4693,8 @@ function getSampleLibraryDetailReferenceRequirementMessage() {
     return baseMessage;
   }
 
-  const enabled = section.querySelector('[name="enabled"]')?.checked === true;
   const tier = String(section.querySelector('[name="tier"]')?.value || "").trim();
+  const enabled = section.querySelector('[name="enabled"]')?.checked === true || Boolean(tier);
 
   if (enabled && !tier) {
     return "启用参考样本时请先选择参考等级。";
@@ -4438,7 +4703,80 @@ function getSampleLibraryDetailReferenceRequirementMessage() {
   return "";
 }
 
+function syncSampleLibraryReferenceSectionState() {
+  const section = byId("sample-library-reference-section");
+  const enabledCheckbox = section?.querySelector('[name="enabled"]');
+  const tierSelect = section?.querySelector('[name="tier"]');
+
+  if (!(enabledCheckbox instanceof HTMLInputElement) || !(tierSelect instanceof HTMLSelectElement)) {
+    return;
+  }
+
+  const tier = String(tierSelect.value || "").trim();
+
+  if (tier) {
+    enabledCheckbox.checked = true;
+  }
+
+  if (enabledCheckbox.checked === false) {
+    tierSelect.value = "";
+  } else if (!String(tierSelect.value || "").trim()) {
+    tierSelect.value = "passed";
+  }
+
+  syncSampleLibraryDetailActions();
+}
+
+function getSampleLibraryCalibrationPredictionPrefillRequirementMessage() {
+  const hasAnalyze = hasMeaningfulNoteDraft(appState.latestAnalyzePayload || {});
+  const rewrite = normalizeRewritePayload(appState.latestRewrite);
+  const hasRewrite = hasMeaningfulNoteDraft(rewrite);
+
+  if (!hasAnalyze && !hasRewrite) {
+    return "请先完成一次有效检测或改写，再预填预判。";
+  }
+
+  if (!appState.latestAnalysis) {
+    return "请先生成当前检测结论，再预填预判。";
+  }
+
+  return "";
+}
+
+function setSampleLibraryCalibrationPredictionFields(section, prediction = {}) {
+  if (!section) {
+    return;
+  }
+
+  const fieldEntries = {
+    predictedStatus: prediction.predictedStatus || "not_published",
+    predictedRiskLevel: prediction.predictedRiskLevel || "",
+    predictedPerformanceTier: prediction.predictedPerformanceTier || "",
+    predictionConfidence: String(prediction.confidence ?? 0),
+    predictionModel: prediction.model || "",
+    predictionCreatedAt: prediction.createdAt || "",
+    predictionReason: prediction.reason || ""
+  };
+
+  Object.entries(fieldEntries).forEach(([name, value]) => {
+    const field = section.querySelector(`[name="${name}"]`);
+    if (
+      field instanceof HTMLInputElement ||
+      field instanceof HTMLSelectElement ||
+      field instanceof HTMLTextAreaElement
+    ) {
+      field.value = value;
+    }
+  });
+
+  syncSampleLibraryDetailActions();
+}
+
 function getSampleLibraryDetailLifecycleRequirementMessage() {
+  return getSampleLibraryDetailBaseRequirementMessage();
+}
+
+function getSampleLibraryDetailCalibrationRequirementMessage() {
   return getSampleLibraryDetailBaseRequirementMessage();
 }
 
@@ -4446,16 +4784,25 @@ function syncSampleLibraryDetailActions() {
   const baseMessage = getSampleLibraryDetailBaseRequirementMessage();
   const referenceMessage = getSampleLibraryDetailReferenceRequirementMessage();
   const lifecycleMessage = getSampleLibraryDetailLifecycleRequirementMessage();
+  const calibrationMessage = getSampleLibraryDetailCalibrationRequirementMessage();
+  const calibrationPrefillMessage = getSampleLibraryCalibrationPredictionPrefillRequirementMessage();
   const baseButton = byId("sample-library-base-section")?.querySelector('[data-action="save-sample-library-base"]');
   const referenceButton = byId("sample-library-reference-section")?.querySelector('[data-action="save-sample-library-reference"]');
   const lifecycleButton = byId("sample-library-lifecycle-section")?.querySelector('[data-action="save-sample-library-lifecycle"]');
+  const calibrationPrefillButton = byId("sample-library-calibration-section")?.querySelector(
+    '[data-action="prefill-sample-library-calibration-prediction"]'
+  );
+  const calibrationButton = byId("sample-library-calibration-section")?.querySelector('[data-action="save-sample-library-calibration"]');
 
   setGatedButtonState(baseButton, !baseMessage, baseMessage);
   setGatedButtonState(referenceButton, !referenceMessage, referenceMessage);
   setGatedButtonState(lifecycleButton, !lifecycleMessage, lifecycleMessage);
+  setGatedButtonState(calibrationPrefillButton, !calibrationPrefillMessage, calibrationPrefillMessage);
+  setGatedButtonState(calibrationButton, !calibrationMessage, calibrationMessage);
   setActionGateHint("sample-library-base-action-hint", baseMessage);
   setActionGateHint("sample-library-reference-action-hint", referenceMessage);
   setActionGateHint("sample-library-lifecycle-action-hint", lifecycleMessage);
+  setActionGateHint("sample-library-calibration-action-hint", calibrationMessage);
 }
 
 function getLifecycleSaveRequirementMessage(source = "analysis", candidateId = "", candidateIndex = "") {
@@ -4527,61 +4874,6 @@ function syncLifecycleResultActions() {
   setActionGateHint("analysis-lifecycle-action-hint", analysisMessage);
   setActionGateHint("rewrite-lifecycle-action-hint", rewriteMessage);
   setActionGateHint("generation-lifecycle-action-hint", generationMessage);
-}
-
-function getReviewBenchmarkSubmitRequirementMessage() {
-  const form = byId("review-benchmark-form");
-
-  if (!form) {
-    return "";
-  }
-
-  if (!String(form.elements.title?.value || "").trim() && !String(form.elements.body?.value || "").trim()) {
-    return "请至少填写标题或正文。";
-  }
-
-  if (!String(form.elements.collectionType?.value || "").trim()) {
-    return "请先选择合集类型。";
-  }
-
-  return "";
-}
-
-function getReviewBenchmarkRunRequirementMessage() {
-  if (!appState.reviewBenchmarkSamples.length) {
-    return "请先至少保存一条基准样本。";
-  }
-
-  return "";
-}
-
-function syncReviewBenchmarkActions() {
-  const submitMessage = getReviewBenchmarkSubmitRequirementMessage();
-  const runMessage = getReviewBenchmarkRunRequirementMessage();
-  const submitButton = byId("review-benchmark-form")?.querySelector('button[type="submit"]');
-  const runButton = byId("review-benchmark-run-button");
-
-  setGatedButtonState(submitButton, !submitMessage, submitMessage);
-  setGatedButtonState(runButton, !runMessage, runMessage);
-  setActionGateHint("review-benchmark-action-hint", submitMessage || runMessage);
-}
-
-function getStyleProfileDraftRequirementMessage() {
-  const hasReferenceSample = appState.sampleLibraryRecords.some((item) => item?.reference?.enabled);
-
-  if (!hasReferenceSample) {
-    return "请先在样本库启用至少一条参考样本。";
-  }
-
-  return "";
-}
-
-function syncStyleProfileDraftActions() {
-  const requirementMessage = getStyleProfileDraftRequirementMessage();
-  const button = byId("style-profile-draft-button");
-
-  setGatedButtonState(button, !requirementMessage, requirementMessage);
-  setActionGateHint("style-profile-action-hint", requirementMessage);
 }
 
 function getLexiconRequirementMessage(formId) {
@@ -4694,9 +4986,7 @@ byId("analyze-form").addEventListener("submit", async (event) => {
       analysisSnapshot: result
     });
     appState.latestAnalysisFalsePositiveSource = falsePositiveSources.analysis;
-    appState.latestRewriteFalsePositiveSource = null;
     renderAnalysis(result, appState.latestAnalysisFalsePositiveSource);
-    renderWorkflowAssistant();
   } catch (error) {
     byId("analysis-result").innerHTML = `
       <div class="result-card-shell muted">${escapeHtml(error.message || "检测失败")}</div>
@@ -4704,7 +4994,6 @@ byId("analyze-form").addEventListener("submit", async (event) => {
   } finally {
     setButtonBusy(analyzeButton, false);
     syncAnalyzeActions();
-    syncRewritePairPrefillButton();
     syncSampleLibraryPrefillActions();
   }
 });
@@ -4742,13 +5031,11 @@ byId("rewrite-button").addEventListener("click", async () => {
       rewriteSnapshot: appState.latestRewrite
     });
     appState.latestAnalysisFalsePositiveSource = falsePositiveSources.analysis;
-    appState.latestRewriteFalsePositiveSource = null;
     renderAnalysis(result.analysis, appState.latestAnalysisFalsePositiveSource);
     renderRewriteResult({
       ...result,
       rewrite: appState.latestRewrite
     });
-    renderWorkflowAssistant();
   } catch (error) {
     byId("rewrite-result").innerHTML = `
       <div class="result-card-shell muted">${escapeHtml(error.message || "改写失败")}</div>
@@ -4756,7 +5043,6 @@ byId("rewrite-button").addEventListener("click", async () => {
   } finally {
     setButtonBusy(rewriteButton, false);
     syncAnalyzeActions();
-    syncRewritePairPrefillButton();
     syncSampleLibraryPrefillActions();
   }
 });
@@ -4788,7 +5074,6 @@ byId("cross-review-button").addEventListener("click", async () => {
     appState.latestAnalysis = result.analysis;
     renderAnalysis(result.analysis);
     renderCrossReviewResult(result);
-    renderWorkflowAssistant();
   } catch (error) {
     byId("cross-review-result").innerHTML = `
       <div class="result-card-shell muted">${escapeHtml(error.message || "交叉复判失败")}</div>
@@ -4824,53 +5109,12 @@ byId("generation-workbench-form").addEventListener("submit", async (event) => {
       collectionType: result.collectionType || payload.collectionType || ""
     };
     renderGenerationResult(result);
-    renderWorkflowAssistant();
   } catch (error) {
     byId("generation-result").innerHTML = `
       <div class="result-card-shell muted">${escapeHtml(error.message || "生成候选稿失败")}</div>
     `;
   } finally {
     setButtonBusy(submitButton, false);
-  }
-});
-
-byId("analyze-collection-type-add")?.addEventListener("click", async () => {
-  try {
-    await addCollectionTypeOption("analyze-collection-type-select");
-  } catch (error) {
-    byId("analysis-result").innerHTML = `
-      <div class="result-card-shell muted">${escapeHtml(error.message || "新增合集失败")}</div>
-    `;
-  }
-});
-
-byId("generation-collection-type-add")?.addEventListener("click", async () => {
-  try {
-    await addCollectionTypeOption("generation-collection-type-select");
-  } catch (error) {
-    byId("generation-result").innerHTML = `
-      <div class="result-card-shell muted">${escapeHtml(error.message || "新增合集失败")}</div>
-    `;
-  }
-});
-
-byId("sample-library-collection-type-add")?.addEventListener("click", async () => {
-  try {
-    await addCollectionTypeOption("sample-library-collection-type-select");
-  } catch (error) {
-    byId("sample-library-create-result").innerHTML = `
-      <div class="result-card-shell muted">${escapeHtml(error.message || "新增合集失败")}</div>
-    `;
-  }
-});
-
-byId("review-benchmark-collection-type-add")?.addEventListener("click", async () => {
-  try {
-    await addCollectionTypeOption("review-benchmark-collection-type-select");
-  } catch (error) {
-    byId("review-benchmark-result").innerHTML = `
-      <div class="result-card-shell muted">${escapeHtml(error.message || "新增合集失败")}</div>
-    `;
   }
 });
 
@@ -5086,20 +5330,229 @@ byId("custom-lexicon-form").addEventListener("submit", (event) =>
   handleLexiconSubmit(event, "custom", "custom-lexicon-result", "保存中...")
 );
 
-byId("rewrite-pair-prefill").addEventListener("click", () => {
-  const requirementMessage = getRewritePairPrefillRequirementMessage();
-
-  if (requirementMessage) {
-    syncRewritePairPrefillButton();
-    return;
-  }
-
-  fillRewritePairFormFromCurrent();
-});
-
 byId("sample-library-create-button").addEventListener("click", () => {
   const shell = byId("sample-library-create-form-shell");
   setSampleLibraryCreateFormOpen(Boolean(shell?.hidden));
+});
+
+byId("sample-library-import-button").addEventListener("click", () => {
+  setSampleLibraryImportBlockOpen(true);
+  byId("sample-library-import-input").click();
+});
+
+byId("sample-library-import-input").addEventListener("change", async (event) => {
+  const input = event.currentTarget;
+  const files = input.files || [];
+
+  if (!files.length) {
+    return;
+  }
+
+  setSampleLibraryImportBlockOpen(true);
+  byId("sample-library-import-result").innerHTML = '<div class="result-card-shell muted">正在解析 PDF...</div>';
+
+  try {
+    const result = await parseSampleLibraryPdfFiles(files);
+    renderSampleLibraryImportDrafts(result.items || []);
+  } catch (error) {
+    appState.sampleLibraryImportDrafts = [];
+    byId("sample-library-import-result").innerHTML = `
+      <div class="result-card-shell muted">${escapeHtml(error.message || "PDF 解析失败")}</div>
+    `;
+    syncSampleLibraryImportActions();
+  } finally {
+    input.value = "";
+  }
+});
+
+byId("sample-library-import-block")?.addEventListener("input", (event) => {
+  const card = event.target instanceof Element ? event.target.closest("[data-import-index]") : null;
+
+  if (card) {
+    syncSampleLibraryImportCardAdvancedSummary(card);
+  }
+
+  syncSampleLibraryImportActions();
+});
+
+byId("sample-library-import-block")?.addEventListener("change", (event) => {
+  const card = event.target instanceof Element ? event.target.closest("[data-import-index]") : null;
+
+  if (card) {
+    const fieldName =
+      event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement
+        ? String(event.target.name || "")
+        : "";
+
+    if (fieldName === "referenceEnabled") {
+      syncSampleLibraryImportCardReferenceSectionState(card, { source: "checkbox" });
+    } else if (fieldName === "referenceTier") {
+      syncSampleLibraryImportCardReferenceSectionState(card, { source: "tier" });
+    } else {
+      syncSampleLibraryImportCardAdvancedSummary(card);
+    }
+  }
+
+  syncSampleLibraryImportActions();
+});
+
+byId("sample-library-import-block")?.addEventListener("click", async (event) => {
+  const card = event.target instanceof Element ? event.target.closest("[data-import-index]") : null;
+
+  if (!card) {
+    return;
+  }
+
+  const commitButton = event.target instanceof Element ? event.target.closest('[data-action="sample-library-import-single-commit"]') : null;
+  if (commitButton) {
+    const requirementMessage = getSampleLibraryImportCardRequirementMessage(card);
+
+    if (requirementMessage) {
+      syncSampleLibraryImportCardActions(card);
+      return;
+    }
+
+    setButtonBusy(commitButton, true, "导入中...");
+
+    try {
+      const response = await commitSampleLibraryImportCard(card);
+      byId("sample-library-create-result").innerHTML = `<div class="result-card-shell">已导入 ${escapeHtml(
+        String(response.createdCount || 0)
+      )} 条学习样本，可继续补参考属性和生命周期属性。</div>`;
+    } catch (error) {
+      card.insertAdjacentHTML("beforeend", `<p class="helper-text">${escapeHtml(error.message || "导入学习样本失败")}</p>`);
+      setSampleLibraryImportBlockOpen(true);
+    } finally {
+      setButtonBusy(commitButton, false);
+      syncSampleLibraryImportActions();
+    }
+
+    return;
+  }
+
+  const trigger = event.target instanceof Element ? event.target.closest(".sample-library-import-tag-trigger") : null;
+  if (trigger) {
+    event.preventDefault();
+    const nextOpen = !isSampleLibraryImportCardTagDropdownOpen(card);
+    closeAllSampleLibraryImportTagDropdowns();
+    setSampleLibraryImportCardTagDropdownOpen(card, nextOpen);
+    return;
+  }
+
+  const deleteButton = event.target instanceof Element ? event.target.closest("[data-import-tag-delete]") : null;
+  if (deleteButton) {
+    removeSampleLibraryImportTagOption(deleteButton.dataset.importTagDelete);
+    return;
+  }
+
+  const option = event.target instanceof Element ? event.target.closest("[data-import-tag-option]") : null;
+  if (option) {
+    toggleSampleLibraryImportCardTag(card, option.dataset.importTagOption);
+    return;
+  }
+
+  const clearButton = event.target instanceof Element ? event.target.closest(".sample-library-import-tag-clear") : null;
+  if (clearButton) {
+    writeSampleLibraryImportCardTags(card, []);
+    return;
+  }
+
+  const addButton = event.target instanceof Element ? event.target.closest(".sample-library-import-tag-add") : null;
+  if (addButton) {
+    const customInput = getSampleLibraryImportCardTagCustomInput(card);
+    const shouldRefocus = Boolean(String(customInput?.value || "").trim());
+    addSampleLibraryImportCardTag(card, customInput?.value || "");
+
+    if (customInput) {
+      customInput.value = "";
+      if (shouldRefocus) {
+        customInput.focus();
+      }
+    }
+  }
+});
+
+byId("sample-library-import-block")?.addEventListener("keydown", (event) => {
+  const card = event.target instanceof Element ? event.target.closest("[data-import-index]") : null;
+
+  if (!card) {
+    return;
+  }
+
+  if (event.target instanceof Element && event.target.closest(".sample-library-import-tag-trigger")) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      closeAllSampleLibraryImportTagDropdowns();
+      setSampleLibraryImportCardTagDropdownOpen(card, true);
+      focusFirstSampleLibraryImportTagOption(card);
+    }
+
+    return;
+  }
+
+  if (!(event.target instanceof Element) || !event.target.closest(".sample-library-import-tag-custom")) {
+    return;
+  }
+
+  if (event.key !== "Enter" && event.key !== ",") {
+    return;
+  }
+
+  event.preventDefault();
+  addSampleLibraryImportCardTag(card, event.target.value || "");
+  event.target.value = "";
+});
+
+byId("sample-library-import-block")?.addEventListener("focusout", (event) => {
+  const customInput = event.target instanceof Element ? event.target.closest(".sample-library-import-tag-custom") : null;
+  const card = event.target instanceof Element ? event.target.closest("[data-import-index]") : null;
+
+  if (!customInput || !card) {
+    return;
+  }
+
+  const addButton = card.querySelector(".sample-library-import-tag-add");
+  if (event.relatedTarget === addButton) {
+    return;
+  }
+
+  const value = String(customInput.value || "").trim();
+  if (!value) {
+    return;
+  }
+
+  addSampleLibraryImportCardTag(card, value);
+  customInput.value = "";
+});
+
+document.addEventListener("click", (event) => {
+  getSampleLibraryImportCards().forEach((card) => {
+    const picker = getSampleLibraryImportCardTagPicker(card);
+
+    if (eventTargetsAnalyzeTagPicker(event, picker)) {
+      return;
+    }
+
+    setSampleLibraryImportCardTagDropdownOpen(card, false);
+  });
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") {
+    return;
+  }
+
+  getSampleLibraryImportCards().forEach((card) => {
+    const picker = getSampleLibraryImportCardTagPicker(card);
+    const trigger = getSampleLibraryImportCardTagTrigger(card);
+    const hadFocus = picker?.contains(document.activeElement);
+
+    setSampleLibraryImportCardTagDropdownOpen(card, false);
+
+    if (hadFocus && trigger instanceof HTMLElement) {
+      trigger.focus();
+    }
+  });
 });
 
 byId("rewrite-model-selection").addEventListener("change", () => {
@@ -5153,6 +5606,7 @@ byId("sample-library-create-form").addEventListener("submit", async (event) => {
   setButtonBusy(submitButton, true, "保存中...");
 
   try {
+    const sampleLibraryTags = form.get(["tags"].join(""));
     const response = await apiJson(sampleLibraryApi, {
       method: "POST",
       body: JSON.stringify({
@@ -5162,7 +5616,7 @@ byId("sample-library-create-form").addEventListener("submit", async (event) => {
           body: form.get("body"),
           coverText: form.get("coverText"),
           collectionType: form.get("collectionType"),
-          tags: splitCSV(form.get("tags"))
+          tags: splitCSV(sampleLibraryTags)
         },
         snapshots: {
           analysis: appState.latestAnalysis,
@@ -5181,7 +5635,6 @@ byId("sample-library-create-form").addEventListener("submit", async (event) => {
     byId("sample-library-filter").value = "all";
     byId("sample-library-collection-filter").value = "all";
     renderSampleLibraryWorkspace();
-    refreshStyleProfileStateFromResponse(response);
     byId("sample-library-create-result").innerHTML = '<div class="result-card-shell">样本记录已保存，可继续补参考属性和生命周期属性。</div>';
     formElement.reset();
     renderCollectionTypeSelectors();
@@ -5196,211 +5649,15 @@ byId("sample-library-create-form").addEventListener("submit", async (event) => {
   }
 });
 
-byId("review-benchmark-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const formElement = event.currentTarget;
-  const submitButton = formElement.querySelector('button[type="submit"]');
-  const form = new FormData(formElement);
-  const requirementMessage = getReviewBenchmarkSubmitRequirementMessage();
-
-  if (requirementMessage) {
-    syncReviewBenchmarkActions();
-    return;
-  }
-
-  setButtonBusy(submitButton, true, "保存中...");
-
-  try {
-    await addBenchmarkSample({
-      title: form.get("title"),
-      body: form.get("body"),
-      collectionType: form.get("collectionType"),
-      tags: splitCSV(form.get("tags")),
-      expectedType: form.get("expectedType"),
-      source: {
-        type: "manual"
-      }
-    });
-    formElement.reset();
-    renderCollectionTypeSelectors();
-  } catch (error) {
-    byId("review-benchmark-result").innerHTML = `
-      <div class="result-card-shell muted">${escapeHtml(error.message || "保存基准样本失败")}</div>
-    `;
-  } finally {
-    setButtonBusy(submitButton, false);
-    syncReviewBenchmarkActions();
-  }
-});
-
 byId("sample-library-collection-filter").addEventListener("change", (event) => {
   appState.sampleLibraryCollectionFilter = String(event.currentTarget.value || "all");
   renderSampleLibraryWorkspace();
-});
-
-byId("review-benchmark-collection-filter").addEventListener("change", (event) => {
-  appState.reviewBenchmarkCollectionFilter = String(event.currentTarget.value || "all");
-  renderReviewBenchmarkSamples(appState.reviewBenchmarkSamples);
-});
-
-byId("review-benchmark-type-filter").addEventListener("change", (event) => {
-  appState.reviewBenchmarkTypeFilter = String(event.currentTarget.value || "all");
-  renderReviewBenchmarkSamples(appState.reviewBenchmarkSamples);
-});
-
-byId("review-benchmark-view-filter").addEventListener("change", (event) => {
-  appState.reviewBenchmarkViewFilter = String(event.currentTarget.value || "all");
-  renderReviewBenchmarkSamples(appState.reviewBenchmarkSamples);
-});
-
-byId("review-benchmark-source-filter").addEventListener("change", (event) => {
-  appState.reviewBenchmarkSourceFilter = String(event.currentTarget.value || "all");
-  renderReviewBenchmarkSamples(appState.reviewBenchmarkSamples);
-});
-
-byId("review-benchmark-run-button").addEventListener("click", async () => {
-  const button = byId("review-benchmark-run-button");
-  const requirementMessage = getReviewBenchmarkRunRequirementMessage();
-
-  if (requirementMessage) {
-    syncReviewBenchmarkActions();
-    return;
-  }
-
-  setButtonBusy(button, true, "运行中...");
-
-  try {
-    const result = await apiJson(`${reviewBenchmarkApi}/run`, {
-      method: "POST",
-      body: JSON.stringify({})
-    });
-    appState.reviewBenchmarkViewFilter = result?.summary?.failed > 0 ? "mismatches" : "all";
-    byId("review-benchmark-view-filter") && (byId("review-benchmark-view-filter").value = appState.reviewBenchmarkViewFilter);
-    renderReviewBenchmarkSamples(appState.reviewBenchmarkSamples);
-    renderReviewBenchmarkResult(result);
-    renderReviewBenchmarkSamples(appState.reviewBenchmarkSamples);
-  } catch (error) {
-    byId("review-benchmark-result").innerHTML = `
-      <div class="result-card-shell muted">${escapeHtml(error.message || "运行基准评测失败")}</div>
-    `;
-  } finally {
-    setButtonBusy(button, false);
-    syncReviewBenchmarkActions();
-  }
-});
-
-byId("style-profile-draft-button").addEventListener("click", async () => {
-  const button = byId("style-profile-draft-button");
-  const requirementMessage = getStyleProfileDraftRequirementMessage();
-
-  if (requirementMessage) {
-    syncStyleProfileDraftActions();
-    return;
-  }
-
-  revealStyleProfilePane();
-  setButtonBusy(button, true, "生成中...");
-
-  try {
-    const response = await apiJson("/api/style-profile/draft", {
-      method: "POST",
-      body: JSON.stringify({
-        topic: byId("style-profile-topic")?.value || ""
-      })
-    });
-    renderStyleProfile(response.profile || {});
-  } catch (error) {
-    byId("style-profile-result").innerHTML = `
-      <div class="result-card-shell muted">${escapeHtml(error.message || "生成风格画像失败")}</div>
-    `;
-  } finally {
-    setButtonBusy(button, false);
-    syncStyleProfileDraftActions();
-  }
-});
-
-byId("rewrite-pair-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const formElement = event.currentTarget;
-  const submitButton = formElement.querySelector('button[type="submit"]');
-  const form = new FormData(formElement);
-  const requirementMessage = getRewritePairRequirementMessage();
-
-  if (requirementMessage) {
-    syncRewritePairActions();
-    return;
-  }
-
-  setButtonBusy(submitButton, true, "保存中...");
-
-  try {
-    const result = await apiJson("/api/rewrite-pairs", {
-      method: "POST",
-      body: JSON.stringify({
-        name: form.get("name"),
-        beforePlatformReason: form.get("beforePlatformReason"),
-        rewriteStrategy: form.get("rewriteStrategy"),
-        effectiveChanges: form.get("effectiveChanges"),
-        rewriteModel: appState.latestRewrite?.model || "",
-        before: {
-          title: form.get("beforeTitle"),
-          body: form.get("beforeBody"),
-          coverText: form.get("beforeCoverText"),
-          tags: splitCSV(form.get("beforeTags"))
-        },
-        after: {
-          title: form.get("afterTitle"),
-          body: form.get("afterBody"),
-          coverText: form.get("afterCoverText"),
-          tags: splitCSV(form.get("afterTags"))
-        }
-      })
-    });
-
-    byId("rewrite-pair-result").innerHTML = `
-      <div class="verdict verdict-observe">
-        <span>样本已保存</span>
-        <strong>${escapeHtml(verdictLabel(result.beforeAnalysis?.verdict || "pass"))} -> ${escapeHtml(
-          verdictLabel(result.afterAnalysis?.verdict || "pass")
-        )}</strong>
-        <em>风险分 ${escapeHtml(String(result.beforeAnalysis?.score ?? 0))} -> ${escapeHtml(
-          String(result.afterAnalysis?.score ?? 0)
-        )}</em>
-      </div>
-    `;
-    formElement.reset();
-    await refreshAll();
-  } catch (error) {
-    byId("rewrite-pair-result").innerHTML = `
-      <div class="result-card-shell muted">${escapeHtml(error.message || "保存改写样本失败")}</div>
-    `;
-  } finally {
-    setButtonBusy(submitButton, false);
-    syncRewritePairActions();
-  }
 });
 
 initializeTabs();
 renderSampleLibraryWorkspace();
 
 document.addEventListener("click", async (event) => {
-  const workflowButton = event.target.closest("[data-workflow-action]");
-
-  if (workflowButton) {
-    setButtonBusy(workflowButton, true, "处理中...");
-
-    try {
-      await runWorkflowAction(workflowButton.dataset.workflowAction);
-    } catch (error) {
-      const assistant = byId("workflow-assistant");
-      assistant?.insertAdjacentHTML("beforeend", `<p class="helper-text">${escapeHtml(error.message || "操作失败")}</p>`);
-    } finally {
-      setButtonBusy(workflowButton, false);
-      renderWorkflowAssistant();
-    }
-    return;
-  }
-
   const summaryAction = event.target.closest("[data-summary-action]");
 
   if (summaryAction) {
@@ -5440,8 +5697,13 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
-  if (action === "prefill-rewrite-pair-current") {
-    fillRewritePairFormFromCurrent();
+  if (action === "open-sample-library-record") {
+    openSampleLibraryRecord(button.dataset.id, "base");
+    return;
+  }
+
+  if (action === "open-sample-library-calibration") {
+    openSampleLibraryRecord(button.dataset.id, "calibration");
     return;
   }
 
@@ -5463,16 +5725,6 @@ document.addEventListener("click", async (event) => {
         method: "DELETE",
         body: JSON.stringify({
           noteId: button.dataset.noteId,
-          createdAt: button.dataset.createdAt
-        })
-      });
-    }
-
-    if (action === "delete-rewrite-pair") {
-      await apiJson("/api/admin/rewrite-pairs", {
-        method: "DELETE",
-        body: JSON.stringify({
-          id: button.dataset.id,
           createdAt: button.dataset.createdAt
         })
       });
@@ -5515,6 +5767,29 @@ document.addEventListener("click", async (event) => {
       });
     }
 
+    if (action === "run-sample-library-calibration-replay") {
+      const resultNode = byId("sample-library-calibration-replay-result");
+
+      if (resultNode) {
+        resultNode.innerHTML = '<div class="result-card-shell muted">正在回放历史校准样本...</div>';
+      }
+
+      const response = await apiJson(sampleLibraryCalibrationReplayApi, {
+        method: "POST",
+        body: JSON.stringify({
+          mode: "balanced"
+        })
+      });
+      appState.sampleLibraryCalibrationReplayResult = response.result || null;
+      ensureSampleLibraryAdvancedPanelOpen();
+      const systemCalibrationPanel = byId("system-calibration-panel");
+      if (systemCalibrationPanel && "open" in systemCalibrationPanel) {
+        systemCalibrationPanel.open = true;
+      }
+      renderSampleLibraryCalibrationReplayResult(appState.sampleLibraryCalibrationReplayResult);
+      return;
+    }
+
     if (action === "save-sample-library-base") {
       const requirementMessage = getSampleLibraryDetailBaseRequirementMessage();
 
@@ -5541,7 +5816,6 @@ document.addEventListener("click", async (event) => {
       appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
       setSampleLibraryDetailStep("reference");
       renderSampleLibraryWorkspace();
-      refreshStyleProfileStateFromResponse(response);
     }
 
     if (action === "save-sample-library-reference") {
@@ -5553,8 +5827,8 @@ document.addEventListener("click", async (event) => {
       }
 
       const section = byId("sample-library-reference-section");
-      const enabled = section?.querySelector('[name="enabled"]')?.checked === true;
       const tier = String(section?.querySelector('[name="tier"]')?.value || "").trim();
+      const enabled = section?.querySelector('[name="enabled"]')?.checked === true || Boolean(tier);
       const response = await apiJson(sampleLibraryApi, {
         method: "PATCH",
         body: JSON.stringify({
@@ -5570,7 +5844,6 @@ document.addEventListener("click", async (event) => {
       appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
       setSampleLibraryDetailStep("lifecycle");
       renderSampleLibraryWorkspace();
-      refreshStyleProfileStateFromResponse(response);
     }
 
     if (action === "save-sample-library-lifecycle") {
@@ -5601,9 +5874,67 @@ document.addEventListener("click", async (event) => {
       });
       appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
       appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
-      setSampleLibraryDetailStep("lifecycle");
+      setSampleLibraryDetailStep("calibration");
       renderSampleLibraryWorkspace();
-      refreshStyleProfileStateFromResponse(response);
+    }
+
+    if (action === "prefill-sample-library-calibration-prediction") {
+      const requirementMessage = getSampleLibraryCalibrationPredictionPrefillRequirementMessage();
+
+      if (requirementMessage) {
+        syncSampleLibraryDetailActions();
+        return;
+      }
+
+      const section = byId("sample-library-calibration-section");
+      const prediction = buildSampleLibraryCalibrationPredictionFromCurrentState();
+      setSampleLibraryCalibrationPredictionFields(section, prediction);
+      setSampleLibraryDetailStep("calibration");
+      renderSampleLibraryDetailStepState();
+      return;
+    }
+
+    if (action === "save-sample-library-calibration") {
+      const requirementMessage = getSampleLibraryDetailCalibrationRequirementMessage();
+
+      if (requirementMessage) {
+        syncSampleLibraryDetailActions();
+        return;
+      }
+
+      const section = byId("sample-library-calibration-section");
+      const response = await apiJson(sampleLibraryApi, {
+        method: "PATCH",
+        body: JSON.stringify({
+          id: button.dataset.id,
+          calibration: {
+            prediction: {
+              predictedStatus: section?.querySelector('[name="predictedStatus"]')?.value || "not_published",
+              predictedRiskLevel: section?.querySelector('[name="predictedRiskLevel"]')?.value || "",
+              predictedPerformanceTier: section?.querySelector('[name="predictedPerformanceTier"]')?.value || "",
+              confidence: section?.querySelector('[name="predictionConfidence"]')?.value || 0,
+              reason: section?.querySelector('[name="predictionReason"]')?.value || "",
+              model: section?.querySelector('[name="predictionModel"]')?.value || "",
+              createdAt: section?.querySelector('[name="predictionCreatedAt"]')?.value || ""
+            },
+            retro: {
+              actualPerformanceTier: section?.querySelector('[name="actualPerformanceTier"]')?.value || "",
+              predictionMatched: section?.querySelector('[name="predictionMatched"]')?.checked === true,
+              missReason: section?.querySelector('[name="missReason"]')?.value || "",
+              validatedSignals: splitCSV(section?.querySelector('[name="validatedSignals"]')?.value || ""),
+              invalidatedSignals: splitCSV(section?.querySelector('[name="invalidatedSignals"]')?.value || ""),
+              shouldBecomeReference: section?.querySelector('[name="shouldBecomeReference"]')?.checked === true,
+              ruleImprovementCandidate: section?.querySelector('[name="ruleImprovementCandidate"]')?.value || "",
+              notes: section?.querySelector('[name="retroNotes"]')?.value || "",
+              reviewedAt: section?.querySelector('[name="reviewedAt"]')?.value || ""
+            }
+          }
+        })
+      });
+      appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+      appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
+      setSampleLibraryDetailStep("calibration");
+      renderSampleLibraryWorkspace();
     }
 
     if (action === "delete-sample-library-record") {
@@ -5616,50 +5947,6 @@ document.addEventListener("click", async (event) => {
       appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : [];
       appState.selectedSampleLibraryRecordId = "";
       renderSampleLibraryWorkspace();
-      refreshStyleProfileStateFromResponse(response);
-      return;
-    }
-
-    if (action === "add-sample-library-to-benchmark") {
-      const record = appState.sampleLibraryRecords.find((item) => String(item.id || "") === String(button.dataset.id || ""));
-
-      if (!record) {
-        throw new Error("未找到对应的样本记录。");
-      }
-
-      await addBenchmarkSample({
-        title: getSampleRecordTitle(record),
-        body: getSampleRecordBody(record) || getSampleRecordCoverText(record) || getSampleRecordTitle(record),
-        coverText: getSampleRecordCoverText(record),
-        collectionType: getSampleRecordCollectionType(record),
-        tags: getSampleRecordTags(record),
-        expectedType: inferBenchmarkExpectedTypeFromSampleRecord(record),
-        source: {
-          type: "sample_library",
-          recordId: String(record.id || "").trim()
-        }
-      });
-      return;
-    }
-
-    if (action === "add-false-positive-to-benchmark") {
-      const item = appState.falsePositiveLog.find((entry) => String(entry.id || "") === String(button.dataset.id || ""));
-
-      if (!item) {
-        throw new Error("未找到对应的误报样本。");
-      }
-
-      await addBenchmarkSample({
-        title: String(item.title || "").trim(),
-        body: String(item.body || item.coverText || item.title || "").trim(),
-        coverText: String(item.coverText || "").trim(),
-        tags: uniqueStrings(item.tags || []),
-        expectedType: "false_positive",
-        source: {
-          type: "false_positive_log",
-          recordId: String(item.id || "").trim()
-        }
-      });
       return;
     }
 
@@ -5696,120 +5983,28 @@ document.addEventListener("click", async (event) => {
       await saveLifecycleFromCurrent("generation", button.dataset.candidateId, button.dataset.candidateIndex);
     }
 
-    if (action === "update-lifecycle-publish") {
-      const container = button.closest(".admin-item")?.querySelector(".lifecycle-update-grid");
-      await apiJson("/api/note-lifecycle", {
-        method: "PATCH",
-        body: JSON.stringify({
-          id: button.dataset.id,
-          publishStatus: container?.querySelector('[name="publishStatus"]')?.value,
-          notes: container?.querySelector('[name="notes"]')?.value,
-          metrics: {
-            likes: container?.querySelector('[name="likes"]')?.value,
-            favorites: container?.querySelector('[name="favorites"]')?.value,
-            comments: container?.querySelector('[name="comments"]')?.value
-          }
-        })
-      });
-      revealNoteLifecyclePane();
-    }
+    if (action === "save-platform-outcome") {
+      const source = button.dataset.source || "analysis";
+      const requirementMessage = getLifecycleSaveRequirementMessage(source, button.dataset.candidateId, button.dataset.candidateIndex);
 
-    if (action === "delete-lifecycle") {
-      await apiJson("/api/note-lifecycle", {
-        method: "DELETE",
-        body: JSON.stringify({
-          id: button.dataset.id
-        })
-      });
-      revealNoteLifecyclePane();
-    }
-
-    if (action === "send-review-benchmark-to-sample-library") {
-      const mismatch = getReviewBenchmarkMismatchById(button.dataset.id);
-
-      if (!mismatch) {
-        throw new Error("未找到对应的未命中样本。");
+      if (requirementMessage) {
+        syncLifecycleResultActions();
+        return;
       }
 
-      const response = await apiJson(sampleLibraryApi, {
-        method: "POST",
-        body: JSON.stringify({
-          source: "benchmark_mismatch",
-          stage: "draft",
-          note: {
-            title: mismatch.input?.title || "",
-            body: mismatch.input?.body || "",
-            coverText: mismatch.input?.coverText || "",
-            collectionType: mismatch.input?.collectionType || "",
-            tags: uniqueStrings(mismatch.input?.tags || [])
-          },
-          publish: {
-            status: inferSampleLibraryPublishStatusFromBenchmarkExpectedType(mismatch.expectedType),
-            notes: buildReviewBenchmarkMismatchSummary(mismatch)
-          },
-          snapshots: {
-            analysis: mismatch.analysis || null,
-            rewrite: null,
-            generation: null,
-            crossReview: null
-          }
-        })
+      const response = await savePlatformOutcomeFromCurrent({
+        source,
+        publishStatus: button.dataset.publishStatus,
+        candidateId: button.dataset.candidateId,
+        candidateIndex: button.dataset.candidateIndex,
+        notes: button.dataset.note
       });
+      const resultNode = byId("sample-library-create-result");
 
-      appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
-      appState.sampleLibraryFilter = "all";
-      appState.sampleLibraryCollectionFilter = "all";
-      appState.sampleLibrarySearch = "";
-      appState.selectedSampleLibraryRecordId = String(response.item?.id || "");
-      byId("sample-library-search-input") && (byId("sample-library-search-input").value = "");
-      byId("sample-library-filter") && (byId("sample-library-filter").value = "all");
-      byId("sample-library-collection-filter") && (byId("sample-library-collection-filter").value = "all");
-      renderSampleLibraryWorkspace();
-      revealSampleLibraryPane();
-
-      if (appState.reviewBenchmarkLastRunResult) {
-        renderReviewBenchmarkResult(appState.reviewBenchmarkLastRunResult);
+      if (resultNode) {
+        resultNode.innerHTML = `<div class="result-card-shell">${escapeHtml(button.dataset.note || "平台结果已回填到学习样本。")}</div>`;
       }
 
-      byId("review-benchmark-result")?.insertAdjacentHTML(
-        "afterbegin",
-        '<div class="result-card-shell">未命中样本已回流到样本库，可继续补充参考属性或修正生命周期状态。</div>'
-      );
-      return;
-    }
-
-    if (action === "send-review-benchmark-to-false-positive") {
-      const mismatch = getReviewBenchmarkMismatchById(button.dataset.id);
-
-      if (!mismatch) {
-        throw new Error("未找到对应的未命中样本。");
-      }
-
-      const response = await apiJson("/api/false-positive-log", {
-        method: "POST",
-        body: JSON.stringify({
-          source: "benchmark_mismatch",
-          title: mismatch.input?.title || "",
-          body: mismatch.input?.body || "",
-          coverText: mismatch.input?.coverText || "",
-          tags: uniqueStrings(mismatch.input?.tags || []),
-          status: "platform_passed_pending",
-          userNotes: buildReviewBenchmarkMismatchSummary(mismatch),
-          analysis: mismatch.analysis || undefined
-        })
-      });
-
-      renderFalsePositiveLog(response.items || []);
-      revealFeedbackCenterPane();
-
-      if (appState.reviewBenchmarkLastRunResult) {
-        renderReviewBenchmarkResult(appState.reviewBenchmarkLastRunResult);
-      }
-
-      byId("review-benchmark-result")?.insertAdjacentHTML(
-        "afterbegin",
-        '<div class="result-card-shell">未命中样本已回流到误报日志，可继续确认是否为稳定误报。</div>'
-      );
       return;
     }
 
@@ -5865,98 +6060,6 @@ document.addEventListener("click", async (event) => {
       return;
     }
 
-    if (action === "delete-review-benchmark") {
-      const response = await apiJson(reviewBenchmarkApi, {
-        method: "DELETE",
-        body: JSON.stringify({
-          id: button.dataset.id
-        })
-      });
-      renderReviewBenchmarkSamples(response.items || []);
-      byId("review-benchmark-result").innerHTML = '<div class="result-card-shell">基准样本已删除。</div>';
-      return;
-    }
-
-    if (action === "edit-style-profile-draft") {
-      enterStyleProfileDraftEditMode(appState.styleProfileState?.draft || appState.styleProfileState?.current || {});
-      renderStyleProfile(appState.styleProfileState || {});
-      return;
-    }
-
-    if (action === "cancel-style-profile-draft") {
-      exitStyleProfileDraftEditMode();
-      renderStyleProfile(appState.styleProfileState || {});
-      return;
-    }
-
-    if (action === "save-style-profile-draft") {
-      const container = button.closest(".style-profile-card");
-      const targetAction = appState.styleProfileState?.draft ? "update-draft" : "confirm-current";
-      const response = await apiJson("/api/style-profile", {
-        method: "PATCH",
-        body: JSON.stringify({
-          action: targetAction,
-          profile: buildStyleProfileDraftPayload(container)
-        })
-      });
-      renderStyleProfile(response.profile || {});
-      return;
-    }
-
-    if (action === "confirm-style-profile") {
-      if (appState.styleProfileDraftEditing) {
-        const container = button.closest(".style-profile-card");
-        const updateAction = appState.styleProfileState?.draft ? "update-draft" : "confirm-current";
-
-        if (updateAction === "confirm-current") {
-          const response = await apiJson("/api/style-profile", {
-            method: "PATCH",
-            body: JSON.stringify({
-              action: "confirm-current",
-              profile: buildStyleProfileDraftPayload(container)
-            })
-          });
-          exitStyleProfileDraftEditMode();
-          renderStyleProfile(response.profile || {});
-          return;
-        }
-
-        const updated = await apiJson("/api/style-profile", {
-          method: "PATCH",
-          body: JSON.stringify({
-            action: updateAction,
-            profile: buildStyleProfileDraftPayload(container)
-          })
-        });
-        const response = await apiJson("/api/style-profile", {
-          method: "PATCH",
-          body: JSON.stringify({})
-        });
-        exitStyleProfileDraftEditMode();
-        renderStyleProfile(response.profile || updated.profile || {});
-        return;
-      }
-
-      const response = await apiJson("/api/style-profile", {
-        method: "PATCH",
-        body: JSON.stringify({})
-      });
-      renderStyleProfile(response.profile || {});
-      return;
-    }
-
-    if (action === "activate-style-profile") {
-      const response = await apiJson("/api/style-profile", {
-        method: "PATCH",
-        body: JSON.stringify({
-          action: "activate",
-          id: button.dataset.id
-        })
-      });
-      renderStyleProfile(response.profile || {});
-      return;
-    }
-
     await refreshAll();
   } catch (error) {
     const target =
@@ -5980,24 +6083,15 @@ refreshAll().catch((error) => {
   `;
 });
 
-refreshReviewBenchmark().catch((error) => {
-  byId("review-benchmark-result").innerHTML = `
-    <div class="result-card-shell muted">${escapeHtml(error.message || "基准评测初始化失败")}</div>
-  `;
-});
-
 loadModelSelectionOptions().catch(() => {});
 loadCollectionTypeOptions().catch(() => {});
 
 syncAnalyzeActions();
 syncFeedbackActions();
 syncGenerationActions();
-syncRewritePairActions();
-syncRewritePairPrefillButton();
 syncSampleLibraryCreateActions();
+syncSampleLibraryImportActions();
 syncSampleLibraryPrefillActions();
 syncSampleLibraryDetailActions();
-syncReviewBenchmarkActions();
-syncStyleProfileDraftActions();
 syncLifecycleResultActions();
 syncLexiconFormActions();

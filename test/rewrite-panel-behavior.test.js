@@ -81,12 +81,14 @@ test("main workbench exposes per-action model selectors and sends current select
   assert.match(indexHtml, /高级判断/);
   assert.match(indexHtml, /id="cross-review-model-selection"/);
   assert.match(indexHtml, /id="cross-review-action-hint"/);
+  assert.match(indexHtml, /只在结论接近或有分歧时再展开/);
   assert.doesNotMatch(actionGridHtml, /cross-review-model-selection/);
   assert.match(appJs, /\/api\/model-options/);
   assert.match(appJs, /modelSelection:\s*getSelectedModelSelections\(\)/);
   assert.match(appJs, /function syncCrossReviewModelSelectionRules\(/);
   assert.match(appJs, /function getCrossReviewActionRequirementMessage\(/);
   assert.match(appJs, /function syncCrossReviewActions\(/);
+  assert.match(appJs, /function shouldRecommendCrossReview\(/);
   assert.match(appJs, /cross-review-model-selection/);
   assert.match(appJs, /rewrite-model-selection/);
   assert.match(appJs, /option\.disabled/);
@@ -131,43 +133,23 @@ test("generation workbench is folded into the main workbench as an optional bran
   assert.match(appJs, /byId\("generation-workbench-form"\)\.addEventListener\("submit"/);
 });
 
-test("workflow assistant prioritizes progressing the main publishing path before advanced review", async () => {
-  const source = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
-  const start = source.indexOf("function getWorkflowAssistantState()");
-  const end = source.indexOf("function renderWorkflowAssistant()", start);
-  const workflowSource = source.slice(start, end);
-  const renderStart = source.indexOf("function renderWorkflowAssistant()");
-  const renderEnd = source.indexOf("function hasAnalyzeInput()", renderStart);
-  const renderSource = source.slice(renderStart, renderEnd);
+test("main workbench no longer keeps a separate workflow assistant layer", async () => {
+  const [indexHtml, appJs, styles] = await Promise.all([
+    fs.readFile(path.join(process.cwd(), "web/index.html"), "utf8"),
+    fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8"),
+    fs.readFile(path.join(process.cwd(), "web/styles.css"), "utf8")
+  ]);
 
-  assert.match(source, /function getPendingFeedbackItems\s*\(/);
-  assert.match(source, /function getPendingSampleLibraryItems\s*\(/);
-  assert.match(workflowSource, /先处理回流反馈，再继续主链路/);
-  assert.match(workflowSource, /先补样本库记录，再继续主链路/);
-  assert.match(workflowSource, /open-feedback-center", label: "去处理优先反馈", tone: "button-alt"/);
-  assert.match(workflowSource, /open-sample-library", label: "去补样本记录", tone: "button-alt"/);
-  assert.match(workflowSource, /save-generation-final", label: "最终推荐稿进入生命周期", tone: "button-alt"/);
-  assert.match(workflowSource, /save-rewrite", label: "保存改写稿生命周期", tone: "button-alt"/);
-  assert.match(workflowSource, /cross-review", label: "需要时再做交叉复判", tone: "button-ghost"/);
-  assert.match(workflowSource, /save-analysis", label: "保存检测记录", tone: "button-alt"/);
-  assert.match(workflowSource, /cross-review", label: "需要时再做交叉复判", tone: "button-ghost"/);
-  assert.doesNotMatch(workflowSource, /cross-review", label: "模型交叉复判", tone: "button-alt"/);
-  assert.match(workflowSource, /actions:\s*\[\]/);
-  assert.match(renderSource, /const actionItems = Array\.isArray\(state\.actions\) \? state\.actions : \[\]/);
-  assert.match(renderSource, /actionItems\.length/);
-});
-
-test("workflow assistant routes sample library and feedback actions to their target panes", async () => {
-  const source = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
-  const start = source.indexOf("async function runWorkflowAction(action = \"\")");
-  const end = source.indexOf("const analyzeForm = byId(\"analyze-form\");", start);
-  const runWorkflowActionSource = source.slice(start, end);
-
-  assert.match(runWorkflowActionSource, /action === "open-sample-library"/);
-  assert.match(runWorkflowActionSource, /setSampleLibraryCreateFormOpen\(true\)/);
-  assert.match(runWorkflowActionSource, /sample-library-create-form-shell/);
-  assert.match(runWorkflowActionSource, /action === "open-feedback-center"/);
-  assert.match(runWorkflowActionSource, /revealFeedbackCenterDetails\(/);
+  assert.doesNotMatch(indexHtml, /id="workflow-assistant"/);
+  assert.doesNotMatch(indexHtml, /id="workflow-timeline"/);
+  assert.doesNotMatch(appJs, /function getPendingFeedbackItems\s*\(/);
+  assert.doesNotMatch(appJs, /function getPendingSampleLibraryItems\s*\(/);
+  assert.doesNotMatch(appJs, /function getWorkflowAssistantState\s*\(/);
+  assert.doesNotMatch(appJs, /function renderWorkflowAssistant\s*\(/);
+  assert.doesNotMatch(appJs, /async function runWorkflowAction\(action = ""\)/);
+  assert.doesNotMatch(appJs, /data-workflow-action/);
+  assert.doesNotMatch(styles, /\.workflow-assistant-card/);
+  assert.doesNotMatch(styles, /\.workflow-timeline/);
 });
 
 test("rewrite result panel renders round-by-round retry guidance", async () => {

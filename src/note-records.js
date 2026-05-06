@@ -31,6 +31,15 @@ const sourcePriority = {
   generation_final: 4
 };
 
+const sampleTypePriority = {
+  "": 0,
+  observe: 1,
+  rewrite_success: 2,
+  false_positive: 3,
+  missed_violation: 4,
+  good_sample: 5
+};
+
 function normalizeString(value) {
   return String(value || "").trim();
 }
@@ -42,6 +51,29 @@ function uniqueStrings(items = []) {
 function normalizeMetric(value) {
   const number = Number(String(value ?? "").trim());
   return Number.isFinite(number) && number >= 0 ? Math.floor(number) : 0;
+}
+
+function normalizeConfidence(value) {
+  const number = Number(String(value ?? "").trim());
+  if (!Number.isFinite(number)) {
+    return 0;
+  }
+
+  return Math.min(100, Math.max(0, Math.round(number)));
+}
+
+function normalizeBoolean(value) {
+  return value === true || String(value || "").trim().toLowerCase() === "true";
+}
+
+function normalizeSignalList(value = []) {
+  return uniqueStrings(
+    Array.isArray(value)
+      ? value
+      : String(value || "")
+          .split(/[，,、\n]/)
+          .map((item) => item.trim())
+  );
 }
 
 function normalizeMetrics(metrics = {}) {
@@ -64,6 +96,16 @@ function normalizeStatus(value = "") {
   }
 
   return "not_published";
+}
+
+export function normalizeLearningSampleType(value = "") {
+  const normalized = normalizeString(value);
+
+  if (["good_sample", "false_positive", "missed_violation", "rewrite_success", "observe"].includes(normalized)) {
+    return normalized;
+  }
+
+  return "";
 }
 
 function normalizeTier(value = "") {
@@ -192,6 +234,29 @@ function mergeSnapshots(left = {}, right = {}) {
   };
 }
 
+function hasMeaningfulCalibrationBranch(branch = {}) {
+  return valueDensity(branch).size > 2 && Object.values(branch || {}).some((value) => {
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === "boolean") return value === true;
+    if (typeof value === "number") return value > 0;
+    return Boolean(normalizeString(value));
+  });
+}
+
+function mergeCalibration(left = {}, right = {}) {
+  const normalizedLeft = normalizeCalibration(left);
+  const normalizedRight = normalizeCalibration(right);
+
+  return {
+    prediction: hasMeaningfulCalibrationBranch(normalizedRight.prediction)
+      ? preferStructuredValue(normalizedLeft.prediction, normalizedRight.prediction)
+      : normalizedLeft.prediction,
+    retro: hasMeaningfulCalibrationBranch(normalizedRight.retro)
+      ? preferStructuredValue(normalizedLeft.retro, normalizedRight.retro)
+      : normalizedLeft.retro
+  };
+}
+
 function chooseCanonicalId(left = {}, right = {}) {
   const candidates = [normalizeString(left.id), normalizeString(right.id)].filter(Boolean).sort((a, b) => a.localeCompare(b));
   return candidates[0] || "";
@@ -238,6 +303,34 @@ function normalizeSnapshots(snapshots = {}) {
   };
 }
 
+function normalizeCalibration(calibration = {}) {
+  const prediction = calibration.prediction && typeof calibration.prediction === "object" ? calibration.prediction : {};
+  const retro = calibration.retro && typeof calibration.retro === "object" ? calibration.retro : {};
+
+  return {
+    prediction: {
+      predictedStatus: normalizeStatus(prediction.predictedStatus),
+      predictedRiskLevel: normalizeString(prediction.predictedRiskLevel),
+      predictedPerformanceTier: normalizeString(prediction.predictedPerformanceTier),
+      confidence: normalizeConfidence(prediction.confidence),
+      reason: normalizeString(prediction.reason),
+      model: normalizeString(prediction.model),
+      createdAt: normalizeString(prediction.createdAt)
+    },
+    retro: {
+      actualPerformanceTier: normalizeString(retro.actualPerformanceTier),
+      predictionMatched: normalizeBoolean(retro.predictionMatched),
+      missReason: normalizeString(retro.missReason),
+      validatedSignals: normalizeSignalList(retro.validatedSignals),
+      invalidatedSignals: normalizeSignalList(retro.invalidatedSignals),
+      shouldBecomeReference: normalizeBoolean(retro.shouldBecomeReference),
+      ruleImprovementCandidate: normalizeString(retro.ruleImprovementCandidate),
+      notes: normalizeString(retro.notes),
+      reviewedAt: normalizeString(retro.reviewedAt)
+    }
+  };
+}
+
 export function buildNoteFingerprint(note = {}) {
   const normalized = normalizeNote(note);
   return [
@@ -256,6 +349,7 @@ export function buildNoteRecord(input = {}) {
   const updatedAt = normalizeString(input.updatedAt) || createdAt;
   const source = normalizeString(input.source) || "manual";
   const stage = normalizeString(input.stage) || "draft";
+  const sampleType = normalizeLearningSampleType(input.sampleType);
   const idSeed = fingerprint || `${Date.now()}`;
 
   return {
@@ -263,12 +357,14 @@ export function buildNoteRecord(input = {}) {
     fingerprint,
     source,
     stage,
+    sampleType,
     createdAt,
     updatedAt,
     note,
     publish: normalizePublish(input.publish || input.publishResult || {}),
     reference: normalizeReference(input.reference || {}),
-    snapshots: normalizeSnapshots(input.snapshots || {})
+    snapshots: normalizeSnapshots(input.snapshots || {}),
+    calibration: normalizeCalibration(input.calibration || {})
   };
 }
 
@@ -324,6 +420,7 @@ export function mergeNoteRecords(current = {}, incoming = {}) {
   const left = buildNoteRecord(current);
   const right = buildNoteRecord(incoming);
   const preferredStage = preferPriorityValue(left.stage, right.stage, stagePriority) || "draft";
+  const sampleType = preferPriorityValue(left.sampleType, right.sampleType, sampleTypePriority) || "";
   const sourceCandidate =
     compareByPriority(left.stage, right.stage, stagePriority) === 0
       ? preferPriorityValue(left.source, right.source, sourcePriority)
@@ -337,12 +434,14 @@ export function mergeNoteRecords(current = {}, incoming = {}) {
     id: chooseCanonicalId(left, right),
     source: sourceCandidate || preferLongerString(left.source, right.source) || "manual",
     stage: preferredStage,
+    sampleType,
     createdAt: earliestTimestamp(left.createdAt, right.createdAt),
     updatedAt: latestTimestamp(left.updatedAt, right.updatedAt),
     note: mergeNote(left.note, right.note),
     publish: mergePublish(left.publish, right.publish),
     reference: mergeReference(left.reference, right.reference),
-    snapshots: mergeSnapshots(left.snapshots, right.snapshots)
+    snapshots: mergeSnapshots(left.snapshots, right.snapshots),
+    calibration: mergeCalibration(left.calibration, right.calibration)
   });
 }
 

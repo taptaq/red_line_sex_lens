@@ -10,8 +10,6 @@ import {
   migrateLifecycleToNoteRecord,
   migrateSuccessSampleToNoteRecord
 } from "./note-records.js";
-import { normalizeReviewBenchmarkSample } from "./review-benchmark.js";
-import { isMeaningfulRewritePairRecord } from "./rewrite-pairs.js";
 import { sanitizeStyleProfileState } from "./style-profile.js";
 import { withSampleWeight } from "./sample-weight.js";
 
@@ -54,6 +52,16 @@ function normalizeString(value) {
   return String(value || "").trim();
 }
 
+function normalizeFalsePositiveSource(value) {
+  const source = normalizeString(value);
+
+  if (source === "benchmark_mismatch") {
+    return "false_positive_reflow";
+  }
+
+  return source;
+}
+
 function normalizeNumber(value, fallback = 0) {
   const normalized = Number(String(value || "").trim());
   return Number.isFinite(normalized) ? normalized : fallback;
@@ -77,7 +85,7 @@ function normalizeFalsePositiveEntry(entry = {}) {
   return withSampleWeight({
     ...entry,
     id: normalizeString(entry.id),
-    source: normalizeString(entry.source),
+    source: normalizeFalsePositiveSource(entry.source),
     status,
     confidence,
     sourceQuality,
@@ -404,11 +412,6 @@ export async function saveReviewQueue(items) {
   await writeJson(paths.reviewQueue, items);
 }
 
-export async function loadRewritePairs() {
-  const items = await readJson(paths.rewritePairs, []);
-  return (Array.isArray(items) ? items : []).filter((item) => isMeaningfulRewritePairRecord(item));
-}
-
 export async function loadNoteRecords() {
   const noteRecordsPath = resolveNoteRecordsPath();
 
@@ -572,17 +575,6 @@ export async function saveCollectionTypes(value = {}) {
   });
 }
 
-export async function appendRewritePairs(entries) {
-  const current = await loadRewritePairs();
-  const next = [...current, ...(Array.isArray(entries) ? entries : [entries]).filter((item) => isMeaningfulRewritePairRecord(item))];
-  await writeJson(paths.rewritePairs, next);
-  return next;
-}
-
-export async function saveRewritePairs(items) {
-  await writeJson(paths.rewritePairs, (Array.isArray(items) ? items : []).filter((item) => isMeaningfulRewritePairRecord(item)));
-}
-
 export async function loadSeedLexicon() {
   return readJson(paths.lexiconSeed, []);
 }
@@ -643,62 +635,4 @@ export async function loadAnalyzeTagOptions() {
 
 export async function saveAnalyzeTagOptions(items) {
   await writeJson(paths.analyzeTagOptions, uniqueStrings(items));
-}
-
-function ensureUniqueReviewBenchmarkIds(items) {
-  const seenIds = new Set();
-
-  return items.map((item) => {
-    if (!seenIds.has(item.id)) {
-      seenIds.add(item.id);
-      return item;
-    }
-
-    let attempt = 1;
-    let regenerated = normalizeReviewBenchmarkSample({
-      ...item,
-      id: "",
-      updatedAt: `${item.updatedAt}#${attempt}`
-    });
-
-    while (seenIds.has(regenerated.id)) {
-      attempt += 1;
-      regenerated = normalizeReviewBenchmarkSample({
-        ...item,
-        id: "",
-        updatedAt: `${item.updatedAt}#${attempt}`
-      });
-    }
-
-    seenIds.add(regenerated.id);
-    return {
-      ...regenerated,
-      updatedAt: item.updatedAt
-    };
-  });
-}
-
-export async function loadReviewBenchmarkSamples() {
-  const items = await readJson(paths.reviewBenchmark, []);
-  return ensureUniqueReviewBenchmarkIds((Array.isArray(items) ? items : []).map((item) => normalizeReviewBenchmarkSample(item)));
-}
-
-export async function saveReviewBenchmarkSamples(items) {
-  const normalized = ensureUniqueReviewBenchmarkIds((Array.isArray(items) ? items : []).map((item) => normalizeReviewBenchmarkSample(item)));
-  await writeJson(paths.reviewBenchmark, normalized);
-}
-
-export async function deleteReviewBenchmarkSampleById(id) {
-  const targetId = normalizeString(id);
-  const current = await loadReviewBenchmarkSamples();
-  const next = current.filter((item) => normalizeString(item.id) !== targetId);
-
-  if (next.length === current.length) {
-    const error = new Error("未找到要删除的基准样本。");
-    error.statusCode = 404;
-    throw error;
-  }
-
-  await saveReviewBenchmarkSamples(next);
-  return next;
 }

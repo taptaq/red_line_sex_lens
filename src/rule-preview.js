@@ -57,25 +57,7 @@ function buildHistorySamples(histories = {}) {
     ...ensureArray(histories.successSamples).map((item) => normalizeHistorySample(item, "success")),
     ...ensureArray(histories.falsePositiveLog).map((item) => normalizeHistorySample(item, "false_positive")),
     ...ensureArray(histories.noteLifecycle).map((item) => normalizeHistorySample(item, "lifecycle")),
-    ...ensureArray(histories.feedbackLog).map((item) => normalizeHistorySample(item, "feedback")),
-    ...ensureArray(histories.rewritePairs).flatMap((item) => [
-      normalizeHistorySample(
-        {
-          id: item.id ? `${item.id}-before` : "",
-          ...(item.before || {}),
-          analysisSnapshot: item.beforeAnalysis
-        },
-        "rewrite_before"
-      ),
-      normalizeHistorySample(
-        {
-          id: item.id ? `${item.id}-after` : "",
-          ...(item.after || {}),
-          analysisSnapshot: item.afterAnalysis
-        },
-        "rewrite_after"
-      )
-    ])
+    ...ensureArray(histories.feedbackLog).map((item) => normalizeHistorySample(item, "feedback"))
   ].filter((item) => item.title || item.body || item.coverText || item.tags.length);
 }
 

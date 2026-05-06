@@ -103,6 +103,163 @@ test("sample library API supports GET POST PATCH for canonical note records", as
   });
 });
 
+test("sample library API preserves learning sample types on canonical note records", async (t) => {
+  await withTempSampleLibraryApi(t, async () => {
+    const created = await invokeRoute("POST", "/api/sample-library", {
+      source: "manual",
+      stage: "draft",
+      sampleType: "good_sample",
+      note: {
+        title: "学习样本标题",
+        body: "学习样本正文",
+        collectionType: "科普"
+      }
+    });
+
+    assert.equal(created.status, 200);
+    assert.equal(created.item.sampleType, "good_sample");
+
+    const patched = await invokeRoute("PATCH", "/api/sample-library", {
+      id: created.item.id,
+      sampleType: "false_positive",
+      publish: {
+        status: "false_positive",
+        notes: "平台放行，系统误判"
+      }
+    });
+
+    const listed = await invokeRoute("GET", "/api/sample-library");
+    const records = await loadNoteRecords();
+
+    assert.equal(patched.status, 200);
+    assert.equal(patched.item.sampleType, "false_positive");
+    assert.equal(listed.items[0].sampleType, "false_positive");
+    assert.equal(records[0].sampleType, "false_positive");
+    assert.equal(records[0].publish.status, "false_positive");
+  });
+});
+
+test("sample library API persists prediction and retro calibration fields", async (t) => {
+  await withTempSampleLibraryApi(t, async () => {
+    const created = await invokeRoute("POST", "/api/sample-library", {
+      source: "manual",
+      stage: "draft",
+      note: {
+        title: "校准样本标题",
+        body: "校准样本正文",
+        collectionType: "科普"
+      },
+      calibration: {
+        prediction: {
+          predictedStatus: "published_passed",
+          predictedRiskLevel: "medium",
+          predictedPerformanceTier: "high",
+          confidence: "81",
+          reason: "历史样本相似度高",
+          model: "gpt-5.4",
+          createdAt: "2026-05-06"
+        }
+      }
+    });
+
+    assert.equal(created.status, 200);
+    assert.equal(created.item.calibration.prediction.predictedStatus, "published_passed");
+    assert.equal(created.item.calibration.prediction.confidence, 81);
+
+    const patched = await invokeRoute("PATCH", "/api/sample-library", {
+      id: created.item.id,
+      calibration: {
+        retro: {
+          actualPerformanceTier: "high",
+          predictionMatched: true,
+          missReason: "判断命中",
+          validatedSignals: "标题结构, 合集匹配",
+          invalidatedSignals: "正文略长",
+          shouldBecomeReference: true,
+          ruleImprovementCandidate: "同类标题可提高参考权重",
+          notes: "发布后 72 小时表现稳定",
+          reviewedAt: "2026-05-09"
+        }
+      }
+    });
+    const records = await loadNoteRecords();
+
+    assert.equal(patched.status, 200);
+    assert.equal(patched.item.calibration.prediction.predictedRiskLevel, "medium");
+    assert.equal(patched.item.calibration.retro.predictionMatched, true);
+    assert.deepEqual(patched.item.calibration.retro.validatedSignals, ["标题结构", "合集匹配"]);
+    assert.deepEqual(patched.item.calibration.retro.invalidatedSignals, ["正文略长"]);
+    assert.equal(patched.item.calibration.retro.shouldBecomeReference, true);
+    assert.equal(records[0].calibration.retro.ruleImprovementCandidate, "同类标题可提高参考权重");
+  });
+});
+
+test("sample library calibration replay summarizes historical calibrated samples", async (t) => {
+  await withTempSampleLibraryApi(t, async () => {
+    await invokeRoute("POST", "/api/sample-library", {
+      note: {
+        title: "历史过审样本",
+        body: "正文一",
+        collectionType: "科普"
+      },
+      publish: {
+        status: "published_passed",
+        metrics: {
+          likes: 24,
+          favorites: 5,
+          comments: 2
+        }
+      },
+      calibration: {
+        prediction: {
+          predictedStatus: "published_passed",
+          predictedRiskLevel: "low",
+          predictedPerformanceTier: "medium"
+        },
+        retro: {
+          predictionMatched: true
+        }
+      }
+    });
+
+    await invokeRoute("POST", "/api/sample-library", {
+      note: {
+        title: "历史违规样本",
+        body: "正文二",
+        collectionType: "科普"
+      },
+      publish: {
+        status: "violation"
+      },
+      calibration: {
+        prediction: {
+          predictedStatus: "published_passed",
+          predictedRiskLevel: "high",
+          predictedPerformanceTier: "medium"
+        },
+        retro: {
+          predictionMatched: false
+        }
+      }
+    });
+
+    const replayed = await invokeRoute("POST", "/api/sample-library/calibration-replay", {
+      mode: "strict_risk"
+    });
+
+    assert.equal(replayed.status, 200);
+    assert.equal(replayed.ok, true);
+    assert.equal(replayed.result.total, 2);
+    assert.equal(replayed.result.matched, 2);
+    assert.equal(replayed.result.mismatched, 0);
+    assert.equal(replayed.result.highRiskMisses, 0);
+    assert.deepEqual(
+      replayed.result.preview.map((item) => item.title),
+      []
+    );
+  });
+});
+
 test("sample library POST ignores client-provided ids so different notes cannot share one canonical id", async (t) => {
   await withTempSampleLibraryApi(t, async () => {
     const first = await invokeRoute("POST", "/api/sample-library", {

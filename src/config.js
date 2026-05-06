@@ -15,13 +15,10 @@ export const paths = {
   feedbackLog: path.join(dataDir, "feedback.log.json"),
   falsePositiveLog: path.join(dataDir, "false-positive-log.json"),
   reviewQueue: path.join(dataDir, "review-queue.json"),
-  rewritePairs: path.join(dataDir, "rewrite-pairs.json"),
   successSamples: path.join(dataDir, "success-samples.json"),
   styleProfile: path.join(dataDir, "style-profile.json"),
   collectionTypes: path.join(dataDir, "collection-types.json"),
   noteLifecycle: path.join(dataDir, "note-lifecycle.json"),
   noteRecords: path.join(dataDir, "note-records.json"),
-  modelPerformance: path.join(dataDir, "model-performance.json"),
-  analyzeTagOptions: path.join(dataDir, "analyze-tag-options.json"),
-  reviewBenchmark: path.join(dataDir, "evals", "review-benchmark.json")
+  analyzeTagOptions: path.join(dataDir, "analyze-tag-options.json")
 };

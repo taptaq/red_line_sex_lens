@@ -107,12 +107,12 @@ test("buildFalsePositiveCaptureSources keeps analysis and rewrite panel sources 
   assert.doesNotMatch(rewriteHtml, /原始标题/);
 });
 
-test("buildFalsePositiveEntryMarkup shows benchmark mismatch source label", async () => {
+test("buildFalsePositiveEntryMarkup shows false positive reflow source label", async () => {
   const { buildFalsePositiveEntryMarkup } = await import("../web/false-positive-view.js");
 
   const html = buildFalsePositiveEntryMarkup({
     id: "fp-benchmark",
-    source: "benchmark_mismatch",
+    source: "false_positive_reflow",
     status: "platform_passed_pending",
     title: "基准回流误报样本",
     body: "用于验证来源标签是否展示",
@@ -127,5 +127,5 @@ test("buildFalsePositiveEntryMarkup shows benchmark mismatch source label", asyn
     }
   });
 
-  assert.match(html, /基准未命中回流/);
+  assert.match(html, /误报回流/);
 });

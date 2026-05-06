@@ -2,8 +2,7 @@ import "./env.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { abstractReasonPhraseLabels, feedbackContextCategories } from "./feedback.js";
-import { filterProviderConfigsBySelection, getRewriteProviderSelection } from "./model-selection.js";
-import { recordModelCall } from "./model-performance.js";
+import { filterProviderConfigsBySelection, getRewriteProviderSelection, getRewriteSelectionModel } from "./model-selection.js";
 import { buildXhsHumanizerSystemRules, buildXhsHumanizerUserRequirements } from "./xhs-humanizer-rules.js";
 
 const glmEndpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
@@ -19,7 +18,6 @@ const defaultMiniMaxDmxapiModel = process.env.MINIMAX_DMXAPI_MODEL || "MiniMax-M
 const defaultGlmDmxapiModel = process.env.GLM_DMXAPI_MODEL || "glm-5.1-free";
 const defaultKimiDmxapiModel = process.env.KIMI_DMXAPI_MODEL || "kimi-k2.6-free";
 const defaultQwenDmxapiModel = process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus-free";
-const defaultMimoDmxapiModel = process.env.MIMO_DMXAPI_MODEL || process.env.DEEPSEEK_DMXAPI_MODEL || "mimo-v2.5-free";
 const defaultDeepSeekFeedbackModel = process.env.DEEPSEEK_FEEDBACK_MODEL || "deepseek-v4-flash";
 const humanizerPassEnabled = process.env.HUMANIZER_PASS_ENABLED !== "false";
 const feedbackModelCandidates = [defaultFeedbackModel, "glm-4.6-flashX"].filter(
@@ -40,14 +38,6 @@ const feedbackProviderConfigs = [
     envKey: "DASHSCOPE_API_KEY",
     endpoint: defaultQwenEndpoint,
     models: [defaultQwenFeedbackModel]
-  },
-  {
-    provider: "mimo",
-    label: "Mimo",
-    envKey: "DMXAPI_API_KEY",
-    endpoint: defaultDmxapiEndpoint,
-    models: [defaultMimoDmxapiModel],
-    routeMode: "dmxapi_only"
   },
   {
     provider: "deepseek",
@@ -103,10 +93,6 @@ function getDefaultKimiDmxapiModel() {
   return String(process.env.KIMI_DMXAPI_MODEL || defaultKimiDmxapiModel || "kimi-k2.6-free").trim();
 }
 
-function getDefaultMimoDmxapiModel() {
-  return String(process.env.MIMO_DMXAPI_MODEL || process.env.DEEPSEEK_DMXAPI_MODEL || defaultMimoDmxapiModel || "mimo-v2.5-free").trim();
-}
-
 function getRewriteProviderPreference() {
   const provider = String(process.env.REWRITE_PROVIDER || "glm").trim().toLowerCase();
 
@@ -115,6 +101,18 @@ function getRewriteProviderPreference() {
 
 export function getRewriteProviderConfig(modelSelection = "auto") {
   const provider = String(modelSelection || "").trim() ? getRewriteProviderSelection(modelSelection) : getRewriteProviderPreference();
+  const standaloneModel = String(modelSelection || "").trim() ? getRewriteSelectionModel(modelSelection) : "";
+
+  if (provider === "dmxapi_text") {
+    return {
+      provider: "dmxapi_text",
+      label: "DMXAPI",
+      envKey: "DMXAPI_API_KEY",
+      endpoint: defaultDmxapiEndpoint,
+      models: uniqueNonEmpty([standaloneModel]),
+      routeMode: "dmxapi_only"
+    };
+  }
 
   if (provider === "kimi") {
     return {
@@ -146,17 +144,6 @@ export function getRewriteProviderConfig(modelSelection = "auto") {
     };
   }
 
-  if (provider === "mimo") {
-    return {
-      provider: "mimo",
-      label: "Mimo",
-      envKey: "DMXAPI_API_KEY",
-      endpoint: defaultDmxapiEndpoint,
-      models: uniqueNonEmpty([getDefaultMimoDmxapiModel()]),
-      routeMode: "dmxapi_only"
-    };
-  }
-
   if (provider === "deepseek") {
     return {
       provider: "deepseek",
@@ -185,12 +172,6 @@ function createGlmError(message, statusCode = 500) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function recordModelCallSafe(payload = {}) {
-  try {
-    await recordModelCall(payload);
-  } catch {}
 }
 
 function guessMimeType(filePath = "") {
@@ -1074,24 +1055,24 @@ const routedTextProviderConfigs = {
     dmxapiLabel: "MiniMax DMXAPI",
     supportsOfficial: false
   },
-  mimo: {
-    provider: "mimo",
-    label: "Mimo",
-    officialEndpoint: "",
-    officialEnvKey: "",
-    getOfficialModel: (model) => String(model || "").trim(),
-    getDmxapiModel: () => getDefaultMimoDmxapiModel(),
-    dmxapiLabel: "Mimo DMXAPI",
-    supportsOfficial: false
-  },
   deepseek: {
     provider: "deepseek",
     label: "深度求索",
     officialEndpoint: "https://api.deepseek.com/chat/completions",
     officialEnvKey: "DEEPSEEK_API_KEY",
     getOfficialModel: (model) => String(model || process.env.DEEPSEEK_FEEDBACK_MODEL || "deepseek-v4-flash").trim(),
-    getDmxapiModel: () => getDefaultMimoDmxapiModel(),
+    getDmxapiModel: () => String(process.env.DEEPSEEK_DMXAPI_MODEL || "deepseek-v4-flash").trim(),
     dmxapiLabel: "深度求索 DMXAPI"
+  },
+  dmxapi_text: {
+    provider: "dmxapi_text",
+    label: "DMXAPI",
+    officialEndpoint: "",
+    officialEnvKey: "",
+    getOfficialModel: (model) => String(model || "").trim(),
+    getDmxapiModel: (model) => String(model || "").trim(),
+    dmxapiLabel: "DMXAPI",
+    supportsOfficial: false
   }
 };
 
@@ -1334,15 +1315,6 @@ async function attemptRoutedProviderRoute({
             providerLabel: label
           })
         };
-        await recordModelCallSafe({
-          scene,
-          provider,
-          route,
-          routeLabel,
-          model: parsedResult.model || model,
-          status: "ok",
-          durationMs: Date.now() - startedAt
-        });
         return parsedResult;
       } catch (error) {
         lastError = attachRouteMetadata(error, {
@@ -1375,19 +1347,6 @@ async function attemptRoutedProviderRoute({
       }
     }
   }
-
-  await recordModelCallSafe({
-    scene,
-    provider,
-    route,
-    routeLabel,
-    model: String(lastError?.model || model || "").trim(),
-    status: "error",
-    errorType: "",
-    statusCode: lastError?.statusCode || 0,
-    message: lastError?.message || `${label} 暂时不可用，请稍后再试。`,
-    durationMs: Date.now() - startedAt
-  });
 
   return {
     ok: false,
@@ -1423,7 +1382,7 @@ export async function callRoutedTextProviderJson({
   const shouldUseOfficial = allowOfficial !== false && config.supportsOfficial !== false;
 
   if (shouldUseDmxapi && dmxapiApiKey) {
-    const dmxapiModel = config.getDmxapiModel();
+    const dmxapiModel = config.getDmxapiModel(model);
     const dmxapiResult = await attemptRoutedProviderRoute({
       provider: config.provider,
       label: config.dmxapiLabel,
@@ -1577,17 +1536,16 @@ export async function callKimiJson(options = {}) {
   });
 }
 
-export async function callMimoJson(options = {}) {
+export async function callMiniMaxJson(options = {}) {
   return callRoutedTextProviderJson({
-    provider: "mimo",
-    allowOfficial: false,
+    provider: "minimax",
     ...options
   });
 }
 
-export async function callMiniMaxJson(options = {}) {
+export async function callDmxapiTextJson(options = {}) {
   return callRoutedTextProviderJson({
-    provider: "minimax",
+    provider: "dmxapi_text",
     ...options
   });
 }
@@ -2210,22 +2168,28 @@ function buildFeedbackSuggestionMessages({
 }
 
 async function callFeedbackSuggestionProvider(config, messages) {
-  if (config.provider === "qwen" || config.provider === "deepseek") {
+  if (config.provider === "qwen" || config.provider === "deepseek" || config.provider === "dmxapi_text") {
     try {
-      const routedCall = config.provider === "qwen" ? callQwenJson : callDeepSeekJson;
+      const routedCall =
+        config.provider === "qwen" ? callQwenJson : config.provider === "deepseek" ? callDeepSeekJson : callDmxapiTextJson;
       const defaultModel =
-        config.provider === "qwen" ? defaultQwenFeedbackModel : defaultDeepSeekFeedbackModel;
+        config.provider === "qwen"
+          ? defaultQwenFeedbackModel
+          : config.provider === "deepseek"
+            ? defaultDeepSeekFeedbackModel
+            : String(config.model || "").trim();
       const { parsed, model } = await routedCall({
         model: (Array.isArray(config.models) ? config.models[0] : config.model) || defaultModel,
         temperature: 0.1,
-    maxTokens: 560,
-    messages,
-    timeoutMs: feedbackSuggestTimeoutMs,
-    missingKeyMessage: `缺少 ${config.envKey}`,
-    scene: "feedback_suggestion",
-    fallbackParser: (message, rawContent) =>
-      tryParseJsonFromUnknown(rawContent) || tryParseJsonFromUnknown(message)
-  });
+        maxTokens: 560,
+        messages,
+        timeoutMs: feedbackSuggestTimeoutMs,
+        missingKeyMessage: `缺少 ${config.envKey}`,
+        scene: "feedback_suggestion",
+        allowOfficial: config.provider === "dmxapi_text" ? false : undefined,
+        fallbackParser: (message, rawContent) =>
+          tryParseJsonFromUnknown(rawContent) || tryParseJsonFromUnknown(message)
+      });
 
       return {
         status: "ok",

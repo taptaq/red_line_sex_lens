@@ -33,7 +33,7 @@ async function withTempSuccessSampleApi(t, run) {
   return run();
 }
 
-test("success sample API creates, lists, upserts, and deletes samples", async (t) => {
+test("success sample compatibility routes are fully removed", async (t) => {
   await withTempSuccessSampleApi(t, async () => {
     const created = await invokeRoute("POST", "/api/success-samples", {
       title: "成功标题",
@@ -43,69 +43,17 @@ test("success sample API creates, lists, upserts, and deletes samples", async (t
       metrics: { likes: 9, favorites: 4, comments: 2 }
     });
 
-    assert.equal(created.status, 200);
-    assert.equal(created.ok, true);
-    assert.equal(created.items.length, 1);
-    assert.equal(created.items[0].tier, "performed");
-
-    const replaced = await invokeRoute("POST", "/api/success-samples", {
-      title: "成功标题",
-      body: "成功正文",
-      tier: "featured",
-      metrics: { likes: 20 }
-    });
-
-    assert.equal(replaced.items.length, 1);
-    assert.equal(replaced.items[0].tier, "featured");
-    assert.equal(replaced.items[0].metrics.likes, 20);
+    assert.equal(created.status, 404);
 
     const listed = await invokeRoute("GET", "/api/success-samples");
-    assert.equal(listed.items.length, 1);
-    assert.equal(listed.items[0].title, "成功标题");
+    assert.equal(listed.status, 404);
 
     const adminData = await loadAdminData();
-    assert.equal(adminData.successSamples.length, 1);
+    assert.equal(Object.hasOwn(adminData, "successSamples"), false);
 
-    const deleted = await invokeRoute("DELETE", "/api/success-samples", { id: listed.items[0].id });
-    assert.equal(deleted.items.length, 0);
-  });
-});
-
-test("success sample POST returns the canonical unified record after merging with an existing lifecycle entry", async (t) => {
-  await withTempSuccessSampleApi(t, async () => {
-    const lifecycle = await invokeRoute("POST", "/api/note-lifecycle", {
-      source: "rewrite",
-      note: {
-        title: "统一存储标题",
-        body: "统一存储正文",
-        tags: ["科普"]
-      },
-      rewriteSnapshot: {
-        model: "glm-5.1-free"
-      }
-    });
-
-    const created = await invokeRoute("POST", "/api/success-samples", {
-      title: "统一存储标题",
-      body: "统一存储正文",
-      tier: "featured",
-      metrics: { likes: 28, favorites: 8, comments: 3 }
-    });
-
-    const listed = await invokeRoute("GET", "/api/success-samples");
-    const adminData = await loadAdminData();
-    const records = await loadNoteRecords();
-
-    assert.equal(created.status, 200);
-    assert.equal(created.item.id, lifecycle.item.id);
-    assert.equal(created.items.length, 1);
-    assert.equal(created.items[0].id, lifecycle.item.id);
-    assert.equal(listed.items.length, 1);
-    assert.equal(listed.items[0].id, lifecycle.item.id);
-    assert.equal(adminData.successSamples.length, 1);
-    assert.equal(adminData.successSamples[0].id, lifecycle.item.id);
-    assert.equal(records.length, 1);
-    assert.equal(records[0].id, lifecycle.item.id);
+    const deleted = await invokeRoute("DELETE", "/api/success-samples", { id: "missing-id" });
+    assert.equal(deleted.status, 404);
+    assert.equal((await loadNoteRecords()).length, 0);
   });
 });
 
@@ -136,6 +84,7 @@ async function invokeRoute(method, pathname, body = null) {
   await handleRequest(request, response);
   return {
     status: response.status,
-    ...(response.body ? JSON.parse(response.body) : {})
+    ...(response.headers["Content-Type"]?.includes("application/json") && response.body ? JSON.parse(response.body) : {}),
+    rawBody: response.body
   };
 }
