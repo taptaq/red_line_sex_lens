@@ -1157,7 +1157,7 @@ Expected: PASS
 - 已确认 `hard_block` 不会被记忆层直接放宽。
 - 已确认 `memory:rebuild`、`memory:inspect` 已落地。
 - 已确认首版候选记忆卡片生成 / 激活逻辑聚焦 `risk_pattern_card`。
-- 已确认 `candidate`、`active` 为当前实际运行状态；`suppressed`、`archived` 仍为治理预留状态，尚未形成完整操作闭环。
+- 已确认 `candidate`、`active`、`suppressed`、`archived` 已具备首版可执行流转，但当前仍以治理字段和 CLI 驱动为主，未补 UI 管理面板。
 
 - [ ] **Step 4: Commit**
 
@@ -1165,3 +1165,89 @@ Expected: PASS
 git add docs/superpowers/specs/2026-05-07-ai-memory-shared-layer-design.md docs/superpowers/plans/2026-05-07-ai-memory-shared-layer.md
 git commit -m "docs: finalize ai memory shared layer plan"
 ```
+
+## Task 8: 补齐治理流转、audit 命令与首版运行时卡片供给
+
+**Files:**
+- Modify: `src/memory/memory-card.js`
+- Modify: `src/cli.js`
+- Modify: `package.json`
+- Modify: `README.md`
+- Modify: `test/memory-card.test.js`
+- Modify: `test/readme-doc-links.test.js`
+
+- [ ] **Step 1: 先补失败测试，锁住剩余行为边界**
+
+```txt
+新增测试目标：
+1. `candidate / active / suppressed / archived` 至少具备首版可执行流转规则
+2. `memory:rebuild` 不只产出 risk pattern，还能产出 rewrite strategy / risk boundary
+3. `memory:audit` 能输出状态分布、按 kind 汇总、缺失 sourceIds / orphan cards 等问题摘要
+4. 检索侧继续只召回 active，且不会放宽 hard_block
+```
+
+- [ ] **Step 2: 扩展 memory-card 治理逻辑**
+
+```txt
+实现方向：
+- 保留 `buildCandidateRiskPatternCards()` 作为基础生成器
+- 新增首版保守型卡片生成器：
+  - `buildCandidateRewriteStrategyCards(feedbackItems)`
+  - `buildCandidateRiskBoundaryCards(falsePositiveItems, referenceRecords)`
+- 新增统一治理入口，例如：
+  - `finalizeMemoryCards(cards, existingCards)`
+
+治理规则首版要求：
+- `manualArchived === true` 或 `archivedAt` 存在 -> `archived`
+- `manualSuppressed === true` 或 `conflictingEvidence === true` -> `suppressed`
+- `candidate` 且 `sourceIds >= 2` 或 `manualConfirmed === true` -> `active`
+- 其余保持 `candidate`
+- rebuild 时尽量保留已有卡片的人工治理字段，不要被全量重建覆盖
+```
+
+- [ ] **Step 3: 为 CLI 增加 audit 能力**
+
+```txt
+新增命令：
+- `memory:audit`
+
+输出建议至少包含：
+- documents / cards 总数
+- byStatus
+- byKind
+- activeCards
+- candidateCards
+- suppressedCards
+- archivedCards
+- missingSourceIdCards
+- orphanCards
+
+其中 orphanCards 定义为：
+- 卡片声明了 sourceIds，但这些 sourceIds 在当前 memory documents 中一个都找不到
+```
+
+- [ ] **Step 4: 更新脚本与 README**
+
+```txt
+需要同步：
+- `package.json` 增加 `memory:audit`
+- `README.md` 增加 audit 用法
+- `test/readme-doc-links.test.js` 对应补链路检查
+```
+
+- [ ] **Step 5: 运行收尾回归**
+
+Run: `node --test test/memory-card.test.js test/readme-doc-links.test.js`
+
+Expected: PASS
+
+Run: `node --test test/memory-document.test.js test/vector-store.test.js test/retrieval-service.test.js test/memory-card.test.js test/analyzer-seed-lexicon.test.js test/generation-workbench.test.js test/generation-api.test.js test/readme-doc-links.test.js test/rewrite-workflow.test.js`
+
+Expected: PASS
+
+**Task 8 实现结果（按当前实现更新）**
+
+- `memory:rebuild` 现在会重建可检索文档、卡片与 embeddings，而不只是单独写卡片文件。
+- `memory:audit` 已落地，可输出状态分布、按 kind 汇总、缺失 `sourceIds` 与 orphan cards 摘要。
+- 首版候选卡片生成已从单一 `risk_pattern_card` 扩展到 `rewrite_strategy_card` 与 `risk_boundary_card`。
+- `vector-store` 已支持卡片与事实文档分仓持久化，同时维持统一搜索态。

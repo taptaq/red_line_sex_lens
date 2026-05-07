@@ -39,6 +39,10 @@ function uniqueStrings(items = []) {
   return [...new Set((Array.isArray(items) ? items : [items]).map((item) => normalizeString(item)).filter(Boolean))];
 }
 
+function isMemoryCardKind(kind = "") {
+  return normalizeString(kind).endsWith("_card");
+}
+
 function extractSearchUnits(value = "") {
   const normalized = normalizeString(value).toLowerCase();
 
@@ -95,6 +99,7 @@ function scoreDocument({ queryEmbedding = [], queryText = "", document = {} } = 
 function createStorePaths(rootDir) {
   return {
     documentsPath: path.join(rootDir, path.basename(paths.memoryDocuments)),
+    cardsPath: path.join(rootDir, path.basename(paths.memoryCards)),
     embeddingsPath: path.join(rootDir, path.basename(paths.memoryEmbeddings)),
     metaPath: path.join(rootDir, path.basename(paths.memoryIndexMeta))
   };
@@ -144,19 +149,20 @@ export function createMemoryVectorStore({
 
   async function readState() {
     if (usesDefaultStorage) {
-      const { documents, embeddings } = await loadMemoryStoreSnapshot();
-      return mergeDocumentsWithEmbeddings(documents, embeddings);
+      const { documents, cards, embeddings } = await loadMemoryStoreSnapshot();
+      return mergeDocumentsWithEmbeddings([...documents, ...cards], embeddings);
     }
 
     return readStateFromFiles();
   }
 
   async function readStateFromFiles() {
-    const [documents, embeddings] = await Promise.all([
+    const [documents, cards, embeddings] = await Promise.all([
       readJsonLines(storePaths.documentsPath),
+      readJsonLines(storePaths.cardsPath),
       readJsonLines(storePaths.embeddingsPath)
     ]);
-    return mergeDocumentsWithEmbeddings(documents, embeddings);
+    return mergeDocumentsWithEmbeddings([...documents, ...cards], embeddings);
   }
 
   function mergeDocumentsWithEmbeddings(documents = [], embeddings = []) {
@@ -188,7 +194,9 @@ export function createMemoryVectorStore({
   }
 
   async function writeState(items) {
-    const documents = items.map(({ embedding, ...document }) => document);
+    const flattened = items.map(({ embedding, ...document }) => document);
+    const documents = flattened.filter((item) => !isMemoryCardKind(item.kind));
+    const cards = flattened.filter((item) => isMemoryCardKind(item.kind));
     const embeddings = items.map((item) => ({
       id: item.id,
       embedding: Array.isArray(item.embedding) ? item.embedding : [],
@@ -201,13 +209,14 @@ export function createMemoryVectorStore({
     };
 
     if (usesDefaultStorage) {
-      await saveMemoryStoreSnapshot({ documents, embeddings, meta });
+      await saveMemoryStoreSnapshot({ documents, cards, embeddings, meta });
       return;
     }
 
     await ensureRoot();
     await Promise.all([
       writeJsonLines(storePaths.documentsPath, documents),
+      writeJsonLines(storePaths.cardsPath, cards),
       writeJsonLines(storePaths.embeddingsPath, embeddings),
       writeJson(storePaths.metaPath, meta)
     ]);
@@ -225,6 +234,31 @@ export function createMemoryVectorStore({
   }
 
   return {
+    async replaceAllDocuments(documents = []) {
+      return withWriteLock(async () => {
+        const incoming = Array.isArray(documents) ? documents.filter(Boolean) : [];
+        const embeddings = await embeddingProvider.embedTexts(incoming.map((item) => item.searchText || ""));
+        const next = incoming
+          .map((document, index) => {
+            const normalizedId = normalizeString(document.id);
+
+            if (!normalizedId) {
+              return null;
+            }
+
+            return {
+              ...document,
+              id: normalizedId,
+              embedding: Array.isArray(embeddings[index]) ? embeddings[index] : [],
+              embeddingVersion: normalizeString(embeddingProvider.version)
+            };
+          })
+          .filter(Boolean);
+
+        await writeState(next);
+        return next;
+      });
+    },
     async upsertDocuments(documents = []) {
       return withWriteLock(async () => {
         const incoming = Array.isArray(documents) ? documents.filter(Boolean) : [];

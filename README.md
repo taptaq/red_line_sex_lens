@@ -215,7 +215,7 @@ npm run eval:review-benchmark
 
 第一版 AI 记忆保留现有 JSON 事实层，在 `data/memory/` 下维护本地检索文档、记忆卡片与索引元数据。
 
-重建 memory 索引与卡片：
+重建 memory 检索文档、卡片与 embeddings：
 
 ```bash
 npm run memory:rebuild
@@ -225,6 +225,12 @@ npm run memory:rebuild
 
 ```bash
 npm run memory:inspect
+```
+
+审计当前 memory 状态分布与异常卡片：
+
+```bash
+npm run memory:audit
 ```
 
 ## 模型与环境变量

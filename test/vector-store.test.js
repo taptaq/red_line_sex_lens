@@ -220,3 +220,38 @@ test("vector store serializes concurrent upserts across store instances on one r
 test("vector store requires explicit embedding provider injection", () => {
   assert.throws(() => createMemoryVectorStore(), /embedding provider/i);
 });
+
+test("vector store persists card kinds into cards storage while keeping them searchable", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "memory-store-cards-"));
+  t.after(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  const store = createMemoryVectorStore({
+    rootDir: tempDir,
+    embeddingProvider: mockEmbeddingProvider()
+  });
+
+  await store.upsertDocuments([
+    {
+      id: "rewrite-strategy:导流与私域",
+      kind: "rewrite_strategy_card",
+      status: "active",
+      searchText: "导流与私域 场景优先做局部弱化，保留原节奏。"
+    }
+  ]);
+
+  const cardsPath = path.join(tempDir, "cards.jsonl");
+  const rawCards = await fs.readFile(cardsPath, "utf8");
+  const result = await store.search({
+    queryText: "导流改写",
+    limit: 5,
+    filters: { kind: ["rewrite_strategy_card"], status: ["active"] }
+  });
+
+  assert.match(rawCards, /rewrite_strategy_card/);
+  assert.deepEqual(
+    result.items.map((item) => item.id),
+    ["rewrite-strategy:导流与私域"]
+  );
+});

@@ -3,8 +3,10 @@ import path from "node:path";
 import { analyzePost } from "./analyzer.js";
 import {
   loadFeedbackLog,
+  loadFalsePositiveLog,
   loadMemoryCards,
   loadMemoryDocuments,
+  loadNoteRecords,
   loadSummary,
   readImportFile,
   saveMemoryCards,
@@ -20,7 +22,21 @@ import {
   sanitizeScreenshotRecognition
 } from "./feedback.js";
 import { recognizeFeedbackScreenshot, screenshotFileToDataUrl, suggestFeedbackCandidates } from "./glm.js";
-import { activateMemoryCards, buildCandidateRiskPatternCards } from "./memory/memory-card.js";
+import {
+  buildCandidateRewriteStrategyCards,
+  buildCandidateRiskBoundaryCards,
+  buildMemoryAuditSummary,
+  buildCandidateRiskPatternCards,
+  finalizeMemoryCards
+} from "./memory/memory-card.js";
+import {
+  buildMemoryDocumentFromFeedback,
+  buildMemoryDocumentFromFalsePositive,
+  buildMemoryDocumentFromNoteRecord
+} from "./memory/memory-document.js";
+import { createDeterministicEmbeddingProvider } from "./memory/embedding-provider.js";
+import { createMemoryVectorStore } from "./memory/vector-store.js";
+import { paths } from "./config.js";
 
 function splitLooseCSV(value = "") {
   return String(value || "")
@@ -158,10 +174,42 @@ async function runEvalFeedback(args) {
 }
 
 async function runMemoryRebuild() {
-  const feedbackItems = await loadFeedbackLog();
-  const cards = activateMemoryCards(buildCandidateRiskPatternCards(feedbackItems));
+  const [feedbackItems, falsePositiveItems, noteRecords, existingCards] = await Promise.all([
+    loadFeedbackLog(),
+    loadFalsePositiveLog(),
+    loadNoteRecords(),
+    loadMemoryCards()
+  ]);
+  const documents = [
+    ...noteRecords.map((record) => buildMemoryDocumentFromNoteRecord(record, { status: "active" })),
+    ...falsePositiveItems.map((item) => buildMemoryDocumentFromFalsePositive(item)),
+    ...feedbackItems.map((item) => buildMemoryDocumentFromFeedback(item))
+  ];
+  const candidateCards = [
+    ...buildCandidateRiskPatternCards(feedbackItems),
+    ...buildCandidateRewriteStrategyCards(feedbackItems),
+    ...buildCandidateRiskBoundaryCards(falsePositiveItems, noteRecords)
+  ];
+  const cards = finalizeMemoryCards(candidateCards, existingCards);
+  const vectorStore = createMemoryVectorStore({
+    rootDir: paths.memoryRoot,
+    embeddingProvider: createDeterministicEmbeddingProvider()
+  });
+
+  await vectorStore.replaceAllDocuments([...documents, ...cards]);
   await saveMemoryCards(cards);
-  console.log(JSON.stringify({ ok: true, cards: cards.length }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        documents: documents.length,
+        cards: cards.length,
+        activeCards: cards.filter((item) => item?.status === "active").length
+      },
+      null,
+      2
+    )
+  );
 }
 
 async function runMemoryInspect() {
@@ -178,6 +226,11 @@ async function runMemoryInspect() {
       2
     )
   );
+}
+
+async function runMemoryAudit() {
+  const [documents, cards] = await Promise.all([loadMemoryDocuments(), loadMemoryCards()]);
+  console.log(JSON.stringify(buildMemoryAuditSummary({ documents, cards }), null, 2));
 }
 
 async function main() {
@@ -211,6 +264,11 @@ async function main() {
 
   if (command === "memory:inspect") {
     await runMemoryInspect();
+    return;
+  }
+
+  if (command === "memory:audit") {
+    await runMemoryAudit();
     return;
   }
 

@@ -197,8 +197,8 @@
 
 当前实现状态：
 
-- 首版运行时与 CLI 已实际使用 `candidate`、`active`。
-- `suppressed`、`archived` 作为治理预留状态保留在设计模型中，但尚未形成完整的降权、归档与运营闭环。
+- 首版运行时与 CLI 已实际使用 `candidate`、`active`、`suppressed`、`archived` 四种状态。
+- 当前状态流转通过卡片治理字段与 `memory:rebuild` / `memory:audit` 生效，尚未补齐独立 UI 管理界面。
 
 ## 运行时检索设计
 
@@ -251,7 +251,7 @@
 
 - 改写链路已经接入共享 `memory retrieval service`。
 - 首版会把 `riskFeedback`、`falsePositiveHints`、`referenceSamples` 和 `memoryCards` 整理成结构化提示块后喂给改写 / patch prompt，而不是直接拼接大量原始样本文本。
-- 首版 `memoryCards` 检索桶按 `rewrite_strategy_card` 过滤；是否召回到结果取决于当前卡片数据是否存在。
+- 首版 `memoryCards` 检索桶按 `rewrite_strategy_card` 过滤；`memory:rebuild` 已开始从违规反馈中生成这类卡片，是否召回到结果仍取决于当前反馈数据是否存在。
 
 第一版不建议简单拼接大量原文样本给模型，优先输出整理后的上下文块。
 
@@ -274,6 +274,7 @@
 
 - 生成链路已经接入共享 `memory retrieval service`。
 - 首版运行时实际消费 `reference_sample`，以及 `style_experience_card` / `risk_boundary_card` 两类记忆卡。
+- `memory:rebuild` 已开始从确认误报中生成 `risk_boundary_card`；`style_experience_card` 仍保留为可扩展卡片种类，当前主要依赖后续人工治理或外部写入。
 - 首版不会把原始违规反馈原文直接喂给生成模型。
 
 第一版生成链路中，不应直接向模型喂入原始违规反馈原文。违规反馈应先被提炼为风险边界提示后再参与生成。
@@ -409,7 +410,8 @@ data/memory/
 
 当前实现状态：
 
-- `suppressed` / `archived` 仍属于治理目标，首版尚未补齐完整的在线降权、失效流转与治理工具。
+- `suppressed` / `archived` 已具备首版可执行流转，可通过卡片治理字段在 rebuild 阶段进入在线排除状态。
+- 当前仍缺少更细粒度的后台管理界面与长期治理策略。
 
 ## 验证与评估
 
@@ -478,8 +480,8 @@ data/memory/
 当前实现状态：
 
 - 已完成 `candidate -> active` 的首版激活逻辑。
-- 首版候选卡片生成逻辑聚焦 `风险模式卡`。
-- `suppressed / archived` 仍保留为后续治理阶段能力。
+- 首版候选卡片生成逻辑已覆盖 `风险模式卡`、`改写策略卡`、`风险边界卡`。
+- `suppressed / archived` 已作为可执行治理状态接入 rebuild 流程。
 
 ### Phase 3：评估与治理
 
@@ -489,11 +491,11 @@ data/memory/
 
 当前实现状态：
 
-- 已补齐 `memory:rebuild`、`memory:inspect` 命令。
-- `audit`、降权与失效治理仍未落地。
+- 已补齐 `memory:rebuild`、`memory:inspect`、`memory:audit` 命令。
+- 已补齐首版降权与失效治理流转，但 benchmark 与更完整的运营治理策略仍未落地。
 
 ## 总结
 
 第一版 AI 记忆不应被设计成通用聊天记忆，也不应被外部 memory 产品替代。更适合当前项目的方案是：
 
-在现有 JSON 事实层之上，新增一套 `本地 embedding + 本地向量索引 + 记忆卡片层 + 统一检索服务` 的共享记忆层，采用半自动写入，自动激活高置信事实，审核后激活推论型记忆，同时服务检测、改写与生成三条在线链路。首版已完成共享检索底座、检测 / 改写 / 生成接入、`memory:rebuild` / `memory:inspect` 命令以及 `风险模式卡` 的候选与激活逻辑；更完整的卡片类型治理、`suppressed / archived` 流转和 audit 能力仍在后续阶段。
+在现有 JSON 事实层之上，新增一套 `本地 embedding + 本地向量索引 + 记忆卡片层 + 统一检索服务` 的共享记忆层，采用半自动写入，自动激活高置信事实，审核后激活推论型记忆，同时服务检测、改写与生成三条在线链路。首版已完成共享检索底座、检测 / 改写 / 生成接入、`memory:rebuild` / `memory:inspect` / `memory:audit` 命令、`风险模式卡` / `改写策略卡` / `风险边界卡` 的候选生成与激活逻辑，以及 `suppressed / archived` 的首版治理流转；后续主要剩 benchmark、UI 化治理和更丰富的卡片类型沉淀。
