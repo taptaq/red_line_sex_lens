@@ -1,4 +1,10 @@
-import { loadFalsePositiveLog, loadLexicon, loadQualifiedReferenceSamples, loadWhitelist } from "./data-store.js";
+import {
+  getMemoryRetrievalService,
+  loadFalsePositiveLog,
+  loadLexicon,
+  loadQualifiedReferenceSamples,
+  loadWhitelist
+} from "./data-store.js";
 import { deriveFailureReasonTags } from "./feedback.js";
 import { isSameFeedbackNote } from "./feedback-identity.js";
 import { evaluateContextRules } from "./risk-rules.js";
@@ -144,8 +150,25 @@ function shouldSoftenVerdictByReferenceSamples(verdict, hits = [], referenceSamp
   return referenceSampleSupportScore >= referenceSampleSupportThreshold;
 }
 
+function buildEmptyAnalysisMemoryContext() {
+  return {
+    riskFeedback: [],
+    falsePositiveHints: [],
+    referenceSamples: [],
+    memoryCards: [],
+    retrievalMeta: {
+      queryKind: "analysis",
+      embeddingVersion: "",
+      candidateCount: 0
+    }
+  };
+}
+
 export async function analyzePost(input = {}) {
   const post = flattenPost(input);
+  const tags = ensureArray(input.tags);
+  const comments = ensureArray(input.comments);
+  const collectionType = String(input.collectionType || "").trim();
   const [whitelist, lexicon, falsePositiveLog, qualifiedReferenceSamples] = await Promise.all([
     loadWhitelist(),
     loadLexicon(),
@@ -168,8 +191,8 @@ export async function analyzePost(input = {}) {
   const whitelistHits = findWhitelistHits(whitelist, post);
   const falsePositiveHints = findFalsePositiveHints(falsePositiveLog, {
     ...post,
-    tags: ensureArray(input.tags),
-    comments: ensureArray(input.comments)
+    tags,
+    comments
   });
   const {
     matchedReferenceSamples,
@@ -177,8 +200,8 @@ export async function analyzePost(input = {}) {
     referenceSampleSupportScore
   } = findReferenceSampleHints(qualifiedReferenceSamples, {
     ...post,
-    tags: ensureArray(input.tags),
-    collectionType: String(input.collectionType || "").trim()
+    tags,
+    collectionType
   });
 
   const score = hits.reduce((total, hit) => total + (riskWeights[hit.riskLevel] || 0), 0);
@@ -222,13 +245,25 @@ export async function analyzePost(input = {}) {
     categories: [...categorySet],
     topHits: hits
   });
+  const memoryContext = await (async () => {
+    try {
+      const memoryRetrievalService = await getMemoryRetrievalService();
+      return await memoryRetrievalService.retrieveForAnalysis({
+        ...post,
+        tags,
+        collectionType
+      });
+    } catch {
+      return buildEmptyAnalysisMemoryContext();
+    }
+  })();
 
   return {
     input: {
       ...post,
-      collectionType: String(input.collectionType || "").trim(),
-      tags: ensureArray(input.tags),
-      comments: ensureArray(input.comments)
+      collectionType,
+      tags,
+      comments
     },
     modelTrace: {
       provider: "rules",
@@ -250,6 +285,7 @@ export async function analyzePost(input = {}) {
     softenedByReferenceSamples,
     categories: [...categorySet],
     suggestions,
-    failureReasonTags
+    failureReasonTags,
+    memoryContext
   };
 }

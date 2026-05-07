@@ -19,6 +19,7 @@ import { analyzePost } from "./analyzer.js";
 import {
   loadCollectionTypes,
   loadFalsePositiveLog,
+  getMemoryRetrievalService,
   loadInnerSpaceTerms,
   loadNoteLifecycle,
   loadNoteRecords,
@@ -425,6 +426,20 @@ function buildRewriteInputFromPayload(rewrite = {}) {
   };
 }
 
+function buildEmptySharedMemoryContext(queryKind = "") {
+  return {
+    riskFeedback: [],
+    falsePositiveHints: [],
+    referenceSamples: [],
+    memoryCards: [],
+    retrievalMeta: {
+      queryKind,
+      embeddingVersion: "",
+      candidateCount: 0
+    }
+  };
+}
+
 function buildRetryGuidance({
   attempt = 1,
   afterAnalysis = {},
@@ -464,6 +479,7 @@ function buildRetryGuidance({
 export async function rewriteUntilAccepted({
   input = {},
   beforeAnalysis = {},
+  memoryContext = beforeAnalysis?.memoryContext || null,
   modelSelection = {},
   maxAttempts = 3,
   innerSpaceTerms = [],
@@ -473,7 +489,7 @@ export async function rewriteUntilAccepted({
 } = {}) {
   let attempt = 0;
   let currentInput = { ...input };
-  let currentAnalysis = beforeAnalysis;
+  let currentAnalysis = memoryContext ? { ...beforeAnalysis, memoryContext } : beforeAnalysis;
   let latestRewrite = null;
   let latestAfterAnalysis = null;
   let latestAfterCrossReview = null;
@@ -554,6 +570,7 @@ export async function rewriteUntilAccepted({
     currentInput = rewrittenInput;
     currentAnalysis = {
       ...latestAfterAnalysis,
+      memoryContext: currentAnalysis?.memoryContext || memoryContext,
       retryGuidance,
       retryHistory: [...(Array.isArray(currentAnalysis?.retryHistory) ? currentAnalysis.retryHistory : []), retryGuidance]
     };
@@ -806,12 +823,21 @@ async function handleRequest(request, response) {
     const beforeAnalysis = await buildMergedAnalysis(payload, {
       modelSelection: modelSelection.semantic
     });
+    const rewriteMemoryContext = await (async () => {
+      try {
+        const memoryRetrievalService = await getMemoryRetrievalService();
+        return await memoryRetrievalService.retrieveForRewrite(payload);
+      } catch {
+        return buildEmptySharedMemoryContext("rewrite");
+      }
+    })();
     const innerSpaceTerms = filterInnerSpaceTerms(await loadInnerSpaceTerms(), {
       collectionType: payload?.collectionType
     });
     const rewriteResult = await rewriteUntilAccepted({
       input: payload,
       beforeAnalysis,
+      memoryContext: rewriteMemoryContext,
       modelSelection,
       maxAttempts: 3,
       innerSpaceTerms
@@ -821,6 +847,7 @@ async function handleRequest(request, response) {
       ok: true,
       analysis: beforeAnalysis,
       beforeAnalysis,
+      memoryContext: rewriteMemoryContext,
       afterAnalysis: rewriteResult.afterAnalysis,
       afterCrossReview: rewriteResult.afterCrossReview,
       rewrite: rewriteResult.rewrite,
@@ -849,6 +876,19 @@ async function handleRequest(request, response) {
     const styleProfile = getActiveStyleProfile(profileState);
     const referenceSamples = buildGenerationReferenceSamples({ successSamples: qualifiedReferenceSamples }).slice(0, 12);
     const innerSpaceTerms = filterInnerSpaceTerms(innerSpaceTermsRaw, { collectionType });
+    const memoryContext = await (async () => {
+      try {
+        const memoryRetrievalService = await getMemoryRetrievalService();
+        return await memoryRetrievalService.retrieveForGeneration({
+          topic: brief.topic,
+          collectionType,
+          constraints: brief.constraints,
+          tags: Array.isArray(payload?.draft?.tags) ? payload.draft.tags : []
+        });
+      } catch {
+        return buildEmptySharedMemoryContext("generation");
+      }
+    })();
     const generation = await generateNoteCandidates({
       mode: payload?.mode,
       brief,
@@ -856,6 +896,7 @@ async function handleRequest(request, response) {
       styleProfile,
       referenceSamples,
       innerSpaceTerms,
+      memoryContext,
       modelSelection: generationModelSelection,
       generateJson: Array.isArray(payload?.mockCandidates)
         ? async () => ({ candidates: payload.mockCandidates, provider: "mock", model: "mock-generation" })
@@ -873,6 +914,7 @@ async function handleRequest(request, response) {
     return sendJson(response, 200, {
       ok: true,
       collectionType,
+      memoryContext,
       ...generation,
       ...scored
     });

@@ -35,13 +35,66 @@ function stringifyReferenceSamples(samples = []) {
     .join("\n\n");
 }
 
+function normalizeMemorySampleTitle(sample = {}) {
+  return String(sample.payload?.note?.title || sample.payload?.title || sample.title || "").trim();
+}
+
+function normalizeMemorySampleBody(sample = {}) {
+  return String(sample.payload?.note?.body || sample.payload?.body || sample.body || "").trim();
+}
+
+function stringifySharedMemoryContext(memoryContext = null) {
+  if (!memoryContext || typeof memoryContext !== "object") {
+    return "";
+  }
+
+  const referenceSection = ensureArray(memoryContext.referenceSamples)
+    .slice(0, 3)
+    .map((sample, index) => {
+      const title = normalizeMemorySampleTitle(sample);
+      const body = normalizeMemorySampleBody(sample);
+      const lines = [`共享参考 ${index + 1}：${title || "未命名样本"}`];
+
+      if (body) {
+        lines.push(`可借鉴正文节奏：${body.slice(0, 140)}`);
+      }
+
+      return lines.join("\n");
+    })
+    .join("\n\n");
+  const memoryCardSection = ensureArray(memoryContext.memoryCards)
+    .slice(0, 4)
+    .map((card, index) => {
+      const kind = String(card.kind || "").trim();
+      const label =
+        kind === "risk_boundary_card"
+          ? "风险边界卡"
+          : kind === "style_experience_card"
+            ? "风格经验卡"
+            : "经验卡";
+      const summary = String(card.summary || card.title || "").trim();
+
+      return summary ? `${label} ${index + 1}：${summary}` : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+
+  return [
+    referenceSection ? `共享记忆参考：\n${referenceSection}` : "",
+    memoryCardSection ? `共享记忆卡：\n${memoryCardSection}` : ""
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 export function buildGenerationMessages({
   mode = "from_scratch",
   brief = {},
   draft = {},
   styleProfile = null,
   referenceSamples = [],
-  innerSpaceTerms = []
+  innerSpaceTerms = [],
+  memoryContext = null
 } = {}) {
   const lengthMode = String(brief.lengthMode || "short").trim() === "long" ? "long" : "short";
   const lengthInstruction =
@@ -49,6 +102,7 @@ export function buildGenerationMessages({
       ? "长文档：正文控制在 1100-1600 字，信息更完整，但仍然要自然分段，每段 2-4 句，避免一整坨长段。"
       : "短文档：正文控制在 600-950 字，表达紧凑但不能干瘪，同样要自然分段，每段 2-4 句。";
   const terminologyPrompt = formatInnerSpaceTermsPrompt(innerSpaceTerms);
+  const sharedMemoryPrompt = stringifySharedMemoryContext(memoryContext);
   return [
     {
       role: "system",
@@ -85,6 +139,9 @@ export function buildGenerationMessages({
         "可参考成功样本：",
         stringifyReferenceSamples(referenceSamples),
         "",
+        sharedMemoryPrompt ? "共享记忆提示：" : "",
+        sharedMemoryPrompt,
+        sharedMemoryPrompt ? "" : "",
         terminologyPrompt,
         terminologyPrompt ? "" : "",
         "生成规则：",
@@ -180,10 +237,19 @@ export async function generateNoteCandidates({
   styleProfile = null,
   referenceSamples = [],
   innerSpaceTerms = [],
+  memoryContext = null,
   modelSelection = "auto",
   generateJson = generateJsonWithModel
 } = {}) {
-  const messages = buildGenerationMessages({ mode, brief, draft, styleProfile, referenceSamples, innerSpaceTerms });
+  const messages = buildGenerationMessages({
+    mode,
+    brief,
+    draft,
+    styleProfile,
+    referenceSamples,
+    innerSpaceTerms,
+    memoryContext
+  });
   const payload = await generateJson({ messages, modelSelection });
   const candidates = ensureArray(payload.candidates).map(normalizeGenerationCandidate).slice(0, 3);
 

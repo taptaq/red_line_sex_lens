@@ -21,5 +21,10 @@ export const paths = {
   noteLifecycle: path.join(dataDir, "note-lifecycle.json"),
   noteRecords: path.join(dataDir, "note-records.json"),
   analyzeTagOptions: path.join(dataDir, "analyze-tag-options.json"),
-  innerSpaceTerms: path.join(dataDir, "inner-space-terms.json")
+  innerSpaceTerms: path.join(dataDir, "inner-space-terms.json"),
+  memoryRoot: path.join(dataDir, "memory"),
+  memoryDocuments: path.join(dataDir, "memory", "documents.jsonl"),
+  memoryCards: path.join(dataDir, "memory", "cards.jsonl"),
+  memoryEmbeddings: path.join(dataDir, "memory", "embeddings.jsonl"),
+  memoryIndexMeta: path.join(dataDir, "memory", "index-meta.json")
 };

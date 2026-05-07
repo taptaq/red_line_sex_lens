@@ -1,7 +1,15 @@
 import "./env.js";
 import path from "node:path";
 import { analyzePost } from "./analyzer.js";
-import { loadSummary, readImportFile, upsertFeedbackEntries } from "./data-store.js";
+import {
+  loadFeedbackLog,
+  loadMemoryCards,
+  loadMemoryDocuments,
+  loadSummary,
+  readImportFile,
+  saveMemoryCards,
+  upsertFeedbackEntries
+} from "./data-store.js";
 import { runFeedbackHarness } from "./evals/feedback-harness.js";
 import {
   createReviewCandidates,
@@ -12,6 +20,7 @@ import {
   sanitizeScreenshotRecognition
 } from "./feedback.js";
 import { recognizeFeedbackScreenshot, screenshotFileToDataUrl, suggestFeedbackCandidates } from "./glm.js";
+import { activateMemoryCards, buildCandidateRiskPatternCards } from "./memory/memory-card.js";
 
 function splitLooseCSV(value = "") {
   return String(value || "")
@@ -148,6 +157,29 @@ async function runEvalFeedback(args) {
   console.log(JSON.stringify(result, null, 2));
 }
 
+async function runMemoryRebuild() {
+  const feedbackItems = await loadFeedbackLog();
+  const cards = activateMemoryCards(buildCandidateRiskPatternCards(feedbackItems));
+  await saveMemoryCards(cards);
+  console.log(JSON.stringify({ ok: true, cards: cards.length }, null, 2));
+}
+
+async function runMemoryInspect() {
+  const [documents, cards] = await Promise.all([loadMemoryDocuments(), loadMemoryCards()]);
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        documents: documents.length,
+        cards: cards.length,
+        activeCards: cards.filter((item) => item?.status === "active").length
+      },
+      null,
+      2
+    )
+  );
+}
+
 async function main() {
   const [, , command = "summary", ...rest] = process.argv;
   const args = parseArgs(rest);
@@ -169,6 +201,16 @@ async function main() {
 
   if (command === "eval-feedback") {
     await runEvalFeedback(args);
+    return;
+  }
+
+  if (command === "memory:rebuild") {
+    await runMemoryRebuild();
+    return;
+  }
+
+  if (command === "memory:inspect") {
+    await runMemoryInspect();
     return;
   }
 

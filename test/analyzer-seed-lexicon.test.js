@@ -20,7 +20,12 @@ async function withTempAnalyzerData(
     falsePositiveLog: paths.falsePositiveLog,
     noteRecords: paths.noteRecords,
     successSamples: paths.successSamples,
-    noteLifecycle: paths.noteLifecycle
+    noteLifecycle: paths.noteLifecycle,
+    memoryRoot: paths.memoryRoot,
+    memoryDocuments: paths.memoryDocuments,
+    memoryCards: paths.memoryCards,
+    memoryEmbeddings: paths.memoryEmbeddings,
+    memoryIndexMeta: paths.memoryIndexMeta
   };
 
   paths.lexiconSeed = path.join(tempDir, "lexicon.seed.json");
@@ -30,6 +35,11 @@ async function withTempAnalyzerData(
   paths.noteRecords = path.join(tempDir, "note-records.json");
   paths.successSamples = path.join(tempDir, "success-samples.json");
   paths.noteLifecycle = path.join(tempDir, "note-lifecycle.json");
+  paths.memoryRoot = path.join(tempDir, "memory");
+  paths.memoryDocuments = path.join(paths.memoryRoot, "documents.jsonl");
+  paths.memoryCards = path.join(paths.memoryRoot, "cards.jsonl");
+  paths.memoryEmbeddings = path.join(paths.memoryRoot, "embeddings.jsonl");
+  paths.memoryIndexMeta = path.join(paths.memoryRoot, "index-meta.json");
 
   await Promise.all([
     fs.writeFile(paths.lexiconSeed, `${JSON.stringify(seedLexicon, null, 2)}\n`, "utf8"),
@@ -67,6 +77,47 @@ test("detects expanded platform diversion aliases and private-traffic scripts", 
   assert.equal(result.verdict, "hard_block");
   assert.ok(result.hits.some((hit) => hit.category === "导流与私域"));
   assert.ok(result.hits.some((hit) => hit.riskLevel === "hard_block"));
+});
+
+test("analysis attaches memory retrieval meta while preserving hard blocks", async (t) => {
+  await withTempAnalyzerData(t, {}, async () => {
+    const result = await analyzePost({
+      title: "联系我拿完整版",
+      body: "加我微信看完整版",
+      tags: ["沟通"]
+    });
+
+    assert.equal(result.originalVerdict, "hard_block");
+    assert.equal(result.verdict, "hard_block");
+    assert.equal(result.memoryContext.retrievalMeta.queryKind, "analysis");
+  });
+});
+
+test("analysis falls back to rule verdict when memory retrieval fails", async (t) => {
+  await withTempAnalyzerData(t, {}, async () => {
+    await fs.mkdir(paths.memoryRoot, { recursive: true });
+    await fs.writeFile(paths.memoryDocuments, '{"id":"broken"', "utf8");
+
+    const result = await analyzePost({
+      title: "联系我拿完整版",
+      body: "加我微信看完整版",
+      tags: ["沟通"]
+    });
+
+    assert.equal(result.originalVerdict, "hard_block");
+    assert.equal(result.verdict, "hard_block");
+    assert.deepEqual(result.memoryContext, {
+      riskFeedback: [],
+      falsePositiveHints: [],
+      referenceSamples: [],
+      memoryCards: [],
+      retrievalMeta: {
+        queryKind: "analysis",
+        embeddingVersion: "",
+        candidateCount: 0
+      }
+    });
+  });
 });
 
 test("detects broader medical-health claims from the updated seed lexicon", async () => {

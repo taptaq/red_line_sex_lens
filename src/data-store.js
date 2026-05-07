@@ -15,6 +15,9 @@ import { sanitizeInnerSpaceTerms } from "./inner-space-terms.js";
 import { sanitizeStyleProfileState } from "./style-profile.js";
 import { withSampleWeight } from "./sample-weight.js";
 
+let memoryRetrievalServicePromise = null;
+let memoryRetrievalServiceRoot = "";
+
 async function readJson(filePath, fallback) {
   try {
     const raw = await fs.readFile(filePath, "utf8");
@@ -31,6 +34,28 @@ async function readJson(filePath, fallback) {
 async function writeJson(filePath, value) {
   const serialized = JSON.stringify(value, null, 2);
   await fs.writeFile(filePath, `${serialized}\n`, "utf8");
+}
+
+async function readJsonLines(filePath, fallback) {
+  try {
+    const raw = await fs.readFile(filePath, "utf8");
+    return raw
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return fallback;
+    }
+
+    throw error;
+  }
+}
+
+async function writeJsonLines(filePath, items) {
+  const lines = (Array.isArray(items) ? items : []).map((item) => JSON.stringify(item));
+  await fs.writeFile(filePath, lines.length ? `${lines.join("\n")}\n` : "", "utf8");
 }
 
 async function fileExists(filePath) {
@@ -656,4 +681,103 @@ export async function loadAnalyzeTagOptions() {
 
 export async function saveAnalyzeTagOptions(items) {
   await writeJson(paths.analyzeTagOptions, uniqueStrings(items));
+}
+
+export async function ensureMemoryStorage() {
+  await fs.mkdir(paths.memoryRoot, { recursive: true });
+}
+
+export async function loadMemoryDocuments() {
+  return readJsonLines(paths.memoryDocuments, []);
+}
+
+export async function saveMemoryDocuments(items) {
+  await ensureMemoryStorage();
+  await writeJsonLines(paths.memoryDocuments, items);
+}
+
+export async function loadMemoryCards() {
+  return readJsonLines(paths.memoryCards, []);
+}
+
+export async function saveMemoryCards(items) {
+  await ensureMemoryStorage();
+  await writeJsonLines(paths.memoryCards, items);
+}
+
+export async function loadMemoryEmbeddings() {
+  return readJsonLines(paths.memoryEmbeddings, []);
+}
+
+export async function saveMemoryEmbeddings(items) {
+  await ensureMemoryStorage();
+  await writeJsonLines(paths.memoryEmbeddings, items);
+}
+
+export async function loadMemoryIndexMeta() {
+  return readJson(paths.memoryIndexMeta, {});
+}
+
+export async function saveMemoryIndexMeta(value = {}) {
+  await ensureMemoryStorage();
+  await writeJson(paths.memoryIndexMeta, value && typeof value === "object" ? value : {});
+}
+
+export async function loadMemoryStoreSnapshot() {
+  const [documents, cards, embeddings, meta] = await Promise.all([
+    loadMemoryDocuments(),
+    loadMemoryCards(),
+    loadMemoryEmbeddings(),
+    loadMemoryIndexMeta()
+  ]);
+
+  return {
+    documents,
+    cards,
+    embeddings,
+    meta
+  };
+}
+
+export async function saveMemoryStoreSnapshot({ documents = [], cards, embeddings = [], meta = {} } = {}) {
+  await ensureMemoryStorage();
+  const writes = [saveMemoryDocuments(documents), saveMemoryEmbeddings(embeddings), saveMemoryIndexMeta(meta)];
+
+  if (Array.isArray(cards)) {
+    writes.push(saveMemoryCards(cards));
+  }
+
+  await Promise.all(writes);
+}
+
+export async function getMemoryRetrievalService() {
+  const resolvedRoot = path.resolve(paths.memoryRoot);
+
+  if (!memoryRetrievalServicePromise || memoryRetrievalServiceRoot !== resolvedRoot) {
+    memoryRetrievalServiceRoot = resolvedRoot;
+    memoryRetrievalServicePromise = (async () => {
+      const [{ createDeterministicEmbeddingProvider }, { createMemoryVectorStore }, { createMemoryRetrievalService }] =
+        await Promise.all([
+          import("./memory/embedding-provider.js"),
+          import("./memory/vector-store.js"),
+          import("./memory/retrieval-service.js")
+        ]);
+
+      const embeddingProvider = createDeterministicEmbeddingProvider();
+      const vectorStore = createMemoryVectorStore({
+        rootDir: paths.memoryRoot,
+        embeddingProvider
+      });
+
+      return createMemoryRetrievalService({ vectorStore });
+    })().catch((error) => {
+      if (memoryRetrievalServiceRoot === resolvedRoot) {
+        memoryRetrievalServicePromise = null;
+      }
+
+      throw error;
+    });
+  }
+
+  return memoryRetrievalServicePromise;
 }

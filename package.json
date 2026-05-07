@@ -12,6 +12,9 @@
     "eval:feedback": "node src/cli.js eval-feedback",
     "eval:rewrite-pairs": "node src/cli.js eval-rewrite-pairs",
     "ingest-feedback": "node src/cli.js ingest-feedback",
+    "memory:inspect": "node src/cli.js memory:inspect",
+    "memory:rebuild": "node src/cli.js memory:rebuild",
+    "test:memory": "node --test test/memory-document.test.js test/vector-store.test.js test/retrieval-service.test.js",
     "summary": "node src/cli.js summary",
     "server": "node src/server.js"
   }

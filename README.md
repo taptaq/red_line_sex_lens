@@ -211,6 +211,22 @@ npm run eval:rewrite-pairs
 npm run eval:review-benchmark
 ```
 
+## AI 记忆共享层
+
+第一版 AI 记忆保留现有 JSON 事实层，在 `data/memory/` 下维护本地检索文档、记忆卡片与索引元数据。
+
+重建 memory 索引与卡片：
+
+```bash
+npm run memory:rebuild
+```
+
+查看当前 memory 摘要：
+
+```bash
+npm run memory:inspect
+```
+
 ## 模型与环境变量
 
 如果只使用本地规则检测，不配置模型也可以运行。

@@ -16,11 +16,21 @@ async function withTempGenerationData(t, run) {
   const originals = {
     collectionTypes: paths.collectionTypes,
     successSamples: paths.successSamples,
-    styleProfile: paths.styleProfile
+    styleProfile: paths.styleProfile,
+    memoryRoot: paths.memoryRoot,
+    memoryDocuments: paths.memoryDocuments,
+    memoryCards: paths.memoryCards,
+    memoryEmbeddings: paths.memoryEmbeddings,
+    memoryIndexMeta: paths.memoryIndexMeta
   };
   paths.collectionTypes = path.join(tempDir, "collection-types.json");
   paths.successSamples = path.join(tempDir, "success-samples.json");
   paths.styleProfile = path.join(tempDir, "style-profile.json");
+  paths.memoryRoot = path.join(tempDir, "memory");
+  paths.memoryDocuments = path.join(paths.memoryRoot, "documents.jsonl");
+  paths.memoryCards = path.join(paths.memoryRoot, "cards.jsonl");
+  paths.memoryEmbeddings = path.join(paths.memoryRoot, "embeddings.jsonl");
+  paths.memoryIndexMeta = path.join(paths.memoryRoot, "index-meta.json");
   await fs.writeFile(paths.collectionTypes, `${JSON.stringify({ custom: [] }, null, 2)}\n`, "utf8");
   await fs.writeFile(
     paths.successSamples,
@@ -64,6 +74,7 @@ test("generation endpoint returns candidates with recommendation metadata", asyn
 
     assert.equal(result.status, 200);
     assert.equal(result.ok, true);
+    assert.equal(result.memoryContext?.retrievalMeta?.queryKind, "generation");
     assert.equal(result.candidates.length, 1);
     assert.equal(result.scoredCandidates.length, 1);
     assert.equal(result.recommendedCandidateId, result.scoredCandidates[0].id);

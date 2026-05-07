@@ -12,4 +12,8 @@ test("README links to the system flow and seed lexicon tiered checklist docs", a
   assert.match(source, /note-records\.json/);
   assert.match(source, /风格画像/);
   assert.match(source, /自进化成稿工作台/);
+  assert.match(source, /AI 记忆共享层/);
+  assert.match(source, /npm run memory:rebuild/);
+  assert.match(source, /npm run memory:inspect/);
+  assert.match(source, /data\/memory\//);
 });

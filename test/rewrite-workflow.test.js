@@ -103,6 +103,72 @@ test("rewrite prompt only keeps the latest retry history item to reduce prompt b
   assert.doesNotMatch(userPrompt, /第一轮摘要/);
 });
 
+test("rewrite prompt includes structured shared memory guidance without leaking raw violation feedback", () => {
+  const messages = buildRewriteMessages({
+    input: {
+      title: "原标题",
+      body: "原正文",
+      coverText: "原封面",
+      tags: ["关系沟通"]
+    },
+    analysis: {
+      verdict: "manual_review",
+      finalVerdict: "manual_review",
+      hits: [],
+      suggestions: [],
+      memoryContext: {
+        referenceSamples: [
+          {
+            title: "共享参考标题",
+            payload: {
+              note: {
+                title: "共享参考标题",
+                body: "这段成功样本正文节奏稳定，适合验证改写提示里会带入共享参考。"
+              }
+            }
+          }
+        ],
+        memoryCards: [
+          {
+            kind: "rewrite_strategy_card",
+            summary: "优先局部替换风险句，保留原本分享节奏。"
+          }
+        ],
+        riskFeedback: [
+          {
+            riskCategories: ["导流与私域"],
+            summary: "曾因导流动作感过强而受限",
+            payload: {
+              platformReason: "疑似导流到站外",
+              violationText: "加我领完整清单"
+            }
+          }
+        ],
+        falsePositiveHints: [
+          {
+            summary: "普通经验分享在弱化动作号召后可保留。"
+          }
+        ]
+      }
+    },
+    semantic: null
+  });
+
+  const userPrompt = String(messages[1]?.content || "");
+
+  assert.match(userPrompt, /共享记忆提示/);
+  assert.match(userPrompt, /共享参考样本/);
+  assert.match(userPrompt, /共享参考标题/);
+  assert.match(userPrompt, /成功样本可借鉴点/);
+  assert.match(userPrompt, /改写策略记忆/);
+  assert.match(userPrompt, /优先局部替换风险句，保留原本分享节奏/);
+  assert.match(userPrompt, /风险边界总结/);
+  assert.match(userPrompt, /导流与私域/);
+  assert.match(userPrompt, /误报保护提示/);
+  assert.doesNotMatch(userPrompt, /疑似导流到站外/);
+  assert.doesNotMatch(userPrompt, /加我领完整清单/);
+});
+
 test("patch prompt asks for local patches tied to retry guidance", () => {
   const messages = buildPatchMessages({
     input: {
@@ -130,6 +196,65 @@ test("patch prompt asks for local patches tied to retry guidance", () => {
   assert.match(userPrompt, /addresses/);
   assert.match(userPrompt, /优先输出局部 patch/);
   assert.match(userPrompt, /去掉疑似导流的话术/);
+});
+
+test("patch prompt includes structured shared memory guidance without leaking raw feedback text", () => {
+  const messages = buildPatchMessages({
+    input: {
+      title: "原标题",
+      body: "想看的姐妹可以来问我",
+      coverText: "原封面",
+      tags: ["关系沟通"]
+    },
+    analysis: {
+      verdict: "manual_review",
+      finalVerdict: "manual_review",
+      retryGuidance: {
+        attempt: 1,
+        summary: "上一轮仍有导流感",
+        focusPoints: ["去掉疑似导流的话术"]
+      },
+      memoryContext: {
+        referenceSamples: [
+          {
+            title: "共享参考标题",
+            payload: {
+              note: {
+                title: "共享参考标题",
+                body: "这段样本更克制，适合模仿保留分享感的改写方式。"
+              }
+            }
+          }
+        ],
+        memoryCards: [
+          {
+            kind: "rewrite_strategy_card",
+            summary: "把动作号召改成个人感受，不要引导对方来私聊。"
+          }
+        ],
+        riskFeedback: [
+          {
+            riskCategories: ["导流与私域"],
+            payload: {
+              platformReason: "存在站外导流嫌疑",
+              violationText: "想要链接私我"
+            }
+          }
+        ]
+      }
+    },
+    semantic: null
+  });
+
+  const userPrompt = String(messages[1]?.content || "");
+
+  assert.match(userPrompt, /共享记忆提示/);
+  assert.match(userPrompt, /共享参考样本/);
+  assert.match(userPrompt, /改写策略记忆/);
+  assert.match(userPrompt, /风险边界总结/);
+  assert.match(userPrompt, /导流与私域/);
+  assert.doesNotMatch(userPrompt, /存在站外导流嫌疑/);
+  assert.doesNotMatch(userPrompt, /想要链接私我/);
 });
 
 test("prefers the base rewrite body when the humanizer output is suspiciously truncated", () => {
@@ -395,6 +520,67 @@ test("rewriteUntilAccepted feeds structured retry guidance into the next rewrite
   ]);
   assert.equal(result.rounds?.length, 2);
   assert.deepEqual(result.rounds?.[0]?.guidance?.focusPoints, rewriteCalls[1].analysis.retryGuidance.focusPoints);
+});
+
+test("rewriteUntilAccepted forwards rewrite memory context into each rewrite round analysis", async () => {
+  const rewriteCalls = [];
+  let analysisCallCount = 0;
+  let reviewCallCount = 0;
+
+  const result = await rewriteUntilAccepted({
+    input: {
+      title: "原标题",
+      body: "原正文"
+    },
+    beforeAnalysis: {
+      verdict: "manual_review",
+      finalVerdict: "manual_review",
+      score: 50,
+      memoryContext: {
+        referenceSamples: [{ title: "共享参考标题" }],
+        memoryCards: [{ kind: "rewrite_strategy_card", summary: "保留原节奏，只处理高风险句。" }]
+      }
+    },
+    maxAttempts: 2,
+    rewritePost: async ({ analysis }) => {
+      rewriteCalls.push(analysis);
+      return {
+        title: `第${rewriteCalls.length}轮标题`,
+        body: `第${rewriteCalls.length}轮正文`,
+        coverText: "",
+        tags: []
+      };
+    },
+    analyzeMerged: async () => {
+      analysisCallCount += 1;
+      return analysisCallCount === 1
+        ? {
+            verdict: "manual_review",
+            finalVerdict: "manual_review",
+            score: 36,
+            suggestions: ["弱化导流动作"],
+            semanticReview: { status: "ok", review: {} }
+          }
+        : {
+            verdict: "observe",
+            finalVerdict: "observe",
+            score: 8,
+            suggestions: [],
+            semanticReview: { status: "ok", review: {} }
+          };
+    },
+    crossReview: async () => {
+      reviewCallCount += 1;
+      return { aggregate: { recommendedVerdict: "pass" } };
+    }
+  });
+
+  assert.equal(rewriteCalls.length, 2);
+  assert.equal(rewriteCalls[0].memoryContext.referenceSamples[0].title, "共享参考标题");
+  assert.equal(rewriteCalls[1].memoryContext.referenceSamples[0].title, "共享参考标题");
+  assert.equal(rewriteCalls[1].memoryContext.memoryCards[0].summary, "保留原节奏，只处理高风险句。");
+  assert.equal(result.accepted, true);
+  assert.equal(reviewCallCount, 1);
 });
 
 test("rewriteUntilAccepted stops after max attempts when the rewrite still needs manual review", async () => {

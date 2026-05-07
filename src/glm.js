@@ -693,12 +693,82 @@ function buildPreviewText(value, maxLength = 240) {
   }
 }
 
+function normalizeMemorySampleTitle(sample = {}) {
+  return String(sample.payload?.note?.title || sample.payload?.title || sample.title || "").trim();
+}
+
+function normalizeMemorySampleBody(sample = {}) {
+  return String(sample.payload?.note?.body || sample.payload?.body || sample.body || "").trim();
+}
+
+function buildRewriteSharedMemoryPrompt(memoryContext = null) {
+  if (!memoryContext || typeof memoryContext !== "object") {
+    return "";
+  }
+
+  const referenceSection = Array.isArray(memoryContext.referenceSamples)
+    ? memoryContext.referenceSamples
+        .slice(0, 3)
+        .map((sample, index) => {
+          const title = normalizeMemorySampleTitle(sample);
+          const body = normalizeMemorySampleBody(sample);
+          const lines = [`共享参考样本 ${index + 1}：${title || "未命名样本"}`];
+
+          if (body) {
+            lines.push(`成功样本可借鉴点：${body.slice(0, 120)}`);
+          }
+
+          return lines.join("\n");
+        })
+        .filter(Boolean)
+        .join("\n\n")
+    : "";
+
+  const cardSection = Array.isArray(memoryContext.memoryCards)
+    ? memoryContext.memoryCards
+        .slice(0, 4)
+        .map((card, index) => {
+          const summary = String(card.summary || card.title || "").trim();
+
+          if (!summary) {
+            return "";
+          }
+
+          return `改写策略记忆 ${index + 1}：${summary}`;
+        })
+        .filter(Boolean)
+        .join("\n")
+    : "";
+
+  const riskCategories = uniqueNonEmpty(
+    (Array.isArray(memoryContext.riskFeedback) ? memoryContext.riskFeedback : []).flatMap((item) =>
+      Array.isArray(item?.riskCategories) ? item.riskCategories : []
+    )
+  );
+  const riskSection = riskCategories.length
+    ? `风险边界总结：相似受限案例主要集中在 ${riskCategories.join("、")}，这次优先弱化相关动作感、交易感和刺激感。`
+    : "";
+  const falsePositiveSection = Array.isArray(memoryContext.falsePositiveHints) && memoryContext.falsePositiveHints.length
+    ? "误报保护提示：历史相似放行样本说明，中性经验分享、克制表达和非导流语气可以尽量保留，不要为了求稳过度改写。"
+    : "";
+
+  return [
+    referenceSection ? `共享记忆提示：\n${referenceSection}` : "",
+    cardSection ? `改写策略记忆：\n${cardSection}` : "",
+    riskSection,
+    falsePositiveSection
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 export function buildRewriteMessages({ input = {}, analysis = {}, semantic = null, innerSpaceTerms = [] } = {}) {
   const retryGuidance = analysis?.retryGuidance && typeof analysis.retryGuidance === "object" ? analysis.retryGuidance : null;
   const retryHistory = Array.isArray(analysis?.retryHistory)
     ? analysis.retryHistory.slice(-rewriteGenerationConfig.retryHistoryLimit)
     : [];
   const terminologyPrompt = formatInnerSpaceTermsPrompt(innerSpaceTerms);
+  const sharedMemoryPrompt = buildRewriteSharedMemoryPrompt(analysis?.memoryContext);
 
   return [
     {
@@ -754,6 +824,7 @@ export function buildRewriteMessages({ input = {}, analysis = {}, semantic = nul
         `语义正向信号：${JSON.stringify(semantic?.safeSignals || [])}`,
         `语义摘要：${JSON.stringify(semantic?.summary || "")}`,
         `语义改写建议：${JSON.stringify(semantic?.suggestion || "")}`,
+        sharedMemoryPrompt,
         retryGuidance ? `当前是第 ${Number(retryGuidance.attempt || 0) + 1} 轮自动改写。` : "",
         retryGuidance ? `上一轮复判摘要：${String(retryGuidance.summary || "")}` : "",
         retryGuidance ? `上一轮优先修正点：${JSON.stringify(retryGuidance.focusPoints || [])}` : "",
@@ -785,6 +856,7 @@ export function buildPatchMessages({ input = {}, analysis = {}, semantic = null,
     ? analysis.retryHistory.slice(-rewriteGenerationConfig.retryHistoryLimit)
     : [];
   const terminologyPrompt = formatInnerSpaceTermsPrompt(innerSpaceTerms);
+  const sharedMemoryPrompt = buildRewriteSharedMemoryPrompt(analysis?.memoryContext);
   const compactHits = Array.isArray(analysis?.hits)
     ? analysis.hits.slice(0, 4).map((item) => ({
         category: String(item?.category || "").trim(),
@@ -854,6 +926,7 @@ export function buildPatchMessages({ input = {}, analysis = {}, semantic = null,
               }))
             )}`
           : "",
+        sharedMemoryPrompt,
         terminologyPrompt
       ].join("\n")
     }

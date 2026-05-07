@@ -55,6 +55,55 @@ test("buildGenerationMessages includes mode, style profile, success samples, and
   assert.match(combined, /600-950 字/);
 });
 
+test("buildGenerationMessages packs shared memory guidance without leaking raw violation text", () => {
+  const messages = buildGenerationMessages({
+    mode: "from_scratch",
+    brief: {
+      topic: "亲密关系沟通",
+      collectionType: "科普"
+    },
+    memoryContext: {
+      referenceSamples: [
+        {
+          title: "共享记忆参考标题",
+          payload: {
+            note: {
+              title: "共享记忆参考标题",
+              body: "这是一段可供模仿节奏的成功样本正文，用来验证提示词会打包成功经验。"
+            }
+          }
+        }
+      ],
+      memoryCards: [
+        {
+          kind: "style_experience_card",
+          summary: "标题可以有反差感，但正文要像真人分享，保持克制。"
+        },
+        {
+          kind: "risk_boundary_card",
+          summary: "避免导流暗示和过度承诺，把风险提醒转成正向边界。"
+        }
+      ],
+      riskFeedback: [
+        {
+          payload: {
+            platformReason: "疑似导流到站外",
+            violationText: "加我领完整清单"
+          }
+        }
+      ]
+    }
+  });
+
+  const combined = messages.map((item) => item.content).join("\n");
+  assert.match(combined, /共享记忆提示/);
+  assert.match(combined, /共享记忆参考标题/);
+  assert.match(combined, /真人分享，保持克制/);
+  assert.match(combined, /避免导流暗示和过度承诺/);
+  assert.doesNotMatch(combined, /疑似导流到站外/);
+  assert.doesNotMatch(combined, /加我领完整清单/);
+});
+
 test("generateNoteCandidates normalizes three candidate variants from an injected generator", async () => {
   const result = await generateNoteCandidates({
     mode: "draft_optimize",
