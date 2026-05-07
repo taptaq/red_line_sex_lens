@@ -64,6 +64,9 @@ test("analysis panel shows false-positive downgrade signals when they affect rul
   assert.match(renderAnalysisSource, /falsePositiveHints/);
   assert.match(renderAnalysisSource, /规则偏严反例/);
   assert.match(renderAnalysisSource, /宽松白名单/);
+  assert.match(renderAnalysisSource, /referenceSampleHints/);
+  assert.match(renderAnalysisSource, /参考样本提示/);
+  assert.match(renderAnalysisSource, /已按参考样本降为观察/);
 });
 
 test("main workbench exposes per-action model selectors and sends current selections with model requests", async () => {

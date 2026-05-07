@@ -116,9 +116,42 @@ test("generation prompt context includes collection type", () => {
   assert.match(messages[1].content, /1100-1600 字/);
 });
 
-test("published final generation drafts become weighted references for the next generation", () => {
+test("generation references only keep qualified manual reference samples", () => {
   const references = buildGenerationReferenceSamples({
-    successSamples: [{ id: "manual-passed", tier: "passed", title: "普通过审样本", body: "普通正文" }],
+    successSamples: [
+      {
+        id: "manual-qualified",
+        tier: "featured",
+        title: "高质量参考样本",
+        body: "高质量参考正文",
+        source: "manual",
+        metrics: { likes: 68, favorites: 14, comments: 3 }
+      },
+      {
+        id: "manual-unqualified",
+        tier: "passed",
+        title: "低数据参考样本",
+        body: "低数据参考正文",
+        source: "manual",
+        metrics: { likes: 2, favorites: 0, comments: 0 }
+      },
+      {
+        id: "manual-qualified-by-views",
+        tier: "performed",
+        title: "高浏览补足参考样本",
+        body: "高浏览补足参考正文",
+        source: "manual",
+        metrics: { likes: 18, favorites: 4, comments: 1, views: 5600 }
+      },
+      {
+        id: "manual-high-views-only",
+        tier: "performed",
+        title: "只有高浏览参考样本",
+        body: "只有高浏览参考正文",
+        source: "manual",
+        metrics: { likes: 1, favorites: 0, comments: 0, views: 12800 }
+      }
+    ],
     noteLifecycle: [
       {
         id: "life-final",
@@ -147,12 +180,17 @@ test("published final generation drafts become weighted references for the next 
     ]
   });
 
-  assert.equal(references[0].title, "最终推荐稿样本");
-  assert.equal(references[0].source, "generation_final");
+  assert.equal(references.some((item) => item.title === "低数据参考样本"), false);
+  assert.equal(references.some((item) => item.title === "高质量参考样本"), true);
+  assert.equal(references.some((item) => item.title === "高浏览补足参考样本"), true);
+  assert.equal(references.some((item) => item.title === "只有高浏览参考样本"), false);
+  assert.equal(references[0].title, "高质量参考样本");
+  assert.equal(references[0].source, "manual");
+  assert.equal(references.some((item) => item.title === "最终推荐稿样本"), false);
   assert.equal(references.some((item) => item.title === "未发布最终稿"), false);
 });
 
-test("unified note records still feed success and lifecycle compatibility views into generation references", async (t) => {
+test("unified note records only feed qualified reference samples into generation references", async (t) => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "generation-note-records-"));
   const originals = {
     noteRecords: paths.noteRecords,
@@ -187,7 +225,8 @@ test("unified note records still feed success and lifecycle compatibility views 
           selectedBy: "manual"
         },
         publish: {
-          status: "published_passed"
+          status: "published_passed",
+          metrics: { likes: 36, favorites: 8, comments: 2 }
         }
       },
       {
@@ -205,6 +244,25 @@ test("unified note records still feed success and lifecycle compatibility views 
         },
         reference: {
           enabled: false
+        }
+      },
+      {
+        id: "record-low-data-reference",
+        source: "manual",
+        stage: "published_reference",
+        note: {
+          title: "低数据参考样本",
+          body: "低数据参考正文",
+          tags: ["科普"]
+        },
+        publish: {
+          status: "published_passed",
+          metrics: { likes: 2, favorites: 0, comments: 0 }
+        },
+        reference: {
+          enabled: true,
+          tier: "passed",
+          selectedBy: "manual"
         }
       },
       {
@@ -230,14 +288,15 @@ test("unified note records still feed success and lifecycle compatibility views 
   const noteLifecycle = await loadNoteLifecycle();
   const references = buildGenerationReferenceSamples({ successSamples, noteLifecycle });
 
-  assert.deepEqual(successSamples.map((item) => item.id), ["record-reference"]);
+  assert.deepEqual(successSamples.map((item) => item.id).sort(), ["record-low-data-reference", "record-reference"]);
   assert.equal(noteLifecycle.length, 2);
   assert.deepEqual(
     noteLifecycle.map((item) => item.note?.title).sort(),
     ["发布后表现好的最终稿", "未发布最终稿"]
   );
-  assert.equal(references.some((item) => item.title === "发布后表现好的最终稿"), true);
   assert.equal(references.some((item) => item.title === "手工参考样本"), true);
+  assert.equal(references.some((item) => item.title === "低数据参考样本"), false);
+  assert.equal(references.some((item) => item.title === "发布后表现好的最终稿"), false);
   assert.equal(references.some((item) => item.title === "未发布最终稿"), false);
 });
 

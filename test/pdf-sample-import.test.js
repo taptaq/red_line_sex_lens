@@ -85,7 +85,8 @@ test("normalizePdfImportCommitItem trims fields, defaults cover text to title, a
     publishNotes: " 24h 后仍稳定 ",
     likes: "",
     favorites: "6",
-    comments: undefined
+    comments: undefined,
+    views: " 42.8 "
   });
 
   assert.deepEqual(item, {
@@ -107,7 +108,8 @@ test("normalizePdfImportCommitItem trims fields, defaults cover text to title, a
     },
     likes: 0,
     favorites: 6,
-    comments: 0
+    comments: 0,
+    views: 42
   });
 });
 

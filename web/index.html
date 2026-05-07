@@ -373,65 +373,63 @@
               </div>
               <!-- Tab 分组：词库/日志 ｜ 样本/画像 用分隔符隔开 -->
               <div class="tab-strip" role="tablist" aria-label="数据维护分区">
-                <button type="button" class="tab-button" data-tab-group="data-maintenance" data-tab-target="feedback-center-pane">回流中心</button>
                 <button type="button" class="tab-button" data-tab-group="data-maintenance" data-tab-target="sample-library-pane">学习样本</button>
               </div>
               <div class="tab-panels">
-            <section class="tab-panel" id="feedback-center-pane" data-tab-group="data-maintenance">
-              <div class="tab-panel-head">
-                <strong>回流中心</strong>
-                <span>把真实违规反馈和误报案例收在一起处理，让系统学习入口更集中。</span>
-              </div>
-              <div id="rules-maintenance-shortcuts" class="admin-panel-block rules-maintenance-shortcuts">
-                <div class="tab-panel-head">
-                  <strong>需要补规则？</strong>
-                  <span>如果某条回流已经能确定要补规则，这里给你一个直达入口。</span>
-                </div>
-                <div class="rules-maintenance-shortcut-actions">
-                  <button type="button" class="button button-ghost" data-summary-action="open-custom-lexicon">打开自定义词库</button>
-                  <button type="button" class="button button-ghost" data-summary-action="open-seed-lexicon">打开种子词库</button>
-                </div>
-              </div>
-              <div class="meta-row">
-                <span class="meta-pill feedback-priority-pill">待优先处理</span>
-                <span class="helper-text">优先看未确认误报、未沉淀规则的反馈，以及最新进入回流的记录。</span>
-              </div>
-              <div class="admin-panel-block">
-                <div class="tab-panel-head">
-                  <strong>待优先处理</strong>
-                  <span>把最该先处理的违规反馈和待确认误报放在最上面。</span>
-                </div>
-                <div id="feedback-priority-list" class="admin-list"></div>
-              </div>
-              <div class="admin-panel-block">
-                <div class="tab-panel-head">
-                  <strong>违规反馈</strong>
-                  <span>查看全部真实违规反馈、误报状态和命中摘要。</span>
-                </div>
-                <div id="feedback-log-list" class="admin-list"></div>
-                <div id="feedback-log-secondary-list" class="admin-list"></div>
-              </div>
-              <div class="admin-panel-block">
-                <div class="tab-panel-head">
-                  <strong>误报案例</strong>
-                  <span>先确认待观察误报，再查看已沉淀的历史案例。</span>
-                </div>
-                <div id="false-positive-pending-list" class="admin-list"></div>
-                <div id="false-positive-history-list" class="admin-list"></div>
-                <div id="false-positive-log-list" class="admin-list" hidden></div>
-              </div>
-            </section>
-
-            <section class="tab-panel" id="sample-library-pane" data-tab-group="data-maintenance">
-              <div class="tab-panel-head">
-                <strong>学习样本</strong>
-                <span>统一沉淀好样本、误判样本和发布结果，减少并列入口。</span>
-              </div>
-              <section id="sample-library-daily-panel" class="admin-panel-block sample-library-daily-panel">
-                <div class="tab-panel-head">
-                  <strong>日常记录</strong>
-                  <span>先集中维护记录列表、基础内容、参考属性和生命周期回填。</span>
-                </div>
+                <section class="tab-panel" id="sample-library-pane" data-tab-group="data-maintenance">
+                  <div class="tab-panel-head">
+                    <strong>学习样本</strong>
+                    <span>统一沉淀好样本、误判样本和发布结果，减少并列入口。</span>
+                  </div>
+                  <section id="sample-library-daily-panel" class="admin-panel-block sample-library-daily-panel">
+                    <section id="sample-library-reflow-panel" class="admin-panel-block sample-library-reflow-panel">
+                      <div class="tab-panel-head">
+                        <strong>回流待处理区</strong>
+                        <span>把真实违规反馈和误报案例收在这里处理，再决定补规则还是沉淀成学习样本。</span>
+                      </div>
+                      <div class="meta-row">
+                        <span class="meta-pill feedback-priority-pill">待优先处理</span>
+                        <span class="helper-text">优先看未确认误报、未沉淀规则的反馈，以及最新进入回流的记录。</span>
+                      </div>
+                      <div class="admin-panel-block">
+                        <div class="tab-panel-head">
+                          <strong>待优先处理</strong>
+                          <span>把最该先处理的违规反馈和待确认误报放在最上面。</span>
+                        </div>
+                        <div id="feedback-priority-list" class="admin-list"></div>
+                      </div>
+                      <div class="admin-panel-block">
+                        <div class="tab-panel-head">
+                          <strong>违规反馈</strong>
+                          <span>查看全部真实违规反馈、误报状态和命中摘要。</span>
+                        </div>
+                        <div id="feedback-log-list" class="admin-list"></div>
+                        <div id="feedback-log-secondary-list" class="admin-list"></div>
+                      </div>
+                      <div class="admin-panel-block">
+                        <div class="tab-panel-head">
+                          <strong>误报案例</strong>
+                          <span>先确认待观察误报，再查看已沉淀的历史案例。</span>
+                        </div>
+                        <div id="false-positive-pending-list" class="admin-list"></div>
+                        <div id="false-positive-history-list" class="admin-list"></div>
+                        <div id="false-positive-log-list" class="admin-list" hidden></div>
+                      </div>
+                    </section>
+                    <div class="tab-panel-head">
+                      <strong>日常记录</strong>
+                      <span>处理完回流后，再集中维护记录列表、基础内容、参考属性和生命周期回填。</span>
+                    </div>
+                <article class="result-card-shell sample-library-flow-guide">
+                    <strong>生效流转说明</strong>
+                  <ol class="sample-library-flow-list">
+                    <li>只保存基础内容：先进入学习样本记录列表，用于去重、归档和后续补全。</li>
+                    <li>启用参考属性并达到数据门槛：才会真正进入参考样本池，参与风格画像、生成参考和内容校验提示。</li>
+                    <li>回填生命周期属性：先用于发布结果复盘和候选筛选，不会单独直接放宽内容校验。</li>
+                    <li>记录预判复盘：用于校准判断经验和回看偏差，不会直接改动当前检测判罚。</li>
+                    <li>仅保存到学习样本：不会直接进入内容检测规则；检测仍主要依赖词库、白名单和误报回流。</li>
+                  </ol>
+                </article>
                 <div class="sample-library-toolbar">
                   <div class="sample-library-toolbar-filters">
                     <label class="field-wide">
@@ -461,7 +459,7 @@
                     type="button"
                     class="button button-alt"
                     id="sample-library-create-button"
-                    aria-controls="sample-library-create-form-shell"
+                    aria-controls="sample-library-modal"
                     aria-expanded="false"
                   >
                     新增学习样本
@@ -475,48 +473,18 @@
                   >
                     批量导入 PDF
                   </button>
+                  <button
+                    type="button"
+                    class="button button-ghost"
+                    id="sample-library-pools-button"
+                    aria-controls="sample-library-pools-modal"
+                    aria-expanded="false"
+                  >
+                    查看样本池
+                  </button>
                   <input id="sample-library-import-input" type="file" accept="application/pdf,.pdf" multiple hidden />
                 </div>
-                <div class="sample-library-create-block" id="sample-library-create-form-shell" hidden>
-                  <div class="admin-panel-body">
-                    <form id="sample-library-create-form" class="stack compact-form">
-                      <label>
-                        <span>标题</span>
-                        <input name="title" placeholder="样本标题" />
-                      </label>
-                      <label>
-                        <span>正文</span>
-                        <textarea name="body" rows="5" placeholder="样本正文"></textarea>
-                      </label>
-                      <label>
-                        <span>封面文案</span>
-                        <input name="coverText" placeholder="封面文案" />
-                      </label>
-                      <label>
-                        <span>合集类型</span>
-                        <select name="collectionType" id="sample-library-collection-type-select" required>
-                          <option value="">请选择合集类型</option>
-                        </select>
-                      </label>
-                      <label>
-                        <span>标签</span>
-                        <input name="tags" placeholder="标签，用逗号分隔" />
-                      </label>
-                      <div class="inline-actions inline-actions-row">
-                        <button type="button" class="button button-ghost" id="sample-library-prefill-analysis">
-                          从当前检测填充
-                        </button>
-                        <button type="button" class="button button-ghost" id="sample-library-prefill-rewrite">
-                          从当前改写填充
-                        </button>
-                        <button type="submit" class="button button-alt">保存学习样本</button>
-                      </div>
-                      <p class="helper-text action-gate-hint" id="sample-library-prefill-action-hint" aria-live="polite"></p>
-                      <p class="helper-text action-gate-hint" id="sample-library-create-action-hint" aria-live="polite"></p>
-                    </form>
-                  </div>
-                  <div id="sample-library-create-result" class="result-card muted">等待操作</div>
-                </div>
+                <div id="sample-library-create-result" class="result-card muted">等待操作</div>
                 <section class="sample-library-import-block" id="sample-library-import-block" hidden>
                   <div class="admin-panel-body stack">
                     <div id="sample-library-import-result" class="result-card muted">等待导入 PDF</div>
@@ -588,6 +556,42 @@
                       </div>
                     </summary>
                     <div class="admin-accordion-body">
+                      <section class="rules-maintenance-launch-list" aria-label="词库工作台入口">
+                        <article class="rules-maintenance-launch-card">
+                          <div class="tab-panel-head">
+                            <strong>自定义词库</strong>
+                            <span>适合接收回流复核草稿，进入弹窗后可微调、保存、删除。</span>
+                          </div>
+                          <div class="item-actions">
+                            <button type="button" class="button button-ghost" data-action="open-lexicon-workspace-modal" data-tab="custom">
+                              打开自定义词库工作台
+                            </button>
+                          </div>
+                        </article>
+                        <article class="rules-maintenance-launch-card">
+                          <div class="tab-panel-head">
+                            <strong>种子词库</strong>
+                            <span>适合维护全局稳定规则，集中在弹窗内查看层级和新增条目。</span>
+                          </div>
+                          <div class="item-actions">
+                            <button type="button" class="button button-ghost" data-action="open-lexicon-workspace-modal" data-tab="seed">
+                              打开种子词库工作台
+                            </button>
+                          </div>
+                        </article>
+                        <article class="rules-maintenance-launch-card">
+                          <div class="tab-panel-head">
+                            <strong>内太空术语表</strong>
+                            <span>适合维护生成与改写参考术语，在弹窗中统一新增和删除。</span>
+                          </div>
+                          <div class="item-actions">
+                            <button type="button" class="button button-ghost" data-action="open-lexicon-workspace-modal" data-tab="inner-space">
+                              打开内太空术语工作台
+                            </button>
+                          </div>
+                        </article>
+                      </section>
+                      <div class="legacy-lexicon-workspace" hidden aria-hidden="true">
                       <section id="inner-space-terms-pane">
                         <div class="tab-panel-head">
                           <strong>内太空术语表</strong>
@@ -755,6 +759,7 @@
                           <div id="seed-lexicon-list" class="admin-list"></div>
                         </div>
                       </section>
+                      </div>
                     </div>
                     </details>
                   </div>
@@ -795,13 +800,114 @@
                     </div>
                   </details>
                 </section>
-
+                
               </div>
             </article>
           </section>
         </div>
       </details>
     </main>
+    <div id="sample-library-modal" class="sample-library-modal" hidden>
+      <button
+        type="button"
+        class="sample-library-modal-overlay"
+        data-action="close-sample-library-modal"
+        aria-label="关闭弹窗"
+      ></button>
+      <section
+        class="sample-library-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sample-library-modal-title"
+      >
+        <header class="sample-library-modal-header">
+          <div>
+            <strong id="sample-library-modal-title">编辑内容</strong>
+            <p id="sample-library-modal-subtitle">在弹窗里完成这一块的编辑与保存。</p>
+          </div>
+          <button type="button" class="button button-ghost button-small" data-action="close-sample-library-modal">关闭</button>
+        </header>
+        <div id="sample-library-modal-result" class="helper-text sample-library-modal-result" aria-live="polite"></div>
+        <div id="sample-library-modal-content" class="sample-library-modal-content"></div>
+        <footer class="sample-library-modal-footer">
+          <button type="button" id="sample-library-modal-cancel" class="button button-ghost" data-action="close-sample-library-modal">取消</button>
+          <button type="button" id="sample-library-modal-save" class="button">保存</button>
+        </footer>
+      </section>
+    </div>
+    <div id="sample-library-pools-modal" class="sample-library-pools-modal" hidden>
+      <button
+        type="button"
+        class="sample-library-pools-modal-overlay"
+        data-action="close-sample-library-pools-modal"
+        aria-label="关闭样本池工作台"
+      ></button>
+      <section
+        class="sample-library-pools-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sample-library-pools-modal-title"
+      >
+        <header class="sample-library-pools-modal-header">
+          <div>
+            <strong id="sample-library-pools-modal-title">样本池工作台</strong>
+            <p id="sample-library-pools-modal-subtitle">查看参考样本池、普通样本池和反例样本池的分区结果与生效范围。</p>
+          </div>
+          <button type="button" class="button button-ghost button-small" data-action="close-sample-library-pools-modal">关闭</button>
+        </header>
+        <div class="sample-library-pools-tab-strip" role="tablist" aria-label="样本池分区">
+          <button type="button" class="sample-library-pools-tab" data-sample-pool-tab="reference" role="tab" aria-selected="true">
+            参考样本池
+          </button>
+          <button type="button" class="sample-library-pools-tab" data-sample-pool-tab="regular" role="tab" aria-selected="false">
+            普通样本池
+          </button>
+          <button type="button" class="sample-library-pools-tab" data-sample-pool-tab="negative" role="tab" aria-selected="false">
+            反例样本池
+          </button>
+        </div>
+        <div id="sample-library-pools-modal-content" class="sample-library-pools-modal-content">
+          <div class="result-card muted">等待打开样本池工作台</div>
+        </div>
+      </section>
+    </div>
+    <div id="lexicon-workspace-modal" class="lexicon-workspace-modal" hidden>
+      <button
+        type="button"
+        class="lexicon-workspace-overlay"
+        data-action="close-lexicon-workspace-modal"
+        aria-label="关闭词库工作台"
+      ></button>
+      <section
+        class="lexicon-workspace-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="lexicon-workspace-modal-title"
+      >
+        <header class="lexicon-workspace-header">
+          <div>
+            <strong id="lexicon-workspace-modal-title">词库工作台</strong>
+            <p id="lexicon-workspace-modal-subtitle">在弹窗里统一查看、新增和维护词库条目。</p>
+          </div>
+          <button type="button" class="button button-ghost button-small" data-action="close-lexicon-workspace-modal">关闭</button>
+        </header>
+        <div class="lexicon-workspace-tab-strip" role="tablist" aria-label="词库工作台分区">
+          <button type="button" class="lexicon-workspace-tab" data-lexicon-workspace-tab="custom" role="tab" aria-selected="true">
+            自定义词库
+          </button>
+          <button type="button" class="lexicon-workspace-tab" data-lexicon-workspace-tab="seed" role="tab" aria-selected="false">
+            种子词库
+          </button>
+          <button type="button" class="lexicon-workspace-tab" data-lexicon-workspace-tab="inner-space" role="tab" aria-selected="false">
+            内太空术语
+          </button>
+        </div>
+        <div id="lexicon-workspace-result" class="helper-text lexicon-workspace-result" aria-live="polite"></div>
+        <div id="lexicon-workspace-modal-content" class="lexicon-workspace-content">
+          <div class="result-card muted">等待打开词库工作台</div>
+        </div>
+      </section>
+    </div>
     <script type="module" src="/app.js?v=20260428-workflow-layout"></script>
   </body>
 </html>

@@ -95,6 +95,26 @@ test("note records normalize success samples and lifecycle records into one cano
   assert.deepEqual(success.note.tags, ["关系", "沟通"]);
 });
 
+test("migrateSuccessSampleToNoteRecord keeps top-level legacy metrics including views", () => {
+  const migrated = migrateSuccessSampleToNoteRecord({
+    id: "success-legacy-top-level",
+    title: "旧成功样本",
+    body: "旧成功样本正文",
+    tier: "performed",
+    likes: "12",
+    favorites: 5,
+    comments: "3",
+    views: "88.9"
+  });
+
+  assert.deepEqual(migrated.publish.metrics, {
+    likes: 12,
+    favorites: 5,
+    comments: 3,
+    views: 88
+  });
+});
+
 test("note records merge by fingerprint and preserve lifecycle publish facts plus success reference facts", () => {
   const merged = mergeNoteRecords(
     migrateSuccessSampleToNoteRecord({
@@ -117,6 +137,35 @@ test("note records merge by fingerprint and preserve lifecycle publish facts plu
   assert.equal(merged.publish.status, "positive_performance");
   assert.equal(merged.publish.metrics.likes, 99);
   assert.equal(merged.createdAt, "2026-04-28T08:00:00.000Z");
+});
+
+test("mergeNoteRecords normalizes views as non-negative integers and keeps the higher value", () => {
+  const merged = mergeNoteRecords(
+    buildNoteRecord({
+      note: { title: "浏览量归并", body: "正文" },
+      publish: {
+        status: "published_passed",
+        metrics: { likes: 12, favorites: 3, comments: 1, views: "18" }
+      }
+    }),
+    buildNoteRecord({
+      note: { title: "浏览量归并", body: "正文" },
+      publish: {
+        status: "positive_performance",
+        metrics: { likes: 9, favorites: 2, comments: 0, views: "-7" }
+      }
+    })
+  );
+
+  const upgraded = mergeNoteRecords(merged, {
+    note: { title: "浏览量归并", body: "正文" },
+    publish: {
+      metrics: { views: "27.9" }
+    }
+  });
+
+  assert.equal(merged.publish.metrics.views, 18);
+  assert.equal(upgraded.publish.metrics.views, 27);
 });
 
 test("dedupeNoteRecords collapses success and lifecycle entries with the same fingerprint", () => {
@@ -176,7 +225,7 @@ test("mergeNoteRecords preserves existing publish and reference details during p
     note: { title: "部分更新", body: "正文" },
     publish: {
       status: "positive_performance",
-      metrics: { likes: 36, favorites: 12, comments: 4 },
+      metrics: { likes: 36, favorites: 12, comments: 4, views: 240 },
       notes: "原始备注",
       publishedAt: "2026-04-22",
       platformReason: "passed"
@@ -196,7 +245,7 @@ test("mergeNoteRecords preserves existing publish and reference details during p
   });
 
   assert.equal(merged.publish.status, "positive_performance");
-  assert.deepEqual(merged.publish.metrics, { likes: 36, favorites: 12, comments: 4 });
+  assert.deepEqual(merged.publish.metrics, { likes: 36, favorites: 12, comments: 4, views: 240 });
   assert.equal(merged.publish.notes, "原始备注");
   assert.equal(merged.publish.publishedAt, "2026-04-22");
   assert.equal(merged.publish.platformReason, "passed");
@@ -425,6 +474,39 @@ test("saving lifecycle view persists canonical note records in unified storage",
   });
 });
 
+test("saving lifecycle view does not wipe an existing canonical views metric when incoming lifecycle omits it", async (t) => {
+  await withTempNoteRecordsStore(t, async () => {
+    await saveSuccessSamples([
+      buildSuccessSampleRecord({
+        title: "已有浏览量样本",
+        body: "已有浏览量正文",
+        tier: "featured",
+        metrics: { likes: 18, favorites: 6, comments: 2, views: 240 }
+      })
+    ]);
+
+    await saveNoteLifecycle([
+      buildLifecycleRecord({
+        source: "generation_final",
+        stage: "published",
+        note: {
+          title: "已有浏览量样本",
+          body: "已有浏览量正文",
+          tags: ["科普"]
+        },
+        publishResult: {
+          status: "positive_performance",
+          metrics: { likes: 66, favorites: 18, comments: 6 }
+        }
+      })
+    ]);
+
+    const stored = await loadNoteRecords();
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0].publish.metrics.views, 240);
+  });
+});
+
 test("success and lifecycle views share one canonical note record for the same content", async (t) => {
   await withTempNoteRecordsStore(t, async () => {
     await saveSuccessSamples([
@@ -604,11 +686,64 @@ test("legacy success and lifecycle files cold-start into one record without losi
 
     assert.equal(records.length, 1);
     assert.equal(records[0].id, "success-99");
-    assert.equal(records[0].publish.status, "not_published");
+    assert.equal(records[0].publish.status, "published_passed");
     assert.equal(successItems.length, 1);
     assert.equal(successItems[0].id, "success-99");
     assert.equal(lifecycleItems.length, 1);
     assert.equal(lifecycleItems[0].id, "success-99");
-    assert.equal(lifecycleItems[0].status, "not_published");
+    assert.equal(lifecycleItems[0].status, "published_passed");
+  });
+});
+
+test("legacy cold-start merge preserves success-sample views when lifecycle payload omits them", async (t) => {
+  await withTempNoteRecordsStore(t, async () => {
+    await Promise.all([
+      fs.writeFile(
+        paths.successSamples,
+        `${JSON.stringify(
+          [
+            {
+              id: "success-views-1",
+              title: "冷启动浏览量标题",
+              body: "冷启动浏览量正文",
+              tier: "performed",
+              metrics: { likes: 12, favorites: 4, comments: 1, views: 320 }
+            }
+          ],
+          null,
+          2
+        )}\n`,
+        "utf8"
+      ),
+      fs.writeFile(
+        paths.noteLifecycle,
+        `${JSON.stringify(
+          [
+            {
+              id: "life-views-1",
+              source: "generation_final",
+              stage: "published",
+              note: {
+                title: "冷启动浏览量标题",
+                body: "冷启动浏览量正文",
+                tags: ["科普"]
+              },
+              publishResult: {
+                status: "positive_performance",
+                metrics: { likes: 40, favorites: 12, comments: 3 }
+              }
+            }
+          ],
+          null,
+          2
+        )}\n`,
+        "utf8"
+      )
+    ]);
+
+    const records = await loadNoteRecords();
+
+    assert.equal(records.length, 1);
+    assert.equal(records[0].publish.metrics.views, 320);
   });
 });

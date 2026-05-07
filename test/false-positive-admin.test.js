@@ -182,7 +182,7 @@ test("confirming a false positive sample creates a whitelist counterexample cand
   });
 });
 
-test("admin page exposes one feedback center pane that contains false positive maintenance", async () => {
+test("admin page exposes false positive maintenance inside the sample library pane", async () => {
   const [indexHtml, appJs] = await Promise.all([
     fs.readFile(path.join(process.cwd(), "web/index.html"), "utf8"),
     fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8")
@@ -191,10 +191,14 @@ test("admin page exposes one feedback center pane that contains false positive m
   assert.match(indexHtml, /id="feedback-advanced-panel"/);
   assert.match(indexHtml, /快速回流/);
   assert.match(indexHtml, /高级识别/);
-  assert.match(indexHtml, /data-tab-target="feedback-center-pane"/);
+  assert.match(indexHtml, /data-tab-target="sample-library-pane"/);
+  assert.doesNotMatch(indexHtml, /data-tab-target="feedback-center-pane"/);
   assert.doesNotMatch(indexHtml, /data-tab-target="false-positive-log-pane"[^>]*>误报样本</);
   assert.doesNotMatch(indexHtml, /data-tab-target="feedback-log-pane"[^>]*>反馈日志</);
-  assert.match(indexHtml, /id="feedback-center-pane"/);
+  assert.doesNotMatch(indexHtml, /id="feedback-center-pane"/);
+  assert.match(indexHtml, /id="sample-library-pane"/);
+  assert.match(indexHtml, /id="sample-library-reflow-panel"/);
+  assert.match(indexHtml, /回流待处理区/);
   assert.match(indexHtml, /违规反馈/);
   assert.match(indexHtml, /误报案例/);
   assert.match(indexHtml, /待优先处理/);
@@ -205,12 +209,26 @@ test("admin page exposes one feedback center pane that contains false positive m
   assert.match(indexHtml, /id="false-positive-history-list"/);
   assert.match(indexHtml, /id="feedback-log-list"/);
   assert.match(indexHtml, /id="false-positive-log-list"/);
+  assert.doesNotMatch(indexHtml, /id="rules-maintenance-shortcuts"/);
+  assert.match(indexHtml, /扩展维护/);
   assert.match(appJs, /renderFalsePositiveLog|false-positive-log-list/);
   assert.match(appJs, /renderFeedbackLog|feedback-log-list/);
   assert.match(appJs, /feedback-item-status/);
   assert.match(appJs, /false_positive_reflow/);
   assert.match(appJs, /send-feedback-to-review-queue/);
   assert.match(appJs, /send-feedback-to-false-positive/);
+  assert.match(appJs, /function\s+buildFeedbackRuleQueueModalMarkup\s*\(/);
+  assert.match(appJs, /function\s+openFeedbackRuleQueueModal\s*\(/);
+  assert.match(appJs, /function\s+saveFeedbackRuleQueueModal\s*\(/);
+  assert.match(appJs, /function\s+buildFeedbackFalsePositiveModalMarkup\s*\(/);
+  assert.match(appJs, /function\s+openFeedbackFalsePositiveModal\s*\(/);
+  assert.match(appJs, /function\s+saveFeedbackFalsePositiveModal\s*\(/);
+  assert.match(appJs, /function\s+buildSampleLibraryModalTagPickerMarkup\s*\(/);
+  assert.match(appJs, /class="tag-picker field-wide sample-library-modal-tag-picker"/);
+  assert.match(appJs, /name="tags" type="hidden"/);
+  assert.match(appJs, /sample-library-modal-tag-trigger/);
+  assert.match(appJs, /sample-library-modal-tag-dropdown/);
+  assert.match(appJs, /buildFeedbackFalsePositiveModalMarkup[\s\S]*buildSampleLibraryModalTagPickerMarkup\(modalState\.tags \|\| \[\]\)/);
   assert.match(appJs, /加入规则复核/);
   assert.match(appJs, /记录为误报案例/);
   assert.match(appJs, /反馈推荐动作/);
@@ -223,14 +241,31 @@ test("admin page exposes one feedback center pane that contains false positive m
   assert.match(appJs, /false-positive-history-list/);
 });
 
-test("recording a false positive sample refreshes the feedback center and keeps false positive list visible", async () => {
+test("recording a false positive sample refreshes the sample library reflow area and keeps false positive list visible", async () => {
   const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
 
-  assert.match(appJs, /apiJson\("\/api\/false-positive-log"/);
+  assert.match(appJs, /data-action="send-feedback-to-false-positive"[\s\S]*data-note-id="\$\{escapeHtml\(item\.noteId\)\}"[\s\S]*data-created-at="\$\{escapeHtml\(item\.createdAt\)\}"/);
+  assert.match(appJs, /if \(action === "send-feedback-to-false-positive"\) \{[\s\S]*openFeedbackFalsePositiveModal\(\{/);
+  assert.match(appJs, /function\s+saveFeedbackFalsePositiveModal\s*\([\s\S]*apiJson\("\/api\/false-positive-log"/);
+  assert.match(
+    appJs,
+    /function\s+saveFeedbackFalsePositiveModal\s*\([\s\S]*await apiJson\("\/api\/admin\/feedback", \{[\s\S]*method: "DELETE"[\s\S]*noteId: modalState\.noteId[\s\S]*createdAt: modalState\.createdAt[\s\S]*\}\);/
+  );
+  assert.match(appJs, /function\s+saveFeedbackFalsePositiveModal\s*\([\s\S]*await refreshAll\(\);/);
   assert.match(appJs, /renderFalsePositiveLog\(response\.items \|\| \[\]\)/);
   assert.match(appJs, /ensureSupportWorkspaceOpen\(\)/);
-  assert.match(appJs, /activateTab\("data-maintenance", "feedback-center-pane"\)/);
-  assert.match(appJs, /feedback-center-pane"\)\?\.scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
+  assert.match(appJs, /activateTab\("data-maintenance", "sample-library-pane"\)/);
+  assert.match(appJs, /sample-library-reflow-panel"\)\?\.scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
+});
+
+test("feedback rule-review action now opens a confirmation modal before jumping into rules maintenance", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+
+  assert.match(appJs, /if \(action === "send-feedback-to-review-queue"\) \{[\s\S]*openFeedbackRuleQueueModal\(\{/);
+  assert.match(appJs, /function\s+saveFeedbackRuleQueueModal\s*\([\s\S]*openLexiconWorkspaceModal\("custom"/);
+  assert.match(appJs, /function\s+saveFeedbackRuleQueueModal\s*\([\s\S]*source:\s*payload\.source \|\| ""/);
+  assert.match(appJs, /function\s+saveFeedbackRuleQueueModal\s*\([\s\S]*category:\s*payload\.category \|\| "待人工判断"/);
+  assert.match(appJs, /function\s+saveFeedbackRuleQueueModal\s*\([\s\S]*riskLevel:\s*"manual_review"/);
 });
 
 async function invokeRoute(method, pathname, body = null) {

@@ -44,7 +44,8 @@ function normalizeMetrics(metrics = {}) {
   return {
     likes: normalizeMetric(metrics.likes),
     favorites: normalizeMetric(metrics.favorites),
-    comments: normalizeMetric(metrics.comments)
+    comments: normalizeMetric(metrics.comments),
+    views: normalizeMetric(metrics.views)
   };
 }
 
@@ -92,7 +93,7 @@ export function buildSuccessSampleRecord(input = {}) {
     sourcePlatform: String(input.sourcePlatform || "xiaohongshu").trim() || "xiaohongshu",
     source,
     publishedAt: String(input.publishedAt || "").trim(),
-    metrics: normalizeMetrics(input.metrics || {}),
+    metrics: normalizeMetrics(input.metrics || input),
     notes: String(input.notes || "").trim(),
     analysisSnapshot: input.analysisSnapshot || input.analysis || null,
     rewriteSnapshot: input.rewriteSnapshot || input.rewrite || null,

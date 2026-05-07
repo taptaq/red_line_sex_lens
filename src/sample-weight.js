@@ -50,6 +50,24 @@ function engagementBoost(metrics = {}) {
   return Math.min(1.6, Math.log10(engagementScore + 1) * 0.42);
 }
 
+function viewsAssistBoost(metrics = {}) {
+  const views = normalizeNumber(metrics.views);
+
+  if (views < 3000) {
+    return 0;
+  }
+
+  if (views >= 10000) {
+    return 0.18;
+  }
+
+  if (views >= 5000) {
+    return 0.1;
+  }
+
+  return 0.04;
+}
+
 function recencyBoost(item = {}) {
   const sourceDate = normalizeString(item.updatedAt || item.createdAt || item.publishedAt || item.observedAt);
 
@@ -110,6 +128,7 @@ export function calculateSampleWeight(item = {}, kind = "auto") {
         confidenceBoost(item, normalizeString(item.source) === "manual" ? "confirmed" : "pending") +
         sourceQualityBoost(item, normalizeString(item.source) === "manual" ? "manual_verified" : "imported") +
         engagementBoost(item.metrics) +
+        viewsAssistBoost(item.metrics) +
         recencyBoost(item)
     );
   }
@@ -126,7 +145,10 @@ export function calculateSampleWeight(item = {}, kind = "auto") {
   }
 
   if (resolvedKind === "lifecycle") {
-    return roundWeight((lifecycleStatusBase[status] || lifecycleStatusBase.not_published) + engagementBoost(item.publishResult?.metrics || item.metrics) + recencyBoost(item));
+    const metrics = item.publishResult?.metrics || item.metrics;
+    return roundWeight(
+      (lifecycleStatusBase[status] || lifecycleStatusBase.not_published) + engagementBoost(metrics) + viewsAssistBoost(metrics) + recencyBoost(item)
+    );
   }
 
   return roundWeight(1 + recencyBoost(item));

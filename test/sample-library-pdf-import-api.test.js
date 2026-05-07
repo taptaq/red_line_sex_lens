@@ -69,7 +69,8 @@ test("sample library PDF parse returns draft errors and commit persists only con
         publishNotes: "24h 指标增长稳定",
         likes: "12",
         favorites: "5",
-        comments: "1"
+        comments: "1",
+        views: "88"
       },
         {
           selected: false,
@@ -100,6 +101,7 @@ test("sample library PDF parse returns draft errors and commit persists only con
     assert.equal(records[0].publish.metrics.likes, 12);
     assert.equal(records[0].publish.metrics.favorites, 5);
     assert.equal(records[0].publish.metrics.comments, 1);
+    assert.equal(records[0].publish.metrics.views, 88);
   });
 });
 

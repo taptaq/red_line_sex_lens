@@ -223,12 +223,17 @@ function initializeTabs() {
   });
 
   activateTab("main-workbench", "analyze-workbench-pane");
-  activateTab("data-maintenance", "feedback-center-pane");
+  activateTab("data-maintenance", "sample-library-pane");
 }
 
 function revealSampleLibraryPane() {
   activateTab("data-maintenance", "sample-library-pane");
   byId("sample-library-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function revealSampleLibraryReflowPane() {
+  activateTab("data-maintenance", "sample-library-pane");
+  byId("sample-library-reflow-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function openSampleLibraryRecord(recordId = "", step = "base") {
@@ -257,17 +262,18 @@ function openSampleLibraryRecord(recordId = "", step = "base") {
   }, 0);
 }
 
+function focusSampleLibraryRecordFromPools(recordId = "", step = "base") {
+  closeSampleLibraryPoolsModal();
+  openSampleLibraryRecord(recordId, step);
+}
+
 function revealFeedbackCenterPane() {
-  activateTab("data-maintenance", "feedback-center-pane");
-  byId("feedback-center-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  revealSampleLibraryReflowPane();
 }
 
 function revealFeedbackCenterDetails() {
-  revealFeedbackCenterPane();
-  byId("feedback-center-pane")?.querySelector(".feedback-advanced-panel")?.scrollIntoView({
-    behavior: "smooth",
-    block: "start"
-  });
+  revealSampleLibraryReflowPane();
+  byId("feedback-priority-list")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function revealRulesMaintenancePane(targetId = "custom-lexicon-pane") {
@@ -324,6 +330,14 @@ const appState = {
   latestGeneration: null,
   latestAnalysisFalsePositiveSource: null,
   falsePositiveLog: [],
+  adminData: {
+    seedLexicon: [],
+    customLexicon: [],
+    innerSpaceTerms: [],
+    feedbackLog: [],
+    falsePositiveLog: [],
+    reviewQueue: []
+  },
   collectionTypeOptions: [],
   sampleLibraryRecords: [],
   selectedSampleLibraryRecordId: "",
@@ -332,7 +346,18 @@ const appState = {
   sampleLibraryFilter: "all",
   sampleLibrarySearch: "",
   sampleLibraryImportDrafts: [],
-  sampleLibraryCalibrationReplayResult: null
+  sampleLibraryCalibrationReplayResult: null,
+  sampleLibraryModal: null,
+  lexiconWorkspaceModal: {
+    open: false,
+    tab: "custom",
+    resultMessage: "",
+    drafts: {}
+  },
+  sampleLibraryPoolsModal: {
+    open: false,
+    tab: "reference"
+  }
 };
 
 const presetAnalyzeTags = [
@@ -361,6 +386,670 @@ const sampleLibraryPdfImportParseApi = "/api/sample-library/pdf-import/parse";
 const sampleLibraryPdfImportCommitApi = "/api/sample-library/pdf-import/commit";
 const sampleLibraryCalibrationReplayApi = "/api/sample-library/calibration-replay";
 const innerSpaceTermsApi = "/api/admin/inner-space-terms";
+
+function syncBodyModalState() {
+  const sampleLibraryModalOpen = byId("sample-library-modal")?.hidden === false;
+  const lexiconWorkspaceModalOpen = byId("lexicon-workspace-modal")?.hidden === false;
+  const sampleLibraryPoolsModalOpen = byId("sample-library-pools-modal")?.hidden === false;
+  document.body.classList.toggle(
+    "modal-open",
+    sampleLibraryModalOpen || lexiconWorkspaceModalOpen || sampleLibraryPoolsModalOpen
+  );
+}
+
+function syncSampleLibraryCreateButtonExpanded(isExpanded = false) {
+  const button = byId("sample-library-create-button");
+
+  if (button) {
+    button.setAttribute("aria-expanded", String(isExpanded));
+  }
+}
+
+function setSampleLibraryModalOpen(isOpen) {
+  const modal = byId("sample-library-modal");
+
+  if (!modal) {
+    return;
+  }
+
+  modal.hidden = !isOpen;
+  syncSampleLibraryCreateButtonExpanded(isOpen && appState.sampleLibraryModal?.kind === "create");
+  syncBodyModalState();
+}
+
+function renderSampleLibraryModal({
+  title = "编辑内容",
+  subtitle = "在弹窗里完成这一块的编辑与保存。",
+  body = "",
+  saveLabel = "保存"
+} = {}) {
+  const titleNode = byId("sample-library-modal-title");
+  const subtitleNode = byId("sample-library-modal-subtitle");
+  const resultNode = byId("sample-library-modal-result");
+  const contentNode = byId("sample-library-modal-content");
+  const saveButton = byId("sample-library-modal-save");
+
+  if (titleNode) {
+    titleNode.textContent = title;
+  }
+
+  if (subtitleNode) {
+    subtitleNode.textContent = subtitle;
+  }
+
+  if (resultNode) {
+    resultNode.textContent = "";
+  }
+
+  if (contentNode) {
+    contentNode.innerHTML = body;
+  }
+
+  if (saveButton) {
+    saveButton.textContent = saveLabel;
+  }
+
+  initializeSampleLibraryModalTagPicker();
+  setSampleLibraryModalOpen(true);
+}
+
+function closeSampleLibraryModal() {
+  appState.sampleLibraryModal = null;
+  setSampleLibraryModalOpen(false);
+
+  const resultNode = byId("sample-library-modal-result");
+  const contentNode = byId("sample-library-modal-content");
+
+  if (resultNode) {
+    resultNode.textContent = "";
+  }
+
+  if (contentNode) {
+    contentNode.innerHTML = "";
+  }
+}
+
+function setSampleLibraryModalMessage(message = "") {
+  const resultNode = byId("sample-library-modal-result");
+
+  if (resultNode) {
+    resultNode.textContent = String(message || "").trim();
+  }
+}
+
+function setSampleLibraryPoolsModalOpen(isOpen) {
+  const modal = byId("sample-library-pools-modal");
+  const trigger = byId("sample-library-pools-button");
+
+  if (!modal) {
+    return;
+  }
+
+  modal.hidden = !isOpen;
+
+  if (trigger) {
+    trigger.setAttribute("aria-expanded", String(isOpen));
+  }
+
+  syncBodyModalState();
+}
+
+function normalizeLexiconWorkspaceTab(tab = "custom") {
+  return ["custom", "seed", "inner-space"].includes(tab) ? tab : "custom";
+}
+
+function createDefaultLexiconDraft(scope = "custom") {
+  const riskLevel = scope === "seed" ? "hard_block" : "manual_review";
+
+  return {
+    match: "exact",
+    source: "",
+    category: "",
+    riskLevel,
+    lexiconLevel: inferLexiconLevel("", riskLevel),
+    xhsReason: ""
+  };
+}
+
+function createDefaultInnerSpaceTermDraft() {
+  return {
+    term: "",
+    aliases: "",
+    category: "equipment",
+    collectionTypes: "",
+    literal: "",
+    metaphor: "",
+    preferredUsage: "",
+    avoidUsage: "",
+    example: "",
+    priority: "80"
+  };
+}
+
+function createLexiconWorkspaceDrafts(existing = {}) {
+  return {
+    custom: {
+      ...createDefaultLexiconDraft("custom"),
+      ...(existing.custom || {})
+    },
+    seed: {
+      ...createDefaultLexiconDraft("seed"),
+      ...(existing.seed || {})
+    },
+    "inner-space": {
+      ...createDefaultInnerSpaceTermDraft(),
+      ...(existing["inner-space"] || {})
+    }
+  };
+}
+
+function setLexiconWorkspaceModalOpen(isOpen) {
+  const modal = byId("lexicon-workspace-modal");
+
+  if (!modal) {
+    return;
+  }
+
+  modal.hidden = !isOpen;
+  syncBodyModalState();
+}
+
+function setLexiconWorkspaceResultMessage(message = "") {
+  const nextState = {
+    ...appState.lexiconWorkspaceModal,
+    resultMessage: String(message || "").trim()
+  };
+  const resultNode = byId("lexicon-workspace-result");
+
+  appState.lexiconWorkspaceModal = nextState;
+
+  if (resultNode) {
+    resultNode.textContent = nextState.resultMessage;
+  }
+}
+
+function buildLexiconWorkspaceConfig(tab = "custom") {
+  if (tab === "seed") {
+    return {
+      title: "种子词库工作台",
+      subtitle: "集中维护全局稳定规则，适合查看层级、新增条目和删除历史规则。"
+    };
+  }
+
+  if (tab === "inner-space") {
+    return {
+      title: "内太空术语工作台",
+      subtitle: "集中维护生成与改写会优先参考的术语表达，不直接参与规则判罚。"
+    };
+  }
+
+  return {
+    title: "自定义词库工作台",
+    subtitle: "接收回流复核草稿后，在这里微调、保存和删除自定义规则。"
+  };
+}
+
+function buildLexiconWorkspaceLexiconFormMarkup(scope = "custom", draft = {}) {
+  const isSeed = scope === "seed";
+  const riskLevel = String(draft.riskLevel || (isSeed ? "hard_block" : "manual_review"));
+  const lexiconLevel = inferLexiconLevel(draft.lexiconLevel, riskLevel);
+
+  return `
+    <form class="stack compact-form" data-lexicon-workspace-form="${escapeHtml(scope)}">
+      <label>
+        <span>匹配类型</span>
+        <select name="match">
+          <option value="exact" ${draft.match === "regex" ? "" : "selected"}>精确词</option>
+          <option value="regex" ${draft.match === "regex" ? "selected" : ""}>正则</option>
+        </select>
+      </label>
+      <label>
+        <span>词 / 模式</span>
+        <input type="text" name="source" value="${escapeHtml(draft.source || "")}" placeholder="${
+          isSeed ? "例如：私信我 或 (vx|微.?信)" : "例如：小窗我"
+        }" required />
+      </label>
+      <label>
+        <span>分类</span>
+        <input type="text" name="category" value="${escapeHtml(draft.category || "")}" placeholder="例如：导流与私域" required />
+      </label>
+      <label>
+        <span>风险等级</span>
+        <select name="riskLevel">
+          <option value="hard_block" ${riskLevel === "hard_block" ? "selected" : ""}>高风险拦截</option>
+          <option value="manual_review" ${riskLevel === "manual_review" ? "selected" : ""}>人工复核</option>
+          <option value="observe" ${riskLevel === "observe" ? "selected" : ""}>观察通过</option>
+        </select>
+      </label>
+      <label>
+        <span>词库级别</span>
+        <select name="lexiconLevel">
+          <option value="l1" ${lexiconLevel === "l1" ? "selected" : ""}>一级词库</option>
+          <option value="l2" ${lexiconLevel === "l2" ? "selected" : ""}>二级词库</option>
+          <option value="l3" ${lexiconLevel === "l3" ? "selected" : ""}>三级词库</option>
+        </select>
+      </label>
+      <label>
+        <span>平台原因</span>
+        <input type="text" name="xhsReason" value="${escapeHtml(draft.xhsReason || "")}" placeholder="${
+          isSeed ? "例如：交易导流/站外引流" : "例如：账号专属高风险短语"
+        }" />
+      </label>
+      <p class="helper-text">${
+        isSeed
+          ? "建议把高频稳定高风险规则放一级，把需要继续观察的规则放二级或三级。"
+          : "一级更偏核心拦截，二级更偏重点复核，三级更偏观察沉淀。"
+      }</p>
+      <div class="item-actions">
+        <button type="submit" class="button ${isSeed ? "" : "button-alt"}">新增${isSeed ? "种子词" : "自定义词"}</button>
+      </div>
+    </form>
+  `;
+}
+
+function buildInnerSpaceWorkspaceFormMarkup(draft = {}) {
+  return `
+    <form class="stack compact-form" data-lexicon-workspace-form="inner-space">
+      <label>
+        <span>术语</span>
+        <input type="text" name="term" value="${escapeHtml(draft.term || "")}" placeholder="例如：小飞船" required />
+      </label>
+      <label>
+        <span>别名</span>
+        <input type="text" name="aliases" value="${escapeHtml(draft.aliases || "")}" placeholder="例如：装备, 快乐飞船" />
+      </label>
+      <label>
+        <span>分类</span>
+        <select name="category">
+          <option value="equipment" ${draft.category === "equipment" ? "selected" : ""}>装备篇</option>
+          <option value="actions" ${draft.category === "actions" ? "selected" : ""}>操作篇</option>
+          <option value="states" ${draft.category === "states" ? "selected" : ""}>状态篇</option>
+          <option value="map" ${draft.category === "map" ? "selected" : ""}>地形篇</option>
+          <option value="protocol" ${draft.category === "protocol" ? "selected" : ""}>协议篇</option>
+        </select>
+      </label>
+      <label>
+        <span>适用合集</span>
+        <input type="text" name="collectionTypes" value="${escapeHtml(draft.collectionTypes || "")}" placeholder="例如：亲密关系, 两性科普" />
+      </label>
+      <label>
+        <span>原意</span>
+        <input type="text" name="literal" value="${escapeHtml(draft.literal || "")}" placeholder="例如：震动棒、跳蛋等情趣玩具" />
+      </label>
+      <label>
+        <span>隐喻逻辑</span>
+        <input type="text" name="metaphor" value="${escapeHtml(draft.metaphor || "")}" placeholder="例如：载你去快乐星球的交通工具" />
+      </label>
+      <label>
+        <span>推荐用法</span>
+        <input type="text" name="preferredUsage" value="${escapeHtml(draft.preferredUsage || "")}" placeholder="例如：适合轻松分享语境，不要写得太生硬" />
+      </label>
+      <label>
+        <span>避免用法</span>
+        <input type="text" name="avoidUsage" value="${escapeHtml(draft.avoidUsage || "")}" placeholder="例如：不要和未成年人、交易暗示并列" />
+      </label>
+      <label class="field-wide">
+        <span>示例句</span>
+        <textarea name="example" rows="4" placeholder="例如：今晚不想社交，只想驾驶我的快乐飞船去月球散步。">${escapeHtml(
+          draft.example || ""
+        )}</textarea>
+      </label>
+      <label>
+        <span>优先级</span>
+        <input type="number" name="priority" min="0" max="100" value="${escapeHtml(String(draft.priority || "80"))}" />
+      </label>
+      <div class="item-actions">
+        <button type="submit" class="button button-alt">新增术语</button>
+      </div>
+    </form>
+  `;
+}
+
+function buildLexiconWorkspaceBodyMarkup(tab = "custom") {
+  const drafts = createLexiconWorkspaceDrafts(appState.lexiconWorkspaceModal?.drafts || {});
+  const customLexicon = Array.isArray(appState.adminData?.customLexicon) ? appState.adminData.customLexicon : [];
+  const seedLexicon = Array.isArray(appState.adminData?.seedLexicon) ? appState.adminData.seedLexicon : [];
+  const innerSpaceTerms = Array.isArray(appState.adminData?.innerSpaceTerms) ? appState.adminData.innerSpaceTerms : [];
+
+  if (tab === "seed") {
+    return `
+      <div class="lexicon-workspace-panel">
+        <section class="lexicon-workspace-editor">
+          <div class="lexicon-workspace-panel-head">
+            <strong>新增种子规则</strong>
+            <p>维护全局稳定规则，新增后会自动刷新右侧列表。</p>
+          </div>
+          ${buildLexiconWorkspaceLexiconFormMarkup("seed", drafts.seed)}
+        </section>
+        <section class="lexicon-workspace-list">
+          <div class="lexicon-workspace-list-head">
+            <strong>当前种子词库</strong>
+            <p>按一级、二级、三级词库查看当前规则沉淀。</p>
+          </div>
+          <div class="admin-list">${buildLexiconListMarkup(seedLexicon, "seed")}</div>
+        </section>
+      </div>
+    `;
+  }
+
+  if (tab === "inner-space") {
+    return `
+      <div class="lexicon-workspace-panel">
+        <section class="lexicon-workspace-editor">
+          <div class="lexicon-workspace-panel-head">
+            <strong>新增术语</strong>
+            <p>术语会参与改写和生成的参考表达，用于统一蜜语风格。</p>
+          </div>
+          ${buildInnerSpaceWorkspaceFormMarkup(drafts["inner-space"])}
+        </section>
+        <section class="lexicon-workspace-list">
+          <div class="lexicon-workspace-list-head">
+            <strong>当前术语表</strong>
+            <p>按优先级展示当前术语，方便快速删除或核对。</p>
+          </div>
+          <div class="admin-list">${buildInnerSpaceTermsListMarkup(innerSpaceTerms)}</div>
+        </section>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="lexicon-workspace-panel">
+      <section class="lexicon-workspace-editor">
+        <div class="lexicon-workspace-panel-head">
+          <strong>新增自定义规则</strong>
+          <p>适合接收回流复核草稿，保存后会自动刷新右侧列表。</p>
+        </div>
+        ${buildLexiconWorkspaceLexiconFormMarkup("custom", drafts.custom)}
+      </section>
+      <section class="lexicon-workspace-list">
+        <div class="lexicon-workspace-list-head">
+          <strong>当前自定义词库</strong>
+          <p>按一级、二级、三级词库查看当前规则沉淀。</p>
+        </div>
+        <div class="admin-list">${buildLexiconListMarkup(customLexicon, "custom")}</div>
+      </section>
+    </div>
+  `;
+}
+
+function renderLexiconWorkspaceModal() {
+  const modalState = appState.lexiconWorkspaceModal;
+  const modal = byId("lexicon-workspace-modal");
+  const titleNode = byId("lexicon-workspace-modal-title");
+  const subtitleNode = byId("lexicon-workspace-modal-subtitle");
+  const resultNode = byId("lexicon-workspace-result");
+  const contentNode = byId("lexicon-workspace-modal-content");
+
+  if (!modalState?.open) {
+    if (modal) {
+      modal.hidden = true;
+    }
+    syncBodyModalState();
+    return;
+  }
+
+  const tab = normalizeLexiconWorkspaceTab(modalState.tab);
+  const config = buildLexiconWorkspaceConfig(tab);
+
+  if (titleNode) {
+    titleNode.textContent = config.title;
+  }
+
+  if (subtitleNode) {
+    subtitleNode.textContent = config.subtitle;
+  }
+
+  if (resultNode) {
+    resultNode.textContent = modalState.resultMessage || "";
+  }
+
+  if (contentNode) {
+    contentNode.innerHTML = buildLexiconWorkspaceBodyMarkup(tab);
+  }
+
+  document.querySelectorAll("[data-lexicon-workspace-tab]").forEach((button) => {
+    button.setAttribute("aria-selected", String(button.dataset.lexiconWorkspaceTab === tab));
+  });
+
+  setLexiconWorkspaceModalOpen(true);
+}
+
+async function openLexiconWorkspaceModal(tab = "custom", { prefill = null, resultMessage = "" } = {}) {
+  const normalizedTab = normalizeLexiconWorkspaceTab(tab);
+  const drafts = createLexiconWorkspaceDrafts(appState.lexiconWorkspaceModal?.drafts || {});
+
+  ensureSupportWorkspaceOpen();
+  ensureSampleLibraryAdvancedPanelOpen();
+  ensureRulesMaintenanceOpen();
+  await refreshAdminDataState();
+  if (normalizedTab === "inner-space") {
+    await refreshInnerSpaceTermsState();
+  }
+
+  if (prefill && typeof prefill === "object") {
+    drafts[normalizedTab] = {
+      ...drafts[normalizedTab],
+      ...prefill
+    };
+  }
+
+  appState.lexiconWorkspaceModal = {
+    open: true,
+    tab: normalizedTab,
+    resultMessage: String(resultMessage || "").trim(),
+    drafts
+  };
+
+  renderLexiconWorkspaceModal();
+}
+
+function closeLexiconWorkspaceModal() {
+  appState.lexiconWorkspaceModal = {
+    open: false,
+    tab: "custom",
+    resultMessage: "",
+    drafts: createLexiconWorkspaceDrafts()
+  };
+  setLexiconWorkspaceModalOpen(false);
+
+  const contentNode = byId("lexicon-workspace-modal-content");
+  const resultNode = byId("lexicon-workspace-result");
+
+  if (contentNode) {
+    contentNode.innerHTML = '<div class="result-card muted">等待打开词库工作台</div>';
+  }
+
+  if (resultNode) {
+    resultNode.textContent = "";
+  }
+}
+
+function buildSamplePoolDescription(pool = "reference") {
+  if (pool === "negative") {
+    return {
+      title: "反例样本池",
+      subtitle: "当前主要用于风险对照和后续避坑提示，不参与正向生成与校验放宽。",
+      empty: "当前还没有进入反例样本池的记录。"
+    };
+  }
+
+  if (pool === "regular") {
+    return {
+      title: "普通样本池",
+      subtitle: "当前用于沉淀、去重、检索和候选筛选，不直接参与运行时正向参考。",
+      empty: "当前没有普通样本记录。"
+    };
+  }
+
+  return {
+    title: "参考样本池",
+    subtitle: "会反哺内容生成、改写和内容校验提示层，只展示真正达到运行时口径的样本。",
+    empty: "当前还没有满足条件的参考样本。"
+  };
+}
+
+function buildSamplePoolActionMarkup(record = {}, pool = "reference") {
+  const recordId = escapeHtml(String(record?.id || ""));
+  const publish = getSampleRecordPublish(record);
+
+  if (pool === "negative") {
+    const primaryAction = ["limited", "violation", "false_positive"].includes(publish.status)
+      ? `
+        <button type="button" class="button button-small" data-action="open-sample-library-lifecycle-from-pool" data-id="${recordId}">
+          调整生命周期
+        </button>
+      `
+      : `
+        <button type="button" class="button button-small" data-action="restore-sample-from-negative-pool" data-id="${recordId}">
+          退回普通样本
+        </button>
+      `;
+
+    return `
+      ${primaryAction}
+      <button type="button" class="button button-ghost button-small" data-action="open-sample-library-record" data-id="${recordId}">
+        回到原记录
+      </button>
+    `;
+  }
+
+  if (pool === "regular") {
+    return `
+      <button type="button" class="button button-small" data-action="promote-sample-to-reference" data-id="${recordId}">
+        设为参考候选
+      </button>
+      <button type="button" class="button button-ghost button-small" data-action="mark-sample-as-negative" data-id="${recordId}">
+        标记为反例
+      </button>
+      <button type="button" class="button button-ghost button-small" data-action="open-sample-library-record" data-id="${recordId}">
+        回到原记录
+      </button>
+    `;
+  }
+
+  return `
+    <button type="button" class="button button-small" data-action="adjust-reference-sample" data-id="${recordId}">
+      调整参考等级
+    </button>
+    <button type="button" class="button button-ghost button-small" data-action="remove-sample-from-reference-pool" data-id="${recordId}">
+      移出参考池
+    </button>
+    <button type="button" class="button button-ghost button-small" data-action="open-sample-library-record" data-id="${recordId}">
+      回到原记录
+    </button>
+  `;
+}
+
+function renderSamplePoolCards(items = [], pool = "reference") {
+  const records = Array.isArray(items) ? items : [];
+
+  if (!records.length) {
+    return "";
+  }
+
+  return records
+    .map((record) => {
+      const title = getSampleRecordTitle(record) || "未命名样本";
+      const publish = getSampleRecordPublish(record);
+      const reference = getSampleRecordReference(record);
+      const tags = getSampleRecordTags(record);
+
+      return `
+        <article class="sample-pool-card result-card-shell">
+          <div class="sample-pool-card-head">
+            <div>
+              <strong>${escapeHtml(title)}</strong>
+              <p>${escapeHtml(getSamplePoolWhyLabel(record))}</p>
+            </div>
+            <span class="meta-pill">${escapeHtml(sampleLibraryPoolLabel(pool))}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-pill">${escapeHtml(collectionTypeLabel(getSampleRecordCollectionType(record)))}</span>
+            <span class="meta-pill">${escapeHtml(publishStatusLabel(publish.status))}</span>
+            <span class="meta-pill">${escapeHtml(reference.enabled ? successTierLabel(reference.tier || "passed") : "未启用参考")}</span>
+          </div>
+          <div class="meta-row sample-library-metric-grid">
+            <span class="meta-pill sample-library-metric-pill">赞 ${escapeHtml(String(publish.metrics.likes || 0))}</span>
+            <span class="meta-pill sample-library-metric-pill">藏 ${escapeHtml(String(publish.metrics.favorites || 0))}</span>
+            <span class="meta-pill sample-library-metric-pill">评 ${escapeHtml(String(publish.metrics.comments || 0))}</span>
+            <span class="meta-pill sample-library-metric-pill">浏览 ${escapeHtml(String(publish.metrics.views || 0))}</span>
+          </div>
+          <p class="helper-text">标签：${escapeHtml(joinCSV(tags) || "未填写")}</p>
+          <div class="item-actions">
+            ${buildSamplePoolActionMarkup(record, pool)}
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderSampleLibraryPoolsModal() {
+  const modal = byId("sample-library-pools-modal");
+  const contentNode = byId("sample-library-pools-modal-content");
+
+  if (!modal || !contentNode) {
+    return;
+  }
+
+  const pool = String(appState.sampleLibraryPoolsModal?.tab || "reference").trim() || "reference";
+  const summary = buildSamplePoolSummary(appState.sampleLibraryRecords);
+  const description = buildSamplePoolDescription(pool);
+  const items = (Array.isArray(appState.sampleLibraryRecords) ? appState.sampleLibraryRecords : []).filter(
+    (record) => classifySampleLibraryPool(record) === pool
+  );
+
+  modal.querySelectorAll("[data-sample-pool-tab]").forEach((button) => {
+    button.setAttribute("aria-selected", String(button.dataset.samplePoolTab === pool));
+  });
+
+  contentNode.innerHTML = `
+    <section class="sample-pool-summary-grid">
+      <article class="sample-pool-summary-card">
+        <strong>参考样本池</strong>
+        <p>${escapeHtml(String(summary.reference || 0))} 条</p>
+      </article>
+      <article class="sample-pool-summary-card">
+        <strong>普通样本池</strong>
+        <p>${escapeHtml(String(summary.regular || 0))} 条</p>
+      </article>
+      <article class="sample-pool-summary-card">
+        <strong>反例样本池</strong>
+        <p>${escapeHtml(String(summary.negative || 0))} 条</p>
+      </article>
+    </section>
+    <section class="sample-pool-panel">
+      <div class="sample-pool-panel-head">
+        <div>
+          <strong>${escapeHtml(description.title)}</strong>
+          <p>${escapeHtml(description.subtitle)}</p>
+        </div>
+        <span class="meta-pill">${escapeHtml(String(items.length))} 条记录</span>
+      </div>
+      <div class="sample-pool-card-list">
+        ${renderSamplePoolCards(items, pool) || `<div class="result-card muted">${escapeHtml(description.empty)}</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function openSampleLibraryPoolsModal(pool = "reference") {
+  appState.sampleLibraryPoolsModal = {
+    open: true,
+    tab: ["reference", "regular", "negative"].includes(pool) ? pool : "reference"
+  };
+  renderSampleLibraryPoolsModal();
+  setSampleLibraryPoolsModalOpen(true);
+}
+
+function closeSampleLibraryPoolsModal() {
+  appState.sampleLibraryPoolsModal = {
+    open: false,
+    tab: String(appState.sampleLibraryPoolsModal?.tab || "reference")
+  };
+  setSampleLibraryPoolsModalOpen(false);
+}
 
 async function loadAnalyzeCustomTagOptions() {
   try {
@@ -489,7 +1178,16 @@ const defaultModelSelectionOptions = {
 };
 
 async function readJson(response) {
-  const payload = await response.json();
+  const raw = await response.text();
+  let payload = {};
+
+  if (raw) {
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      payload = { error: raw };
+    }
+  }
 
   if (!response.ok) {
     throw new Error(payload?.error || "请求失败");
@@ -653,6 +1351,10 @@ const platformOutcomeOptions = [
   { status: "false_positive", label: "系统误判", note: "平台放行但系统偏严，已进入误判降权候选。" }
 ];
 
+function getPlatformOutcomeOption(status = "published_passed") {
+  return platformOutcomeOptions.find((item) => item.status === String(status || "").trim()) || platformOutcomeOptions[0] || {};
+}
+
 function buildPlatformOutcomeActions(source = "analysis", options = {}) {
   const candidateId = options.candidateId || "";
   const candidateIndex = options.candidateIndex ?? "";
@@ -681,6 +1383,70 @@ function buildPlatformOutcomeActions(source = "analysis", options = {}) {
       <div class="item-actions">${buttons}</div>
     </div>
   `;
+}
+
+function buildPlatformOutcomeModalMarkup({ publishStatus = "published_passed", notes = "", views = 0 } = {}) {
+  const option = getPlatformOutcomeOption(publishStatus);
+
+  return `
+    <div class="sample-library-modal-stack compact-form">
+      <section class="sample-library-modal-section">
+        <div class="sample-library-modal-section-head">
+          <strong>${escapeHtml(option.label || "平台结果回填")}</strong>
+          <p>${escapeHtml(option.note || "补充这次平台结果的关键回填信息。")}</p>
+        </div>
+        <div class="sample-library-modal-grid">
+          <label>
+            <span>平台结果</span>
+            <input value="${escapeHtml(option.label || "平台结果")}" disabled />
+          </label>
+          <label>
+            <span>浏览数</span>
+            <input name="platformOutcomeViews" type="number" min="0" value="${escapeHtml(String(views || 0))}" />
+          </label>
+        </div>
+        <label>
+          <span>回填备注</span>
+          <textarea name="platformOutcomeNotes" rows="3" placeholder="例如：发布 24h 后稳定通过">${escapeHtml(notes || option.note || "")}</textarea>
+        </label>
+      </section>
+    </div>
+  `;
+}
+
+function openPlatformOutcomeModal({
+  source = "analysis",
+  publishStatus = "published_passed",
+  candidateId = "",
+  candidateIndex = "",
+  notes = "",
+  views = 0
+} = {}) {
+  appState.sampleLibraryModal = {
+    kind: "platform-outcome",
+    source,
+    publishStatus,
+    candidateId,
+    candidateIndex,
+    notes,
+    views
+  };
+
+  renderSampleLibraryModal({
+    title: "回填平台结果",
+    subtitle: `${lifecycleSourceLabel(source)} · ${publishStatusLabel(publishStatus)}`,
+    body: buildPlatformOutcomeModalMarkup({ publishStatus, notes, views }),
+    saveLabel: "确认回填"
+  });
+}
+
+function readPlatformOutcomeModalPayload() {
+  const contentNode = byId("sample-library-modal-content");
+
+  return {
+    notes: contentNode?.querySelector('[name="platformOutcomeNotes"]')?.value || "",
+    views: contentNode?.querySelector('[name="platformOutcomeViews"]')?.value || 0
+  };
 }
 
 function normalizeTextValue(value) {
@@ -1137,7 +1903,7 @@ function renderSummary(summary = {}) {
       label: "待处理误判",
       value: pendingFeedbackCount,
       meta: pendingFeedbackCount ? "有平台反馈或误报案例待确认，优先把它们沉淀成学习信号。" : "当前没有待处理误判，可以继续推进新内容。",
-      action: pendingFeedbackCount ? "去处理误判回流" : "查看回流中心",
+      action: pendingFeedbackCount ? "去处理误判回流" : "打开学习样本",
       summaryAction: "open-feedback-center"
     },
     {
@@ -1258,6 +2024,7 @@ function renderAnalysis(result, falsePositiveSource = null) {
         )}</p>`;
   const falsePositiveHints = Array.isArray(result.falsePositiveHints) ? result.falsePositiveHints : [];
   const whitelistHits = Array.isArray(result.whitelistHits) ? result.whitelistHits : [];
+  const referenceSampleHints = Array.isArray(result.referenceSampleHints) ? result.referenceSampleHints : [];
   const downgradeEvidence = [
     ...falsePositiveHints.map((item) => `规则偏严反例：${item.title || item.sourceId || "已确认误报样本"}`),
     ...whitelistHits.map((item) => `宽松白名单：${item.phrase || item}`)
@@ -1268,6 +2035,18 @@ function renderAnalysis(result, falsePositiveSource = null) {
         <span class="model-scope-kicker">降权提示</span>
         <strong>${escapeHtml(result.softenedByFalsePositive ? "已按反例信号降为观察" : "发现可参考的反例信号")}</strong>
         <p>${escapeHtml(downgradeEvidence.join("；"))}</p>
+      </div>
+    `
+    : "";
+  const referenceSampleEvidence = referenceSampleHints
+    .map((item) => String(item?.message || item?.title || "").trim())
+    .filter(Boolean);
+  const referenceSampleMarkup = referenceSampleEvidence.length
+    ? `
+      <div class="model-scope-banner">
+        <span class="model-scope-kicker">参考样本提示</span>
+        <strong>${escapeHtml(result.softenedByReferenceSamples ? "已按参考样本降为观察" : "发现可参考的安全样本")}</strong>
+        <p>${escapeHtml(referenceSampleEvidence.join("；"))}</p>
       </div>
     `
     : "";
@@ -1282,6 +2061,7 @@ function renderAnalysis(result, falsePositiveSource = null) {
       semantic ? verdictLabel(semantic.verdict) : "未启用/未返回"
     )}</p>
     <p class="helper-text">规则检测模型：${ruleModelLabel}</p>
+    ${referenceSampleMarkup}
     <div class="columns">
       <div>
         <h3>规则命中</h3>
@@ -1767,14 +2547,14 @@ function renderScreenshotRecognition(recognition, screenshot) {
   `;
 }
 
-function renderLexiconList(containerId, items, scope) {
+function buildLexiconListMarkup(items = [], scope = "custom") {
   const groups = [
     { key: "l1", label: "一级词库" },
     { key: "l2", label: "二级词库" },
     { key: "l3", label: "三级词库" }
   ];
 
-  byId(containerId).innerHTML = items.length
+  return items.length
     ? groups
         .map(({ key, label }) => {
           const groupItems = items.filter((item) => inferLexiconLevel(item.lexiconLevel, item.riskLevel) === key);
@@ -1829,6 +2609,16 @@ function renderLexiconList(containerId, items, scope) {
         })
         .join("")
     : '<div class="result-card muted">当前没有条目</div>';
+}
+
+function renderLexiconList(containerId, items, scope) {
+  const node = byId(containerId);
+
+  if (!node) {
+    return;
+  }
+
+  node.innerHTML = buildLexiconListMarkup(items, scope);
 }
 
 function renderFeedbackLog(items) {
@@ -1909,6 +2699,8 @@ function renderFeedbackLog(items) {
             data-platform-reason="${escapeHtml(item.platformReason || "")}"
             data-analysis-verdict="${escapeHtml(item.analysisSnapshot?.verdict || "")}"
             data-analysis-score="${escapeHtml(String(item.analysisSnapshot?.score ?? ""))}"
+            data-note-id="${escapeHtml(item.noteId)}"
+            data-created-at="${escapeHtml(item.createdAt)}"
           >
             记录为误报案例
           </button>
@@ -2025,7 +2817,8 @@ function getSampleRecordPublish(record = {}) {
     metrics: {
       likes: Number(source.metrics?.likes ?? source.likes ?? 0) || 0,
       favorites: Number(source.metrics?.favorites ?? source.favorites ?? 0) || 0,
-      comments: Number(source.metrics?.comments ?? source.comments ?? 0) || 0
+      comments: Number(source.metrics?.comments ?? source.comments ?? 0) || 0,
+      views: Number(source.metrics?.views ?? source.views ?? 0) || 0
     }
   };
 }
@@ -2114,8 +2907,157 @@ function hasTrackedLifecycle(record = {}) {
     publish.metrics.likes > 0 ||
     publish.metrics.favorites > 0 ||
     publish.metrics.comments > 0 ||
+    publish.metrics.views > 0 ||
     Boolean(publish.notes || publish.publishedAt || publish.platformReason)
   );
+}
+
+function isPositiveReferenceStatus(status = "") {
+  return ["published_passed", "positive_performance"].includes(String(status || "").trim());
+}
+
+function evaluateReferenceSampleThreshold(metrics = {}) {
+  const likes = Number(metrics?.likes || 0) || 0;
+  const favorites = Number(metrics?.favorites || 0) || 0;
+  const comments = Number(metrics?.comments || 0) || 0;
+  const views = Number(metrics?.views || 0) || 0;
+
+  const nearQualified = likes >= 16 || favorites >= 4 || comments >= 1;
+  const highViews = views >= 5000;
+  const directQualified = likes >= 20 || favorites >= 5 || comments >= 2;
+
+  if (directQualified) {
+    return {
+      qualified: true,
+      reason: "互动达标",
+      mode: "engagement",
+      nearQualified: true,
+      highViews
+    };
+  }
+
+  if (nearQualified && highViews) {
+    return {
+      qualified: true,
+      reason: "互动接近达标，已由高浏览数补足",
+      mode: "views_assist",
+      nearQualified,
+      highViews
+    };
+  }
+
+  return {
+    qualified: false,
+    reason: "",
+    mode: "none",
+    nearQualified,
+    highViews
+  };
+}
+
+function meetsReferenceSampleThreshold(metrics = {}) {
+  return evaluateReferenceSampleThreshold(metrics).qualified;
+}
+
+function isQualifiedReferenceCandidate(record = {}) {
+  const reference = getSampleRecordReference(record);
+  const publish = getSampleRecordPublish(record);
+  const title = getSampleRecordTitle(record);
+  const body = getSampleRecordBody(record);
+  const coverText = getSampleRecordCoverText(record);
+  const hasContent = title.length >= 4 || body.length >= 16 || coverText.length >= 4;
+
+  return reference.enabled && hasContent && isPositiveReferenceStatus(publish.status) && meetsReferenceSampleThreshold(publish.metrics);
+}
+
+function getReferenceQualification(record = {}) {
+  return evaluateReferenceSampleThreshold(getSampleRecordPublish(record).metrics);
+}
+
+function classifySampleLibraryPool(record = {}) {
+  const publish = getSampleRecordPublish(record);
+  const sampleType = String(record?.sampleType || "").trim();
+
+  if (["limited", "violation", "false_positive"].includes(publish.status) || ["false_positive", "missed_violation"].includes(sampleType)) {
+    return "negative";
+  }
+
+  if (isQualifiedReferenceCandidate(record)) {
+    return "reference";
+  }
+
+  return "regular";
+}
+
+function sampleLibraryPoolLabel(pool = "reference") {
+  if (pool === "negative") return "反例样本池";
+  if (pool === "regular") return "普通样本池";
+  return "参考样本池";
+}
+
+function buildSamplePoolSummary(records = []) {
+  return (Array.isArray(records) ? records : []).reduce(
+    (summary, record) => {
+      const pool = classifySampleLibraryPool(record);
+      summary[pool] += 1;
+      return summary;
+    },
+    {
+      reference: 0,
+      regular: 0,
+      negative: 0
+    }
+  );
+}
+
+function getSamplePoolWhyLabel(record = {}) {
+  const publish = getSampleRecordPublish(record);
+  const reference = getSampleRecordReference(record);
+  const sampleType = String(record?.sampleType || "").trim();
+  const pool = classifySampleLibraryPool(record);
+  const qualification = getReferenceQualification(record);
+
+  if (pool === "reference") {
+    return `${qualification.reason || "互动达标"}，会参与生成、改写和内容校验提示。`;
+  }
+
+  if (pool === "negative") {
+    if (["limited", "violation"].includes(publish.status)) {
+      return `生命周期状态为${publishStatusLabel(publish.status)}，当前归入反例样本池。`;
+    }
+
+    if (sampleType === "false_positive") {
+      return "这条记录属于误报回流样本，当前放在反例样本池做风险对照。";
+    }
+
+    if (sampleType === "missed_violation") {
+      return "这条记录属于漏判风险样本，当前放在反例样本池做风险对照。";
+    }
+
+    return "当前已标记为不建议复用，先归入反例样本池。";
+  }
+
+  if (!reference.enabled) {
+    return "还没启用参考属性，当前先保留在普通样本池。";
+  }
+
+  if (!qualification.qualified) {
+    if (qualification.highViews && !qualification.nearQualified) {
+      return "已启用参考，但当前只有浏览高，核心互动还没接近达标，仍保留在普通样本池。";
+    }
+
+    if (qualification.nearQualified && !qualification.highViews) {
+      return "已启用参考，互动已接近达标，但浏览数还不足以补足，当前仍保留在普通样本池。";
+    }
+
+    return "已启用参考，但互动数据还没达标，当前仍保留在普通样本池。";
+  }
+
+  if (!isPositiveReferenceStatus(publish.status)) {
+    return "已启用参考，但发布状态还不属于正向合规样本，当前仍保留在普通样本池。";
+  }
+
+  return "当前先作为普通样本沉淀，用于去重、检索和后续筛选。";
 }
 
 function hasCalibration(record = {}) {
@@ -2346,6 +3288,7 @@ function renderSampleLibraryList(items = []) {
                     : ""
                 }
                 <span class="meta-pill">${escapeHtml(collectionTypeLabel(collectionType))}</span>
+                <span class="meta-pill">浏览 ${escapeHtml(String(publish.metrics.views || 0))}</span>
                 <span class="meta-pill">${escapeHtml(lifecycleSourceLabel(item?.source || "manual"))}</span>
                 <span class="meta-pill">${escapeHtml(formatDate(item?.updatedAt || item?.createdAt))}</span>
               </div>
@@ -2567,6 +3510,867 @@ function buildSampleLibraryStepMarkup({ step, index, title, description, status,
   `;
 }
 
+function buildSampleLibraryDetailSummaryCardMarkup({
+  title = "",
+  summary = "",
+  pills = [],
+  pillsClassName = "meta-row",
+  pillClassName = "meta-pill",
+  actionMarkup = "",
+  hintId = ""
+} = {}) {
+  const pillMarkup = Array.isArray(pills) && pills.length
+    ? `<div class="${escapeHtml(pillsClassName)}">${pills
+        .map((item) => `<span class="${escapeHtml(pillClassName)}">${escapeHtml(item)}</span>`)
+        .join("")}</div>`
+    : "";
+
+  return `
+    <article class="sample-library-detail-summary-card">
+      <div>
+        <strong>${escapeHtml(title)}</strong>
+        <p>${escapeHtml(summary)}</p>
+      </div>
+      ${pillMarkup}
+      <div class="item-actions">
+        ${actionMarkup}
+      </div>
+      ${hintId ? `<p class="helper-text action-gate-hint" id="${escapeHtml(hintId)}" aria-live="polite"></p>` : ""}
+    </article>
+  `;
+}
+
+function buildSampleLibraryModalTagPickerMarkup(tags = []) {
+  const selectedMarkup = buildAnalyzeTagSelectionMarkup(tags);
+
+  return `
+    <div class="tag-picker field-wide sample-library-modal-tag-picker">
+      <input name="tags" type="hidden" value="${escapeHtml(joinCSV(tags))}" />
+      <button
+        type="button"
+        class="tag-picker-trigger sample-library-modal-tag-trigger"
+        aria-expanded="false"
+        aria-controls="sample-library-modal-tag-dropdown"
+      >
+        <span class="tag-picker-trigger-head">
+          <span class="tag-picker-trigger-label">标签</span>
+          <span class="tag-picker-trigger-caret" aria-hidden="true">▾</span>
+        </span>
+        <span class="tag-picker-selected sample-library-modal-tag-selected" role="group" aria-label="已选标签" aria-live="polite">
+          ${selectedMarkup}
+        </span>
+      </button>
+      <div class="tag-picker-dropdown sample-library-modal-tag-dropdown" id="sample-library-modal-tag-dropdown" hidden>
+        <div class="tag-picker-dropdown-head">
+          <strong>选择预置标签</strong>
+          <button type="button" class="tag-picker-clear sample-library-modal-tag-clear">清空</button>
+        </div>
+        <div class="tag-picker-options sample-library-modal-tag-options"></div>
+        <div class="tag-picker-custom">
+          <input type="text" class="sample-library-modal-tag-custom" placeholder="输入自定义标签" />
+          <button type="button" class="button button-ghost button-small sample-library-modal-tag-add">添加</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function buildSampleLibraryNoteModalMarkup({
+  title = "",
+  body = "",
+  coverText = "",
+  collectionType = "",
+  tags = [],
+  views = 0,
+  includeViews = false,
+  includePrefillActions = false
+} = {}) {
+  return `
+    <div class="sample-library-modal-stack compact-form">
+      <section class="sample-library-modal-section">
+        <div class="sample-library-modal-section-head">
+          <strong>基础内容</strong>
+          <p>先把标题、正文、封面文案和标签整理好，后续筛选都会基于这里。</p>
+        </div>
+        <label>
+          <span>标题</span>
+          <input name="title" value="${escapeHtml(title)}" placeholder="样本标题" />
+        </label>
+        <label>
+          <span>正文</span>
+          <textarea name="body" rows="6" placeholder="样本正文">${escapeHtml(body)}</textarea>
+        </label>
+        <label>
+          <span>封面文案</span>
+          <input name="coverText" value="${escapeHtml(coverText)}" placeholder="封面文案" />
+        </label>
+        <label>
+          <span>合集类型</span>
+          <select name="collectionType">
+            ${buildCollectionTypeOptionsMarkup({
+              options: appState.collectionTypeOptions,
+              value: collectionType
+            })}
+          </select>
+        </label>
+        <div class="sample-library-create-metrics">
+          ${buildSampleLibraryModalTagPickerMarkup(tags)}
+          ${
+            includeViews
+              ? `
+                <label>
+                  <span>浏览数</span>
+                  <input name="views" type="number" min="0" value="${escapeHtml(String(views || 0))}" placeholder="浏览数" />
+                </label>
+              `
+              : ""
+          }
+        </div>
+        ${
+          includePrefillActions
+            ? `
+              <div class="inline-actions inline-actions-row">
+                <button type="button" class="button button-ghost" data-action="prefill-sample-library-create-analysis">
+                  从当前检测填充
+                </button>
+                <button type="button" class="button button-ghost" data-action="prefill-sample-library-create-rewrite">
+                  从当前改写填充
+                </button>
+              </div>
+            `
+            : ""
+        }
+      </section>
+    </div>
+  `;
+}
+
+function buildSampleLibraryCreateModalMarkup() {
+  return buildSampleLibraryNoteModalMarkup({
+    includeViews: true,
+    includePrefillActions: true
+  });
+}
+
+function buildSampleLibraryBaseModalMarkup(record = {}) {
+  const note = getSampleRecordNote(record);
+
+  return buildSampleLibraryNoteModalMarkup({
+    title: note.title || "",
+    body: note.body || "",
+    coverText: note.coverText || "",
+    collectionType: getSampleRecordCollectionType(record),
+    tags: note.tags || []
+  });
+}
+
+function readSampleLibraryCreateModalPayload() {
+  const contentNode = byId("sample-library-modal-content");
+
+  return {
+    title: contentNode?.querySelector('[name="title"]')?.value || "",
+    body: contentNode?.querySelector('[name="body"]')?.value || "",
+    coverText: contentNode?.querySelector('[name="coverText"]')?.value || "",
+    collectionType: contentNode?.querySelector('[name="collectionType"]')?.value || "",
+    tags: splitCSV(contentNode?.querySelector('[name="tags"]')?.value || ""),
+    views: contentNode?.querySelector('[name="views"]')?.value || 0
+  };
+}
+
+function readSampleLibraryModalBasePayload() {
+  const contentNode = byId("sample-library-modal-content");
+
+  return {
+    title: contentNode?.querySelector('[name="title"]')?.value || "",
+    body: contentNode?.querySelector('[name="body"]')?.value || "",
+    coverText: contentNode?.querySelector('[name="coverText"]')?.value || "",
+    collectionType: contentNode?.querySelector('[name="collectionType"]')?.value || "",
+    tags: splitCSV(contentNode?.querySelector('[name="tags"]')?.value || "")
+  };
+}
+
+function getSampleLibraryCreateRequirementMessage(root = byId("sample-library-modal-content")) {
+  const title = String(root?.querySelector('[name="title"]')?.value || "").trim();
+  const body = String(root?.querySelector('[name="body"]')?.value || "").trim();
+  const coverText = String(root?.querySelector('[name="coverText"]')?.value || "").trim();
+  const collectionType = String(root?.querySelector('[name="collectionType"]')?.value || "").trim();
+
+  if (!title && !body && !coverText) {
+    return "请至少填写标题、正文或封面文案。";
+  }
+
+  if (!collectionType) {
+    return "请先选择合集类型。";
+  }
+
+  return "";
+}
+
+function openSampleLibraryCreateModal() {
+  appState.sampleLibraryModal = {
+    kind: "create"
+  };
+
+  renderSampleLibraryModal({
+    title: "新增学习样本",
+    subtitle: "先保存基础内容，后续再继续补参考属性和生命周期属性。",
+    body: buildSampleLibraryCreateModalMarkup(),
+    saveLabel: "保存学习样本"
+  });
+}
+
+function fillSampleLibraryCreateModalFromCurrent(source = "analysis") {
+  const contentNode = byId("sample-library-modal-content");
+  const payload = appState.latestAnalyzePayload || {};
+  const rewrite = source === "rewrite" && appState.latestRewrite ? normalizeRewritePayload(appState.latestRewrite) : null;
+
+  if (!contentNode) {
+    return;
+  }
+
+  const fieldValues = {
+    title: rewrite?.title || payload.title || "",
+    body: rewrite?.body || payload.body || "",
+    coverText: rewrite?.coverText || payload.coverText || "",
+    collectionType: rewrite?.collectionType || payload.collectionType || ""
+  };
+  const nextTags = rewrite?.tags?.length ? rewrite.tags : payload.tags || [];
+
+  Object.entries(fieldValues).forEach(([name, value]) => {
+    const field = contentNode.querySelector(`[name="${name}"]`);
+    if (
+      field instanceof HTMLInputElement ||
+      field instanceof HTMLSelectElement ||
+      field instanceof HTMLTextAreaElement
+    ) {
+      field.value = value;
+    }
+  });
+
+  writeSampleLibraryModalTags(nextTags);
+}
+
+async function saveSampleLibraryCreateModal() {
+  const requirementMessage = getSampleLibraryCreateRequirementMessage();
+
+  if (requirementMessage) {
+    throw new Error(requirementMessage);
+  }
+
+  const payload = readSampleLibraryCreateModalPayload();
+  const response = await apiJson(sampleLibraryApi, {
+    method: "POST",
+    body: JSON.stringify({
+      source: "manual",
+      note: {
+        title: payload.title,
+        body: payload.body,
+        coverText: payload.coverText,
+        collectionType: payload.collectionType,
+        tags: payload.tags
+      },
+      publish: {
+        metrics: {
+          views: payload.views || 0
+        }
+      },
+      snapshots: {
+        analysis: appState.latestAnalysis,
+        rewrite: appState.latestRewrite,
+        generation: null,
+        crossReview: null
+      }
+    })
+  });
+
+  appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+  appState.sampleLibraryFilter = "all";
+  appState.sampleLibrarySearch = "";
+  appState.selectedSampleLibraryRecordId = String(response.item?.id || "");
+
+  if (byId("sample-library-search-input")) {
+    byId("sample-library-search-input").value = "";
+  }
+  if (byId("sample-library-filter")) {
+    byId("sample-library-filter").value = "all";
+  }
+  if (byId("sample-library-collection-filter")) {
+    byId("sample-library-collection-filter").value = "all";
+  }
+
+  renderSampleLibraryWorkspace();
+  byId("sample-library-create-result").innerHTML = '<div class="result-card-shell">样本记录已保存，可继续补参考属性和生命周期属性。</div>';
+  renderCollectionTypeSelectors();
+}
+
+function openSampleLibraryBaseModal(recordId = "") {
+  const record = appState.sampleLibraryRecords.find((item) => String(item.id || "") === String(recordId || ""));
+
+  if (!record) {
+    return;
+  }
+
+  appState.sampleLibraryModal = {
+    kind: "base",
+    recordId: String(record.id || "")
+  };
+
+  renderSampleLibraryModal({
+    title: "编辑基础内容",
+    subtitle: getSampleRecordTitle(record) || "补充标题、正文、封面文案和标签",
+    body: buildSampleLibraryBaseModalMarkup(record),
+    saveLabel: "保存基础内容"
+  });
+}
+
+function buildSampleLibraryDeleteModalMarkup(record = {}) {
+  return `
+    <div class="sample-library-modal-stack">
+      <section class="sample-library-modal-section">
+        <div class="sample-library-modal-section-head">
+          <strong>确认删除这条学习样本？</strong>
+          <p>删除后这条记录会从学习样本列表中移除，相关参考属性和生命周期回填也会一起消失。</p>
+        </div>
+        <article class="sample-library-detail-summary-card">
+          <strong>${escapeHtml(getSampleRecordTitle(record) || "未命名样本记录")}</strong>
+          <p>${escapeHtml(compactText(getSampleRecordBody(record) || getSampleRecordCoverText(record), 180) || "未填写正文")}</p>
+        </article>
+      </section>
+    </div>
+  `;
+}
+
+function openSampleLibraryDeleteModal(recordId = "") {
+  const record = appState.sampleLibraryRecords.find((item) => String(item.id || "") === String(recordId || ""));
+
+  if (!record) {
+    return;
+  }
+
+  appState.sampleLibraryModal = {
+    kind: "delete-record",
+    recordId: String(record.id || "")
+  };
+
+  renderSampleLibraryModal({
+    title: "删除学习样本",
+    subtitle: "请确认这次删除操作。",
+    body: buildSampleLibraryDeleteModalMarkup(record),
+    saveLabel: "确认删除"
+  });
+}
+
+function buildFeedbackRuleQueueModalMarkup(modalState = {}) {
+  return `
+    <div class="sample-library-modal-stack compact-form">
+      <section class="sample-library-modal-section">
+        <div class="sample-library-modal-section-head">
+          <strong>加入规则复核</strong>
+          <p>先确认这次要带过去的候选词、语境和平台原因，再跳转到规则维护。</p>
+        </div>
+        <label>
+          <span>候选词</span>
+          <input name="source" value="${escapeHtml(modalState.source || "")}" placeholder="候选词" />
+        </label>
+        <label>
+          <span>语境分类</span>
+          <input name="category" value="${escapeHtml(modalState.category || "")}" placeholder="待人工判断" />
+        </label>
+        <label>
+          <span>平台原因</span>
+          <textarea name="xhsReason" rows="3" placeholder="补充平台原因">${escapeHtml(modalState.xhsReason || "")}</textarea>
+        </label>
+      </section>
+    </div>
+  `;
+}
+
+function openFeedbackRuleQueueModal({
+  source = "",
+  category = "待人工判断",
+  xhsReason = ""
+} = {}) {
+  appState.sampleLibraryModal = {
+    kind: "feedback-rule-queue",
+    source,
+    category,
+    xhsReason
+  };
+
+  renderSampleLibraryModal({
+    title: "确认规则复核草稿",
+    subtitle: "确认后会自动跳转到规则维护并预填表单。",
+    body: buildFeedbackRuleQueueModalMarkup(appState.sampleLibraryModal),
+    saveLabel: "确认并前往规则维护"
+  });
+}
+
+function readFeedbackRuleQueueModalPayload() {
+  const contentNode = byId("sample-library-modal-content");
+
+  return {
+    source: contentNode?.querySelector('[name="source"]')?.value || "",
+    category: contentNode?.querySelector('[name="category"]')?.value || "",
+    xhsReason: contentNode?.querySelector('[name="xhsReason"]')?.value || ""
+  };
+}
+
+async function saveFeedbackRuleQueueModal() {
+  const modalState = appState.sampleLibraryModal;
+  const payload = readFeedbackRuleQueueModalPayload();
+
+  if (!String(payload.source || "").trim() && !String(payload.category || "").trim()) {
+    throw new Error("请至少确认候选词或语境分类。");
+  }
+
+  openLexiconWorkspaceModal("custom", {
+    prefill: {
+      match: "exact",
+      source: payload.source || "",
+      category: payload.category || "待人工判断",
+      riskLevel: "manual_review",
+      lexiconLevel: inferLexiconLevel("", "manual_review"),
+      xhsReason: payload.xhsReason || modalState?.xhsReason || ""
+    },
+    resultMessage: "已根据反馈预填规则草稿，请确认后保存，或回到人工复核队列继续处理。"
+  });
+}
+
+function buildFeedbackFalsePositiveModalMarkup(modalState = {}) {
+  return `
+    <div class="sample-library-modal-stack compact-form">
+      <section class="sample-library-modal-section">
+        <div class="sample-library-modal-section-head">
+          <strong>记录为误报案例</strong>
+          <p>先确认标题、正文摘要和备注，再把它转入误报待确认列表。</p>
+        </div>
+        <article class="sample-library-detail-summary-card">
+          <strong>${escapeHtml(modalState.title || "未命名反馈")}</strong>
+          <p>${escapeHtml(compactText(modalState.body || "", 180) || "未填写正文")}</p>
+        </article>
+        ${buildSampleLibraryModalTagPickerMarkup(modalState.tags || [])}
+        <label>
+          <span>备注</span>
+          <textarea name="userNotes" rows="3" placeholder="补充误报备注">${escapeHtml(modalState.userNotes || "")}</textarea>
+        </label>
+      </section>
+    </div>
+  `;
+}
+
+function openFeedbackFalsePositiveModal({
+  title = "",
+  body = "",
+  tags = [],
+  userNotes = "",
+  analysisVerdict = "",
+  analysisScore = 0,
+  noteId = "",
+  createdAt = ""
+} = {}) {
+  appState.sampleLibraryModal = {
+    kind: "feedback-false-positive",
+    title,
+    body,
+    tags,
+    userNotes,
+    analysisVerdict,
+    analysisScore,
+    noteId,
+    createdAt
+  };
+
+  renderSampleLibraryModal({
+    title: "确认误报案例",
+    subtitle: "确认后会把这条反馈转入误报待确认列表。",
+    body: buildFeedbackFalsePositiveModalMarkup(appState.sampleLibraryModal),
+    saveLabel: "确认记录为误报"
+  });
+}
+
+function readFeedbackFalsePositiveModalPayload() {
+  const contentNode = byId("sample-library-modal-content");
+
+  return {
+    tags: splitCSV(contentNode?.querySelector('[name="tags"]')?.value || ""),
+    userNotes: contentNode?.querySelector('[name="userNotes"]')?.value || ""
+  };
+}
+
+async function saveFeedbackFalsePositiveModal() {
+  const modalState = appState.sampleLibraryModal;
+  const payload = readFeedbackFalsePositiveModalPayload();
+  const analysisVerdict = String(modalState?.analysisVerdict || "").trim();
+  const analysisScore = Number(modalState?.analysisScore || 0);
+  const response = await apiJson("/api/false-positive-log", {
+    method: "POST",
+    body: JSON.stringify({
+      source: "feedback_log",
+      title: modalState?.title || "",
+      body: modalState?.body || "",
+      tags: payload.tags,
+      status: "platform_passed_pending",
+      userNotes: payload.userNotes || modalState?.userNotes || "由违规反馈回流记录",
+      analysis: analysisVerdict
+        ? {
+            verdict: analysisVerdict,
+            score: Number.isFinite(analysisScore) ? analysisScore : 0,
+            categories: payload.tags
+          }
+        : undefined
+    })
+  });
+
+  renderFalsePositiveLog(response.items || []);
+  await apiJson("/api/admin/feedback", {
+    method: "DELETE",
+    body: JSON.stringify({
+      noteId: modalState.noteId,
+      createdAt: modalState.createdAt
+    })
+  });
+  await refreshAll();
+  ensureSupportWorkspaceOpen();
+  revealSampleLibraryReflowPane();
+  byId("false-positive-pending-list")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function buildSampleLibraryReferenceModalMarkup(record) {
+  const reference = getSampleRecordReference(record);
+
+  return `
+    <div class="sample-library-modal-stack compact-form">
+      <section class="sample-library-modal-section">
+        <div class="sample-library-modal-section-head">
+          <strong>参考属性</strong>
+          <p>决定这条记录能否进入参考样本候选，达到数据门槛后才会真正生效。</p>
+        </div>
+        <label class="sample-library-checkbox">
+          <input type="checkbox" name="enabled"${reference.enabled ? " checked" : ""} />
+          <span>启用为参考样本</span>
+        </label>
+        <label>
+          <span>参考等级</span>
+          <select name="tier">
+            <option value=""${!reference.tier ? " selected" : ""}>未启用</option>
+            <option value="passed"${reference.tier === "passed" ? " selected" : ""}>仅过审</option>
+            <option value="performed"${reference.tier === "performed" ? " selected" : ""}>过审且表现好</option>
+            <option value="featured"${reference.tier === "featured" ? " selected" : ""}>人工精选标杆</option>
+          </select>
+        </label>
+        <label>
+          <span>备注</span>
+          <textarea name="notes" rows="3" placeholder="例如：适合作为情绪沟通类参考">${escapeHtml(reference.notes || "")}</textarea>
+        </label>
+      </section>
+    </div>
+  `;
+}
+
+function buildSampleLibraryLifecycleModalMarkup(record) {
+  const publish = getSampleRecordPublish(record);
+
+  return `
+    <div class="sample-library-modal-stack compact-form">
+      <section class="sample-library-modal-section">
+        <div class="sample-library-modal-section-head">
+          <strong>生命周期属性</strong>
+          <p>发布后回填结果，便于后续判断哪些内容真正可复用。</p>
+        </div>
+        <div class="lifecycle-primary-grid">
+          <label>
+            <span>发布状态</span>
+            <select name="status">
+              <option value="not_published"${publish.status === "not_published" ? " selected" : ""}>未发布</option>
+              <option value="published_passed"${publish.status === "published_passed" ? " selected" : ""}>已发布通过</option>
+              <option value="limited"${publish.status === "limited" ? " selected" : ""}>疑似限流</option>
+              <option value="violation"${publish.status === "violation" ? " selected" : ""}>平台判违规</option>
+              <option value="false_positive"${publish.status === "false_positive" ? " selected" : ""}>系统误报 / 平台放行</option>
+              <option value="positive_performance"${publish.status === "positive_performance" ? " selected" : ""}>过审且表现好</option>
+            </select>
+          </label>
+          <label>
+            <span>发布时间</span>
+            <input name="publishedAt" type="date" value="${escapeHtml(String(publish.publishedAt || "").slice(0, 10))}" />
+          </label>
+        </div>
+        <div class="lifecycle-metrics-grid">
+          <label>
+            <span>点赞</span>
+            <input name="likes" type="number" min="0" value="${escapeHtml(String(publish.metrics.likes || 0))}" />
+          </label>
+          <label>
+            <span>收藏</span>
+            <input name="favorites" type="number" min="0" value="${escapeHtml(String(publish.metrics.favorites || 0))}" />
+          </label>
+          <label>
+            <span>评论</span>
+            <input name="comments" type="number" min="0" value="${escapeHtml(String(publish.metrics.comments || 0))}" />
+          </label>
+          <label>
+            <span>浏览数</span>
+            <input name="views" type="number" min="0" value="${escapeHtml(String(publish.metrics.views || 0))}" />
+          </label>
+        </div>
+        <label class="field-wide">
+          <span>平台原因</span>
+          <input name="platformReason" value="${escapeHtml(publish.platformReason || "")}" placeholder="例如：疑似导流、低俗等" />
+        </label>
+        <label class="field-wide">
+          <span>回填备注</span>
+          <textarea name="notes" rows="3" placeholder="例如：发布 24h 后稳定通过">${escapeHtml(publish.notes || "")}</textarea>
+        </label>
+      </section>
+    </div>
+  `;
+}
+
+function buildSampleLibraryCalibrationModalMarkup(record) {
+  const publish = getSampleRecordPublish(record);
+  const calibration = getSampleRecordCalibration(record);
+  const comparison = buildSampleLibraryCalibrationRetroComparison({
+    prediction: calibration.prediction,
+    publish
+  });
+  const recommendation = buildSampleLibraryCalibrationRetroRecommendation({
+    prediction: calibration.prediction,
+    retro: calibration.retro,
+    publish,
+    comparison
+  });
+  const effectiveRetro = {
+    ...calibration.retro,
+    actualPerformanceTier: calibration.retro.actualPerformanceTier || comparison.actualPerformanceTier,
+    predictionMatched: hasSampleLibraryCalibrationRetroField(record, "predictionMatched")
+      ? calibration.retro.predictionMatched
+      : comparison.matched,
+    missReason: calibration.retro.missReason || comparison.missReasonSuggestion,
+    shouldBecomeReference: hasSampleLibraryCalibrationRetroField(record, "shouldBecomeReference")
+      ? calibration.retro.shouldBecomeReference
+      : recommendation.shouldBecomeReference,
+    ruleImprovementCandidate: calibration.retro.ruleImprovementCandidate || recommendation.ruleImprovementCandidate
+  };
+  const comparisonStatusLabel = predictionMatchedLabel(comparison.matched);
+
+  return `
+    <div class="sample-library-modal-stack compact-form">
+      <section class="sample-library-modal-section">
+        <div class="sample-library-modal-section-head">
+          <strong>发布前预判</strong>
+          <p>这部分用于锁定当时的判断基线。</p>
+        </div>
+        <div class="lifecycle-primary-grid">
+          <label>
+            <span>预判发布状态</span>
+            <select name="predictedStatus">
+              <option value="not_published"${calibration.prediction.predictedStatus === "not_published" ? " selected" : ""}>未发布</option>
+              <option value="published_passed"${calibration.prediction.predictedStatus === "published_passed" ? " selected" : ""}>已发布通过</option>
+              <option value="limited"${calibration.prediction.predictedStatus === "limited" ? " selected" : ""}>疑似限流</option>
+              <option value="violation"${calibration.prediction.predictedStatus === "violation" ? " selected" : ""}>平台判违规</option>
+              <option value="false_positive"${calibration.prediction.predictedStatus === "false_positive" ? " selected" : ""}>系统误报 / 平台放行</option>
+              <option value="positive_performance"${calibration.prediction.predictedStatus === "positive_performance" ? " selected" : ""}>过审且表现好</option>
+            </select>
+          </label>
+          <label>
+            <span>预判风险</span>
+            <select name="predictedRiskLevel">
+              <option value=""${!calibration.prediction.predictedRiskLevel ? " selected" : ""}>未预判</option>
+              <option value="low"${calibration.prediction.predictedRiskLevel === "low" ? " selected" : ""}>低风险</option>
+              <option value="medium"${calibration.prediction.predictedRiskLevel === "medium" ? " selected" : ""}>中风险</option>
+              <option value="high"${calibration.prediction.predictedRiskLevel === "high" ? " selected" : ""}>高风险</option>
+            </select>
+          </label>
+        </div>
+        <div class="lifecycle-primary-grid">
+          <label>
+            <span>预判表现</span>
+            <select name="predictedPerformanceTier">
+              <option value=""${!calibration.prediction.predictedPerformanceTier ? " selected" : ""}>未判断</option>
+              <option value="low"${calibration.prediction.predictedPerformanceTier === "low" ? " selected" : ""}>低表现</option>
+              <option value="medium"${calibration.prediction.predictedPerformanceTier === "medium" ? " selected" : ""}>中等表现</option>
+              <option value="high"${calibration.prediction.predictedPerformanceTier === "high" ? " selected" : ""}>高表现</option>
+            </select>
+          </label>
+          <label>
+            <span>置信度</span>
+            <input name="predictionConfidence" type="number" min="0" max="100" value="${escapeHtml(String(calibration.prediction.confidence || 0))}" />
+          </label>
+        </div>
+        <div class="lifecycle-primary-grid">
+          <label>
+            <span>预判模型</span>
+            <input name="predictionModel" value="${escapeHtml(calibration.prediction.model || "")}" placeholder="例如：gpt-5.4" />
+          </label>
+          <label>
+            <span>预判时间</span>
+            <input name="predictionCreatedAt" type="date" value="${escapeHtml(String(calibration.prediction.createdAt || "").slice(0, 10))}" />
+          </label>
+        </div>
+        <label>
+          <span>预判理由</span>
+          <textarea name="predictionReason" rows="3" placeholder="例如：标题结构接近高表现样本，但正文风险较低">${escapeHtml(
+            calibration.prediction.reason || ""
+          )}</textarea>
+        </label>
+        <div class="item-actions">
+          <button type="button" class="button button-ghost button-small" data-action="prefill-sample-library-modal-calibration-prediction">
+            从当前检测预填预判
+          </button>
+        </div>
+      </section>
+      <section class="sample-library-modal-section">
+        <div class="sample-library-modal-section-head">
+          <strong>发布后复盘</strong>
+          <p>把真实结果和偏差原因转成后续可用的判断经验。</p>
+        </div>
+        <div class="lifecycle-primary-grid">
+          <label>
+            <span>实际表现</span>
+            <select name="actualPerformanceTier">
+              <option value=""${!effectiveRetro.actualPerformanceTier ? " selected" : ""}>未判断</option>
+              <option value="low"${effectiveRetro.actualPerformanceTier === "low" ? " selected" : ""}>低表现</option>
+              <option value="medium"${effectiveRetro.actualPerformanceTier === "medium" ? " selected" : ""}>中等表现</option>
+              <option value="high"${effectiveRetro.actualPerformanceTier === "high" ? " selected" : ""}>高表现</option>
+            </select>
+          </label>
+          <label>
+            <span>复盘时间</span>
+            <input name="reviewedAt" type="date" value="${escapeHtml(String(effectiveRetro.reviewedAt || "").slice(0, 10))}" />
+          </label>
+        </div>
+        <label class="sample-library-checkbox">
+          <input type="checkbox" name="predictionMatched"${effectiveRetro.predictionMatched ? " checked" : ""} />
+          <span>预判命中</span>
+        </label>
+        <label class="sample-library-checkbox">
+          <input type="checkbox" name="shouldBecomeReference"${effectiveRetro.shouldBecomeReference ? " checked" : ""} />
+          <span>建议进入参考样本</span>
+        </label>
+        <label>
+          <span>偏差原因</span>
+          <input name="missReason" value="${escapeHtml(effectiveRetro.missReason || "")}" placeholder="例如：标题命中，但正文留存不足" />
+        </label>
+        <label>
+          <span>被验证信号</span>
+          <input name="validatedSignals" value="${escapeHtml(joinCSV(effectiveRetro.validatedSignals))}" placeholder="标题结构, 合集匹配" />
+        </label>
+        <label>
+          <span>被推翻信号</span>
+          <input name="invalidatedSignals" value="${escapeHtml(joinCSV(effectiveRetro.invalidatedSignals))}" placeholder="正文过长, 标签不准" />
+        </label>
+        <label>
+          <span>规则优化候选</span>
+          <textarea name="ruleImprovementCandidate" rows="3" placeholder="例如：同类标题结构可提升参考权重">${escapeHtml(
+            effectiveRetro.ruleImprovementCandidate || ""
+          )}</textarea>
+        </label>
+        <label>
+          <span>复盘备注</span>
+          <textarea name="retroNotes" rows="3" placeholder="例如：72 小时后表现稳定">${escapeHtml(effectiveRetro.notes || "")}</textarea>
+        </label>
+        <p class="helper-text">${escapeHtml(comparisonStatusLabel)}${comparison.missReasonSuggestion ? ` · ${escapeHtml(comparison.missReasonSuggestion)}` : ""}</p>
+      </section>
+    </div>
+  `;
+}
+
+function buildSampleLibraryDetailModalConfig(kind, record) {
+  if (kind === "reference") {
+    return {
+      title: "编辑参考属性",
+      subtitle: getSampleRecordTitle(record) || "这条记录的参考样本设置",
+      body: buildSampleLibraryReferenceModalMarkup(record),
+      saveLabel: "保存参考属性"
+    };
+  }
+
+  if (kind === "lifecycle") {
+    return {
+      title: "编辑生命周期属性",
+      subtitle: getSampleRecordTitle(record) || "回填发布结果与互动表现",
+      body: buildSampleLibraryLifecycleModalMarkup(record),
+      saveLabel: "保存生命周期属性"
+    };
+  }
+
+  return {
+    title: "编辑预判复盘",
+    subtitle: getSampleRecordTitle(record) || "把预判和真实结果放到同一条样本里复盘",
+    body: buildSampleLibraryCalibrationModalMarkup(record),
+    saveLabel: "保存预判复盘"
+  };
+}
+
+function readSampleLibraryModalReferencePayload() {
+  const contentNode = byId("sample-library-modal-content");
+  const tier = String(contentNode?.querySelector('[name="tier"]')?.value || "").trim();
+  const enabled = contentNode?.querySelector('[name="enabled"]')?.checked === true || Boolean(tier);
+
+  return {
+    enabled,
+    tier: enabled ? tier || "passed" : "",
+    notes: contentNode?.querySelector('[name="notes"]')?.value || ""
+  };
+}
+
+function readSampleLibraryModalLifecyclePayload() {
+  const contentNode = byId("sample-library-modal-content");
+  return {
+    status: contentNode?.querySelector('[name="status"]')?.value || "not_published",
+    publishedAt: contentNode?.querySelector('[name="publishedAt"]')?.value || "",
+    platformReason: contentNode?.querySelector('[name="platformReason"]')?.value || "",
+    notes: contentNode?.querySelector('[name="notes"]')?.value || "",
+    metrics: {
+      likes: contentNode?.querySelector('[name="likes"]')?.value || 0,
+      favorites: contentNode?.querySelector('[name="favorites"]')?.value || 0,
+      comments: contentNode?.querySelector('[name="comments"]')?.value || 0,
+      views: contentNode?.querySelector('[name="views"]')?.value || 0
+    }
+  };
+}
+
+function readSampleLibraryModalCalibrationPayload() {
+  const contentNode = byId("sample-library-modal-content");
+
+  return {
+    prediction: {
+      predictedStatus: contentNode?.querySelector('[name="predictedStatus"]')?.value || "not_published",
+      predictedRiskLevel: contentNode?.querySelector('[name="predictedRiskLevel"]')?.value || "",
+      predictedPerformanceTier: contentNode?.querySelector('[name="predictedPerformanceTier"]')?.value || "",
+      confidence: contentNode?.querySelector('[name="predictionConfidence"]')?.value || 0,
+      reason: contentNode?.querySelector('[name="predictionReason"]')?.value || "",
+      model: contentNode?.querySelector('[name="predictionModel"]')?.value || "",
+      createdAt: contentNode?.querySelector('[name="predictionCreatedAt"]')?.value || ""
+    },
+    retro: {
+      actualPerformanceTier: contentNode?.querySelector('[name="actualPerformanceTier"]')?.value || "",
+      predictionMatched: contentNode?.querySelector('[name="predictionMatched"]')?.checked === true,
+      missReason: contentNode?.querySelector('[name="missReason"]')?.value || "",
+      validatedSignals: splitCSV(contentNode?.querySelector('[name="validatedSignals"]')?.value || ""),
+      invalidatedSignals: splitCSV(contentNode?.querySelector('[name="invalidatedSignals"]')?.value || ""),
+      shouldBecomeReference: contentNode?.querySelector('[name="shouldBecomeReference"]')?.checked === true,
+      ruleImprovementCandidate: contentNode?.querySelector('[name="ruleImprovementCandidate"]')?.value || "",
+      notes: contentNode?.querySelector('[name="retroNotes"]')?.value || "",
+      reviewedAt: contentNode?.querySelector('[name="reviewedAt"]')?.value || ""
+    }
+  };
+}
+
+function openSampleLibraryDetailModal(kind, recordId) {
+  const record = appState.sampleLibraryRecords.find((item) => String(item.id || "") === String(recordId || ""));
+
+  if (!record) {
+    return;
+  }
+
+  appState.sampleLibraryModal = {
+    kind,
+    recordId: String(record.id || "")
+  };
+
+  renderSampleLibraryModal(buildSampleLibraryDetailModalConfig(kind, record));
+}
+
 function renderSampleLibraryDetail(record) {
   const detailNode = byId("sample-library-detail");
   const headerNode = byId("sample-library-detail-header");
@@ -2598,7 +4402,7 @@ function renderSampleLibraryDetail(record) {
         step: "reference",
         index: 2,
         title: "参考属性",
-        description: "决定它是否进入参考样本和风格画像。",
+        description: "决定它能否进入参考样本候选，达到数据门槛后才会真正生效。",
         status: "未启用",
         body: '<div class="result-card muted">选中记录后可启用参考属性。</div>'
       })
@@ -2682,7 +4486,7 @@ function renderSampleLibraryDetail(record) {
             <button
               type="button"
               class="button button-danger button-small"
-              data-action="delete-sample-library-record"
+              data-action="open-sample-library-delete-modal"
               data-id="${escapeHtml(record.id || "")}"
             >
               删除记录
@@ -2694,6 +4498,7 @@ function renderSampleLibraryDetail(record) {
           <span class="meta-pill">${escapeHtml(lifecycleSummary)}</span>
           <span class="meta-pill">${escapeHtml(calibrationSummary)}</span>
           <span class="meta-pill">${escapeHtml(collectionTypeLabel(collectionType))}</span>
+          <span class="meta-pill">浏览 ${escapeHtml(String(publish.metrics.views || 0))}</span>
           <span class="meta-pill">${escapeHtml(lifecycleSourceLabel(record.source || "manual"))}</span>
           <span class="meta-pill">${escapeHtml(formatDate(record.updatedAt || record.createdAt))}</span>
         </div>
@@ -2709,41 +4514,22 @@ function renderSampleLibraryDetail(record) {
       title: "基础内容",
       description: "先确认标题、正文和标签，后续筛选都基于这里。",
       status: "已选中",
-      body: `
-        <div class="admin-panel-body stack compact-form">
-          <label>
-            <span>标题</span>
-            <input name="title" value="${escapeHtml(note.title || "")}" placeholder="样本标题" />
-          </label>
-          <label>
-            <span>正文</span>
-            <textarea name="body" rows="6" placeholder="样本正文">${escapeHtml(note.body || "")}</textarea>
-          </label>
-          <label>
-            <span>封面文案</span>
-            <input name="coverText" value="${escapeHtml(note.coverText || "")}" placeholder="封面文案" />
-          </label>
-          <label>
-            <span>合集类型</span>
-            <select name="collectionType">
-              ${buildCollectionTypeOptionsMarkup({
-                options: appState.collectionTypeOptions,
-                value: collectionType
-              })}
-            </select>
-          </label>
-          <label>
-            <span>标签</span>
-            <input name="tags" value="${escapeHtml(joinCSV(note.tags) || "")}" placeholder="标签1, 标签2" />
-          </label>
-          <div class="item-actions">
-            <button type="button" class="button button-small" data-action="save-sample-library-base" data-id="${escapeHtml(record.id || "")}">
-              保存基础内容
-            </button>
-          </div>
-          <p class="helper-text action-gate-hint" id="sample-library-base-action-hint" aria-live="polite"></p>
-        </div>
-      `
+      body: buildSampleLibraryDetailSummaryCardMarkup({
+        title: "当前基础内容",
+        summary: compactText(note.body || note.coverText || "还没有补全基础内容，建议先在弹窗里集中编辑。", 160),
+        pills: [collectionTypeLabel(collectionType), joinCSV(note.tags) || "未填写标签"],
+        actionMarkup: `
+          <button
+            type="button"
+            class="button button-small"
+            data-action="open-sample-library-base-modal"
+            data-id="${escapeHtml(record.id || "")}"
+          >
+            编辑基础内容
+          </button>
+        `,
+        hintId: "sample-library-base-action-hint"
+      })
     })
   );
 
@@ -2753,40 +4539,24 @@ function renderSampleLibraryDetail(record) {
       step: "reference",
       index: 2,
       title: "参考属性",
-      description: "决定这条记录是否参与参考样本和风格画像生成。",
+      description: "决定这条记录能否进入参考样本候选，达到数据门槛后才会参与生成和校验提示。",
       status: referenceSummary,
-      body: `
-        <div class="admin-panel-body stack compact-form">
-          <label class="sample-library-checkbox">
-            <input type="checkbox" name="enabled"${reference.enabled ? " checked" : ""} />
-            <span>启用为参考样本</span>
-          </label>
-          <label>
-            <span>参考等级</span>
-            <select name="tier">
-              <option value=""${!reference.tier ? " selected" : ""}>未启用</option>
-              <option value="passed"${reference.tier === "passed" ? " selected" : ""}>仅过审</option>
-              <option value="performed"${reference.tier === "performed" ? " selected" : ""}>过审且表现好</option>
-              <option value="featured"${reference.tier === "featured" ? " selected" : ""}>人工精选标杆</option>
-            </select>
-          </label>
-          <label>
-            <span>备注</span>
-            <textarea name="notes" rows="3" placeholder="例如：适合作为情绪沟通类参考">${escapeHtml(reference.notes || "")}</textarea>
-          </label>
-          <div class="item-actions">
-            <button
-              type="button"
-              class="button button-small"
-              data-action="save-sample-library-reference"
-              data-id="${escapeHtml(record.id || "")}"
-            >
-              保存参考属性
-            </button>
-          </div>
-          <p class="helper-text action-gate-hint" id="sample-library-reference-action-hint" aria-live="polite"></p>
-        </div>
-      `
+      body: buildSampleLibraryDetailSummaryCardMarkup({
+        title: `当前状态：${referenceSummary}`,
+        summary: reference.notes || "还没有补充参考备注，适合把是否启用和等级判断集中放在弹窗里处理。",
+        pills: [reference.enabled ? "已启用参考样本" : "未启用参考样本", successTierLabel(reference.tier || "passed")],
+        actionMarkup: `
+          <button
+            type="button"
+            class="button button-small"
+            data-action="open-sample-library-reference-modal"
+            data-id="${escapeHtml(record.id || "")}"
+          >
+            编辑参考属性
+          </button>
+        `,
+        hintId: "sample-library-reference-action-hint"
+      })
     })
   );
 
@@ -2798,62 +4568,33 @@ function renderSampleLibraryDetail(record) {
       title: "生命周期属性",
       description: "发布后回填结果，便于后续判断哪些内容真正可复用。",
       status: lifecycleSummary,
-      body: `
-        <div class="admin-panel-body">
-          <div class="lifecycle-update-grid sample-library-lifecycle-grid">
-            <div class="lifecycle-primary-grid">
-              <label>
-                <span>发布状态</span>
-                <select name="status">
-                  <option value="not_published"${publish.status === "not_published" ? " selected" : ""}>未发布</option>
-                  <option value="published_passed"${publish.status === "published_passed" ? " selected" : ""}>已发布通过</option>
-                  <option value="limited"${publish.status === "limited" ? " selected" : ""}>疑似限流</option>
-                  <option value="violation"${publish.status === "violation" ? " selected" : ""}>平台判违规</option>
-                  <option value="false_positive"${publish.status === "false_positive" ? " selected" : ""}>系统误报 / 平台放行</option>
-                  <option value="positive_performance"${publish.status === "positive_performance" ? " selected" : ""}>过审且表现好</option>
-                </select>
-              </label>
-              <label>
-                <span>发布时间</span>
-                <input name="publishedAt" type="date" value="${escapeHtml(String(publish.publishedAt || "").slice(0, 10))}" />
-              </label>
-            </div>
-            <div class="lifecycle-metrics-grid">
-              <label>
-                <span>点赞</span>
-                <input name="likes" type="number" min="0" value="${escapeHtml(String(publish.metrics.likes || 0))}" />
-              </label>
-              <label>
-                <span>收藏</span>
-                <input name="favorites" type="number" min="0" value="${escapeHtml(String(publish.metrics.favorites || 0))}" />
-              </label>
-              <label>
-                <span>评论</span>
-                <input name="comments" type="number" min="0" value="${escapeHtml(String(publish.metrics.comments || 0))}" />
-              </label>
-            </div>
-            <label class="field-wide">
-              <span>平台原因</span>
-              <input name="platformReason" value="${escapeHtml(publish.platformReason || "")}" placeholder="例如：疑似导流、低俗等" />
-            </label>
-            <label class="field-wide">
-              <span>回填备注</span>
-              <textarea name="notes" rows="3" placeholder="例如：发布 24h 后稳定通过">${escapeHtml(publish.notes || "")}</textarea>
-            </label>
-          </div>
-          <div class="item-actions">
-            <button
-              type="button"
-              class="button button-small"
-              data-action="save-sample-library-lifecycle"
-              data-id="${escapeHtml(record.id || "")}"
-            >
-              保存生命周期属性
-            </button>
-          </div>
-          <p class="helper-text action-gate-hint" id="sample-library-lifecycle-action-hint" aria-live="polite"></p>
-        </div>
-      `
+      body: buildSampleLibraryDetailSummaryCardMarkup({
+        title: `当前状态：${lifecycleSummary}`,
+        summary:
+          publish.notes ||
+          publish.platformReason ||
+          "互动指标、发布状态和平台原因都放进弹窗编辑，主页面只保留结果摘要。",
+        pills: [
+          publishStatusLabel(publish.status),
+          `点赞 ${String(publish.metrics.likes || 0)}`,
+          `收藏 ${String(publish.metrics.favorites || 0)}`,
+          `评论 ${String(publish.metrics.comments || 0)}`,
+          `浏览 ${String(publish.metrics.views || 0)}`
+        ],
+        pillsClassName: "meta-row sample-library-metric-grid",
+        pillClassName: "meta-pill sample-library-metric-pill",
+        actionMarkup: `
+          <button
+            type="button"
+            class="button button-small"
+            data-action="open-sample-library-lifecycle-modal"
+            data-id="${escapeHtml(record.id || "")}"
+          >
+            编辑生命周期属性
+          </button>
+        `,
+        hintId: "sample-library-lifecycle-action-hint"
+      })
     })
   );
 
@@ -2865,146 +4606,29 @@ function renderSampleLibraryDetail(record) {
       title: "预判复盘",
       description: "发布前先记录判断，发布后用真实表现校准系统。",
       status: calibrationSummary,
-      body: `
-        <div class="admin-panel-body">
-          <div class="sample-library-calibration-grid">
-            <section class="sample-library-calibration-card">
-              <div class="sample-library-calibration-head">
-                <strong>发布前预判</strong>
-                <p>这部分用于锁定当时的判断基线。</p>
-              </div>
-              <div class="lifecycle-primary-grid">
-                <label>
-                  <span>预判发布状态</span>
-                  <select name="predictedStatus">
-                    <option value="not_published"${calibration.prediction.predictedStatus === "not_published" ? " selected" : ""}>未发布</option>
-                    <option value="published_passed"${calibration.prediction.predictedStatus === "published_passed" ? " selected" : ""}>已发布通过</option>
-                    <option value="limited"${calibration.prediction.predictedStatus === "limited" ? " selected" : ""}>疑似限流</option>
-                    <option value="violation"${calibration.prediction.predictedStatus === "violation" ? " selected" : ""}>平台判违规</option>
-                    <option value="false_positive"${calibration.prediction.predictedStatus === "false_positive" ? " selected" : ""}>系统误报 / 平台放行</option>
-                    <option value="positive_performance"${
-                      calibration.prediction.predictedStatus === "positive_performance" ? " selected" : ""
-                    }>过审且表现好</option>
-                  </select>
-                </label>
-                <label>
-                  <span>预判风险</span>
-                  <select name="predictedRiskLevel">
-                    <option value=""${!calibration.prediction.predictedRiskLevel ? " selected" : ""}>未预判</option>
-                    <option value="low"${calibration.prediction.predictedRiskLevel === "low" ? " selected" : ""}>低风险</option>
-                    <option value="medium"${calibration.prediction.predictedRiskLevel === "medium" ? " selected" : ""}>中风险</option>
-                    <option value="high"${calibration.prediction.predictedRiskLevel === "high" ? " selected" : ""}>高风险</option>
-                  </select>
-                </label>
-              </div>
-              <div class="lifecycle-primary-grid">
-                <label>
-                  <span>预判表现</span>
-                  <select name="predictedPerformanceTier">
-                    <option value=""${!calibration.prediction.predictedPerformanceTier ? " selected" : ""}>未判断</option>
-                    <option value="low"${calibration.prediction.predictedPerformanceTier === "low" ? " selected" : ""}>低表现</option>
-                    <option value="medium"${calibration.prediction.predictedPerformanceTier === "medium" ? " selected" : ""}>中等表现</option>
-                    <option value="high"${calibration.prediction.predictedPerformanceTier === "high" ? " selected" : ""}>高表现</option>
-                  </select>
-                </label>
-                <label>
-                  <span>置信度</span>
-                  <input name="predictionConfidence" type="number" min="0" max="100" value="${escapeHtml(
-                    String(calibration.prediction.confidence || 0)
-                  )}" />
-                </label>
-              </div>
-              <div class="lifecycle-primary-grid">
-                <label>
-                  <span>预判模型</span>
-                  <input name="predictionModel" value="${escapeHtml(calibration.prediction.model || "")}" placeholder="例如：gpt-5.4" />
-                </label>
-                <label>
-                  <span>预判时间</span>
-                  <input name="predictionCreatedAt" type="date" value="${escapeHtml(String(calibration.prediction.createdAt || "").slice(0, 10))}" />
-                </label>
-              </div>
-              <label>
-                <span>预判理由</span>
-                <textarea name="predictionReason" rows="3" placeholder="例如：标题结构接近高表现样本，但正文风险较低">${escapeHtml(
-                  calibration.prediction.reason || ""
-                )}</textarea>
-              </label>
-            </section>
-            <section class="sample-library-calibration-card">
-              <div class="sample-library-calibration-head">
-                <strong>发布后复盘</strong>
-                <p>把真实结果和偏差原因转成后续可用的判断经验。</p>
-              </div>
-              <div class="lifecycle-primary-grid">
-                <label>
-                  <span>实际表现</span>
-                  <select name="actualPerformanceTier">
-                    <option value=""${!effectiveRetro.actualPerformanceTier ? " selected" : ""}>未判断</option>
-                    <option value="low"${effectiveRetro.actualPerformanceTier === "low" ? " selected" : ""}>低表现</option>
-                    <option value="medium"${effectiveRetro.actualPerformanceTier === "medium" ? " selected" : ""}>中等表现</option>
-                    <option value="high"${effectiveRetro.actualPerformanceTier === "high" ? " selected" : ""}>高表现</option>
-                  </select>
-                </label>
-                <label>
-                  <span>复盘时间</span>
-                  <input name="reviewedAt" type="date" value="${escapeHtml(String(effectiveRetro.reviewedAt || "").slice(0, 10))}" />
-                </label>
-              </div>
-              <label class="sample-library-checkbox">
-                <input type="checkbox" name="predictionMatched"${effectiveRetro.predictionMatched ? " checked" : ""} />
-                <span>预判命中</span>
-              </label>
-              <label class="sample-library-checkbox">
-                <input type="checkbox" name="shouldBecomeReference"${effectiveRetro.shouldBecomeReference ? " checked" : ""} />
-                <span>建议进入参考样本</span>
-              </label>
-              <label>
-                <span>偏差原因</span>
-                <input name="missReason" value="${escapeHtml(effectiveRetro.missReason || "")}" placeholder="例如：标题命中，但正文留存不足" />
-              </label>
-              <label>
-                <span>被验证信号</span>
-                <input name="validatedSignals" value="${escapeHtml(joinCSV(effectiveRetro.validatedSignals))}" placeholder="标题结构, 合集匹配" />
-              </label>
-              <label>
-                <span>被推翻信号</span>
-                <input name="invalidatedSignals" value="${escapeHtml(joinCSV(effectiveRetro.invalidatedSignals))}" placeholder="正文过长, 标签不准" />
-              </label>
-              <label>
-                <span>规则优化候选</span>
-                <textarea name="ruleImprovementCandidate" rows="3" placeholder="例如：同类标题结构可提升参考权重">${escapeHtml(
-                  effectiveRetro.ruleImprovementCandidate || ""
-                )}</textarea>
-              </label>
-              <label>
-                <span>复盘备注</span>
-                <textarea name="retroNotes" rows="3" placeholder="例如：72 小时后表现稳定">${escapeHtml(effectiveRetro.notes || "")}</textarea>
-              </label>
-              <p class="helper-text">${escapeHtml(comparisonStatusLabel)}${comparison.missReasonSuggestion ? ` · ${escapeHtml(comparison.missReasonSuggestion)}` : ""}</p>
-            </section>
-          </div>
-          <div class="item-actions">
-            <button
-              type="button"
-              class="button button-ghost button-small"
-              data-action="prefill-sample-library-calibration-prediction"
-              data-id="${escapeHtml(record.id || "")}"
-            >
-              从当前检测预填预判
-            </button>
-            <button
-              type="button"
-              class="button button-small"
-              data-action="save-sample-library-calibration"
-              data-id="${escapeHtml(record.id || "")}"
-            >
-              保存预判复盘
-            </button>
-          </div>
-          <p class="helper-text action-gate-hint" id="sample-library-calibration-action-hint" aria-live="polite"></p>
-        </div>
-      `
+      body: buildSampleLibraryDetailSummaryCardMarkup({
+        title: `当前状态：${calibrationSummary}`,
+        summary:
+          calibration.prediction.reason ||
+          effectiveRetro.notes ||
+          "把发布前预判、发布后偏差和规则优化候选都收进弹窗里编辑，主页面只保留复盘摘要。",
+        pills: [
+          comparisonStatusLabel,
+          performanceTierLabel(effectiveRetro.actualPerformanceTier || calibration.prediction.predictedPerformanceTier),
+          riskLevelLabel(calibration.prediction.predictedRiskLevel)
+        ],
+        actionMarkup: `
+          <button
+            type="button"
+            class="button button-small"
+            data-action="open-sample-library-calibration-modal"
+            data-id="${escapeHtml(record.id || "")}"
+          >
+            编辑预判复盘
+          </button>
+        `,
+        hintId: "sample-library-calibration-action-hint"
+      })
     })
   );
   renderSampleLibraryDetailStepState();
@@ -3030,6 +4654,9 @@ function renderSampleLibraryWorkspace() {
   renderSampleLibraryDetail(selectedRecord);
   renderSampleLibraryCalibrationReplayResult(appState.sampleLibraryCalibrationReplayResult);
   renderSampleLibraryCalibrationReviewQueue(appState.sampleLibraryRecords);
+  if (appState.sampleLibraryPoolsModal?.open) {
+    renderSampleLibraryPoolsModal();
+  }
   syncSampleLibraryCreateActions();
   syncSampleLibraryPrefillActions();
   syncSampleLibraryDetailActions();
@@ -3225,14 +4852,8 @@ function renderReviewQueueAdmin(items) {
     : '<div class="result-card muted">当前没有待维护的复核项</div>';
 }
 
-function renderInnerSpaceTermsList(items = []) {
-  const node = byId("inner-space-terms-list");
-
-  if (!node) {
-    return;
-  }
-
-  node.innerHTML = Array.isArray(items) && items.length
+function buildInnerSpaceTermsListMarkup(items = []) {
+  return Array.isArray(items) && items.length
     ? items
         .slice()
         .sort((left, right) => Number(right.priority || 0) - Number(left.priority || 0))
@@ -3272,6 +4893,16 @@ function renderInnerSpaceTermsList(items = []) {
     : '<div class="result-card muted">当前没有术语项</div>';
 }
 
+function renderInnerSpaceTermsList(items = []) {
+  const node = byId("inner-space-terms-list");
+
+  if (!node) {
+    return;
+  }
+
+  node.innerHTML = buildInnerSpaceTermsListMarkup(items);
+}
+
 function renderAdminData(data) {
   renderLexiconList("seed-lexicon-list", data.seedLexicon, "seed");
   renderLexiconList("custom-lexicon-list", data.customLexicon, "custom");
@@ -3280,19 +4911,58 @@ function renderAdminData(data) {
   renderFalsePositiveLog(data.falsePositiveLog || []);
 }
 
+async function refreshInnerSpaceTermsState() {
+  let items = [];
+
+  try {
+    const innerSpaceTermsPayload = await apiJson(innerSpaceTermsApi);
+    items = Array.isArray(innerSpaceTermsPayload.items) ? innerSpaceTermsPayload.items : [];
+  } catch (error) {
+    const adminData = await apiJson("/api/admin/data");
+    items = Array.isArray(adminData.innerSpaceTerms) ? adminData.innerSpaceTerms : [];
+  }
+
+  appState.adminData = {
+    ...appState.adminData,
+    innerSpaceTerms: items
+  };
+
+  return items;
+}
+
+async function refreshAdminDataState() {
+  const adminData = await apiJson("/api/admin/data");
+
+  appState.adminData = {
+    seedLexicon: Array.isArray(adminData.seedLexicon) ? adminData.seedLexicon : [],
+    customLexicon: Array.isArray(adminData.customLexicon) ? adminData.customLexicon : [],
+    innerSpaceTerms: Array.isArray(adminData.innerSpaceTerms) ? adminData.innerSpaceTerms : [],
+    feedbackLog: Array.isArray(adminData.feedbackLog) ? adminData.feedbackLog : [],
+    falsePositiveLog: Array.isArray(adminData.falsePositiveLog) ? adminData.falsePositiveLog : [],
+    reviewQueue: Array.isArray(adminData.reviewQueue) ? adminData.reviewQueue : []
+  };
+
+  if (!Array.isArray(adminData.innerSpaceTerms)) {
+    await refreshInnerSpaceTermsState();
+  }
+
+  return appState.adminData;
+}
+
 async function refreshAll() {
-  const [summary, adminData, collectionTypePayload] = await Promise.all([
+  const [summary, collectionTypePayload] = await Promise.all([
     apiJson("/api/summary"),
-    apiJson("/api/admin/data"),
     apiJson(collectionTypesApi)
   ]);
 
+  await refreshAdminDataState();
   appState.collectionTypeOptions = Array.isArray(collectionTypePayload.options) ? collectionTypePayload.options : [];
-  renderSummary(summary);
-  renderQueue(adminData.reviewQueue);
-  renderAdminData(adminData);
-  renderCollectionTypeSelectors();
   await refreshSampleLibraryWorkspace();
+  renderSummary(summary);
+  renderQueue(appState.adminData.reviewQueue);
+  renderAdminData(appState.adminData);
+  renderLexiconWorkspaceModal();
+  renderCollectionTypeSelectors();
 }
 
 async function fileToDataUrl(file) {
@@ -3459,7 +5129,13 @@ function readSampleLibraryImportDraftPublish(item = {}) {
     status: String(source?.status || source?.publishStatus || "not_published").trim() || "not_published",
     publishedAt: String(source?.publishedAt || "").trim(),
     platformReason: String(source?.platformReason || "").trim(),
-    notes: String(source?.notes || source?.publishNotes || "").trim()
+    notes: String(source?.notes || source?.publishNotes || "").trim(),
+    metrics: {
+      likes: Number(source?.metrics?.likes ?? source?.likes ?? 0) || 0,
+      favorites: Number(source?.metrics?.favorites ?? source?.favorites ?? 0) || 0,
+      comments: Number(source?.metrics?.comments ?? source?.comments ?? 0) || 0,
+      views: Number(source?.metrics?.views ?? source?.views ?? 0) || 0
+    }
   };
 }
 
@@ -3472,6 +5148,71 @@ function buildSampleLibraryImportCardAdvancedStatusMarkup({ reference, publish }
       normalizedReference.enabled ? successTierLabel(normalizedReference.tier || "passed") : "未启用"
     )}</span>
     <span class="meta-pill">生命周期：${escapeHtml(publishStatusLabel(normalizedPublish.status || "not_published"))}</span>
+    <span class="meta-pill sample-library-metric-pill">浏览 ${escapeHtml(String(normalizedPublish.metrics.views || 0))}</span>
+  `;
+}
+
+function buildSampleLibraryImportAdvancedModalMarkup(item = {}) {
+  const reference = readSampleLibraryImportDraftReference(item);
+  const publish = readSampleLibraryImportDraftPublish(item);
+
+  return `
+    <div class="sample-library-modal-stack compact-form">
+      <section class="sample-library-modal-section">
+        <div class="sample-library-modal-section-head">
+          <strong>参考属性</strong>
+          <p>需要作为参考样本时，在这里顺手补齐等级和备注。</p>
+        </div>
+        <label class="sample-library-checkbox">
+          <input type="checkbox" name="referenceEnabled"${reference.enabled ? " checked" : ""} />
+          <span>启用为参考样本</span>
+        </label>
+        <label>
+          <span>参考等级</span>
+          <select name="referenceTier">
+            <option value=""${!reference.tier ? " selected" : ""}>未启用</option>
+            <option value="passed"${reference.tier === "passed" ? " selected" : ""}>仅过审</option>
+            <option value="performed"${reference.tier === "performed" ? " selected" : ""}>过审且表现好</option>
+            <option value="featured"${reference.tier === "featured" ? " selected" : ""}>人工精选标杆</option>
+          </select>
+        </label>
+        <label>
+          <span>参考备注</span>
+          <textarea name="referenceNotes" rows="3" placeholder="例如：适合作为开头结构参考">${escapeHtml(reference.notes || "")}</textarea>
+        </label>
+      </section>
+      <section class="sample-library-modal-section">
+        <div class="sample-library-modal-section-head">
+          <strong>生命周期属性</strong>
+          <p>点赞、收藏、评论仍放在卡片主区，这里只处理发布状态与补充说明。</p>
+        </div>
+        <div class="sample-library-modal-grid">
+          <label>
+            <span>发布状态</span>
+            <select name="publishStatus">
+              <option value="not_published"${publish.status === "not_published" ? " selected" : ""}>未发布</option>
+              <option value="published_passed"${publish.status === "published_passed" ? " selected" : ""}>已发布通过</option>
+              <option value="limited"${publish.status === "limited" ? " selected" : ""}>疑似限流</option>
+              <option value="violation"${publish.status === "violation" ? " selected" : ""}>平台判违规</option>
+              <option value="false_positive"${publish.status === "false_positive" ? " selected" : ""}>系统误报 / 平台放行</option>
+              <option value="positive_performance"${publish.status === "positive_performance" ? " selected" : ""}>过审且表现好</option>
+            </select>
+          </label>
+          <label>
+            <span>发布时间</span>
+            <input name="publishedAt" type="date" value="${escapeHtml(String(publish.publishedAt || "").slice(0, 10))}" />
+          </label>
+        </div>
+        <label>
+          <span>平台原因</span>
+          <input name="platformReason" value="${escapeHtml(publish.platformReason || "")}" placeholder="例如：疑似导流、低俗等" />
+        </label>
+        <label>
+          <span>回填备注</span>
+          <textarea name="publishNotes" rows="3" placeholder="例如：发布 24h 后稳定通过">${escapeHtml(publish.notes || "")}</textarea>
+        </label>
+      </section>
+    </div>
   `;
 }
 
@@ -3512,6 +5253,10 @@ function buildSampleLibraryImportTagPickerMarkup(index, tags = []) {
 
 function getSampleLibraryImportCards() {
   return [...document.querySelectorAll("[data-import-index]")];
+}
+
+function getOpenSampleLibraryImportCard(index) {
+  return document.querySelector(`[data-import-index="${Number(index)}"]`);
 }
 
 function getSampleLibraryImportCardTagPicker(card) {
@@ -3694,7 +5439,7 @@ function initializeSampleLibraryImportTagPickers() {
     );
     setSampleLibraryImportCardTagDropdownOpen(card, false);
     writeSampleLibraryImportCardTags(card, readSampleLibraryImportCardTags(card), { emitInput: false });
-    syncSampleLibraryImportCardReferenceSectionState(card);
+    syncSampleLibraryImportCardAdvancedSummary(card);
   });
 }
 
@@ -3705,18 +5450,10 @@ function syncSampleLibraryImportCardAdvancedSummary(card) {
     return;
   }
 
-  const referenceTier = String(card.querySelector('[name="referenceTier"]')?.value || "").trim();
-  const referenceEnabled = card.querySelector('[name="referenceEnabled"]')?.checked === true || Boolean(referenceTier);
-  const publishStatus = String(card.querySelector('[name="publishStatus"]')?.value || "not_published").trim() || "not_published";
-
+  const item = appState.sampleLibraryImportDrafts[Number(card?.dataset?.importIndex ?? -1)] || {};
   statusNode.innerHTML = buildSampleLibraryImportCardAdvancedStatusMarkup({
-    reference: {
-      enabled: referenceEnabled,
-      tier: referenceTier
-    },
-    publish: {
-      status: publishStatus
-    }
+    reference: readSampleLibraryImportDraftReference(item),
+    publish: readSampleLibraryImportDraftPublish(item)
   });
 }
 
@@ -3739,8 +5476,70 @@ function syncSampleLibraryImportCardReferenceSectionState(card, { source = "" } 
   } else {
     tierSelect.value = "";
   }
+}
 
-  syncSampleLibraryImportCardAdvancedSummary(card);
+function readSampleLibraryImportAdvancedModalDraft() {
+  const contentNode = byId("sample-library-modal-content");
+  const referenceTier = String(contentNode?.querySelector('[name="referenceTier"]')?.value || "").trim();
+  const referenceEnabled = contentNode?.querySelector('[name="referenceEnabled"]')?.checked === true || Boolean(referenceTier);
+
+  return {
+    reference: {
+      enabled: referenceEnabled,
+      tier: referenceEnabled ? referenceTier || "passed" : "",
+      notes: contentNode?.querySelector('[name="referenceNotes"]')?.value || ""
+    },
+    publish: {
+      status: contentNode?.querySelector('[name="publishStatus"]')?.value || "not_published",
+      publishedAt: contentNode?.querySelector('[name="publishedAt"]')?.value || "",
+      platformReason: contentNode?.querySelector('[name="platformReason"]')?.value || "",
+      notes: contentNode?.querySelector('[name="publishNotes"]')?.value || ""
+    }
+  };
+}
+
+function openSampleLibraryImportAdvancedModal(index) {
+  const item = appState.sampleLibraryImportDrafts[Number(index)] || null;
+
+  if (!item) {
+    return;
+  }
+
+  appState.sampleLibraryModal = {
+    kind: "import-advanced",
+    index: Number(index)
+  };
+
+  renderSampleLibraryModal({
+    title: "编辑高级属性",
+    subtitle: String(item.fileName || item.title || "补充参考属性与生命周期属性"),
+    body: buildSampleLibraryImportAdvancedModalMarkup(item),
+    saveLabel: "保存高级属性"
+  });
+}
+
+function saveSampleLibraryImportAdvancedModal() {
+  const modalState = appState.sampleLibraryModal;
+
+  if (modalState?.kind !== "import-advanced") {
+    return;
+  }
+
+  const nextPatch = readSampleLibraryImportAdvancedModalDraft();
+  const current = appState.sampleLibraryImportDrafts[modalState.index] || {};
+  appState.sampleLibraryImportDrafts[modalState.index] = {
+    ...current,
+    reference: nextPatch.reference,
+    publish: nextPatch.publish
+  };
+
+  const card = getOpenSampleLibraryImportCard(modalState.index);
+  if (card) {
+    syncSampleLibraryImportCardAdvancedSummary(card);
+    syncSampleLibraryImportCardActions(card);
+  }
+
+  closeSampleLibraryModal();
 }
 
 function renderSampleLibraryImportDrafts(items = []) {
@@ -3812,77 +5611,29 @@ function renderSampleLibraryImportDrafts(items = []) {
                   <span>评论</span>
                   <input name="comments" type="number" min="0" value="${escapeHtml(String(item?.comments ?? 0))}" />
                 </label>
+                <label>
+                  <span>浏览数</span>
+                  <input name="views" type="number" min="0" value="${escapeHtml(String(item?.views ?? 0))}" />
+                </label>
               </div>
-              <details class="sample-library-import-advanced admin-accordion">
-                <summary class="sample-library-import-advanced-summary">
-                  <span>高级属性</span>
+              <article class="sample-library-detail-summary-card">
+                <div>
+                  <strong>高级属性</strong>
+                  <p>参考属性和生命周期属性改到弹窗里编辑，避免在导入卡片中继续层层展开。</p>
+                </div>
+                <div class="item-actions">
                   <span class="sample-library-import-advanced-status">
                     ${buildSampleLibraryImportCardAdvancedStatusMarkup({ reference, publish })}
                   </span>
-                </summary>
-                <div class="admin-accordion-body sample-library-import-advanced-body">
-                  <div class="sample-library-import-advanced-grid">
-                    <section class="sample-library-import-advanced-section">
-                      <div class="sample-library-import-advanced-head">
-                        <strong>参考属性</strong>
-                        <p>需要作为参考样本时，直接在导入时顺手补齐。</p>
-                      </div>
-                      <label class="sample-library-checkbox">
-                        <input type="checkbox" name="referenceEnabled"${reference.enabled ? " checked" : ""} />
-                        <span>启用为参考样本</span>
-                      </label>
-                      <label>
-                        <span>参考等级</span>
-                        <select name="referenceTier">
-                          <option value=""${!reference.tier ? " selected" : ""}>未启用</option>
-                          <option value="passed"${reference.tier === "passed" ? " selected" : ""}>仅过审</option>
-                          <option value="performed"${reference.tier === "performed" ? " selected" : ""}>过审且表现好</option>
-                          <option value="featured"${reference.tier === "featured" ? " selected" : ""}>人工精选标杆</option>
-                        </select>
-                      </label>
-                      <label>
-                        <span>参考备注</span>
-                        <textarea name="referenceNotes" rows="3" placeholder="例如：适合作为开头结构参考">${escapeHtml(
-                          reference.notes || ""
-                        )}</textarea>
-                      </label>
-                    </section>
-                    <section class="sample-library-import-advanced-section">
-                      <div class="sample-library-import-advanced-head">
-                        <strong>生命周期属性</strong>
-                        <p>点赞、收藏、评论保留在上方，这里补发布状态与备注。</p>
-                      </div>
-                      <div class="lifecycle-primary-grid">
-                        <label>
-                          <span>发布状态</span>
-                          <select name="publishStatus">
-                            <option value="not_published"${publish.status === "not_published" ? " selected" : ""}>未发布</option>
-                            <option value="published_passed"${publish.status === "published_passed" ? " selected" : ""}>已发布通过</option>
-                            <option value="limited"${publish.status === "limited" ? " selected" : ""}>疑似限流</option>
-                            <option value="violation"${publish.status === "violation" ? " selected" : ""}>平台判违规</option>
-                            <option value="false_positive"${publish.status === "false_positive" ? " selected" : ""}>系统误报 / 平台放行</option>
-                            <option value="positive_performance"${publish.status === "positive_performance" ? " selected" : ""}>过审且表现好</option>
-                          </select>
-                        </label>
-                        <label>
-                          <span>发布时间</span>
-                          <input name="publishedAt" type="date" value="${escapeHtml(String(publish.publishedAt || "").slice(0, 10))}" />
-                        </label>
-                      </div>
-                      <label>
-                        <span>平台原因</span>
-                        <input name="platformReason" value="${escapeHtml(publish.platformReason || "")}" placeholder="例如：疑似导流、低俗等" />
-                      </label>
-                      <label>
-                        <span>回填备注</span>
-                        <textarea name="publishNotes" rows="3" placeholder="例如：发布 24h 后稳定通过">${escapeHtml(
-                          publish.notes || ""
-                        )}</textarea>
-                      </label>
-                    </section>
-                  </div>
+                  <button
+                    type="button"
+                    class="button button-ghost button-small"
+                    data-action="sample-library-import-open-advanced-modal"
+                  >
+                    编辑高级属性
+                  </button>
                 </div>
-              </details>
+              </article>
               <div class="inline-actions">
                 <button type="button" class="button button-alt" data-action="sample-library-import-single-commit">确认导入</button>
               </div>
@@ -3908,6 +5659,8 @@ async function commitSampleLibraryImportCard(card) {
 
   const index = Number(card.dataset.importIndex);
   const sourceItem = appState.sampleLibraryImportDrafts[index] || {};
+  const reference = readSampleLibraryImportDraftReference(sourceItem);
+  const publish = readSampleLibraryImportDraftPublish(sourceItem);
   const items = [
     {
       selected: true,
@@ -3917,16 +5670,17 @@ async function commitSampleLibraryImportCard(card) {
       body: card.querySelector('[name="body"]')?.value || "",
       collectionType: card.querySelector('[name="collectionType"]')?.value || "",
       tags: joinCSV(readSampleLibraryImportCardTags(card)),
-      referenceEnabled: card.querySelector('[name="referenceEnabled"]')?.checked === true,
-      referenceTier: card.querySelector('[name="referenceTier"]')?.value || "",
-      referenceNotes: card.querySelector('[name="referenceNotes"]')?.value || "",
-      publishStatus: card.querySelector('[name="publishStatus"]')?.value || "not_published",
-      publishedAt: card.querySelector('[name="publishedAt"]')?.value || "",
-      platformReason: card.querySelector('[name="platformReason"]')?.value || "",
-      publishNotes: card.querySelector('[name="publishNotes"]')?.value || "",
+      referenceEnabled: reference.enabled === true,
+      referenceTier: reference.tier || "",
+      referenceNotes: reference.notes || "",
+      publishStatus: publish.status || "not_published",
+      publishedAt: publish.publishedAt || "",
+      platformReason: publish.platformReason || "",
+      publishNotes: publish.notes || "",
       likes: card.querySelector('[name="likes"]')?.value || "0",
       favorites: card.querySelector('[name="favorites"]')?.value || "0",
-      comments: card.querySelector('[name="comments"]')?.value || "0"
+      comments: card.querySelector('[name="comments"]')?.value || "0",
+      views: card.querySelector('[name="views"]')?.value || "0"
     }
   ];
 
@@ -3964,40 +5718,6 @@ async function commitSampleLibraryImportCard(card) {
   }
 
   return response;
-}
-
-function syncSampleLibraryCreateButtonLabel() {
-  const button = byId("sample-library-create-button");
-  const shell = byId("sample-library-create-form-shell");
-
-  if (button) {
-    button.textContent = shell?.hidden === false ? "收起新建" : "新增样本记录";
-  }
-}
-
-function setSampleLibraryCreateFormOpen(isOpen) {
-  const button = byId("sample-library-create-button");
-  const shell = byId("sample-library-create-form-shell");
-  const form = byId("sample-library-create-form");
-  const expandedAttribute = ["aria", "expanded"].join("-");
-  const nextHidden = !isOpen;
-
-  if (shell) {
-    shell.hidden = nextHidden;
-  }
-
-  if (button) {
-    button.setAttribute(expandedAttribute, String(!nextHidden));
-  }
-
-  syncSampleLibraryCreateButtonLabel();
-
-  if (!nextHidden) {
-    shell?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    window.setTimeout(() => {
-      form?.elements.title?.focus();
-    }, 120);
-  }
 }
 
 function getAnalyzePayload() {
@@ -4074,6 +5794,162 @@ function setAnalyzeTagDropdownOpen(isOpen) {
   trigger.setAttribute("aria-expanded", isOpen ? "true" : "false");
   dropdown.hidden = !isOpen;
   byId("analyze-tag-picker")?.classList.toggle("is-open", isOpen);
+}
+
+function getSampleLibraryModalTagPicker() {
+  return byId("sample-library-modal-content")?.querySelector(".sample-library-modal-tag-picker");
+}
+
+function getSampleLibraryModalTagTrigger() {
+  return byId("sample-library-modal-content")?.querySelector(".sample-library-modal-tag-trigger");
+}
+
+function getSampleLibraryModalTagDropdown() {
+  return byId("sample-library-modal-content")?.querySelector(".sample-library-modal-tag-dropdown");
+}
+
+function getSampleLibraryModalTagOptionsContainer() {
+  return byId("sample-library-modal-content")?.querySelector(".sample-library-modal-tag-options");
+}
+
+function getSampleLibraryModalTagSelection() {
+  return byId("sample-library-modal-content")?.querySelector(".sample-library-modal-tag-selected");
+}
+
+function getSampleLibraryModalTagInput() {
+  return byId("sample-library-modal-content")?.querySelector('.sample-library-modal-tag-picker [name="tags"]');
+}
+
+function getSampleLibraryModalTagCustomInput() {
+  return byId("sample-library-modal-content")?.querySelector(".sample-library-modal-tag-custom");
+}
+
+function focusFirstSampleLibraryModalTagOption() {
+  const firstOption = getSampleLibraryModalTagOptionsContainer()?.querySelector("[data-modal-tag-option]");
+  if (firstOption instanceof HTMLElement) {
+    firstOption.focus();
+  }
+}
+
+function isSampleLibraryModalTagDropdownOpen() {
+  return getSampleLibraryModalTagTrigger()?.getAttribute("aria-expanded") === "true";
+}
+
+function setSampleLibraryModalTagDropdownOpen(isOpen) {
+  const trigger = getSampleLibraryModalTagTrigger();
+  const dropdown = getSampleLibraryModalTagDropdown();
+  const picker = getSampleLibraryModalTagPicker();
+
+  if (!trigger || !dropdown || !picker) {
+    return;
+  }
+
+  trigger.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  dropdown.hidden = !isOpen;
+  picker.classList.toggle("is-open", isOpen);
+}
+
+function readSampleLibraryModalTags() {
+  return uniqueStrings(splitCSV(getSampleLibraryModalTagInput()?.value || ""));
+}
+
+function renderSampleLibraryModalTagOptions() {
+  const container = getSampleLibraryModalTagOptionsContainer();
+
+  if (!container) {
+    return;
+  }
+
+  const selectedTags = readSampleLibraryModalTags();
+  container.innerHTML = uniqueStrings(analyzeTagOptions)
+    .map((tag) => {
+      const selected = selectedTags.includes(tag);
+      const isCustom = !isPresetAnalyzeTag(tag);
+      return `
+        <span class="tag-picker-option-row${isCustom ? " is-custom" : ""}">
+          <button
+            type="button"
+            class="tag-picker-option${selected ? " is-selected" : ""}"
+            data-modal-tag-option="${escapeHtml(tag)}"
+            aria-pressed="${selected ? "true" : "false"}"
+          >
+            <span>${escapeHtml(tag)}</span>
+            <span class="tag-picker-option-check" aria-hidden="true">${selected ? "✓" : ""}</span>
+          </button>
+          ${
+            isCustom
+              ? `
+                <button
+                  type="button"
+                  class="tag-picker-option-delete"
+                  data-modal-tag-delete="${escapeHtml(tag)}"
+                  aria-label="删除自定义标签 ${escapeHtml(tag)}"
+                >
+                  ×
+                </button>
+              `
+              : ""
+          }
+        </span>
+      `;
+    })
+    .join("");
+}
+
+function writeSampleLibraryModalTags(tags = [], { emitInput = true } = {}) {
+  const hiddenInput = getSampleLibraryModalTagInput();
+  const selected = getSampleLibraryModalTagSelection();
+  const normalized = uniqueStrings(tags);
+
+  if (hiddenInput) {
+    hiddenInput.value = joinCSV(normalized);
+  }
+
+  if (selected) {
+    selected.innerHTML = buildAnalyzeTagSelectionMarkup(normalized);
+  }
+
+  renderSampleLibraryModalTagOptions();
+
+  if (emitInput && hiddenInput) {
+    hiddenInput.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+}
+
+function toggleSampleLibraryModalTag(tag) {
+  const current = readSampleLibraryModalTags();
+  const normalizedTag = String(tag || "").trim();
+
+  if (!normalizedTag) {
+    return;
+  }
+
+  writeSampleLibraryModalTags(
+    current.includes(normalizedTag) ? current.filter((item) => item !== normalizedTag) : [...current, normalizedTag]
+  );
+}
+
+function addSampleLibraryModalTag(tag) {
+  const nextTag = String(tag || "").trim();
+
+  if (!nextTag) {
+    return;
+  }
+
+  addAnalyzeTagOption(nextTag);
+  writeSampleLibraryModalTags([...readSampleLibraryModalTags(), nextTag]);
+}
+
+function initializeSampleLibraryModalTagPicker() {
+  const customInput = getSampleLibraryModalTagCustomInput();
+
+  if (!customInput) {
+    return;
+  }
+
+  customInput.setAttribute("aria-label", customInput.getAttribute("aria-label") || customInput.placeholder || "输入自定义标签");
+  setSampleLibraryModalTagDropdownOpen(false);
+  writeSampleLibraryModalTags(readSampleLibraryModalTags(), { emitInput: false });
 }
 
 function readAnalyzeTags() {
@@ -4214,33 +6090,6 @@ function getGenerationPayload() {
     },
     modelSelection: getSelectedModelSelections()
   };
-}
-
-function fillSuccessSampleFormFromCurrent(source = "analysis") {
-  const form = byId("sample-library-create-form");
-  const shell = byId("sample-library-create-form-shell");
-  const resultNode = byId("sample-library-create-result");
-  const payload = appState.latestAnalyzePayload || {};
-  const rewrite = source === "rewrite" && appState.latestRewrite ? normalizeRewritePayload(appState.latestRewrite) : null;
-
-  if (!form) {
-    return;
-  }
-
-  form.elements.title.value = rewrite?.title || payload.title || "";
-  form.elements.body.value = rewrite?.body || payload.body || "";
-  form.elements.coverText.value = rewrite?.coverText || payload.coverText || "";
-  if (form.elements.collectionType) {
-    form.elements.collectionType.value = rewrite?.collectionType || payload.collectionType || "";
-  }
-  form.elements.tags.value = joinCSV(rewrite?.tags?.length ? rewrite.tags : payload.tags || []);
-  revealSampleLibraryPane();
-  setSampleLibraryCreateFormOpen(true);
-  if (resultNode) {
-    resultNode.innerHTML =
-      '<div class="result-card-shell">已填充新增表单，保存后可继续补参考属性和生命周期属性。</div>';
-  }
-  syncSampleLibraryCreateActions();
 }
 
 function initializeAnalyzeTagPicker() {
@@ -4393,25 +6242,14 @@ async function handleSummaryAction(action) {
 
   if (action === "open-feedback-center") {
     ensureSupportWorkspaceOpen();
-    revealFeedbackCenterPane();
+    revealSampleLibraryReflowPane();
     return;
   }
 
   if (action === "open-sample-library") {
     ensureSupportWorkspaceOpen();
     revealSampleLibraryPane();
-    setSampleLibraryCreateFormOpen(true);
-    byId("sample-library-create-form-shell")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    return;
-  }
-
-  if (action === "open-custom-lexicon") {
-    revealRulesMaintenancePane("custom-lexicon-pane");
-    return;
-  }
-
-  if (action === "open-seed-lexicon") {
-    revealRulesMaintenancePane("seed-lexicon-pane");
+    openSampleLibraryCreateModal();
     return;
   }
 
@@ -4502,7 +6340,8 @@ async function savePlatformOutcomeFromCurrent({
   publishStatus = "published_passed",
   candidateId = "",
   candidateIndex = "",
-  notes = ""
+  notes = "",
+  views = 0
 } = {}) {
   const saved = await saveLifecycleFromCurrent(source, candidateId, candidateIndex);
   const id = String(saved.item?.id || appState.selectedSampleLibraryRecordId || "").trim();
@@ -4511,13 +6350,22 @@ async function savePlatformOutcomeFromCurrent({
     throw new Error("未找到可回填的平台结果记录。");
   }
 
+  const payload = {
+    status: publishStatus,
+    notes,
+    views: Number(views || 0) || 0
+  };
+
   const response = await apiJson(sampleLibraryApi, {
     method: "PATCH",
     body: JSON.stringify({
       id,
       publish: {
-        status: publishStatus,
-        notes
+        status: payload.status,
+        notes: payload.notes,
+        metrics: {
+          views: payload.views || 0
+        }
       }
     })
   });
@@ -4540,8 +6388,6 @@ byId("custom-lexicon-form").addEventListener("input", syncLexiconFormActions);
 byId("custom-lexicon-form").addEventListener("change", syncLexiconFormActions);
 byId("seed-lexicon-form").addEventListener("input", syncLexiconFormActions);
 byId("seed-lexicon-form").addEventListener("change", syncLexiconFormActions);
-byId("sample-library-create-form").addEventListener("input", syncSampleLibraryCreateActions);
-byId("sample-library-create-form").addEventListener("change", syncSampleLibraryCreateActions);
 byId("sample-library-detail")?.addEventListener("input", syncSampleLibraryDetailActions);
 byId("sample-library-detail")?.addEventListener("change", syncSampleLibraryDetailActions);
 byId("sample-library-detail")?.addEventListener("change", syncSampleLibraryReferenceSectionState);
@@ -4653,31 +6499,11 @@ function syncGenerationActions() {
   setActionGateHint("generation-action-hint", requirementMessage);
 }
 
-function getSampleLibraryCreateRequirementMessage() {
-  const form = byId("sample-library-create-form");
-
-  if (!form) {
-    return "";
-  }
-
-  if (
-    !String(form.elements.title?.value || "").trim() &&
-    !String(form.elements.body?.value || "").trim() &&
-    !String(form.elements.coverText?.value || "").trim()
-  ) {
-    return "请至少填写标题、正文或封面文案。";
-  }
-
-  if (!String(form.elements.collectionType?.value || "").trim()) {
-    return "请先选择合集类型。";
-  }
-
-  return "";
-}
-
 function syncSampleLibraryCreateActions() {
-  const requirementMessage = getSampleLibraryCreateRequirementMessage();
-  const submitButton = byId("sample-library-create-form")?.querySelector('button[type="submit"]');
+  const requirementMessage =
+    appState.sampleLibraryModal?.kind === "create" ? getSampleLibraryCreateRequirementMessage() : "";
+  const submitButton =
+    appState.sampleLibraryModal?.kind === "create" ? byId("sample-library-modal-save") : null;
 
   setGatedButtonState(submitButton, !requirementMessage, requirementMessage);
   setActionGateHint("sample-library-create-action-hint", requirementMessage);
@@ -4712,20 +6538,14 @@ function syncSampleLibraryPrefillActions() {
   setActionGateHint("sample-library-prefill-action-hint", analysisMessage || rewriteMessage);
 }
 
-function getSampleLibraryDetailBaseRequirementMessage() {
-  const section = byId("sample-library-base-section");
-
-  if (!section) {
-    return "";
-  }
-
+function getSampleLibraryDetailBaseRequirementMessage(root = byId("sample-library-modal-content")) {
   const note = {
-    title: section.querySelector('[name="title"]')?.value || "",
-    body: section.querySelector('[name="body"]')?.value || "",
-    coverText: section.querySelector('[name="coverText"]')?.value || "",
-    tags: splitCSV(section.querySelector('[name="tags"]')?.value || "")
+    title: root?.querySelector('[name="title"]')?.value || "",
+    body: root?.querySelector('[name="body"]')?.value || "",
+    coverText: root?.querySelector('[name="coverText"]')?.value || "",
+    tags: splitCSV(root?.querySelector('[name="tags"]')?.value || "")
   };
-  const collectionType = String(section.querySelector('[name="collectionType"]')?.value || "").trim();
+  const collectionType = String(root?.querySelector('[name="collectionType"]')?.value || "").trim();
 
   if (!hasMeaningfulNoteDraft(note)) {
     return "请至少填写标题、正文、封面文案或标签。";
@@ -4738,20 +6558,9 @@ function getSampleLibraryDetailBaseRequirementMessage() {
   return "";
 }
 
-function getSampleLibraryDetailReferenceRequirementMessage() {
-  const section = byId("sample-library-reference-section");
-  const baseMessage = getSampleLibraryDetailBaseRequirementMessage();
-
-  if (!section) {
-    return "";
-  }
-
-  if (baseMessage) {
-    return baseMessage;
-  }
-
-  const tier = String(section.querySelector('[name="tier"]')?.value || "").trim();
-  const enabled = section.querySelector('[name="enabled"]')?.checked === true || Boolean(tier);
+function getSampleLibraryDetailReferenceRequirementMessage(root = byId("sample-library-modal-content")) {
+  const tier = String(root?.querySelector('[name="tier"]')?.value || "").trim();
+  const enabled = root?.querySelector('[name="enabled"]')?.checked === true || Boolean(tier);
 
   if (enabled && !tier) {
     return "启用参考样本时请先选择参考等级。";
@@ -4760,10 +6569,13 @@ function getSampleLibraryDetailReferenceRequirementMessage() {
   return "";
 }
 
-function syncSampleLibraryReferenceSectionState() {
-  const section = byId("sample-library-reference-section");
-  const enabledCheckbox = section?.querySelector('[name="enabled"]');
-  const tierSelect = section?.querySelector('[name="tier"]');
+function syncSampleLibraryReferenceSectionState(root = byId("sample-library-reference-section")) {
+  const scope =
+    root?.querySelector?.('[name="enabled"]')
+      ? root
+      : root?.querySelector?.("#sample-library-reference-section") || null;
+  const enabledCheckbox = scope?.querySelector('[name="enabled"]');
+  const tierSelect = scope?.querySelector('[name="tier"]');
 
   if (!(enabledCheckbox instanceof HTMLInputElement) || !(tierSelect instanceof HTMLSelectElement)) {
     return;
@@ -4829,37 +6641,209 @@ function setSampleLibraryCalibrationPredictionFields(section, prediction = {}) {
   syncSampleLibraryDetailActions();
 }
 
+async function patchSampleLibraryRecordAndRefresh(payload, { recordId = "", nextStep = "base" } = {}) {
+  const response = await apiJson(sampleLibraryApi, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+
+  appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+  appState.selectedSampleLibraryRecordId = String(response.item?.id || recordId || payload?.id || "");
+  setSampleLibraryDetailStep(nextStep);
+  renderSampleLibraryWorkspace();
+  return response;
+}
+
+async function saveSampleLibraryDetailReferenceModal(recordId) {
+  const requirementMessage = getSampleLibraryDetailReferenceRequirementMessage();
+
+  if (requirementMessage) {
+    throw new Error(requirementMessage);
+  }
+
+  const reference = readSampleLibraryModalReferencePayload();
+  return patchSampleLibraryRecordAndRefresh(
+    {
+      id: recordId,
+      reference
+    },
+    { recordId, nextStep: "lifecycle" }
+  );
+}
+
+async function saveSampleLibraryDetailBaseModal(recordId) {
+  const requirementMessage = getSampleLibraryCreateRequirementMessage();
+
+  if (requirementMessage) {
+    throw new Error(requirementMessage);
+  }
+
+  const payload = readSampleLibraryModalBasePayload();
+  return patchSampleLibraryRecordAndRefresh(
+    {
+      id: recordId,
+      note: {
+        title: payload.title,
+        body: payload.body,
+        coverText: payload.coverText,
+        collectionType: payload.collectionType,
+        tags: payload.tags
+      }
+    },
+    { recordId, nextStep: "reference" }
+  );
+}
+
+async function saveSampleLibraryDetailLifecycleModal(recordId) {
+  return patchSampleLibraryRecordAndRefresh(
+    {
+      id: recordId,
+      publish: readSampleLibraryModalLifecyclePayload()
+    },
+    { recordId, nextStep: "calibration" }
+  );
+}
+
+async function saveSampleLibraryDetailCalibrationModal(recordId) {
+  return patchSampleLibraryRecordAndRefresh(
+    {
+      id: recordId,
+      calibration: readSampleLibraryModalCalibrationPayload()
+    },
+    { recordId, nextStep: "calibration" }
+  );
+}
+
+async function savePlatformOutcomeModal() {
+  const modalState = appState.sampleLibraryModal;
+
+  if (modalState?.kind !== "platform-outcome") {
+    return;
+  }
+
+  const payload = readPlatformOutcomeModalPayload();
+  await savePlatformOutcomeFromCurrent({
+    source: modalState.source,
+    publishStatus: modalState.publishStatus,
+    candidateId: modalState.candidateId,
+    candidateIndex: modalState.candidateIndex,
+    notes: payload.notes,
+    views: payload.views
+  });
+
+  const resultNode = byId("sample-library-create-result");
+  const outcomeOption = getPlatformOutcomeOption(modalState.publishStatus);
+
+  if (resultNode) {
+    resultNode.innerHTML = `<div class="result-card-shell">${escapeHtml(payload.notes || outcomeOption.note || "平台结果已回填到学习样本。")}</div>`;
+  }
+}
+
+async function saveSampleLibraryDeleteModal() {
+  const modalState = appState.sampleLibraryModal;
+
+  if (!modalState?.recordId) {
+    return;
+  }
+
+  const response = await apiJson(sampleLibraryApi, {
+    method: "DELETE",
+    body: JSON.stringify({
+      id: modalState.recordId
+    })
+  });
+  appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : [];
+  appState.selectedSampleLibraryRecordId = "";
+  renderSampleLibraryWorkspace();
+}
+
+async function saveSampleLibraryDetailModal() {
+  const modalState = appState.sampleLibraryModal;
+
+  if (modalState?.kind === "platform-outcome") {
+    await savePlatformOutcomeModal();
+    closeSampleLibraryModal();
+    return;
+  }
+
+  if (modalState?.kind === "create") {
+    await saveSampleLibraryCreateModal();
+    closeSampleLibraryModal();
+    return;
+  }
+
+  if (modalState?.kind === "delete-record") {
+    await saveSampleLibraryDeleteModal();
+    closeSampleLibraryModal();
+    return;
+  }
+
+  if (modalState?.kind === "feedback-rule-queue") {
+    await saveFeedbackRuleQueueModal();
+    closeSampleLibraryModal();
+    return;
+  }
+
+  if (modalState?.kind === "feedback-false-positive") {
+    await saveFeedbackFalsePositiveModal();
+    closeSampleLibraryModal();
+    return;
+  }
+
+  if (!modalState?.recordId) {
+    return;
+  }
+
+  if (modalState.kind === "base") {
+    await saveSampleLibraryDetailBaseModal(modalState.recordId);
+    closeSampleLibraryModal();
+    return;
+  }
+
+  if (modalState.kind === "reference") {
+    await saveSampleLibraryDetailReferenceModal(modalState.recordId);
+    closeSampleLibraryModal();
+    return;
+  }
+
+  if (modalState.kind === "lifecycle") {
+    await saveSampleLibraryDetailLifecycleModal(modalState.recordId);
+    closeSampleLibraryModal();
+    return;
+  }
+
+  if (modalState.kind === "calibration") {
+    await saveSampleLibraryDetailCalibrationModal(modalState.recordId);
+    closeSampleLibraryModal();
+  }
+}
+
 function getSampleLibraryDetailLifecycleRequirementMessage() {
-  return getSampleLibraryDetailBaseRequirementMessage();
+  return "";
 }
 
 function getSampleLibraryDetailCalibrationRequirementMessage() {
-  return getSampleLibraryDetailBaseRequirementMessage();
+  return "";
 }
 
 function syncSampleLibraryDetailActions() {
-  const baseMessage = getSampleLibraryDetailBaseRequirementMessage();
-  const referenceMessage = getSampleLibraryDetailReferenceRequirementMessage();
-  const lifecycleMessage = getSampleLibraryDetailLifecycleRequirementMessage();
-  const calibrationMessage = getSampleLibraryDetailCalibrationRequirementMessage();
   const calibrationPrefillMessage = getSampleLibraryCalibrationPredictionPrefillRequirementMessage();
-  const baseButton = byId("sample-library-base-section")?.querySelector('[data-action="save-sample-library-base"]');
-  const referenceButton = byId("sample-library-reference-section")?.querySelector('[data-action="save-sample-library-reference"]');
-  const lifecycleButton = byId("sample-library-lifecycle-section")?.querySelector('[data-action="save-sample-library-lifecycle"]');
-  const calibrationPrefillButton = byId("sample-library-calibration-section")?.querySelector(
-    '[data-action="prefill-sample-library-calibration-prediction"]'
-  );
-  const calibrationButton = byId("sample-library-calibration-section")?.querySelector('[data-action="save-sample-library-calibration"]');
+  const baseButton = byId("sample-library-base-section")?.querySelector('[data-action="open-sample-library-base-modal"]');
+  const referenceButton = byId("sample-library-reference-section")?.querySelector('[data-action="open-sample-library-reference-modal"]');
+  const lifecycleButton = byId("sample-library-lifecycle-section")?.querySelector('[data-action="open-sample-library-lifecycle-modal"]');
+  const calibrationPrefillButton =
+    byId("sample-library-calibration-section")?.querySelector('[data-action="prefill-sample-library-calibration-prediction"]') || null;
+  const calibrationButton = byId("sample-library-calibration-section")?.querySelector('[data-action="open-sample-library-calibration-modal"]');
 
-  setGatedButtonState(baseButton, !baseMessage, baseMessage);
-  setGatedButtonState(referenceButton, !referenceMessage, referenceMessage);
-  setGatedButtonState(lifecycleButton, !lifecycleMessage, lifecycleMessage);
+  setGatedButtonState(baseButton, true, "");
+  setGatedButtonState(referenceButton, true, "");
+  setGatedButtonState(lifecycleButton, true, "");
   setGatedButtonState(calibrationPrefillButton, !calibrationPrefillMessage, calibrationPrefillMessage);
-  setGatedButtonState(calibrationButton, !calibrationMessage, calibrationMessage);
-  setActionGateHint("sample-library-base-action-hint", baseMessage);
-  setActionGateHint("sample-library-reference-action-hint", referenceMessage);
-  setActionGateHint("sample-library-lifecycle-action-hint", lifecycleMessage);
-  setActionGateHint("sample-library-calibration-action-hint", calibrationMessage);
+  setGatedButtonState(calibrationButton, true, "");
+  setActionGateHint("sample-library-base-action-hint", "");
+  setActionGateHint("sample-library-reference-action-hint", "");
+  setActionGateHint("sample-library-lifecycle-action-hint", "");
+  setActionGateHint("sample-library-calibration-action-hint", "");
 }
 
 function getLifecycleSaveRequirementMessage(source = "analysis", candidateId = "", candidateIndex = "") {
@@ -5266,7 +7250,8 @@ document.addEventListener("submit", async (event) => {
     }
 
     renderFalsePositiveLog(response.items || []);
-    revealFeedbackCenterPane();
+    ensureSupportWorkspaceOpen();
+    revealSampleLibraryReflowPane();
   } catch (error) {
     if (resultNode) {
       resultNode.innerHTML = `
@@ -5428,10 +7413,173 @@ byId("inner-space-terms-form").addEventListener("submit", async (event) => {
   }
 });
 
-byId("sample-library-create-button").addEventListener("click", () => {
-  const shell = byId("sample-library-create-form-shell");
-  setSampleLibraryCreateFormOpen(Boolean(shell?.hidden));
+function updateLexiconWorkspaceDraftFromForm(scope, formElement) {
+  const drafts = createLexiconWorkspaceDrafts(appState.lexiconWorkspaceModal?.drafts || {});
+  const form = new FormData(formElement);
+
+  if (scope === "inner-space") {
+    drafts["inner-space"] = {
+      term: String(form.get("term") || ""),
+      aliases: String(form.get("aliases") || ""),
+      category: String(form.get("category") || "equipment"),
+      collectionTypes: String(form.get("collectionTypes") || ""),
+      literal: String(form.get("literal") || ""),
+      metaphor: String(form.get("metaphor") || ""),
+      preferredUsage: String(form.get("preferredUsage") || ""),
+      avoidUsage: String(form.get("avoidUsage") || ""),
+      example: String(form.get("example") || ""),
+      priority: String(form.get("priority") || "80")
+    };
+  } else {
+    const riskLevel = String(form.get("riskLevel") || (scope === "seed" ? "hard_block" : "manual_review"));
+
+    drafts[scope] = {
+      match: String(form.get("match") || "exact"),
+      source: String(form.get("source") || ""),
+      category: String(form.get("category") || ""),
+      riskLevel,
+      lexiconLevel: String(form.get("lexiconLevel") || inferLexiconLevel("", riskLevel)),
+      xhsReason: String(form.get("xhsReason") || "")
+    };
+  }
+
+  appState.lexiconWorkspaceModal = {
+    ...appState.lexiconWorkspaceModal,
+    drafts
+  };
+}
+
+async function submitLexiconWorkspaceLexiconForm(formElement, scope) {
+  const submitButton = formElement.querySelector('button[type="submit"]');
+  const form = new FormData(formElement);
+  const source = String(form.get("source") || "").trim();
+  const category = String(form.get("category") || "").trim();
+
+  if (!source && !category) {
+    setLexiconWorkspaceResultMessage("请先填写词 / 模式和分类。");
+    return;
+  }
+
+  if (!source) {
+    setLexiconWorkspaceResultMessage("请先填写词 / 模式。");
+    return;
+  }
+
+  if (!category) {
+    setLexiconWorkspaceResultMessage("请先填写分类。");
+    return;
+  }
+
+  setLexiconWorkspaceResultMessage("");
+  setButtonBusy(submitButton, true, "保存中...");
+
+  try {
+    await apiJson("/api/admin/lexicon", {
+      method: "POST",
+      body: JSON.stringify({
+        scope,
+        entry: buildLexiconEntry(form)
+      })
+    });
+
+    appState.lexiconWorkspaceModal = {
+      ...appState.lexiconWorkspaceModal,
+      drafts: {
+        ...createLexiconWorkspaceDrafts(appState.lexiconWorkspaceModal?.drafts || {}),
+        [scope]: createDefaultLexiconDraft(scope)
+      },
+      resultMessage: "操作成功，列表已更新。"
+    };
+    await refreshAll();
+  } catch (error) {
+    setLexiconWorkspaceResultMessage(error.message || "保存失败");
+  } finally {
+    setButtonBusy(submitButton, false);
+  }
+}
+
+async function submitLexiconWorkspaceInnerSpaceForm(formElement) {
+  const submitButton = formElement.querySelector('button[type="submit"]');
+  const formData = new FormData(formElement);
+  setLexiconWorkspaceResultMessage("");
+  setButtonBusy(submitButton, true, "保存中...");
+
+  try {
+    await apiJson(innerSpaceTermsApi, {
+      method: "POST",
+      body: JSON.stringify({
+        entry: {
+          term: formData.get("term"),
+          aliases: splitCSV(formData.get("aliases")),
+          category: formData.get("category"),
+          collectionTypes: splitCSV(formData.get("collectionTypes")),
+          literal: formData.get("literal"),
+          metaphor: formData.get("metaphor"),
+          preferredUsage: formData.get("preferredUsage"),
+          avoidUsage: formData.get("avoidUsage"),
+          example: formData.get("example"),
+          priority: formData.get("priority")
+        }
+      })
+    });
+
+    appState.lexiconWorkspaceModal = {
+      ...appState.lexiconWorkspaceModal,
+      drafts: {
+        ...createLexiconWorkspaceDrafts(appState.lexiconWorkspaceModal?.drafts || {}),
+        "inner-space": createDefaultInnerSpaceTermDraft()
+      },
+      resultMessage: "操作成功，列表已更新。"
+    };
+    await refreshAll();
+  } catch (error) {
+    setLexiconWorkspaceResultMessage(error.message || "保存失败");
+  } finally {
+    setButtonBusy(submitButton, false);
+  }
+}
+
+byId("lexicon-workspace-modal-content")?.addEventListener("submit", async (event) => {
+  const form = event.target.closest("[data-lexicon-workspace-form]");
+
+  if (!form) {
+    return;
+  }
+
+  event.preventDefault();
+  const scope = String(form.dataset.lexiconWorkspaceForm || "custom");
+
+  updateLexiconWorkspaceDraftFromForm(scope, form);
+
+  if (scope === "inner-space") {
+    await submitLexiconWorkspaceInnerSpaceForm(form);
+    return;
+  }
+
+  await submitLexiconWorkspaceLexiconForm(form, scope);
 });
+
+byId("lexicon-workspace-modal-content")?.addEventListener("input", (event) => {
+  const form = event.target.closest("[data-lexicon-workspace-form]");
+
+  if (!form) {
+    return;
+  }
+
+  updateLexiconWorkspaceDraftFromForm(String(form.dataset.lexiconWorkspaceForm || "custom"), form);
+});
+
+byId("lexicon-workspace-modal-content")?.addEventListener("change", (event) => {
+  const form = event.target.closest("[data-lexicon-workspace-form]");
+
+  if (!form) {
+    return;
+  }
+
+  updateLexiconWorkspaceDraftFromForm(String(form.dataset.lexiconWorkspaceForm || "custom"), form);
+});
+
+byId("sample-library-create-button").addEventListener("click", openSampleLibraryCreateModal);
 
 byId("sample-library-import-button").addEventListener("click", () => {
   setSampleLibraryImportBlockOpen(true);
@@ -5464,33 +7612,10 @@ byId("sample-library-import-input").addEventListener("change", async (event) => 
 });
 
 byId("sample-library-import-block")?.addEventListener("input", (event) => {
-  const card = event.target instanceof Element ? event.target.closest("[data-import-index]") : null;
-
-  if (card) {
-    syncSampleLibraryImportCardAdvancedSummary(card);
-  }
-
   syncSampleLibraryImportActions();
 });
 
-byId("sample-library-import-block")?.addEventListener("change", (event) => {
-  const card = event.target instanceof Element ? event.target.closest("[data-import-index]") : null;
-
-  if (card) {
-    const fieldName =
-      event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement
-        ? String(event.target.name || "")
-        : "";
-
-    if (fieldName === "referenceEnabled") {
-      syncSampleLibraryImportCardReferenceSectionState(card, { source: "checkbox" });
-    } else if (fieldName === "referenceTier") {
-      syncSampleLibraryImportCardReferenceSectionState(card, { source: "tier" });
-    } else {
-      syncSampleLibraryImportCardAdvancedSummary(card);
-    }
-  }
-
+byId("sample-library-import-block")?.addEventListener("change", () => {
   syncSampleLibraryImportActions();
 });
 
@@ -5498,6 +7623,13 @@ byId("sample-library-import-block")?.addEventListener("click", async (event) => 
   const card = event.target instanceof Element ? event.target.closest("[data-import-index]") : null;
 
   if (!card) {
+    return;
+  }
+
+  const advancedButton =
+    event.target instanceof Element ? event.target.closest('[data-action="sample-library-import-open-advanced-modal"]') : null;
+  if (advancedButton) {
+    openSampleLibraryImportAdvancedModal(card.dataset.importIndex || "");
     return;
   }
 
@@ -5624,6 +7756,12 @@ byId("sample-library-import-block")?.addEventListener("focusout", (event) => {
 });
 
 document.addEventListener("click", (event) => {
+  const modalTagPicker = getSampleLibraryModalTagPicker();
+
+  if (!eventTargetsAnalyzeTagPicker(event, modalTagPicker)) {
+    setSampleLibraryModalTagDropdownOpen(false);
+  }
+
   getSampleLibraryImportCards().forEach((card) => {
     const picker = getSampleLibraryImportCardTagPicker(card);
 
@@ -5640,6 +7778,16 @@ document.addEventListener("keydown", (event) => {
     return;
   }
 
+  if (appState.sampleLibraryModal) {
+    closeSampleLibraryModal();
+    return;
+  }
+
+   if (appState.sampleLibraryPoolsModal?.open) {
+    closeSampleLibraryPoolsModal();
+    return;
+  }
+
   getSampleLibraryImportCards().forEach((card) => {
     const picker = getSampleLibraryImportCardTagPicker(card);
     const trigger = getSampleLibraryImportCardTagTrigger(card);
@@ -5651,6 +7799,223 @@ document.addEventListener("keydown", (event) => {
       trigger.focus();
     }
   });
+});
+
+byId("sample-library-modal-content")?.addEventListener("change", (event) => {
+  const fieldName =
+    event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement
+      ? String(event.target.name || "")
+      : "";
+  const modalState = appState.sampleLibraryModal;
+
+  if (fieldName === "referenceEnabled") {
+    syncSampleLibraryImportCardReferenceSectionState(byId("sample-library-modal-content"), { source: "checkbox" });
+  }
+
+  if (fieldName === "referenceTier") {
+    syncSampleLibraryImportCardReferenceSectionState(byId("sample-library-modal-content"), { source: "tier" });
+  }
+
+  if (fieldName === "enabled" || fieldName === "tier") {
+    syncSampleLibraryReferenceSectionState(byId("sample-library-modal-content"));
+  }
+
+  if (modalState?.kind === "create") {
+    syncSampleLibraryCreateActions();
+  }
+
+  if (modalState?.kind === "base") {
+    const requirementMessage = getSampleLibraryDetailBaseRequirementMessage();
+    setGatedButtonState(byId("sample-library-modal-save"), !requirementMessage, requirementMessage);
+  }
+
+  if (modalState?.kind === "reference") {
+    const requirementMessage = getSampleLibraryDetailReferenceRequirementMessage();
+    setGatedButtonState(byId("sample-library-modal-save"), !requirementMessage, requirementMessage);
+  }
+});
+
+byId("sample-library-modal-content")?.addEventListener("input", () => {
+  const modalState = appState.sampleLibraryModal;
+
+  if (modalState?.kind === "create") {
+    syncSampleLibraryCreateActions();
+    return;
+  }
+
+  if (modalState?.kind === "base") {
+    const requirementMessage = getSampleLibraryDetailBaseRequirementMessage();
+    setGatedButtonState(byId("sample-library-modal-save"), !requirementMessage, requirementMessage);
+    return;
+  }
+
+  if (modalState?.kind === "reference") {
+    const requirementMessage = getSampleLibraryDetailReferenceRequirementMessage();
+    setGatedButtonState(byId("sample-library-modal-save"), !requirementMessage, requirementMessage);
+  }
+});
+
+byId("sample-library-modal-content")?.addEventListener("click", (event) => {
+  const trigger = event.target instanceof Element ? event.target.closest(".sample-library-modal-tag-trigger") : null;
+
+  if (trigger) {
+    event.preventDefault();
+    event.stopPropagation();
+    setSampleLibraryModalTagDropdownOpen(!isSampleLibraryModalTagDropdownOpen());
+    return;
+  }
+
+  const clearButton = event.target instanceof Element ? event.target.closest(".sample-library-modal-tag-clear") : null;
+
+  if (clearButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    writeSampleLibraryModalTags([]);
+    return;
+  }
+
+  const addButton = event.target instanceof Element ? event.target.closest(".sample-library-modal-tag-add") : null;
+
+  if (addButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    const customInput = getSampleLibraryModalTagCustomInput();
+    const value = String(customInput?.value || "").trim();
+
+    if (!value) {
+      return;
+    }
+
+    addSampleLibraryModalTag(value);
+    if (customInput) {
+      customInput.value = "";
+      customInput.focus();
+    }
+    return;
+  }
+
+  const deleteButton = event.target instanceof Element ? event.target.closest("[data-modal-tag-delete]") : null;
+
+  if (deleteButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    const tag = deleteButton.dataset.modalTagDelete;
+
+    removeAnalyzeTagOption(tag);
+    writeSampleLibraryModalTags(readSampleLibraryModalTags().filter((item) => item !== String(tag || "").trim()));
+    return;
+  }
+
+  const optionButton = event.target instanceof Element ? event.target.closest("[data-modal-tag-option]") : null;
+
+  if (optionButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleSampleLibraryModalTag(optionButton.dataset.modalTagOption);
+  }
+});
+
+byId("sample-library-modal-content")?.addEventListener("keydown", (event) => {
+  const trigger = event.target instanceof Element ? event.target.closest(".sample-library-modal-tag-trigger") : null;
+
+  if (trigger && event.key === "ArrowDown") {
+    event.preventDefault();
+    setSampleLibraryModalTagDropdownOpen(true);
+    focusFirstSampleLibraryModalTagOption();
+    return;
+  }
+
+  const customInput = event.target instanceof Element ? event.target.closest(".sample-library-modal-tag-custom") : null;
+
+  if (!customInput || (event.key !== "Enter" && event.key !== ",")) {
+    return;
+  }
+
+  event.preventDefault();
+  addSampleLibraryModalTag(customInput.value);
+  customInput.value = "";
+});
+
+byId("sample-library-modal-content")?.addEventListener("focusout", (event) => {
+  const customInput = event.target instanceof Element ? event.target.closest(".sample-library-modal-tag-custom") : null;
+
+  if (!customInput) {
+    return;
+  }
+
+  const addButton = getSampleLibraryModalTagPicker()?.querySelector(".sample-library-modal-tag-add");
+
+  if (event.relatedTarget === addButton) {
+    return;
+  }
+
+  const value = String(customInput.value || "").trim();
+
+  if (!value) {
+    return;
+  }
+
+  addSampleLibraryModalTag(value);
+  customInput.value = "";
+});
+
+byId("sample-library-modal-content")?.addEventListener("click", (event) => {
+  const button = event.target instanceof Element ? event.target.closest("[data-action]") : null;
+
+  if (!button) {
+    return;
+  }
+
+  if (button.dataset.action === "prefill-sample-library-create-analysis") {
+    const requirementMessage = getSampleLibraryPrefillAnalysisRequirementMessage();
+
+    if (requirementMessage) {
+      setSampleLibraryModalMessage(requirementMessage);
+      return;
+    }
+
+    fillSampleLibraryCreateModalFromCurrent("analysis");
+    setSampleLibraryModalMessage("已根据当前检测结果填充内容。");
+    syncSampleLibraryCreateActions();
+    return;
+  }
+
+  if (button.dataset.action === "prefill-sample-library-create-rewrite") {
+    const requirementMessage = getSampleLibraryPrefillRewriteRequirementMessage();
+
+    if (requirementMessage) {
+      setSampleLibraryModalMessage(requirementMessage);
+      return;
+    }
+
+    fillSampleLibraryCreateModalFromCurrent("rewrite");
+    setSampleLibraryModalMessage("已根据当前改写结果填充内容。");
+    syncSampleLibraryCreateActions();
+  }
+});
+
+byId("sample-library-modal-save")?.addEventListener("click", async () => {
+  const saveButton = byId("sample-library-modal-save");
+  const modalState = appState.sampleLibraryModal;
+
+  if (!modalState) {
+    return;
+  }
+
+  setSampleLibraryModalMessage("");
+  setButtonBusy(saveButton, true, "保存中...");
+
+  try {
+    if (modalState.kind === "import-advanced") {
+      saveSampleLibraryImportAdvancedModal();
+    } else {
+      await saveSampleLibraryDetailModal();
+    }
+  } catch (error) {
+    setSampleLibraryModalMessage(error.message || "保存失败");
+  } finally {
+    setButtonBusy(saveButton, false);
+  }
 });
 
 byId("rewrite-model-selection").addEventListener("change", () => {
@@ -5667,84 +8032,8 @@ byId("sample-library-filter").addEventListener("change", (event) => {
   renderSampleLibraryWorkspace();
 });
 
-byId("sample-library-prefill-analysis").addEventListener("click", () => {
-  const requirementMessage = getSampleLibraryPrefillAnalysisRequirementMessage();
-
-  if (requirementMessage) {
-    syncSampleLibraryPrefillActions();
-    return;
-  }
-
-  fillSuccessSampleFormFromCurrent("analysis");
-});
-
-byId("sample-library-prefill-rewrite").addEventListener("click", () => {
-  const requirementMessage = getSampleLibraryPrefillRewriteRequirementMessage();
-
-  if (requirementMessage) {
-    syncSampleLibraryPrefillActions();
-    return;
-  }
-
-  fillSuccessSampleFormFromCurrent("rewrite");
-});
-
-byId("sample-library-create-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const formElement = event.currentTarget;
-  const submitButton = formElement.querySelector('button[type="submit"]');
-  const form = new FormData(formElement);
-  const requirementMessage = getSampleLibraryCreateRequirementMessage();
-
-  if (requirementMessage) {
-    syncSampleLibraryCreateActions();
-    return;
-  }
-
-  setButtonBusy(submitButton, true, "保存中...");
-
-  try {
-    const sampleLibraryTags = form.get(["tags"].join(""));
-    const response = await apiJson(sampleLibraryApi, {
-      method: "POST",
-      body: JSON.stringify({
-        source: "manual",
-        note: {
-          title: form.get("title"),
-          body: form.get("body"),
-          coverText: form.get("coverText"),
-          collectionType: form.get("collectionType"),
-          tags: splitCSV(sampleLibraryTags)
-        },
-        snapshots: {
-          analysis: appState.latestAnalysis,
-          rewrite: appState.latestRewrite,
-          generation: null,
-          crossReview: null
-        }
-      })
-    });
-
-    appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
-    appState.sampleLibraryFilter = "all";
-    appState.sampleLibrarySearch = "";
-    appState.selectedSampleLibraryRecordId = String(response.item?.id || "");
-    byId("sample-library-search-input").value = "";
-    byId("sample-library-filter").value = "all";
-    byId("sample-library-collection-filter").value = "all";
-    renderSampleLibraryWorkspace();
-    byId("sample-library-create-result").innerHTML = '<div class="result-card-shell">样本记录已保存，可继续补参考属性和生命周期属性。</div>';
-    formElement.reset();
-    renderCollectionTypeSelectors();
-    setSampleLibraryCreateFormOpen(false);
-  } catch (error) {
-    byId("sample-library-create-result").innerHTML = `
-      <div class="result-card-shell muted">${escapeHtml(error.message || "保存样本记录失败")}</div>
-    `;
-  } finally {
-    setButtonBusy(submitButton, false);
-    syncSampleLibraryCreateActions();
-  }
+byId("sample-library-pools-button")?.addEventListener("click", () => {
+  openSampleLibraryPoolsModal("reference");
 });
 
 byId("sample-library-collection-filter").addEventListener("change", (event) => {
@@ -5760,6 +8049,36 @@ document.addEventListener("click", async (event) => {
 
   if (summaryAction) {
     await handleSummaryAction(summaryAction.dataset.summaryAction);
+    return;
+  }
+
+  const samplePoolTab = event.target.closest("[data-sample-pool-tab]");
+
+  if (samplePoolTab) {
+    appState.sampleLibraryPoolsModal = {
+      open: true,
+      tab: String(samplePoolTab.dataset.samplePoolTab || "reference")
+    };
+    renderSampleLibraryPoolsModal();
+    return;
+  }
+
+  const lexiconWorkspaceTab = event.target.closest("[data-lexicon-workspace-tab]");
+
+  if (lexiconWorkspaceTab) {
+    const normalizedTab = normalizeLexiconWorkspaceTab(lexiconWorkspaceTab.dataset.lexiconWorkspaceTab || "custom");
+
+    if (normalizedTab === "inner-space") {
+      await refreshInnerSpaceTermsState();
+    }
+
+    appState.lexiconWorkspaceModal = {
+      ...appState.lexiconWorkspaceModal,
+      open: true,
+      tab: normalizedTab,
+      drafts: createLexiconWorkspaceDrafts(appState.lexiconWorkspaceModal?.drafts || {})
+    };
+    renderLexiconWorkspaceModal();
     return;
   }
 
@@ -5780,28 +8099,215 @@ document.addEventListener("click", async (event) => {
 
   const action = button.dataset.action;
 
-  if (action === "prefill-custom-draft") {
-    const form = byId("custom-lexicon-form");
+  if (action === "open-lexicon-workspace-modal") {
+    openLexiconWorkspaceModal(button.dataset.tab || "custom");
+    return;
+  }
 
-    form.elements.match.value = button.dataset.match || "exact";
-    form.elements.source.value = button.dataset.source || "";
-    form.elements.category.value = button.dataset.category || "";
-    form.elements.riskLevel.value = button.dataset.riskLevel || "manual_review";
-    form.elements.lexiconLevel.value = button.dataset.lexiconLevel || inferLexiconLevel("", button.dataset.riskLevel);
-    form.elements.xhsReason.value = button.dataset.xhsReason || "";
-    revealRulesMaintenancePane("custom-lexicon-pane");
-    byId("custom-lexicon-result").innerHTML =
-      '<div class="result-card-shell">已将推荐草稿填入自定义词库表单，可先调整再保存。</div>';
+  if (action === "prefill-custom-draft") {
+    openLexiconWorkspaceModal("custom", {
+      prefill: {
+        match: button.dataset.match || "exact",
+        source: button.dataset.source || "",
+        category: button.dataset.category || "",
+        riskLevel: button.dataset.riskLevel || "manual_review",
+        lexiconLevel: button.dataset.lexiconLevel || inferLexiconLevel("", button.dataset.riskLevel),
+        xhsReason: button.dataset.xhsReason || ""
+      },
+      resultMessage: "已将推荐草稿填入自定义词库表单，可先调整再保存。"
+    });
     return;
   }
 
   if (action === "open-sample-library-record") {
-    openSampleLibraryRecord(button.dataset.id, "base");
+    focusSampleLibraryRecordFromPools(button.dataset.id, "base");
     return;
   }
 
   if (action === "open-sample-library-calibration") {
-    openSampleLibraryRecord(button.dataset.id, "calibration");
+    focusSampleLibraryRecordFromPools(button.dataset.id, "calibration");
+    return;
+  }
+
+  if (action === "close-sample-library-pools-modal") {
+    closeSampleLibraryPoolsModal();
+    return;
+  }
+
+  if (action === "promote-sample-to-reference" || action === "adjust-reference-sample") {
+    openSampleLibraryDetailModal("reference", button.dataset.id);
+    return;
+  }
+
+  if (action === "open-sample-library-lifecycle-from-pool") {
+    openSampleLibraryDetailModal("lifecycle", button.dataset.id);
+    return;
+  }
+
+  if (action === "remove-sample-from-reference-pool") {
+    setButtonBusy(button, true, "移出中...");
+
+    try {
+      const response = await apiJson(sampleLibraryApi, {
+        method: "PATCH",
+        body: JSON.stringify({
+          id: button.dataset.id,
+          reference: {
+            enabled: false,
+            tier: "",
+            notes: ""
+          }
+        })
+      });
+      appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+      appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
+      renderSampleLibraryWorkspace();
+    } finally {
+      setButtonBusy(button, false);
+    }
+    return;
+  }
+
+  if (action === "mark-sample-as-negative") {
+    setButtonBusy(button, true, "标记中...");
+
+    try {
+      const response = await apiJson(sampleLibraryApi, {
+        method: "PATCH",
+        body: JSON.stringify({
+          id: button.dataset.id,
+          sampleType: "missed_violation"
+        })
+      });
+      appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+      appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
+      appState.sampleLibraryPoolsModal.tab = "negative";
+      renderSampleLibraryWorkspace();
+    } finally {
+      setButtonBusy(button, false);
+    }
+    return;
+  }
+
+  if (action === "restore-sample-from-negative-pool") {
+    setButtonBusy(button, true, "恢复中...");
+
+    try {
+      const response = await apiJson(sampleLibraryApi, {
+        method: "PATCH",
+        body: JSON.stringify({
+          id: button.dataset.id,
+          sampleType: ""
+        })
+      });
+      appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+      appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
+      appState.sampleLibraryPoolsModal.tab = "regular";
+      renderSampleLibraryWorkspace();
+    } finally {
+      setButtonBusy(button, false);
+    }
+    return;
+  }
+
+  if (action === "sample-library-import-open-advanced-modal") {
+    const card = button.closest("[data-import-index]");
+    openSampleLibraryImportAdvancedModal(card?.dataset.importIndex || "");
+    return;
+  }
+
+  if (action === "open-sample-library-base-modal") {
+    openSampleLibraryBaseModal(button.dataset.id);
+    return;
+  }
+
+  if (action === "open-sample-library-reference-modal") {
+    openSampleLibraryDetailModal("reference", button.dataset.id);
+    return;
+  }
+
+  if (action === "open-sample-library-lifecycle-modal") {
+    openSampleLibraryDetailModal("lifecycle", button.dataset.id);
+    return;
+  }
+
+  if (action === "open-sample-library-calibration-modal") {
+    openSampleLibraryDetailModal("calibration", button.dataset.id);
+    return;
+  }
+
+  if (action === "open-sample-library-delete-modal") {
+    openSampleLibraryDeleteModal(button.dataset.id);
+    return;
+  }
+
+  if (action === "close-sample-library-modal") {
+    closeSampleLibraryModal();
+    return;
+  }
+
+  if (action === "close-lexicon-workspace-modal") {
+    closeLexiconWorkspaceModal();
+    return;
+  }
+
+  if (action === "prefill-sample-library-modal-calibration-prediction") {
+    const requirementMessage = getSampleLibraryCalibrationPredictionPrefillRequirementMessage();
+
+    if (requirementMessage) {
+      setSampleLibraryModalMessage(requirementMessage);
+      return;
+    }
+
+    const prediction = buildSampleLibraryCalibrationPredictionFromCurrentState();
+    setSampleLibraryCalibrationPredictionFields(byId("sample-library-modal-content"), prediction);
+    setSampleLibraryModalMessage("已根据当前检测结果预填预判字段。");
+    return;
+  }
+
+  if (action === "save-platform-outcome") {
+    const source = button.dataset.source || "analysis";
+    const requirementMessage = getLifecycleSaveRequirementMessage(source, button.dataset.candidateId, button.dataset.candidateIndex);
+
+    if (requirementMessage) {
+      syncLifecycleResultActions();
+      return;
+    }
+
+    openPlatformOutcomeModal({
+      source,
+      publishStatus: button.dataset.publishStatus,
+      candidateId: button.dataset.candidateId,
+      candidateIndex: button.dataset.candidateIndex,
+      notes: button.dataset.note || "",
+      views: 0
+    });
+    return;
+  }
+
+  if (action === "send-feedback-to-review-queue") {
+    openFeedbackRuleQueueModal({
+      platformReason: button.dataset.platformReason || "",
+      suspiciousPhrases: uniqueStrings([
+        ...splitCSV(button.dataset.suspiciousPhrases || ""),
+        ...splitCSV(button.dataset.feedbackModelSuspiciousPhrases || "")
+      ]),
+      contextCategories: splitCSV(button.dataset.feedbackModelContextCategories || "")
+    });
+    return;
+  }
+
+  if (action === "send-feedback-to-false-positive") {
+    openFeedbackFalsePositiveModal({
+      title: button.dataset.title || "",
+      body: button.dataset.body || "",
+      tags: splitCSV(button.dataset.tags || ""),
+      userNotes: button.dataset.platformReason || "",
+      analysisVerdict: button.dataset.analysisVerdict || "",
+      analysisScore: Number(button.dataset.analysisScore || 0),
+      noteId: button.dataset.noteId || "",
+      createdAt: button.dataset.createdAt || ""
+    });
     return;
   }
 
@@ -5897,166 +8403,6 @@ document.addEventListener("click", async (event) => {
       return;
     }
 
-    if (action === "save-sample-library-base") {
-      const requirementMessage = getSampleLibraryDetailBaseRequirementMessage();
-
-      if (requirementMessage) {
-        syncSampleLibraryDetailActions();
-        return;
-      }
-
-      const section = byId("sample-library-base-section");
-      const response = await apiJson(sampleLibraryApi, {
-        method: "PATCH",
-        body: JSON.stringify({
-          id: button.dataset.id,
-          note: {
-            title: section?.querySelector('[name="title"]')?.value || "",
-            body: section?.querySelector('[name="body"]')?.value || "",
-            coverText: section?.querySelector('[name="coverText"]')?.value || "",
-            collectionType: section?.querySelector('[name="collectionType"]')?.value || "",
-            tags: splitCSV(section?.querySelector('[name="tags"]')?.value || "")
-          }
-        })
-      });
-      appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
-      appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
-      setSampleLibraryDetailStep("reference");
-      renderSampleLibraryWorkspace();
-    }
-
-    if (action === "save-sample-library-reference") {
-      const requirementMessage = getSampleLibraryDetailReferenceRequirementMessage();
-
-      if (requirementMessage) {
-        syncSampleLibraryDetailActions();
-        return;
-      }
-
-      const section = byId("sample-library-reference-section");
-      const tier = String(section?.querySelector('[name="tier"]')?.value || "").trim();
-      const enabled = section?.querySelector('[name="enabled"]')?.checked === true || Boolean(tier);
-      const response = await apiJson(sampleLibraryApi, {
-        method: "PATCH",
-        body: JSON.stringify({
-          id: button.dataset.id,
-          reference: {
-            enabled,
-            tier: enabled ? tier || "passed" : "",
-            notes: section?.querySelector('[name="notes"]')?.value || ""
-          }
-        })
-      });
-      appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
-      appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
-      setSampleLibraryDetailStep("lifecycle");
-      renderSampleLibraryWorkspace();
-    }
-
-    if (action === "save-sample-library-lifecycle") {
-      const requirementMessage = getSampleLibraryDetailLifecycleRequirementMessage();
-
-      if (requirementMessage) {
-        syncSampleLibraryDetailActions();
-        return;
-      }
-
-      const section = byId("sample-library-lifecycle-section");
-      const response = await apiJson(sampleLibraryApi, {
-        method: "PATCH",
-        body: JSON.stringify({
-          id: button.dataset.id,
-          publish: {
-            status: section?.querySelector('[name="status"]')?.value || "not_published",
-            publishedAt: section?.querySelector('[name="publishedAt"]')?.value || "",
-            platformReason: section?.querySelector('[name="platformReason"]')?.value || "",
-            notes: section?.querySelector('[name="notes"]')?.value || "",
-            metrics: {
-              likes: section?.querySelector('[name="likes"]')?.value || 0,
-              favorites: section?.querySelector('[name="favorites"]')?.value || 0,
-              comments: section?.querySelector('[name="comments"]')?.value || 0
-            }
-          }
-        })
-      });
-      appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
-      appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
-      setSampleLibraryDetailStep("calibration");
-      renderSampleLibraryWorkspace();
-    }
-
-    if (action === "prefill-sample-library-calibration-prediction") {
-      const requirementMessage = getSampleLibraryCalibrationPredictionPrefillRequirementMessage();
-
-      if (requirementMessage) {
-        syncSampleLibraryDetailActions();
-        return;
-      }
-
-      const section = byId("sample-library-calibration-section");
-      const prediction = buildSampleLibraryCalibrationPredictionFromCurrentState();
-      setSampleLibraryCalibrationPredictionFields(section, prediction);
-      setSampleLibraryDetailStep("calibration");
-      renderSampleLibraryDetailStepState();
-      return;
-    }
-
-    if (action === "save-sample-library-calibration") {
-      const requirementMessage = getSampleLibraryDetailCalibrationRequirementMessage();
-
-      if (requirementMessage) {
-        syncSampleLibraryDetailActions();
-        return;
-      }
-
-      const section = byId("sample-library-calibration-section");
-      const response = await apiJson(sampleLibraryApi, {
-        method: "PATCH",
-        body: JSON.stringify({
-          id: button.dataset.id,
-          calibration: {
-            prediction: {
-              predictedStatus: section?.querySelector('[name="predictedStatus"]')?.value || "not_published",
-              predictedRiskLevel: section?.querySelector('[name="predictedRiskLevel"]')?.value || "",
-              predictedPerformanceTier: section?.querySelector('[name="predictedPerformanceTier"]')?.value || "",
-              confidence: section?.querySelector('[name="predictionConfidence"]')?.value || 0,
-              reason: section?.querySelector('[name="predictionReason"]')?.value || "",
-              model: section?.querySelector('[name="predictionModel"]')?.value || "",
-              createdAt: section?.querySelector('[name="predictionCreatedAt"]')?.value || ""
-            },
-            retro: {
-              actualPerformanceTier: section?.querySelector('[name="actualPerformanceTier"]')?.value || "",
-              predictionMatched: section?.querySelector('[name="predictionMatched"]')?.checked === true,
-              missReason: section?.querySelector('[name="missReason"]')?.value || "",
-              validatedSignals: splitCSV(section?.querySelector('[name="validatedSignals"]')?.value || ""),
-              invalidatedSignals: splitCSV(section?.querySelector('[name="invalidatedSignals"]')?.value || ""),
-              shouldBecomeReference: section?.querySelector('[name="shouldBecomeReference"]')?.checked === true,
-              ruleImprovementCandidate: section?.querySelector('[name="ruleImprovementCandidate"]')?.value || "",
-              notes: section?.querySelector('[name="retroNotes"]')?.value || "",
-              reviewedAt: section?.querySelector('[name="reviewedAt"]')?.value || ""
-            }
-          }
-        })
-      });
-      appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
-      appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
-      setSampleLibraryDetailStep("calibration");
-      renderSampleLibraryWorkspace();
-    }
-
-    if (action === "delete-sample-library-record") {
-      const response = await apiJson(sampleLibraryApi, {
-        method: "DELETE",
-        body: JSON.stringify({
-          id: button.dataset.id
-        })
-      });
-      appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : [];
-      appState.selectedSampleLibraryRecordId = "";
-      renderSampleLibraryWorkspace();
-      return;
-    }
-
     if (action === "save-lifecycle-analysis") {
       const requirementMessage = getLifecycleSaveRequirementMessage("analysis");
 
@@ -6090,83 +8436,6 @@ document.addEventListener("click", async (event) => {
       await saveLifecycleFromCurrent("generation", button.dataset.candidateId, button.dataset.candidateIndex);
     }
 
-    if (action === "save-platform-outcome") {
-      const source = button.dataset.source || "analysis";
-      const requirementMessage = getLifecycleSaveRequirementMessage(source, button.dataset.candidateId, button.dataset.candidateIndex);
-
-      if (requirementMessage) {
-        syncLifecycleResultActions();
-        return;
-      }
-
-      const response = await savePlatformOutcomeFromCurrent({
-        source,
-        publishStatus: button.dataset.publishStatus,
-        candidateId: button.dataset.candidateId,
-        candidateIndex: button.dataset.candidateIndex,
-        notes: button.dataset.note
-      });
-      const resultNode = byId("sample-library-create-result");
-
-      if (resultNode) {
-        resultNode.innerHTML = `<div class="result-card-shell">${escapeHtml(button.dataset.note || "平台结果已回填到学习样本。")}</div>`;
-      }
-
-      return;
-    }
-
-    if (action === "send-feedback-to-review-queue") {
-      const suspiciousPhrases = uniqueStrings([
-        ...splitCSV(button.dataset.suspiciousPhrases || ""),
-        ...splitCSV(button.dataset.feedbackModelSuspiciousPhrases || ""),
-        ...splitCSV(button.dataset.feedbackModelContextCategories || "")
-      ]);
-
-      if (!suspiciousPhrases.length) {
-        throw new Error("当前反馈没有可沉淀的候选词或语境。");
-      }
-
-      const form = byId("custom-lexicon-form");
-      form.elements.match.value = "exact";
-      form.elements.source.value = suspiciousPhrases[0] || "";
-      form.elements.category.value = splitCSV(button.dataset.feedbackModelContextCategories || "")[0] || "待人工判断";
-      form.elements.riskLevel.value = "manual_review";
-      form.elements.lexiconLevel.value = inferLexiconLevel("", "manual_review");
-      form.elements.xhsReason.value = button.dataset.platformReason || "";
-      revealRulesMaintenancePane("custom-lexicon-pane");
-      byId("custom-lexicon-result").innerHTML =
-        '<div class="result-card-shell">已根据反馈预填规则草稿，请确认后保存，或回到人工复核队列继续处理。</div>';
-      return;
-    }
-
-    if (action === "send-feedback-to-false-positive") {
-      const analysisVerdict = String(button.dataset.analysisVerdict || "").trim();
-      const analysisScore = Number(button.dataset.analysisScore || 0);
-      const response = await apiJson("/api/false-positive-log", {
-        method: "POST",
-        body: JSON.stringify({
-          source: "feedback_log",
-          title: button.dataset.title || "",
-          body: button.dataset.body || "",
-          tags: splitCSV(button.dataset.tags || ""),
-          status: "platform_passed_pending",
-          userNotes: button.dataset.platformReason || "由违规反馈回流记录",
-          analysis: analysisVerdict
-            ? {
-                verdict: analysisVerdict,
-                score: Number.isFinite(analysisScore) ? analysisScore : 0,
-                categories: splitCSV(button.dataset.tags || [])
-              }
-            : undefined
-        })
-      });
-
-      renderFalsePositiveLog(response.items || []);
-      revealFeedbackCenterPane();
-      byId("false-positive-log-list")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-
     await refreshAll();
   } catch (error) {
     const target =
@@ -6182,7 +8451,7 @@ document.addEventListener("click", async (event) => {
 
 renderModelSelectionControls(defaultModelSelectionOptions);
 renderCollectionTypeSelectors();
-syncSampleLibraryCreateButtonLabel();
+syncSampleLibraryCreateButtonExpanded(false);
 
 refreshAll().catch((error) => {
   byId("analysis-result").innerHTML = `

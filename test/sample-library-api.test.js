@@ -62,6 +62,7 @@ test("sample library API supports GET POST PATCH for canonical note records", as
     assert.equal(created.item.note.collectionType, "科普");
     assert.equal(created.item.reference.enabled, false);
     assert.equal(created.item.publish.status, "not_published");
+    assert.equal(created.item.publish.metrics.views, 0);
 
     const patched = await invokeRoute("PATCH", "/api/sample-library", {
       id: created.item.id,
@@ -77,7 +78,10 @@ test("sample library API supports GET POST PATCH for canonical note records", as
       publish: {
         status: "published_passed",
         publishedAt: "2026-04-30",
-        notes: "补充发布属性"
+        notes: "补充发布属性",
+        metrics: {
+          views: 77
+        }
       }
     });
 
@@ -89,6 +93,7 @@ test("sample library API supports GET POST PATCH for canonical note records", as
     assert.equal(patched.item.note.collectionType, "疗愈指南");
     assert.equal(patched.item.publish.status, "published_passed");
     assert.equal(patched.item.publish.publishedAt, "2026-04-30");
+    assert.equal(patched.item.publish.metrics.views, 77);
 
     const listed = await invokeRoute("GET", "/api/sample-library");
     const records = await loadNoteRecords();
@@ -100,6 +105,7 @@ test("sample library API supports GET POST PATCH for canonical note records", as
     assert.equal(records[0].id, created.item.id);
     assert.equal(records[0].note.collectionType, "疗愈指南");
     assert.equal(records[0].publish.status, "published_passed");
+    assert.equal(records[0].publish.metrics.views, 77);
   });
 });
 
@@ -320,7 +326,8 @@ test("sample library PATCH can roll back reference and publish fields with true 
         metrics: {
           likes: 120,
           favorites: 24,
-          comments: 8
+          comments: 8,
+          views: 300
         },
         notes: "先记录高表现",
         publishedAt: "2026-04-30"
@@ -332,6 +339,7 @@ test("sample library PATCH can roll back reference and publish fields with true 
     assert.equal(upgraded.item.reference.tier, "featured");
     assert.equal(upgraded.item.publish.status, "positive_performance");
     assert.equal(upgraded.item.publish.metrics.likes, 120);
+    assert.equal(upgraded.item.publish.metrics.views, 300);
     assert.equal(upgraded.item.publish.notes, "先记录高表现");
     assert.equal(upgraded.item.publish.publishedAt, "2026-04-30");
 
@@ -346,7 +354,8 @@ test("sample library PATCH can roll back reference and publish fields with true 
         metrics: {
           likes: 3,
           favorites: 0,
-          comments: 1
+          comments: 1,
+          views: 0
         },
         notes: "",
         publishedAt: ""
@@ -362,6 +371,7 @@ test("sample library PATCH can roll back reference and publish fields with true 
     assert.equal(rolledBack.item.publish.metrics.likes, 3);
     assert.equal(rolledBack.item.publish.metrics.favorites, 0);
     assert.equal(rolledBack.item.publish.metrics.comments, 1);
+    assert.equal(rolledBack.item.publish.metrics.views, 0);
     assert.equal(rolledBack.item.publish.notes, "");
     assert.equal(rolledBack.item.publish.publishedAt, "");
 
@@ -369,6 +379,7 @@ test("sample library PATCH can roll back reference and publish fields with true 
     assert.equal(listed.items[0].reference.enabled, false);
     assert.equal(listed.items[0].publish.status, "violation");
     assert.equal(listed.items[0].publish.metrics.likes, 3);
+    assert.equal(listed.items[0].publish.metrics.views, 0);
   });
 });
 

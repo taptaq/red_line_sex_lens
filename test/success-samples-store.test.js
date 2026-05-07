@@ -60,7 +60,7 @@ test("buildSuccessSampleRecord normalizes tiers, metrics, content, and snapshots
   assert.equal(record.title, "标题");
   assert.equal(record.body, "正文");
   assert.deepEqual(record.tags, ["科普", "关系"]);
-  assert.deepEqual(record.metrics, { likes: 12, favorites: 5, comments: 3 });
+  assert.deepEqual(record.metrics, { likes: 12, favorites: 5, comments: 3, views: 0 });
   assert.equal(record.source, "current_rewrite");
   assert.equal(record.analysisSnapshot.verdict, "pass");
   assert.equal(record.rewriteSnapshot.model, "glm-test");

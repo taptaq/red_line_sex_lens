@@ -7,25 +7,38 @@ import path from "node:path";
 import { analyzePost } from "../src/analyzer.js";
 import { paths } from "../src/config.js";
 
-async function withTempAnalyzerData(t, { seedLexicon = [], customLexicon = [], whitelist = [], falsePositiveLog = [] }, run) {
+async function withTempAnalyzerData(
+  t,
+  { seedLexicon = [], customLexicon = [], whitelist = [], falsePositiveLog = [], noteRecords = [] },
+  run
+) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "analyzer-fp-"));
   const originals = {
     lexiconSeed: paths.lexiconSeed,
     lexiconCustom: paths.lexiconCustom,
     whitelist: paths.whitelist,
-    falsePositiveLog: paths.falsePositiveLog
+    falsePositiveLog: paths.falsePositiveLog,
+    noteRecords: paths.noteRecords,
+    successSamples: paths.successSamples,
+    noteLifecycle: paths.noteLifecycle
   };
 
   paths.lexiconSeed = path.join(tempDir, "lexicon.seed.json");
   paths.lexiconCustom = path.join(tempDir, "lexicon.custom.json");
   paths.whitelist = path.join(tempDir, "whitelist.json");
   paths.falsePositiveLog = path.join(tempDir, "false-positive-log.json");
+  paths.noteRecords = path.join(tempDir, "note-records.json");
+  paths.successSamples = path.join(tempDir, "success-samples.json");
+  paths.noteLifecycle = path.join(tempDir, "note-lifecycle.json");
 
   await Promise.all([
     fs.writeFile(paths.lexiconSeed, `${JSON.stringify(seedLexicon, null, 2)}\n`, "utf8"),
     fs.writeFile(paths.lexiconCustom, `${JSON.stringify(customLexicon, null, 2)}\n`, "utf8"),
     fs.writeFile(paths.whitelist, `${JSON.stringify(whitelist, null, 2)}\n`, "utf8"),
-    fs.writeFile(paths.falsePositiveLog, `${JSON.stringify(falsePositiveLog, null, 2)}\n`, "utf8")
+    fs.writeFile(paths.falsePositiveLog, `${JSON.stringify(falsePositiveLog, null, 2)}\n`, "utf8"),
+    fs.writeFile(paths.noteRecords, `${JSON.stringify(noteRecords, null, 2)}\n`, "utf8"),
+    fs.writeFile(paths.successSamples, `${JSON.stringify([], null, 2)}\n`, "utf8"),
+    fs.writeFile(paths.noteLifecycle, `${JSON.stringify([], null, 2)}\n`, "utf8")
   ]);
 
   t.after(async () => {
@@ -177,6 +190,116 @@ test("whitelist counterexample phrases soften matching manual-review results aft
       assert.equal(result.verdict, "observe");
       assert.deepEqual(result.whitelistHits.map((item) => item.phrase), ["健康表达"]);
       assert.match(result.suggestions.join("\n"), /白名单/);
+    }
+  );
+});
+
+test("qualified reference samples soften safe manual-review results but never hard blocks", async (t) => {
+  await withTempAnalyzerData(
+    t,
+    {
+      seedLexicon: [
+        {
+          id: "manual-sensitive",
+          match: "exact",
+          term: "敏感短语",
+          category: "两性用品宣传与展示",
+          riskLevel: "manual_review",
+          fields: ["body"],
+          enabled: true
+        },
+        {
+          id: "hard-diversion",
+          match: "exact",
+          term: "加薇",
+          category: "导流与私域",
+          riskLevel: "hard_block",
+          fields: ["body"],
+          enabled: true
+        }
+      ],
+      noteRecords: [
+        {
+          id: "record-qualified-reference",
+          source: "manual",
+          stage: "published_reference",
+          note: {
+            title: "关系沟通练习",
+            body: "这是一条关系沟通场景下的敏感短语说明，重点是边界和感受表达。",
+            coverText: "关系沟通练习",
+            collectionType: "科普",
+            tags: ["关系沟通", "边界"]
+          },
+          reference: {
+            enabled: true,
+            tier: "featured",
+            selectedBy: "manual"
+          },
+          publish: {
+            status: "published_passed",
+            metrics: {
+              likes: 18,
+              favorites: 4,
+              comments: 1,
+              views: 5400
+            }
+          }
+        },
+        {
+          id: "record-unqualified-reference",
+          source: "manual",
+          stage: "published_reference",
+          note: {
+            title: "低数据参考",
+            body: "这是一条也包含敏感短语的普通说明。",
+            coverText: "低数据参考",
+            collectionType: "科普",
+            tags: ["关系沟通"]
+          },
+          reference: {
+            enabled: true,
+            tier: "passed",
+            selectedBy: "manual"
+          },
+          publish: {
+            status: "published_passed",
+            metrics: {
+              likes: 1,
+              favorites: 0,
+              comments: 0
+            }
+          }
+        }
+      ]
+    },
+    async () => {
+      const softened = await analyzePost({
+        title: "关系沟通练习",
+        body: "这是一条关系沟通场景下的敏感短语说明，重点是边界和感受表达。",
+        tags: ["关系沟通", "边界"],
+        collectionType: "科普"
+      });
+
+      assert.equal(softened.originalVerdict, "manual_review");
+      assert.equal(softened.verdict, "observe");
+      assert.equal(softened.softenedByReferenceSamples, true);
+      assert.equal(softened.matchedReferenceSamples.length, 1);
+      assert.equal(softened.matchedReferenceSamples[0].sourceId, "record-qualified-reference");
+      assert.equal(softened.matchedReferenceSamples[0].title, "关系沟通练习");
+      assert.ok(softened.referenceSampleSupportScore > 0);
+      assert.match(softened.suggestions.join("\n"), /参考样本/);
+
+      const blocked = await analyzePost({
+        title: "关系沟通练习",
+        body: "这是一条关系沟通场景下的敏感短语说明，重点是边界和感受表达，还可以加薇继续聊。",
+        tags: ["关系沟通", "边界"],
+        collectionType: "科普"
+      });
+
+      assert.equal(blocked.originalVerdict, "hard_block");
+      assert.equal(blocked.verdict, "hard_block");
+      assert.equal(blocked.softenedByReferenceSamples, false);
+      assert.ok(blocked.matchedReferenceSamples.length >= 1);
     }
   );
 });

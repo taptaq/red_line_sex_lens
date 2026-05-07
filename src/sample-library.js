@@ -8,6 +8,14 @@ function normalizeString(value) {
   return String(value || "").trim();
 }
 
+function resolveMetricValue(item = {}, key) {
+  if (Object.prototype.hasOwnProperty.call(item || {}, key)) {
+    return item[key];
+  }
+
+  return item?.publish?.metrics?.[key];
+}
+
 function stripClientIdentityFields(payload = {}) {
   const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...rest } = payload || {};
   return rest;
@@ -34,9 +42,10 @@ export function buildSampleLibraryImportPayload(item = {}) {
       publishedAt: publish.publishedAt || "",
       platformReason: publish.platformReason || "",
       metrics: {
-        likes: item.likes,
-        favorites: item.favorites,
-        comments: item.comments
+        likes: resolveMetricValue(item, "likes"),
+        favorites: resolveMetricValue(item, "favorites"),
+        comments: resolveMetricValue(item, "comments"),
+        views: resolveMetricValue(item, "views")
       }
     },
     reference: {
@@ -169,6 +178,9 @@ export function patchSampleLibraryRecord(current = {}, payload = {}) {
       }
       if (hasOwn(payload.publish.metrics, "comments")) {
         next.publish.metrics.comments = payload.publish.metrics.comments;
+      }
+      if (hasOwn(payload.publish.metrics, "views")) {
+        next.publish.metrics.views = payload.publish.metrics.views;
       }
     }
   }

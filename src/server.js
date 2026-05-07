@@ -22,6 +22,7 @@ import {
   loadInnerSpaceTerms,
   loadNoteLifecycle,
   loadNoteRecords,
+  loadQualifiedReferenceSamples,
   loadReviewQueue,
   loadSummary,
   loadStyleProfile,
@@ -68,6 +69,7 @@ import {
   patchSampleLibraryRecord
 } from "./sample-library.js";
 import { replayCalibratedSamples } from "./calibration-replay.js";
+import { filterQualifiedReferenceSamples } from "./reference-samples.js";
 import { rankSamplesByWeight, withSampleWeight } from "./sample-weight.js";
 import { paths, webDir } from "./config.js";
 
@@ -206,13 +208,7 @@ export function lifecycleRecordToReferenceSample(item = {}) {
 }
 
 export function buildGenerationReferenceSamples({ successSamples = [], noteLifecycle = [] } = {}) {
-  return rankSamplesByWeight(
-    [
-      ...successSamples,
-      ...noteLifecycle.map(lifecycleRecordToReferenceSample).filter(Boolean)
-    ],
-    "auto"
-  );
+  return rankSamplesByWeight(filterQualifiedReferenceSamples(successSamples), "success");
 }
 
 function uniqueStrings(items = []) {
@@ -845,14 +841,13 @@ async function handleRequest(request, response) {
       ...(payload?.brief && typeof payload.brief === "object" ? payload.brief : {}),
       collectionType
     };
-    const [profileState, successSamples, noteLifecycle, innerSpaceTermsRaw] = await Promise.all([
+    const [profileState, qualifiedReferenceSamples, innerSpaceTermsRaw] = await Promise.all([
       loadStyleProfile(),
-      loadSuccessSamples(),
-      loadNoteLifecycle(),
+      loadQualifiedReferenceSamples(),
       loadInnerSpaceTerms()
     ]);
     const styleProfile = getActiveStyleProfile(profileState);
-    const referenceSamples = buildGenerationReferenceSamples({ successSamples, noteLifecycle }).slice(0, 12);
+    const referenceSamples = buildGenerationReferenceSamples({ successSamples: qualifiedReferenceSamples }).slice(0, 12);
     const innerSpaceTerms = filterInnerSpaceTerms(innerSpaceTermsRaw, { collectionType });
     const generation = await generateNoteCandidates({
       mode: payload?.mode,
@@ -1094,6 +1089,10 @@ async function handleRequest(request, response) {
     const payload = await readBody(request);
     const entry = await addInnerSpaceTerm(payload?.entry);
     return sendJson(response, 200, { ok: true, entry });
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/admin/inner-space-terms") {
+    return sendItemsResponse(response, loadInnerSpaceTerms);
   }
 
   if (request.method === "DELETE" && url.pathname === "/api/admin/lexicon") {

@@ -43,6 +43,39 @@ test("sample weights include lifecycle outcomes and engagement signals", () => {
   assert.ok(onlyPublished > violation);
 });
 
+test("sample weights only use views as a small assist instead of the main driver", () => {
+  const nearThresholdWithoutViews = calculateSampleWeight(
+    {
+      status: "published_passed",
+      publishResult: {
+        metrics: { likes: 18, favorites: 4, comments: 1, views: 0 }
+      }
+    },
+    "lifecycle"
+  );
+  const nearThresholdWithViews = calculateSampleWeight(
+    {
+      status: "published_passed",
+      publishResult: {
+        metrics: { likes: 18, favorites: 4, comments: 1, views: 8200 }
+      }
+    },
+    "lifecycle"
+  );
+  const clearlyEngaged = calculateSampleWeight(
+    {
+      status: "published_passed",
+      publishResult: {
+        metrics: { likes: 42, favorites: 9, comments: 3, views: 0 }
+      }
+    },
+    "lifecycle"
+  );
+
+  assert.ok(nearThresholdWithViews > nearThresholdWithoutViews);
+  assert.ok(clearlyEngaged > nearThresholdWithViews);
+});
+
 test("weighted ranking sorts samples and exposes sampleWeight", () => {
   const ranked = rankSamplesByWeight(
     [

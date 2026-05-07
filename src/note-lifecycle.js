@@ -35,9 +35,10 @@ function normalizeNotePayload(note = {}) {
 
 function normalizeMetrics(metrics = {}) {
   return {
-    likes: Math.max(0, Number(metrics.likes) || 0),
-    favorites: Math.max(0, Number(metrics.favorites) || 0),
-    comments: Math.max(0, Number(metrics.comments) || 0)
+    likes: Math.max(0, Math.floor(Number(metrics.likes) || 0)),
+    favorites: Math.max(0, Math.floor(Number(metrics.favorites) || 0)),
+    comments: Math.max(0, Math.floor(Number(metrics.comments) || 0)),
+    views: Math.max(0, Math.floor(Number(metrics.views) || 0))
   };
 }
 
@@ -91,6 +92,8 @@ export function buildLifecycleRecord(payload = {}) {
 export function normalizePublishResult(payload = {}) {
   const status = normalizePublishStatus(payload.publishStatus || payload.status);
   const now = new Date().toISOString();
+  const metricSource =
+    payload.metrics && typeof payload.metrics === "object" ? payload.metrics : payload.publish?.metrics || payload;
 
   return {
     status,
@@ -98,7 +101,7 @@ export function normalizePublishResult(payload = {}) {
     publishedAt: normalizeString(payload.publishedAt),
     platformReason: normalizeString(payload.platformReason),
     notes: normalizeString(payload.notes || payload.publishNotes),
-    metrics: normalizeMetrics(payload.metrics || payload),
+    metrics: normalizeMetrics(metricSource),
     updatedAt: normalizeString(payload.updatedAt) || now
   };
 }

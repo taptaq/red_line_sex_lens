@@ -1,8 +1,9 @@
-import { loadFalsePositiveLog, loadLexicon, loadWhitelist } from "./data-store.js";
+import { loadFalsePositiveLog, loadLexicon, loadQualifiedReferenceSamples, loadWhitelist } from "./data-store.js";
 import { deriveFailureReasonTags } from "./feedback.js";
 import { isSameFeedbackNote } from "./feedback-identity.js";
 import { evaluateContextRules } from "./risk-rules.js";
 import { ensureArray, flattenPost, normalizeText } from "./normalizer.js";
+import { findReferenceSampleHints, referenceSampleSupportThreshold } from "./reference-samples.js";
 import { calculateSampleWeight } from "./sample-weight.js";
 
 const riskWeights = {
@@ -131,12 +132,25 @@ function shouldSoftenVerdict(verdict, hits = [], whitelistHits = [], falsePositi
   return whitelistHits.length > 0 || falsePositiveHints.some((item) => item.sampleWeight >= 2);
 }
 
+function shouldSoftenVerdictByReferenceSamples(verdict, hits = [], referenceSampleSupportScore = 0) {
+  if (verdict !== "manual_review") {
+    return false;
+  }
+
+  if (hits.some((hit) => hit.riskLevel === "hard_block")) {
+    return false;
+  }
+
+  return referenceSampleSupportScore >= referenceSampleSupportThreshold;
+}
+
 export async function analyzePost(input = {}) {
   const post = flattenPost(input);
-  const [whitelist, lexicon, falsePositiveLog] = await Promise.all([
+  const [whitelist, lexicon, falsePositiveLog, qualifiedReferenceSamples] = await Promise.all([
     loadWhitelist(),
     loadLexicon(),
-    loadFalsePositiveLog()
+    loadFalsePositiveLog(),
+    loadQualifiedReferenceSamples()
   ]);
 
   const normalizedByField = Object.fromEntries(
@@ -157,6 +171,15 @@ export async function analyzePost(input = {}) {
     tags: ensureArray(input.tags),
     comments: ensureArray(input.comments)
   });
+  const {
+    matchedReferenceSamples,
+    referenceSampleHints,
+    referenceSampleSupportScore
+  } = findReferenceSampleHints(qualifiedReferenceSamples, {
+    ...post,
+    tags: ensureArray(input.tags),
+    collectionType: String(input.collectionType || "").trim()
+  });
 
   const score = hits.reduce((total, hit) => total + (riskWeights[hit.riskLevel] || 0), 0);
 
@@ -170,8 +193,13 @@ export async function analyzePost(input = {}) {
   }
   const originalVerdict = verdict;
   const softenedByFalsePositive = shouldSoftenVerdict(verdict, hits, whitelistHits, falsePositiveHints);
+  const softenedByReferenceSamples = shouldSoftenVerdictByReferenceSamples(
+    originalVerdict,
+    hits,
+    referenceSampleSupportScore
+  );
 
-  if (softenedByFalsePositive) {
+  if (softenedByFalsePositive || softenedByReferenceSamples) {
     verdict = "observe";
   }
 
@@ -185,6 +213,10 @@ export async function analyzePost(input = {}) {
     );
   }
 
+  if (softenedByReferenceSamples) {
+    suggestions.unshift("命中相似参考样本，当前表达更接近已验证的安全内容，可按观察项继续人工把关。");
+  }
+
   const failureReasonTags = deriveFailureReasonTags({
     texts: suggestions,
     categories: [...categorySet],
@@ -194,6 +226,7 @@ export async function analyzePost(input = {}) {
   return {
     input: {
       ...post,
+      collectionType: String(input.collectionType || "").trim(),
       tags: ensureArray(input.tags),
       comments: ensureArray(input.comments)
     },
@@ -210,7 +243,11 @@ export async function analyzePost(input = {}) {
     hits,
     whitelistHits,
     falsePositiveHints,
+    referenceSampleHints,
+    matchedReferenceSamples,
+    referenceSampleSupportScore,
     softenedByFalsePositive,
+    softenedByReferenceSamples,
     categories: [...categorySet],
     suggestions,
     failureReasonTags

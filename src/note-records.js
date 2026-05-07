@@ -80,7 +80,8 @@ function normalizeMetrics(metrics = {}) {
   return {
     likes: normalizeMetric(metrics.likes),
     favorites: normalizeMetric(metrics.favorites),
-    comments: normalizeMetric(metrics.comments)
+    comments: normalizeMetric(metrics.comments),
+    views: normalizeMetric(metrics.views)
   };
 }
 
@@ -156,7 +157,8 @@ function mergeMetrics(left = {}, right = {}) {
   return {
     likes: Math.max(normalizeMetric(left.likes), normalizeMetric(right.likes)),
     favorites: Math.max(normalizeMetric(left.favorites), normalizeMetric(right.favorites)),
-    comments: Math.max(normalizeMetric(left.comments), normalizeMetric(right.comments))
+    comments: Math.max(normalizeMetric(left.comments), normalizeMetric(right.comments)),
+    views: Math.max(normalizeMetric(left.views), normalizeMetric(right.views))
   };
 }
 
@@ -378,7 +380,7 @@ export function migrateSuccessSampleToNoteRecord(sample = {}) {
     note: sample,
     publish: {
       status: "published_passed",
-      metrics: sample.metrics || {},
+      metrics: sample.metrics || sample,
       notes: sample.notes,
       publishedAt: sample.publishedAt
     },

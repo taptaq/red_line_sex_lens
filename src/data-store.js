@@ -10,6 +10,7 @@ import {
   migrateLifecycleToNoteRecord,
   migrateSuccessSampleToNoteRecord
 } from "./note-records.js";
+import { isQualifiedReferenceRecord } from "./reference-samples.js";
 import { sanitizeInnerSpaceTerms } from "./inner-space-terms.js";
 import { sanitizeStyleProfileState } from "./style-profile.js";
 import { withSampleWeight } from "./sample-weight.js";
@@ -68,6 +69,10 @@ function normalizeNumber(value, fallback = 0) {
   return Number.isFinite(normalized) ? normalized : fallback;
 }
 
+function normalizeMetric(value) {
+  return Math.max(0, Math.floor(normalizeNumber(value, 0)));
+}
+
 function normalizeFalsePositiveEntry(entry = {}) {
   const status = normalizeString(entry.status) || "platform_passed_pending";
   const confidence = (() => {
@@ -104,9 +109,10 @@ function normalizeFalsePositiveEntry(entry = {}) {
 
 function normalizeMetrics(metrics = {}) {
   return {
-    likes: normalizeNumber(metrics.likes, 0),
-    favorites: normalizeNumber(metrics.favorites, 0),
-    comments: normalizeNumber(metrics.comments, 0)
+    likes: normalizeMetric(metrics.likes),
+    favorites: normalizeMetric(metrics.favorites),
+    comments: normalizeMetric(metrics.comments),
+    views: normalizeMetric(metrics.views)
   };
 }
 
@@ -284,30 +290,25 @@ function mergeSuccessIntoRecord(existing = {}, incoming = {}) {
 
 function mergeLifecycleIntoRecord(existing = {}, incoming = {}) {
   const merged = mergeNoteRecords(existing, incoming);
-  const incomingPublish = normalizeNoteRecordPublish(incoming);
-  const incomingId = normalizeString(incoming.id);
-  const existingId = normalizeString(existing.id);
-  const shouldOverridePublish = incomingId && existingId && incomingId === existingId ? true : incomingPublish.status !== "not_published";
 
   return buildNoteRecord({
     ...merged,
     id: normalizeString(existing.id) || normalizeString(merged.id),
     source: normalizeString(incoming.source) || normalizeString(merged.source) || "manual",
     stage: normalizeString(incoming.stage) || normalizeString(merged.stage) || "draft",
-    publish: shouldOverridePublish ? incomingPublish : merged.publish
+    publish: merged.publish
   });
 }
 
 function mergeFallbackLifecycleIntoRecord(existing = {}, incoming = {}) {
   const merged = mergeNoteRecords(existing, incoming);
-  const incomingPublish = normalizeNoteRecordPublish(incoming);
 
   return buildNoteRecord({
     ...merged,
     id: normalizeString(existing.id) || normalizeString(merged.id),
     source: normalizeString(incoming.source) || normalizeString(merged.source) || "manual",
     stage: normalizeString(incoming.stage) || normalizeString(merged.stage) || "draft",
-    publish: incomingPublish
+    publish: merged.publish
   });
 }
 
@@ -322,11 +323,13 @@ function noteRecordToSuccessSample(record = {}) {
   return withSampleWeight({
     id: normalizeString(record.id),
     tier: reference.tier || "passed",
+    status: publish.status,
     confidence: isManualReference ? "confirmed" : "pending",
     sourceQuality: isManualReference ? "manual_verified" : "imported",
     title: normalizeString(note.title),
     body: normalizeString(note.body),
     coverText: normalizeString(note.coverText),
+    collectionType: normalizeString(note.collectionType),
     tags: uniqueStrings(note.tags),
     sourcePlatform: "xiaohongshu",
     source,
@@ -458,6 +461,13 @@ export async function loadSuccessSamples() {
   const items = await loadNoteRecords();
   return items
     .filter((item) => normalizeNoteRecordReference(item).enabled)
+    .map((item) => noteRecordToSuccessSample(item));
+}
+
+export async function loadQualifiedReferenceSamples() {
+  const items = await loadNoteRecords();
+  return items
+    .filter((item) => isQualifiedReferenceRecord(item))
     .map((item) => noteRecordToSuccessSample(item));
 }
 
@@ -615,19 +625,21 @@ export async function saveFalsePositiveLog(items) {
 }
 
 export async function loadSummary() {
-  const [seed, custom, feedback, reviewQueue, noteLifecycle, noteRecords] = await Promise.all([
+  const [seed, custom, feedback, reviewQueue, noteLifecycle, noteRecords, falsePositiveLog] = await Promise.all([
     readJson(paths.lexiconSeed, []),
     readJson(paths.lexiconCustom, []),
     readJson(paths.feedbackLog, []),
     readJson(paths.reviewQueue, []),
     loadNoteLifecycle(),
-    loadNoteRecords()
+    loadNoteRecords(),
+    loadFalsePositiveLog()
   ]);
+  const pendingFalsePositiveCount = falsePositiveLog.filter((item) => item.status !== "platform_passed_confirmed").length;
 
   return {
     seedLexiconCount: seed.length,
     customLexiconCount: custom.length,
-    feedbackCount: feedback.length,
+    feedbackCount: feedback.length + pendingFalsePositiveCount,
     reviewQueueCount: reviewQueue.length,
     noteLifecycleCount: noteLifecycle.length,
     sampleLibraryCount: noteRecords.length

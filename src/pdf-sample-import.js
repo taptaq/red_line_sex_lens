@@ -84,6 +84,14 @@ function normalizeMetric(value) {
   return Number.isFinite(normalized) && normalized > 0 ? Math.floor(normalized) : 0;
 }
 
+function resolveMetricValue(item = {}, key) {
+  if (Object.prototype.hasOwnProperty.call(item || {}, key)) {
+    return item[key];
+  }
+
+  return item?.publish?.metrics?.[key] ?? item?.metrics?.[key];
+}
+
 export function buildPdfImportDraftFromText({ fileName = "", text = "" } = {}) {
   const title = buildTitleFromFileName(fileName);
   const body = stripLeadingTitleFragments(buildBodyFromPdfText(text), title);
@@ -126,9 +134,10 @@ export function normalizePdfImportCommitItem(item = {}) {
       platformReason: String(item.platformReason || "").trim(),
       notes: String(item.publishNotes || "").trim()
     },
-    likes: normalizeMetric(item.likes),
-    favorites: normalizeMetric(item.favorites),
-    comments: normalizeMetric(item.comments)
+    likes: normalizeMetric(resolveMetricValue(item, "likes")),
+    favorites: normalizeMetric(resolveMetricValue(item, "favorites")),
+    comments: normalizeMetric(resolveMetricValue(item, "comments")),
+    views: normalizeMetric(resolveMetricValue(item, "views"))
   };
 }
 

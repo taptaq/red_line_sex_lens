@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { paths } from '../src/config.js';
-import { loadFalsePositiveLog, saveFalsePositiveLog } from '../src/data-store.js';
+import { loadFalsePositiveLog, loadSummary, saveFalsePositiveLog } from '../src/data-store.js';
 import { calculateSampleWeight } from '../src/sample-weight.js';
 
 test('load/save false positive log persists normalized entries', async (t) => {
@@ -106,4 +106,31 @@ test('false positive weights prefer confirmed entries with clearer provenance', 
   );
 
   assert.ok(confirmedVerified > pendingUnknown);
+});
+
+test('loadSummary counts pending false positive entries as feedback work items', async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'false-positive-summary-'));
+  const falsePositiveFile = path.join(tempDir, 'false-positive-log.json');
+  const feedbackFile = path.join(tempDir, 'feedback-log.json');
+  const originalFalsePositivePath = paths.falsePositiveLog;
+  const originalFeedbackPath = paths.feedbackLog;
+
+  paths.falsePositiveLog = falsePositiveFile;
+  paths.feedbackLog = feedbackFile;
+
+  t.after(async () => {
+    paths.falsePositiveLog = originalFalsePositivePath;
+    paths.feedbackLog = originalFeedbackPath;
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  await fs.writeFile(falsePositiveFile, `${JSON.stringify([
+    { id: 'fp-pending-1', status: 'platform_passed_pending', title: '待确认误报' },
+    { id: 'fp-confirmed-1', status: 'platform_passed_confirmed', title: '已确认误报' }
+  ], null, 2)}\n`, 'utf8');
+  await fs.writeFile(feedbackFile, '[]\n', 'utf8');
+
+  const summary = await loadSummary();
+
+  assert.equal(summary.feedbackCount, 1);
 });

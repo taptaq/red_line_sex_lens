@@ -199,6 +199,12 @@ test("inner-space terms admin route can create and delete terminology entries", 
     assert.equal(listed.status, 200);
     assert.equal(listed.innerSpaceTerms.length, 1);
 
+    const dedicatedList = await invokeRoute("GET", "/api/admin/inner-space-terms");
+    assert.equal(dedicatedList.status, 200);
+    assert.equal(dedicatedList.ok, true);
+    assert.equal(dedicatedList.items.length, 1);
+    assert.equal(dedicatedList.items[0].term, "小飞船");
+
     const deleted = await invokeRoute("DELETE", "/api/admin/inner-space-terms", {
       id: created.entry.id
     });
@@ -207,4 +213,26 @@ test("inner-space terms admin route can create and delete terminology entries", 
     assert.equal(deleted.ok, true);
     assert.deepEqual(deleted.items, []);
   });
+});
+
+test("bundled inner-space terms preset keeps the curated terminology baseline", async () => {
+  const source = await fs.readFile(path.join(process.cwd(), "data/inner-space-terms.json"), "utf8");
+  const items = JSON.parse(source);
+
+  assert.equal(items.length, 18);
+
+  const preheat = items.find((item) => item.term === "预热点火");
+  assert.ok(preheat);
+  assert.equal(preheat.category, "actions");
+  assert.equal(preheat.literal, "前戏 (Foreplay)");
+  assert.match(preheat.metaphor, /火箭发射前必须预热/);
+
+  const consent = items.find((item) => item.term === "发射授权");
+  assert.ok(consent);
+  assert.equal(consent.literal, "知情同意 (Consent)");
+  assert.match(consent.example, /没有听到明确的YES/);
+
+  const wormhole = items.find((item) => item.term === "隐藏虫洞");
+  assert.ok(wormhole);
+  assert.deepEqual(wormhole.aliases, ["G区"]);
 });

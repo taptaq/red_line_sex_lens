@@ -70,18 +70,23 @@ test("frontend exposes a list-first sample library workspace with one primary cr
 
   assert.match(indexHtml, /data-tab-target="sample-library-pane"/);
   assert.match(indexHtml, /id="sample-library-pane"/);
-  assert.match(indexHtml, /data-tab-target="feedback-center-pane"/);
+  assert.doesNotMatch(indexHtml, /data-tab-target="feedback-center-pane"/);
   assert.doesNotMatch(indexHtml, /data-tab-target="custom-lexicon-pane"[^>]*>自定义词库</);
   assert.doesNotMatch(indexHtml, /data-tab-target="seed-lexicon-pane"[^>]*>种子词库</);
   assert.match(indexHtml, /id="rules-maintenance-panel"/);
   assert.match(indexHtml, /规则维护/);
   assert.doesNotMatch(indexHtml, /<details id="rules-maintenance-panel"[^>]*\sopen[>\s]/);
-  assert.match(indexHtml, /id="rules-maintenance-shortcuts"/);
-  assert.match(indexHtml, /需要补规则/);
-  assert.match(indexHtml, /data-summary-action="open-custom-lexicon"/);
-  assert.match(indexHtml, /data-summary-action="open-seed-lexicon"/);
-  assert.match(indexHtml, /id="custom-lexicon-pane"/);
-  assert.match(indexHtml, /id="seed-lexicon-pane"/);
+  assert.doesNotMatch(indexHtml, /id="rules-maintenance-shortcuts"/);
+  assert.doesNotMatch(indexHtml, /如果某条回流已经能确定要补规则，这里给你一个直达入口/);
+  assert.doesNotMatch(indexHtml, /data-summary-action="open-custom-lexicon"/);
+  assert.doesNotMatch(indexHtml, /data-summary-action="open-seed-lexicon"/);
+  assert.match(indexHtml, /id="lexicon-workspace-modal"/);
+  assert.match(indexHtml, /id="lexicon-workspace-modal-title"/);
+  assert.match(indexHtml, /id="lexicon-workspace-modal-content"/);
+  assert.match(indexHtml, /data-lexicon-workspace-tab="custom"/);
+  assert.match(indexHtml, /data-lexicon-workspace-tab="seed"/);
+  assert.match(indexHtml, /data-lexicon-workspace-tab="inner-space"/);
+  assert.match(indexHtml, /data-action="open-lexicon-workspace-modal" data-tab="seed"/);
   assert.doesNotMatch(indexHtml, /data-tab-target="feedback-log-pane"[^>]*>反馈日志</);
   assert.doesNotMatch(indexHtml, /data-tab-target="false-positive-log-pane"[^>]*>误报样本</);
   assert.doesNotMatch(indexHtml, /data-tab-target="review-benchmark-pane"[^>]*>基准评测</);
@@ -94,21 +99,23 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.equal(createButtonMatches.length, 1, "expected one primary sample library create action in the pane");
   assert.match(sampleLibraryPaneHtml, /id="sample-library-create-button"/);
   assert.match(sampleLibraryPaneHtml, /id="sample-library-import-button"/);
+  assert.match(sampleLibraryPaneHtml, /id="sample-library-pools-button"/);
   assert.match(sampleLibraryPaneHtml, /id="sample-library-import-button"[\s\S]*aria-controls="sample-library-import-block"/);
   assert.match(sampleLibraryPaneHtml, /id="sample-library-import-button"[\s\S]*aria-expanded="false"/);
   assert.match(sampleLibraryPaneHtml, /id="sample-library-import-input"/);
   assert.match(sampleLibraryPaneHtml, /accept="application\/pdf,.pdf"/);
   assert.match(sampleLibraryPaneHtml, /id="sample-library-import-result"/);
   assert.doesNotMatch(sampleLibraryPaneHtml, /id="sample-library-import-commit-button"/);
-  assert.match(sampleLibraryPaneHtml, /aria-controls="sample-library-create-form-shell"/);
+  assert.match(sampleLibraryPaneHtml, /aria-controls="sample-library-modal"/);
   assert.match(sampleLibraryPaneHtml, /aria-expanded="false"/);
   assert.match(indexHtml, /新增学习样本/);
-  assert.match(indexHtml, /保存学习样本/);
+  assert.match(appJs, /saveLabel:\s*"保存学习样本"/);
   assert.match(indexHtml, /id="sample-library-search-input"/);
   assert.match(indexHtml, /id="sample-library-filter"/);
   assert.match(indexHtml, /id="sample-library-collection-filter"/);
-  assert.match(indexHtml, /id="sample-library-collection-type-select"/);
   assert.match(indexHtml, /name="collectionType"/);
+  assert.match(appJs, /<select name="collectionType">/);
+  assert.match(appJs, /name="views"/);
   assert.match(indexHtml, /id="analyze-collection-type-select"/);
   assert.match(indexHtml, /id="generation-collection-type-select"/);
   assert.match(indexHtml, /id="generation-model-selection"/);
@@ -141,12 +148,37 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(indexHtml, /id="sample-library-reference-section"/);
   assert.match(indexHtml, /id="sample-library-lifecycle-section"/);
   assert.match(indexHtml, /id="sample-library-calibration-section"/);
+  assert.match(indexHtml, /id="sample-library-modal"/);
+  assert.match(indexHtml, /id="sample-library-modal-title"/);
+  assert.match(indexHtml, /id="sample-library-modal-content"/);
+  assert.match(indexHtml, /id="sample-library-modal-save"/);
+  assert.match(indexHtml, /id="sample-library-modal-cancel"/);
+  assert.match(indexHtml, /id="sample-library-pools-modal"/);
+  assert.match(indexHtml, /id="sample-library-pools-modal-title"/);
+  assert.match(indexHtml, /id="sample-library-pools-modal-content"/);
+  assert.match(indexHtml, /data-sample-pool-tab="reference"/);
+  assert.match(indexHtml, /data-sample-pool-tab="regular"/);
+  assert.match(indexHtml, /data-sample-pool-tab="negative"/);
   assert.match(indexHtml, /data-sample-library-step="base"/);
   assert.match(indexHtml, /data-sample-library-step="reference"/);
   assert.match(indexHtml, /data-sample-library-step="lifecycle"/);
   assert.match(indexHtml, /data-sample-library-step="calibration"/);
   assert.match(sampleLibraryPaneHtml, /id="sample-library-daily-panel"/);
+  assert.match(sampleLibraryPaneHtml, /id="sample-library-reflow-panel"/);
+  assert.match(sampleLibraryPaneHtml, /回流待处理区/);
+  assert.match(sampleLibraryPaneHtml, /待优先处理/);
+  assert.match(sampleLibraryPaneHtml, /违规反馈/);
+  assert.match(sampleLibraryPaneHtml, /误报案例/);
+  assert.match(sampleLibraryPaneHtml, /id="feedback-priority-list"/);
+  assert.match(sampleLibraryPaneHtml, /id="feedback-log-secondary-list"/);
+  assert.match(sampleLibraryPaneHtml, /id="false-positive-pending-list"/);
+  assert.match(sampleLibraryPaneHtml, /id="false-positive-history-list"/);
   assert.match(sampleLibraryPaneHtml, /日常记录/);
+  assert.match(sampleLibraryPaneHtml, /生效流转说明/);
+  assert.match(sampleLibraryPaneHtml, /只保存基础内容：先进入学习样本记录列表/);
+  assert.match(sampleLibraryPaneHtml, /启用参考属性并达到数据门槛：才会真正进入参考样本池，参与风格画像、生成参考和内容校验提示/);
+  assert.match(sampleLibraryPaneHtml, /回填生命周期属性：先用于发布结果复盘和候选筛选，不会单独直接放宽内容校验/);
+  assert.match(sampleLibraryPaneHtml, /仅保存到学习样本：不会直接进入内容检测规则/);
   assert.match(sampleLibraryPaneHtml, /id="sample-library-advanced-panel"/);
   assert.match(sampleLibraryPaneHtml, /扩展维护/);
   assert.doesNotMatch(sampleLibraryPaneHtml, /<details id="sample-library-advanced-panel"[^>]*\sopen[>\s]/);
@@ -162,7 +194,7 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(indexHtml, /id="cross-review-action-hint"/);
   assert.match(indexHtml, /id="feedback-action-hint"/);
   assert.match(indexHtml, /id="generation-action-hint"/);
-  assert.match(indexHtml, /id="sample-library-create-action-hint"/);
+  assert.match(appJs, /setActionGateHint\("sample-library-create-action-hint"/);
   assert.doesNotMatch(indexHtml, /data-sample-library-tab-target=/);
   assert.doesNotMatch(indexHtml, /id="success-sample-form"/);
   assert.doesNotMatch(indexHtml, /id="note-lifecycle-list"/);
@@ -176,6 +208,7 @@ test("frontend exposes a list-first sample library workspace with one primary cr
 
   assert.match(appJs, /\/api\/sample-library/);
   assert.match(appJs, /collectionType:\s*String\(form\.get\("collectionType"\)/);
+  assert.match(appJs, /views:\s*Number\(source\.metrics\?\.views \?\? source\.views \?\? 0\) \|\| 0/);
   assert.match(appJs, /sampleLibraryRecords:\s*\[\s*\]/);
   assert.match(appJs, /sampleLibraryCollectionFilter:\s*"all"/);
   assert.match(appJs, /selectedSampleLibraryRecordId:\s*""/);
@@ -191,9 +224,17 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /function\s+refreshSampleLibraryWorkspace\s*\(/);
   assert.match(appJs, /function\s+setSampleLibraryDetailStep\s*\(/);
   assert.match(appJs, /function\s+renderSampleLibraryDetailStepState\s*\(/);
+  assert.match(appJs, /function\s+openSampleLibraryDetailModal\s*\(/);
+  assert.match(appJs, /function\s+saveSampleLibraryDetailModal\s*\(/);
+  assert.match(appJs, /sampleLibraryPoolsModal/);
+  assert.match(appJs, /function\s+classifySampleLibraryPool\s*\(/);
+  assert.match(appJs, /function\s+renderSampleLibraryPoolsModal\s*\(/);
+  assert.match(appJs, /function\s+openSampleLibraryPoolsModal\s*\(/);
+  assert.match(appJs, /function\s+closeSampleLibraryPoolsModal\s*\(/);
   assert.match(appJs, /function\s+buildSampleLibraryCalibrationPredictionFromCurrentState\s*\(/);
   assert.match(appJs, /function\s+buildSampleLibraryCalibrationRetroComparison\s*\(/);
-  assert.match(appJs, /function\s+setSampleLibraryCreateFormOpen\s*\(/);
+  assert.match(appJs, /function\s+syncSampleLibraryCreateButtonExpanded\s*\(/);
+  assert.match(appJs, /function\s+setSampleLibraryModalOpen\s*\(/);
   assert.match(appJs, /function\s+getAnalyzeActionRequirementMessage\s*\(/);
   assert.match(appJs, /function\s+syncFeedbackActions\s*\(/);
   assert.match(appJs, /function\s+getGenerationRequirementMessage\s*\(/);
@@ -203,7 +244,13 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /function\s+syncGenerationActions\s*\(/);
   assert.match(appJs, /function\s+getSampleLibraryCreateRequirementMessage\s*\(/);
   assert.match(appJs, /function\s+syncSampleLibraryCreateActions\s*\(/);
+  assert.match(appJs, /publish:\s*\{\s*metrics:\s*\{\s*views:\s*payload\.views \|\| 0/s);
   assert.match(appJs, /function\s+setActionGateHint\s*\(/);
+  assert.match(appJs, /决定它能否进入参考样本候选，达到数据门槛后才会真正生效/);
+  assert.match(appJs, /决定这条记录能否进入参考样本候选，达到数据门槛后才会参与生成和校验提示/);
+  assert.doesNotMatch(sampleLibraryPaneHtml, /id="sample-library-reference-pool-section"/);
+  assert.doesNotMatch(sampleLibraryPaneHtml, /id="sample-library-regular-pool-section"/);
+  assert.doesNotMatch(sampleLibraryPaneHtml, /id="sample-library-negative-pool-section"/);
   assert.doesNotMatch(appJs, /add-sample-library-to-benchmark/);
   assert.doesNotMatch(appJs, /add-false-positive-to-benchmark/);
   assert.doesNotMatch(appJs, /benchmarkSourceLabel/);
@@ -232,46 +279,60 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /summaryAction:\s*"open-sample-library"/);
   assert.doesNotMatch(appJs, /if \(action === "open-style-profile"\)/);
   assert.match(appJs, /if \(action === "open-lifecycle"\)/);
-  assert.match(appJs, /if \(action === "open-custom-lexicon"\)/);
-  assert.match(appJs, /if \(action === "open-seed-lexicon"\)/);
+  assert.doesNotMatch(appJs, /if \(action === "open-custom-lexicon"\)/);
+  assert.doesNotMatch(appJs, /if \(action === "open-seed-lexicon"\)/);
   assert.match(appJs, /if \(summaryAction\)/);
   assert.match(appJs, /await handleSummaryAction\(summaryAction\.dataset\.summaryAction\)/);
   assert.match(appJs, /ensureSupportWorkspaceOpen\(\);[\s\S]*byId\("review-queue"\)\?\.scrollIntoView/);
-  assert.match(appJs, /revealFeedbackCenterPane\(\)/);
-  assert.match(appJs, /setSampleLibraryCreateFormOpen\(true\)/);
+  assert.match(appJs, /revealSampleLibraryReflowPane\(\)/);
+  assert.match(appJs, /openSampleLibraryCreateModal\(\)/);
   assert.match(appJs, /byId\("sample-library-lifecycle-section"\)\?\.scrollIntoView/);
   assert.match(appJs, /sample-library-detail-step-summary/);
   assert.match(appJs, /sample-library-detail-step-body/);
   assert.match(appJs, /setSampleLibraryDetailStep\("base"\)/);
-  assert.match(appJs, /setSampleLibraryDetailStep\("reference"\)/);
-  assert.match(appJs, /setSampleLibraryDetailStep\("lifecycle"\)/);
-  assert.match(appJs, /setSampleLibraryDetailStep\("calibration"\)/);
-  assert.match(appJs, /if \(action === "save-sample-library-base"\)[\s\S]*setSampleLibraryDetailStep\("reference"\)/);
-  assert.match(appJs, /if \(action === "save-sample-library-reference"\)[\s\S]*setSampleLibraryDetailStep\("lifecycle"\)/);
-  assert.match(appJs, /if \(action === "save-sample-library-lifecycle"\)[\s\S]*setSampleLibraryDetailStep\("calibration"\)/);
-  assert.match(appJs, /if \(action === "save-sample-library-calibration"\)[\s\S]*calibration:/);
-  assert.match(appJs, /data-action="prefill-sample-library-calibration-prediction"/);
+  assert.match(appJs, /nextStep:\s*"reference"/);
+  assert.match(appJs, /nextStep:\s*"lifecycle"/);
+  assert.match(appJs, /nextStep:\s*"calibration"/);
+  assert.match(appJs, /data-action="open-sample-library-reference-modal"/);
+  assert.match(appJs, /data-action="open-sample-library-lifecycle-modal"/);
+  assert.match(appJs, /data-action="open-sample-library-calibration-modal"/);
+  assert.match(appJs, /if \(modalState\.kind === "base"\) \{[\s\S]*saveSampleLibraryDetailBaseModal\(modalState\.recordId\)/);
+  assert.match(appJs, /if \(modalState\.kind === "reference"\) \{[\s\S]*saveSampleLibraryDetailReferenceModal\(modalState\.recordId\)/);
+  assert.match(appJs, /if \(modalState\.kind === "lifecycle"\) \{[\s\S]*saveSampleLibraryDetailLifecycleModal\(modalState\.recordId\)/);
+  assert.match(appJs, /if \(modalState\.kind === "calibration"\) \{[\s\S]*saveSampleLibraryDetailCalibrationModal\(modalState\.recordId\)/);
+  assert.match(appJs, /data-action="prefill-sample-library-modal-calibration-prediction"/);
   assert.match(appJs, /从当前检测预填预判/);
   assert.match(appJs, /setSampleLibraryCalibrationPredictionFields\(/);
   assert.match(appJs, /function ensureSupportWorkspaceOpen\(/);
-  assert.match(appJs, /function ensureRulesMaintenanceOpen\(/);
-  assert.match(appJs, /function revealRulesMaintenancePane\(/);
-  assert.match(appJs, /byId\("rules-maintenance-panel"\)/);
-  assert.match(appJs, /revealRulesMaintenancePane\("custom-lexicon-pane"\)/);
-  assert.match(appJs, /revealRulesMaintenancePane\("seed-lexicon-pane"\)/);
+  assert.match(appJs, /async function openLexiconWorkspaceModal\(tab = "custom"/);
+  assert.match(appJs, /function closeLexiconWorkspaceModal\(/);
+  assert.match(appJs, /function renderLexiconWorkspaceModal\(/);
+  assert.match(appJs, /function refreshAdminDataState\s*\(/);
+  assert.match(appJs, /async function openLexiconWorkspaceModal\(tab = "custom"[\s\S]*await refreshAdminDataState\(\);/);
+  assert.match(appJs, /async function openLexiconWorkspaceModal\(tab = "custom"[\s\S]*ensureSupportWorkspaceOpen\(\);\s*ensureSampleLibraryAdvancedPanelOpen\(\);\s*ensureRulesMaintenanceOpen\(\);/);
+  assert.match(appJs, /function buildLexiconWorkspaceLexiconFormMarkup\(scope = "custom"/);
+  assert.match(appJs, /function buildInnerSpaceWorkspaceFormMarkup\(/);
+  assert.match(appJs, /dataset\.lexiconWorkspaceForm/);
+  assert.match(appJs, /openLexiconWorkspaceModal\("custom"/);
+  assert.match(appJs, /openLexiconWorkspaceModal\(button\.dataset\.tab \|\| "custom"\)/);
   assert.match(appJs, /byId\("support-workspace-panel"\)/);
   assert.match(appJs, /function ensureSampleLibraryAdvancedPanelOpen\(/);
   assert.match(appJs, /byId\("sample-library-advanced-panel"\)/);
-  assert.match(appJs, /activateTab\("data-maintenance", "feedback-center-pane"\)/);
-  assert.match(appJs, /function revealRulesMaintenancePane\(targetId = "custom-lexicon-pane"\)/);
-  assert.match(appJs, /window\.setTimeout\(\(\) => \{/);
-  assert.match(appJs, /byId\(targetId\)\?\.scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
-  assert.match(appJs, /ensureRulesMaintenanceOpen\(\);[\s\S]*byId\(targetId\)\?\.scrollIntoView/);
-  assert.match(appJs, /ensureSampleLibraryAdvancedPanelOpen\(\);[\s\S]*byId\(targetId\)\?\.scrollIntoView/);
+  assert.match(appJs, /activateTab\("data-maintenance", "sample-library-pane"\)/);
+  assert.match(appJs, /if \(action === "close-lexicon-workspace-modal"\)/);
+  assert.match(appJs, /data-lexicon-workspace-tab/);
+  assert.match(appJs, /prefill-custom-draft[\s\S]*openLexiconWorkspaceModal\("custom"/);
 
   assert.match(styles, /\.sample-library-workspace/);
   assert.match(styles, /\.sample-library-record-list/);
   assert.match(styles, /\.sample-library-detail/);
+  assert.match(styles, /\.sample-library-flow-guide/);
+  assert.match(styles, /\.sample-library-flow-list/);
+  assert.match(styles, /\.sample-library-modal/);
+  assert.match(styles, /\.sample-library-modal-dialog/);
+  assert.match(styles, /\.sample-library-modal\s*\{[\s\S]*z-index:\s*74;/);
+  assert.match(styles, /\.sample-library-pools-modal\s*\{[\s\S]*z-index:\s*72;/);
+  assert.match(styles, /\.sample-library-detail-summary-card/);
   assert.match(styles, /\.sample-library-import-block/);
   assert.match(styles, /\.sample-library-import-list/);
   assert.match(styles, /\.sample-library-import-card/);
@@ -286,8 +347,13 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(styles, /\.summary-card-button/);
   assert.match(styles, /\.summary-card-button:hover:not\(:disabled\)/);
   assert.match(styles, /\.summary-card-button:focus-visible/);
-  assert.match(styles, /\.rules-maintenance-shortcuts/);
-  assert.match(styles, /\.rules-maintenance-shortcut-actions/);
+  assert.doesNotMatch(styles, /\.rules-maintenance-shortcuts/);
+  assert.doesNotMatch(styles, /\.rules-maintenance-shortcut-actions/);
+  assert.match(styles, /\.lexicon-workspace-modal/);
+  assert.match(styles, /\.lexicon-workspace-dialog/);
+  assert.match(styles, /\.lexicon-workspace-tab-strip/);
+  assert.match(styles, /\.lexicon-workspace-tab/);
+  assert.match(styles, /\.lexicon-workspace-content/);
   assert.match(styles, /\.sample-library-record-step/);
   assert.match(styles, /\.sample-library-detail-topbar\s*\{/);
   assert.match(styles, /\.sample-library-detail-topbar > \*\s*\{/);
@@ -302,8 +368,12 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(styles, /\.sample-library-calibration-grid\s*\{/);
   assert.match(appJs, /class="lifecycle-primary-grid"/);
   assert.match(appJs, /class="lifecycle-metrics-grid"/);
+  assert.match(appJs, /<span>浏览数<\/span>/);
+  assert.match(appJs, /浏览 \${String\(publish\.metrics\.views \|\| 0\)}/);
   assert.match(styles, /\.lifecycle-primary-grid\s*\{/);
   assert.match(styles, /\.lifecycle-metrics-grid\s*\{/);
+  assert.match(styles, /\.sample-library-metric-grid\s*\{/);
+  assert.match(styles, /\.sample-library-metric-pill\s*\{/);
   assert.match(styles, /grid-template-columns:\s*minmax\(0,\s*1\.1fr\)\s*minmax\(0,\s*0\.9fr\)/);
   assert.match(styles, /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(140px,\s*1fr\)\)/);
   assert.match(styles, /white-space:\s*normal/);
@@ -311,8 +381,6 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(styles, /\.lifecycle-update-grid > \*\s*\{/);
   assert.match(styles, /\.workspace-support\s*>\s*\*\s*\{/);
   assert.match(styles, /\.support-workspace-panel/);
-  assert.match(styles, /\.rules-maintenance-panel/);
-  assert.match(styles, /\.rules-maintenance-summary/);
   assert.match(styles, /\.support-workspace-summary/);
   assert.match(styles, /\.sample-library-advanced-panel/);
   assert.match(styles, /\.tab-panels/);
@@ -325,6 +393,74 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(styles, /\.tag-picker-selected\s*\{/);
   assert.match(styles, /@media\s*\(max-width:\s*1360px\)\s*\{[\s\S]*\.item-actions\s*\{[\s\S]*display:\s*grid;/);
   assert.match(styles, /@media\s*\(max-width:\s*1360px\)\s*\{[\s\S]*\.item-actions\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(180px,\s*1fr\)\)/);
+
+  const refreshAllStart = appJs.indexOf("async function refreshAll()");
+  const refreshAllEnd = appJs.indexOf("async function fileToDataUrl", refreshAllStart);
+  const refreshAllSource = appJs.slice(refreshAllStart, refreshAllEnd);
+  assert.ok(refreshAllStart !== -1 && refreshAllEnd !== -1, "expected refreshAll source");
+  assert.ok(
+    refreshAllSource.indexOf("await refreshSampleLibraryWorkspace();") < refreshAllSource.indexOf("renderSummary(summary);"),
+    "expected refreshAll to update sample library state before rendering summary"
+  );
+});
+
+test("feedback review shortcuts keep candidate phrases separate from context categories", async () => {
+  const { appJs } = await readFrontendFiles();
+  const reviewActionStart = appJs.indexOf('if (action === "send-feedback-to-review-queue") {');
+  const falsePositiveActionStart = appJs.indexOf('if (action === "send-feedback-to-false-positive") {', reviewActionStart);
+  const reviewActionSource = appJs.slice(reviewActionStart, falsePositiveActionStart);
+
+  assert.ok(reviewActionStart !== -1 && falsePositiveActionStart !== -1, "expected send-feedback-to-review-queue block");
+  assert.match(reviewActionSource, /suspiciousPhrases:\s*uniqueStrings\(\[[\s\S]*button\.dataset\.suspiciousPhrases[\s\S]*button\.dataset\.feedbackModelSuspiciousPhrases[\s\S]*\]\)/);
+  assert.match(reviewActionSource, /contextCategories:\s*splitCSV\(button\.dataset\.feedbackModelContextCategories \|\| ""\)/);
+  assert.match(reviewActionSource, /openFeedbackRuleQueueModal\(\{/);
+});
+
+test("sample pool classification treats false positive lifecycle outcomes as negative samples", async () => {
+  const { appJs } = await readFrontendFiles();
+  const classifyStart = appJs.indexOf("function classifySampleLibraryPool(record = {}) {");
+  const classifyEnd = appJs.indexOf("function sampleLibraryPoolLabel", classifyStart);
+  const classifySource = appJs.slice(classifyStart, classifyEnd);
+
+  assert.ok(classifyStart !== -1 && classifyEnd !== -1, "expected classifySampleLibraryPool source");
+  assert.match(classifySource, /\["limited", "violation", "false_positive"\]\.includes\(publish\.status\)/);
+});
+
+test("negative pool actions route false positive lifecycle records to lifecycle editing instead of fake restore", async () => {
+  const { appJs } = await readFrontendFiles();
+  const actionMarkupStart = appJs.indexOf("function buildSamplePoolActionMarkup(record = {}, pool = \"reference\") {");
+  const actionMarkupEnd = appJs.indexOf("function renderSampleLibraryPoolsModal", actionMarkupStart);
+  const actionMarkupSource = appJs.slice(actionMarkupStart, actionMarkupEnd);
+
+  assert.ok(actionMarkupStart !== -1 && actionMarkupEnd !== -1, "expected buildSamplePoolActionMarkup source");
+  assert.match(actionMarkupSource, /\["limited", "violation", "false_positive"\]\.includes\(publish\.status\)/);
+  assert.doesNotMatch(
+    actionMarkupSource,
+    /\["limited", "violation"\]\.includes\(publish\.status\)[\s\S]*restore-sample-from-negative-pool/
+  );
+});
+
+test("reference candidate qualification uses the same content-length floor as runtime references", async () => {
+  const { appJs } = await readFrontendFiles();
+  const candidateStart = appJs.indexOf("function isQualifiedReferenceCandidate(record = {}) {");
+  const candidateEnd = appJs.indexOf("function classifySampleLibraryPool", candidateStart);
+  const candidateSource = appJs.slice(candidateStart, candidateEnd);
+
+  assert.ok(candidateStart !== -1 && candidateEnd !== -1, "expected isQualifiedReferenceCandidate source");
+  assert.match(candidateSource, /title\.length >= 4/);
+  assert.match(candidateSource, /body\.length >= 16/);
+  assert.match(candidateSource, /coverText\.length >= 4/);
+  assert.doesNotMatch(candidateSource, /const hasContent = Boolean\(getSampleRecordTitle\(record\) \|\| getSampleRecordBody\(record\) \|\| getSampleRecordCoverText\(record\)\);/);
+});
+
+test("sample pool explanation distinguishes direct engagement from views-assisted qualification", async () => {
+  const { appJs } = await readFrontendFiles();
+  assert.match(appJs, /function evaluateReferenceSampleThreshold\(metrics = \{\}\) \{/);
+  assert.match(appJs, /views >= 5000/);
+  assert.match(appJs, /互动达标/);
+  assert.match(appJs, /互动接近达标，已由高浏览数补足/);
+  assert.match(appJs, /qualification\.reason \|\| "互动达标"/);
+  assert.match(appJs, /只有浏览高，核心互动还没接近达标/);
 });
 
 test("frontend keeps the analyze picker regression surface in the main UI file", async () => {
@@ -340,13 +476,38 @@ test("frontend keeps the analyze picker regression surface in the main UI file",
 test("sample library create button toggles with explicit expanded state and scroll feedback", async () => {
   const { appJs } = await readFrontendFiles();
 
-  assert.match(appJs, /function\s+setSampleLibraryCreateFormOpen\s*\(/);
-  assert.match(appJs, /button\.setAttribute\(expandedAttribute,\s*String\(!nextHidden\)\)/);
-  assert.match(appJs, /const expandedAttribute = \["aria", "expanded"\]\.join\("-"\)/);
-  assert.match(appJs, /shell\.hidden\s*=\s*nextHidden/);
-  assert.match(appJs, /shell\?\.scrollIntoView\(\{\s*behavior:\s*"smooth",\s*block:\s*"nearest"\s*\}\)/);
-  assert.match(appJs, /setSampleLibraryCreateFormOpen\(true\)/);
-  assert.match(appJs, /setSampleLibraryCreateFormOpen\(false\)/);
+  assert.match(appJs, /function\s+buildSampleLibraryModalTagPickerMarkup\s*\(/);
+  assert.match(appJs, /function\s+initializeSampleLibraryModalTagPicker\s*\(/);
+  assert.match(appJs, /function\s+renderSampleLibraryModalTagOptions\s*\(/);
+  assert.match(appJs, /function\s+writeSampleLibraryModalTags\s*\(/);
+  assert.match(appJs, /function\s+buildSampleLibraryCreateModalMarkup\s*\(/);
+  assert.match(appJs, /function\s+openSampleLibraryCreateModal\s*\(/);
+  assert.match(appJs, /function\s+saveSampleLibraryCreateModal\s*\(/);
+  assert.match(appJs, /function\s+fillSampleLibraryCreateModalFromCurrent\s*\(/);
+  assert.match(appJs, /class="tag-picker field-wide sample-library-modal-tag-picker"/);
+  assert.match(appJs, /name="tags" type="hidden"/);
+  assert.match(appJs, /class="tag-picker-trigger sample-library-modal-tag-trigger"/);
+  assert.match(appJs, /class="tag-picker-dropdown sample-library-modal-tag-dropdown"/);
+  assert.match(appJs, /sample-library-modal-tag-custom/);
+  assert.match(appJs, /renderSampleLibraryModalTagOptions\(\)[\s\S]*uniqueStrings\(analyzeTagOptions\)/);
+  assert.match(appJs, /byId\("sample-library-create-button"\)\.addEventListener\("click", openSampleLibraryCreateModal\)/);
+  assert.match(appJs, /openSampleLibraryCreateModal\(\)/);
+  assert.doesNotMatch(appJs, /function\s+setSampleLibraryCreateFormOpen\s*\(/);
+});
+
+test("sample library base editing and record deletion now route through modal confirmations", async () => {
+  const { appJs } = await readFrontendFiles();
+
+  assert.match(appJs, /function\s+buildSampleLibraryBaseModalMarkup\s*\(/);
+  assert.match(appJs, /function\s+readSampleLibraryModalBasePayload\s*\(/);
+  assert.match(appJs, /function\s+saveSampleLibraryDetailBaseModal\s*\(/);
+  assert.match(appJs, /function\s+buildSampleLibraryDeleteModalMarkup\s*\(/);
+  assert.match(appJs, /function\s+saveSampleLibraryDeleteModal\s*\(/);
+  assert.match(appJs, /data-action="open-sample-library-base-modal"/);
+  assert.match(appJs, /data-action="open-sample-library-delete-modal"/);
+  assert.match(appJs, /if \(action === "open-sample-library-base-modal"\)/);
+  assert.match(appJs, /if \(action === "open-sample-library-delete-modal"\)/);
+  assert.doesNotMatch(appJs, /data-action="save-sample-library-base"/);
 });
 
 test("frontend gates secondary sample-library and lifecycle-save actions with inline hints", async () => {
@@ -360,18 +521,18 @@ test("frontend gates secondary sample-library and lifecycle-save actions with in
   assert.match(appJs, /function\s+getLifecycleSaveRequirementMessage\s*\(/);
   assert.match(appJs, /function\s+syncLifecycleResultActions\s*\(/);
 
-  assert.match(appJs, /id="sample-library-base-action-hint"/);
-  assert.match(appJs, /id="sample-library-reference-action-hint"/);
-  assert.match(appJs, /id="sample-library-lifecycle-action-hint"/);
-  assert.match(appJs, /id="sample-library-calibration-action-hint"/);
+  assert.match(appJs, /sample-library-base-action-hint/);
+  assert.match(appJs, /sample-library-reference-action-hint/);
+  assert.match(appJs, /sample-library-lifecycle-action-hint/);
+  assert.match(appJs, /sample-library-calibration-action-hint/);
   assert.match(appJs, /id="analysis-lifecycle-action-hint"/);
   assert.match(appJs, /id="rewrite-lifecycle-action-hint"/);
   assert.match(appJs, /id="generation-lifecycle-action-hint"/);
 
-  assert.match(appJs, /setActionGateHint\("sample-library-base-action-hint",\s*baseMessage\)/);
-  assert.match(appJs, /setActionGateHint\("sample-library-reference-action-hint",\s*referenceMessage\)/);
-  assert.match(appJs, /setActionGateHint\("sample-library-lifecycle-action-hint",\s*lifecycleMessage\)/);
-  assert.match(appJs, /setActionGateHint\("sample-library-calibration-action-hint",\s*calibrationMessage\)/);
+  assert.match(appJs, /setActionGateHint\("sample-library-base-action-hint",\s*""\)/);
+  assert.match(appJs, /setActionGateHint\("sample-library-reference-action-hint",\s*""\)/);
+  assert.match(appJs, /setActionGateHint\("sample-library-lifecycle-action-hint",\s*""\)/);
+  assert.match(appJs, /setActionGateHint\("sample-library-calibration-action-hint",\s*""\)/);
   assert.match(appJs, /setActionGateHint\("analysis-lifecycle-action-hint",\s*analysisMessage\)/);
   assert.match(appJs, /setActionGateHint\("rewrite-lifecycle-action-hint",\s*rewriteMessage\)/);
   assert.match(appJs, /setActionGateHint\("generation-lifecycle-action-hint",\s*generationMessage\)/);
@@ -386,7 +547,7 @@ test("frontend gates secondary sample-library and lifecycle-save actions with in
   assert.match(appJs, /tierSelect\.value[\s\S]*enabledCheckbox\.checked = true/);
   assert.match(appJs, /enabledCheckbox\.checked === false[\s\S]*tierSelect\.value = ""/);
   assert.match(appJs, /byId\("sample-library-detail"\)\?\.addEventListener\("change",\s*syncSampleLibraryReferenceSectionState\)/);
-  assert.match(appJs, /const enabled = section\?\.querySelector\('\[name="enabled"\]'\)\?\.checked === true \|\| Boolean\(tier\)/);
+  assert.match(appJs, /const enabled = root\?\.querySelector\('\[name="enabled"\]'\)\?\.checked === true \|\| Boolean\(tier\)/);
   assert.match(appJs, /predictionMatchedLabel\(comparison\.matched\)/);
   assert.match(appJs, /comparison\.missReasonSuggestion/);
 });
@@ -449,15 +610,21 @@ test("frontend exposes a calibrated-history replay action in system calibration"
 test("frontend exposes an inner-space terminology workspace for rewrite and generation guidance", async () => {
   const { indexHtml, appJs } = await readFrontendFiles();
 
-  assert.match(indexHtml, /id="inner-space-terms-pane"/);
-  assert.match(indexHtml, /id="inner-space-terms-form"/);
-  assert.match(indexHtml, /id="inner-space-terms-list"/);
+  assert.match(indexHtml, /data-lexicon-workspace-tab="inner-space"/);
+  assert.match(indexHtml, /id="lexicon-workspace-modal"/);
   assert.match(indexHtml, /内太空术语表/);
   assert.match(indexHtml, /适用合集/);
   assert.match(appJs, /\/api\/admin\/inner-space-terms/);
+  assert.match(appJs, /const raw = await response\.text\(\);/);
+  assert.match(appJs, /payload = JSON\.parse\(raw\);/);
+  assert.match(appJs, /async function refreshInnerSpaceTermsState\s*\(/);
+  assert.match(appJs, /const innerSpaceTermsPayload = await apiJson\(innerSpaceTermsApi\)/);
+  assert.match(appJs, /catch \(error\) \{[\s\S]*const adminData = await apiJson\("\/api\/admin\/data"\)/);
+  assert.match(appJs, /if \(normalizedTab === "inner-space"\) \{[\s\S]*await refreshInnerSpaceTermsState\(\);/);
+  assert.match(appJs, /if \(normalizedTab === "inner-space"\) \{[\s\S]*renderLexiconWorkspaceModal\(\);/);
   assert.match(appJs, /function renderInnerSpaceTermsList\s*\(/);
-  assert.match(appJs, /inner-space-terms-form/);
-  assert.match(appJs, /inner-space-terms-result/);
+  assert.match(appJs, /data-lexicon-workspace-form="inner-space"/);
+  assert.match(appJs, /lexicon-workspace-result/);
   assert.match(appJs, /delete-inner-space-term/);
 });
 
@@ -472,6 +639,9 @@ test("frontend exposes platform outcome shortcuts from analysis rewrite and gene
   const generationSource = appJs.slice(generationStart, generationEnd);
 
   assert.match(appJs, /function\s+buildPlatformOutcomeActions\s*\(/);
+  assert.match(appJs, /function\s+buildPlatformOutcomeModalMarkup\s*\(/);
+  assert.match(appJs, /function\s+openPlatformOutcomeModal\s*\(/);
+  assert.match(appJs, /function\s+savePlatformOutcomeModal\s*\(/);
   assert.match(appJs, /function\s+savePlatformOutcomeFromCurrent\s*\(/);
   assert.match(analysisSource, /buildPlatformOutcomeActions\("analysis"\)/);
   assert.match(rewriteSource, /buildPlatformOutcomeActions\("rewrite"\)/);
@@ -482,7 +652,11 @@ test("frontend exposes platform outcome shortcuts from analysis rewrite and gene
   assert.match(appJs, /效果好/);
   assert.match(appJs, /效果一般/);
   assert.match(appJs, /系统误判/);
+  assert.match(appJs, /name="platformOutcomeViews"/);
+  assert.match(appJs, /name="platformOutcomeNotes"/);
   assert.match(appJs, /publishStatus:\s*button\.dataset\.publishStatus/);
+  assert.match(appJs, /openPlatformOutcomeModal\(\{/);
+  assert.match(appJs, /views:\s*payload\.views \|\| 0/);
   assert.match(appJs, /await savePlatformOutcomeFromCurrent/);
 });
 
@@ -504,13 +678,14 @@ test("frontend explains how saved platform outcomes feed future detection and ge
 test("frontend also gates prefill and lexicon submit actions that depend on prerequisite content", async () => {
   const { indexHtml, appJs } = await readFrontendFiles();
 
-  assert.match(indexHtml, /id="sample-library-prefill-action-hint"/);
   assert.match(indexHtml, /id="custom-lexicon-action-hint"/);
   assert.match(indexHtml, /id="seed-lexicon-action-hint"/);
 
   assert.match(appJs, /function\s+getSampleLibraryPrefillAnalysisRequirementMessage\s*\(/);
   assert.match(appJs, /function\s+getSampleLibraryPrefillRewriteRequirementMessage\s*\(/);
   assert.match(appJs, /function\s+syncSampleLibraryPrefillActions\s*\(/);
+  assert.match(appJs, /data-action="prefill-sample-library-create-analysis"/);
+  assert.match(appJs, /data-action="prefill-sample-library-create-rewrite"/);
   assert.match(appJs, /function\s+getLexiconRequirementMessage\s*\(/);
   assert.match(appJs, /function\s+syncLexiconFormActions\s*\(/);
 
