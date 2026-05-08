@@ -411,8 +411,18 @@
                           <strong>误报案例</strong>
                           <span>先确认待观察误报，再查看已沉淀的历史案例。</span>
                         </div>
-                        <div id="false-positive-pending-list" class="admin-list"></div>
-                        <div id="false-positive-history-list" class="admin-list"></div>
+                        <div class="item-actions">
+                          <button
+                            type="button"
+                            id="false-positive-preview-open-button"
+                            class="button button-ghost button-small"
+                            data-action="open-false-positive-list-modal"
+                            hidden
+                          >
+                            查看全部误报案例
+                          </button>
+                        </div>
+                        <p id="false-positive-summary" class="helper-text muted">当前没有误报样本</p>
                         <div id="false-positive-log-list" class="admin-list" hidden></div>
                       </div>
                     </section>
@@ -424,7 +434,7 @@
                     <strong>生效流转说明</strong>
                   <ol class="sample-library-flow-list">
                     <li>只保存基础内容：先进入学习样本记录列表，用于去重、归档和后续补全。</li>
-                    <li>启用参考属性并达到数据门槛：才会真正进入参考样本池，参与风格画像、生成参考和内容校验提示。</li>
+                    <li id="sample-library-flow-reference-threshold">启用参考属性并达到数据门槛。</li>
                     <li>回填生命周期属性：先用于发布结果复盘和候选筛选，不会单独直接放宽内容校验。</li>
                     <li>记录预判复盘：用于校准判断经验和回看偏差，不会直接改动当前检测判罚。</li>
                     <li>仅保存到学习样本：不会直接进入内容检测规则；检测仍主要依赖词库、白名单和误报回流。</li>
@@ -496,47 +506,19 @@
                       <strong>记录列表</strong>
                       <span id="sample-library-list-count">0 条 · 全部记录</span>
                     </div>
+                    <div class="item-actions">
+                      <button
+                        type="button"
+                        id="sample-library-record-preview-open-button"
+                        class="button button-ghost button-small"
+                        data-action="open-sample-library-record-list-modal"
+                        hidden
+                      >
+                        查看全部记录列表
+                      </button>
+                    </div>
                     <div id="sample-library-record-list" class="admin-list"></div>
                   </aside>
-                  <section id="sample-library-detail" class="sample-library-detail">
-                    <div id="sample-library-detail-header" class="result-card muted">请选择左侧学习样本，或先新增一条记录。</div>
-                    <section id="sample-library-base-section" class="sample-library-detail-section" data-sample-library-step="base">
-                      <div class="sample-library-section-head">
-                        <div>
-                          <strong>基础内容</strong>
-                          <p>先保存标题、正文、标签和封面文案。</p>
-                        </div>
-                        <span class="meta-pill">未选择记录</span>
-                      </div>
-                    </section>
-                    <section id="sample-library-reference-section" class="sample-library-detail-section" data-sample-library-step="reference">
-                      <div class="sample-library-section-head">
-                        <div>
-                          <strong>参考属性</strong>
-                          <p>决定它是否进入参考样本和风格画像。</p>
-                        </div>
-                        <span class="meta-pill">未启用</span>
-                      </div>
-                    </section>
-                    <section id="sample-library-lifecycle-section" class="sample-library-detail-section" data-sample-library-step="lifecycle">
-                      <div class="sample-library-section-head">
-                        <div>
-                          <strong>生命周期属性</strong>
-                          <p>回填发布结果和互动表现。</p>
-                        </div>
-                        <span class="meta-pill">未回填</span>
-                      </div>
-                    </section>
-                    <section id="sample-library-calibration-section" class="sample-library-detail-section" data-sample-library-step="calibration">
-                      <div class="sample-library-section-head">
-                        <div>
-                          <strong>预判复盘</strong>
-                          <p>记录发布前判断，并在真实数据回来后校准。</p>
-                        </div>
-                        <span class="meta-pill">未校准</span>
-                      </div>
-                    </section>
-                  </section>
                 </div>
               </section>
               <details id="sample-library-advanced-panel" class="admin-panel-block admin-accordion sample-library-advanced-panel">

@@ -2,12 +2,12 @@ import { ensureArray, normalizeText } from "./normalizer.js";
 
 export const referenceMetricThreshold = {
   likes: 20,
-  favorites: 5,
-  comments: 2,
+  favorites: 10,
+  comments: 10,
   nearLikes: 16,
   nearFavorites: 4,
-  nearComments: 1,
-  supportViews: 5000
+  nearComments: 5,
+  supportViews: 3000
 };
 
 export const referenceSampleSupportThreshold = 3.6;

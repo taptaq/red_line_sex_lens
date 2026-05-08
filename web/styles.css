@@ -1514,8 +1514,7 @@ li + li {
 
 .tab-panels,
 .tab-panel,
-.sample-library-workspace > *,
-.sample-library-detail > * {
+.sample-library-workspace > * {
   min-width: 0;
   max-width: 100%;
 }
@@ -1638,6 +1637,10 @@ body.modal-open {
   overflow: hidden;
 }
 
+.sample-library-modal[data-modal-kind="record-list-inline-editor"] .sample-library-modal-dialog {
+  width: min(1220px, calc(100vw - 2rem));
+}
+
 .sample-library-modal-header {
   display: flex;
   align-items: flex-start;
@@ -1697,6 +1700,110 @@ body.modal-open {
   padding: 0.95rem 1.25rem 1.15rem;
   border-top: 1px solid rgba(54, 43, 31, 0.08);
   background: rgba(255, 251, 244, 0.92);
+}
+
+.sample-library-record-inline-editor-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+  min-height: min(72vh, 820px);
+}
+
+.sample-library-record-inline-editor-sidebar,
+.sample-library-record-inline-editor-detail {
+  min-height: 0;
+  border: 1px solid rgba(54, 43, 31, 0.08);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(251, 244, 232, 0.82));
+}
+
+.sample-library-record-inline-editor-sidebar,
+.sample-library-record-inline-editor-sidebar-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.sample-library-record-inline-editor-sidebar-head {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem 1rem 0.85rem;
+  border-bottom: 1px solid rgba(54, 43, 31, 0.08);
+}
+
+.sample-library-record-inline-editor-sidebar-head p {
+  margin: 0;
+}
+
+.sample-library-record-inline-editor-sidebar-list {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.9rem;
+  overflow: auto;
+}
+
+.sample-library-record-inline-editor-sidebar-item {
+  appearance: none;
+  width: 100%;
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.8rem 0.85rem;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  border: 1px solid rgba(54, 43, 31, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 251, 244, 0.92);
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.sample-library-record-inline-editor-sidebar-item:hover,
+.sample-library-record-inline-editor-sidebar-item:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(184, 93, 61, 0.26);
+  box-shadow: 0 12px 26px rgba(67, 43, 25, 0.08);
+}
+
+.sample-library-record-inline-editor-sidebar-item strong,
+.sample-library-record-inline-editor-detail-head strong {
+  font-family: "Songti SC", "STSong", "Noto Serif SC", serif;
+}
+
+.sample-library-record-inline-editor-sidebar-item span,
+.sample-library-record-inline-editor-detail-head p,
+.sample-library-record-inline-editor-sidebar-meta {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.sample-library-record-inline-editor-sidebar-item.is-active {
+  border-color: rgba(184, 93, 61, 0.36);
+  background:
+    linear-gradient(180deg, rgba(255, 246, 238, 0.96), rgba(251, 241, 231, 0.94));
+  box-shadow: 0 16px 34px rgba(184, 93, 61, 0.08);
+}
+
+.sample-library-record-inline-editor-detail {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  overflow: auto;
+}
+
+.sample-library-record-inline-editor-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.sample-library-record-inline-editor-detail-head p {
+  margin: 0.35rem 0 0;
 }
 
 .sample-library-pools-modal {
@@ -1995,18 +2102,18 @@ body.modal-open {
 
 .sample-library-workspace {
   display: grid;
-  grid-template-columns: minmax(250px, 0.78fr) minmax(0, 1.62fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
 }
 
-.sample-library-record-list,
-.sample-library-detail {
+.sample-library-record-list {
   display: grid;
   gap: 0.9rem;
 }
 
 .sample-library-record-list {
+  width: min(100%, 980px);
   padding: 1rem;
   border: 1px solid rgba(54, 43, 31, 0.1);
   border-radius: 24px;
@@ -2118,10 +2225,6 @@ body.modal-open {
   overflow-wrap: anywhere;
 }
 
-.sample-library-detail {
-  min-width: 0;
-}
-
 .feedback-priority-pill {
   background: rgba(184, 93, 61, 0.12);
   color: #9a5539;
@@ -2156,31 +2259,6 @@ body.modal-open {
   border: 1px solid rgba(199, 154, 69, 0.24);
 }
 
-.sample-library-detail-section {
-  display: grid;
-  gap: 0.8rem;
-  padding: 1rem;
-  border: 1px solid rgba(54, 43, 31, 0.1);
-  border-radius: 24px;
-  background:
-    linear-gradient(180deg, rgba(255, 251, 244, 0.82), rgba(248, 238, 222, 0.62));
-}
-
-.sample-library-detail-section[data-step-state="current"] {
-  border-color: rgba(199, 154, 69, 0.34);
-  box-shadow: 0 16px 36px rgba(67, 43, 25, 0.08);
-}
-
-.sample-library-detail-step-summary {
-  display: grid;
-  gap: 0.4rem;
-}
-
-.sample-library-detail-step-body {
-  display: grid;
-  gap: 0.8rem;
-}
-
 .sample-library-section-head {
   display: flex;
   flex-wrap: wrap;
@@ -2193,35 +2271,6 @@ body.modal-open {
   margin: 0.28rem 0 0;
   color: var(--muted);
   line-height: 1.6;
-}
-
-.sample-library-detail-topbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
-  gap: 0.85rem;
-}
-
-.sample-library-detail-topbar > * {
-  min-width: 0;
-}
-
-.sample-library-detail-topbar p {
-  margin: 0.35rem 0 0;
-  color: var(--muted);
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-}
-
-.sample-library-detail-topbar .item-actions {
-  margin-top: 0;
-  justify-content: flex-start;
-  align-self: start;
-  width: 100%;
-}
-
-.sample-library-detail-topbar .item-actions .button {
-  max-width: 100%;
 }
 
 .sample-library-checkbox {
@@ -3164,6 +3213,7 @@ body.modal-open {
   .lifecycle-update-grid,
   .sample-library-modal-grid,
   .sample-library-calibration-grid,
+  .sample-library-record-inline-editor-layout,
   .inline-actions-row,
   .review-provider-grid,
   .cross-review-stats,
@@ -3212,6 +3262,15 @@ body.modal-open {
   .sample-library-modal-footer {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sample-library-record-inline-editor-layout {
+    min-height: auto;
+  }
+
+  .sample-library-record-inline-editor-sidebar-list,
+  .sample-library-record-inline-editor-detail {
+    max-height: none;
   }
 
   .lexicon-workspace-modal {

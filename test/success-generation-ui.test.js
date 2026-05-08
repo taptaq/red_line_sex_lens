@@ -61,6 +61,16 @@ function extractElementInnerHtml(html, marker) {
   return html.slice(openTagEnd + 1, closeIndex);
 }
 
+function extractSourceBetween(source, startMarker, endMarker) {
+  const startIndex = source.indexOf(startMarker);
+  assert.notEqual(startIndex, -1, `expected ${startMarker} to exist`);
+
+  const endIndex = source.indexOf(endMarker, startIndex);
+  assert.notEqual(endIndex, -1, `expected ${endMarker} after ${startMarker}`);
+
+  return source.slice(startIndex, endIndex);
+}
+
 test("frontend exposes a list-first sample library workspace with one primary create action", async () => {
   const [indexHtml, appJs, styles] = await Promise.all([
     fs.readFile(path.join(process.cwd(), "web/index.html"), "utf8"),
@@ -136,18 +146,17 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.doesNotMatch(indexHtml, /<details id="support-workspace-panel"[^>]*\sopen[>\s]/);
   assert.match(sampleLibraryPaneHtml, /class="[^"]*\bsample-library-workspace\b[^"]*"/);
   assert.match(sampleLibraryWorkspaceHtml, /id="sample-library-record-list"/);
-  assert.match(sampleLibraryWorkspaceHtml, /id="sample-library-detail"/);
   assert.match(sampleLibraryWorkspaceHtml, /class="[^"]*\bsample-library-record-list\b[^"]*"/);
-  assert.match(sampleLibraryWorkspaceHtml, /class="[^"]*\bsample-library-detail\b[^"]*"/);
-  assert.ok(
-    sampleLibraryWorkspaceHtml.indexOf('id="sample-library-record-list"') <
-      sampleLibraryWorkspaceHtml.indexOf('id="sample-library-detail"'),
-    "expected sample library list to appear before detail"
-  );
-  assert.match(indexHtml, /id="sample-library-base-section"/);
-  assert.match(indexHtml, /id="sample-library-reference-section"/);
-  assert.match(indexHtml, /id="sample-library-lifecycle-section"/);
-  assert.match(indexHtml, /id="sample-library-calibration-section"/);
+  assert.doesNotMatch(sampleLibraryWorkspaceHtml, /id="sample-library-detail"/);
+  assert.doesNotMatch(sampleLibraryWorkspaceHtml, /id="sample-library-base-section"/);
+  assert.doesNotMatch(sampleLibraryWorkspaceHtml, /id="sample-library-reference-section"/);
+  assert.doesNotMatch(sampleLibraryWorkspaceHtml, /id="sample-library-lifecycle-section"/);
+  assert.doesNotMatch(sampleLibraryWorkspaceHtml, /id="sample-library-calibration-section"/);
+  assert.doesNotMatch(indexHtml, /id="sample-library-detail"/);
+  assert.doesNotMatch(indexHtml, /id="sample-library-base-section"/);
+  assert.doesNotMatch(indexHtml, /id="sample-library-reference-section"/);
+  assert.doesNotMatch(indexHtml, /id="sample-library-lifecycle-section"/);
+  assert.doesNotMatch(indexHtml, /id="sample-library-calibration-section"/);
   assert.match(indexHtml, /id="sample-library-modal"/);
   assert.match(indexHtml, /id="sample-library-modal-title"/);
   assert.match(indexHtml, /id="sample-library-modal-content"/);
@@ -159,10 +168,6 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(indexHtml, /data-sample-pool-tab="reference"/);
   assert.match(indexHtml, /data-sample-pool-tab="regular"/);
   assert.match(indexHtml, /data-sample-pool-tab="negative"/);
-  assert.match(indexHtml, /data-sample-library-step="base"/);
-  assert.match(indexHtml, /data-sample-library-step="reference"/);
-  assert.match(indexHtml, /data-sample-library-step="lifecycle"/);
-  assert.match(indexHtml, /data-sample-library-step="calibration"/);
   assert.match(sampleLibraryPaneHtml, /id="sample-library-daily-panel"/);
   assert.match(sampleLibraryPaneHtml, /id="sample-library-reflow-panel"/);
   assert.match(sampleLibraryPaneHtml, /回流待处理区/);
@@ -171,12 +176,13 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(sampleLibraryPaneHtml, /误报案例/);
   assert.match(sampleLibraryPaneHtml, /id="feedback-priority-list"/);
   assert.match(sampleLibraryPaneHtml, /id="feedback-log-secondary-list"/);
-  assert.match(sampleLibraryPaneHtml, /id="false-positive-pending-list"/);
-  assert.match(sampleLibraryPaneHtml, /id="false-positive-history-list"/);
+  assert.match(sampleLibraryPaneHtml, /id="false-positive-summary"/);
+  assert.doesNotMatch(sampleLibraryPaneHtml, /id="false-positive-pending-list"/);
+  assert.doesNotMatch(sampleLibraryPaneHtml, /id="false-positive-history-list"/);
   assert.match(sampleLibraryPaneHtml, /日常记录/);
   assert.match(sampleLibraryPaneHtml, /生效流转说明/);
   assert.match(sampleLibraryPaneHtml, /只保存基础内容：先进入学习样本记录列表/);
-  assert.match(sampleLibraryPaneHtml, /启用参考属性并达到数据门槛：才会真正进入参考样本池，参与风格画像、生成参考和内容校验提示/);
+  assert.match(sampleLibraryPaneHtml, /id="sample-library-flow-reference-threshold"/);
   assert.match(sampleLibraryPaneHtml, /回填生命周期属性：先用于发布结果复盘和候选筛选，不会单独直接放宽内容校验/);
   assert.match(sampleLibraryPaneHtml, /仅保存到学习样本：不会直接进入内容检测规则/);
   assert.match(sampleLibraryPaneHtml, /id="sample-library-advanced-panel"/);
@@ -219,11 +225,11 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /function\s+getSelectedSampleLibraryRecord\s*\(/);
   assert.match(appJs, /function\s+renderSampleLibraryList\s*\(/);
   assert.match(appJs, /function\s+getSampleLibraryRecordStepLabel\s*\(/);
-  assert.match(appJs, /function\s+renderSampleLibraryDetail\s*\(/);
   assert.match(appJs, /function\s+renderSampleLibraryWorkspace\s*\(/);
   assert.match(appJs, /function\s+refreshSampleLibraryWorkspace\s*\(/);
-  assert.match(appJs, /function\s+setSampleLibraryDetailStep\s*\(/);
-  assert.match(appJs, /function\s+renderSampleLibraryDetailStepState\s*\(/);
+  assert.doesNotMatch(appJs, /function\s+renderSampleLibraryDetail\s*\(/);
+  assert.doesNotMatch(appJs, /function\s+setSampleLibraryDetailStep\s*\(/);
+  assert.doesNotMatch(appJs, /function\s+renderSampleLibraryDetailStepState\s*\(/);
   assert.match(appJs, /function\s+openSampleLibraryDetailModal\s*\(/);
   assert.match(appJs, /function\s+saveSampleLibraryDetailModal\s*\(/);
   assert.match(appJs, /sampleLibraryPoolsModal/);
@@ -246,8 +252,13 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /function\s+syncSampleLibraryCreateActions\s*\(/);
   assert.match(appJs, /publish:\s*\{\s*metrics:\s*\{\s*views:\s*payload\.views \|\| 0/s);
   assert.match(appJs, /function\s+setActionGateHint\s*\(/);
-  assert.match(appJs, /决定它能否进入参考样本候选，达到数据门槛后才会真正生效/);
-  assert.match(appJs, /决定这条记录能否进入参考样本候选，达到数据门槛后才会参与生成和校验提示/);
+  assert.match(appJs, /const\s+REFERENCE_METRIC_THRESHOLD\s*=\s*\{/);
+  assert.match(appJs, /function\s+getReferenceThresholdFlowGuideText\s*\(/);
+  assert.match(appJs, /function\s+getReferenceThresholdReferenceDescription\s*\(/);
+  assert.match(appJs, /function\s+getReferenceThresholdPoolsSubtitleText\s*\(/);
+  assert.match(appJs, /function\s+syncReferenceThresholdCopy\s*\(/);
+  assert.match(appJs, /byId\("sample-library-flow-reference-threshold"\)/);
+  assert.match(appJs, /byId\("sample-library-pools-modal-subtitle"\)/);
   assert.doesNotMatch(sampleLibraryPaneHtml, /id="sample-library-reference-pool-section"/);
   assert.doesNotMatch(sampleLibraryPaneHtml, /id="sample-library-regular-pool-section"/);
   assert.doesNotMatch(sampleLibraryPaneHtml, /id="sample-library-negative-pool-section"/);
@@ -286,23 +297,20 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /ensureSupportWorkspaceOpen\(\);[\s\S]*byId\("review-queue"\)\?\.scrollIntoView/);
   assert.match(appJs, /revealSampleLibraryReflowPane\(\)/);
   assert.match(appJs, /openSampleLibraryCreateModal\(\)/);
-  assert.match(appJs, /byId\("sample-library-lifecycle-section"\)\?\.scrollIntoView/);
-  assert.match(appJs, /sample-library-detail-step-summary/);
-  assert.match(appJs, /sample-library-detail-step-body/);
-  assert.match(appJs, /setSampleLibraryDetailStep\("base"\)/);
+  assert.match(appJs, /function\s+openSampleLibraryRecord\s*\([\s\S]*openSampleLibraryRecordInlineEditorModal\(recordId\)/);
+  assert.doesNotMatch(appJs, /byId\("sample-library-lifecycle-section"\)\?\.scrollIntoView/);
+  assert.doesNotMatch(appJs, /sample-library-detail-step-summary/);
+  assert.doesNotMatch(appJs, /sample-library-detail-step-body/);
+  assert.doesNotMatch(appJs, /setSampleLibraryDetailStep\("base"\)/);
   assert.match(appJs, /nextStep:\s*"reference"/);
   assert.match(appJs, /nextStep:\s*"lifecycle"/);
   assert.match(appJs, /nextStep:\s*"calibration"/);
-  assert.match(appJs, /data-action="open-sample-library-reference-modal"/);
-  assert.match(appJs, /data-action="open-sample-library-lifecycle-modal"/);
-  assert.match(appJs, /data-action="open-sample-library-calibration-modal"/);
-  assert.match(appJs, /if \(modalState\.kind === "base"\) \{[\s\S]*saveSampleLibraryDetailBaseModal\(modalState\.recordId\)/);
-  assert.match(appJs, /if \(modalState\.kind === "reference"\) \{[\s\S]*saveSampleLibraryDetailReferenceModal\(modalState\.recordId\)/);
-  assert.match(appJs, /if \(modalState\.kind === "lifecycle"\) \{[\s\S]*saveSampleLibraryDetailLifecycleModal\(modalState\.recordId\)/);
-  assert.match(appJs, /if \(modalState\.kind === "calibration"\) \{[\s\S]*saveSampleLibraryDetailCalibrationModal\(modalState\.recordId\)/);
   assert.match(appJs, /data-action="prefill-sample-library-modal-calibration-prediction"/);
   assert.match(appJs, /从当前检测预填预判/);
   assert.match(appJs, /setSampleLibraryCalibrationPredictionFields\(/);
+  assert.match(appJs, /function\s+openSampleLibraryRecordInlineEditorModal\s*\(/);
+  assert.match(appJs, /function\s+renderSampleLibraryRecordInlineEditorModal\s*\(/);
+  assert.match(appJs, /kind:\s*"record-list-inline-editor"/);
   assert.match(appJs, /function ensureSupportWorkspaceOpen\(/);
   assert.match(appJs, /async function openLexiconWorkspaceModal\(tab = "custom"/);
   assert.match(appJs, /function closeLexiconWorkspaceModal\(/);
@@ -325,7 +333,6 @@ test("frontend exposes a list-first sample library workspace with one primary cr
 
   assert.match(styles, /\.sample-library-workspace/);
   assert.match(styles, /\.sample-library-record-list/);
-  assert.match(styles, /\.sample-library-detail/);
   assert.match(styles, /\.sample-library-flow-guide/);
   assert.match(styles, /\.sample-library-flow-list/);
   assert.match(styles, /\.sample-library-modal/);
@@ -355,21 +362,14 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(styles, /\.lexicon-workspace-tab/);
   assert.match(styles, /\.lexicon-workspace-content/);
   assert.match(styles, /\.sample-library-record-step/);
-  assert.match(styles, /\.sample-library-detail-topbar\s*\{/);
-  assert.match(styles, /\.sample-library-detail-topbar > \*\s*\{/);
-  assert.match(styles, /\.sample-library-detail-section\[data-step-state="current"\]/);
-  assert.match(styles, /\.sample-library-detail-step-summary/);
-  assert.match(styles, /\.sample-library-detail-step-body/);
   assert.match(styles, /grid-template-columns:\s*minmax\(0,\s*1fr\)/);
   assert.match(styles, /min-width:\s*0/);
-  assert.match(styles, /\.sample-library-detail-topbar\s+\.item-actions\s*\{/);
-  assert.match(styles, /justify-content:\s*flex-start/);
   assert.match(styles, /\.lifecycle-update-grid\s*\{/);
   assert.match(styles, /\.sample-library-calibration-grid\s*\{/);
   assert.match(appJs, /class="lifecycle-primary-grid"/);
   assert.match(appJs, /class="lifecycle-metrics-grid"/);
   assert.match(appJs, /<span>浏览数<\/span>/);
-  assert.match(appJs, /浏览 \${String\(publish\.metrics\.views \|\| 0\)}/);
+  assert.match(appJs, /浏览 \${escapeHtml\(String\(publish\.metrics\.views \|\| 0\)\)}/);
   assert.match(styles, /\.lifecycle-primary-grid\s*\{/);
   assert.match(styles, /\.lifecycle-metrics-grid\s*\{/);
   assert.match(styles, /\.sample-library-metric-grid\s*\{/);
@@ -386,7 +386,7 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(styles, /\.tab-panels/);
   assert.match(styles, /\.tab-panel/);
   assert.match(styles, /\.sample-library-workspace\s*>\s*\*/);
-  assert.match(styles, /\.sample-library-detail\s*>\s*\*/);
+  assert.doesNotMatch(styles, /\.sample-library-detail\s*>\s*\*/);
   assert.match(styles, /max-width:\s*100%/);
   assert.match(styles, /\.action-gate-hint\s*\{/);
   assert.match(styles, /@media\s*\(max-width:\s*1360px\)/);
@@ -402,6 +402,285 @@ test("frontend exposes a list-first sample library workspace with one primary cr
     refreshAllSource.indexOf("await refreshSampleLibraryWorkspace();") < refreshAllSource.indexOf("renderSummary(summary);"),
     "expected refreshAll to update sample library state before rendering summary"
   );
+});
+
+test("sample library workspace exposes record preview and full-list modal controls", async () => {
+  const { indexHtml, appJs } = await readFrontendFiles();
+  const sampleLibraryPaneHtml = extractElementInnerHtml(indexHtml, 'id="sample-library-pane"');
+  const previewHelperSource = extractSourceBetween(
+    appJs,
+    "function getSampleLibraryRecordPreviewItems(",
+    "function renderSampleLibraryList("
+  );
+  const modalBuilderSource = extractSourceBetween(
+    appJs,
+    "function buildSampleLibraryRecordListModalMarkup(",
+    "function renderSampleLibraryRecordListModal("
+  );
+  const focusSource = extractSourceBetween(
+    appJs,
+    "function focusSampleLibraryRecordFromModal(",
+    "function renderSampleLibraryCalibrationReplayResult("
+  );
+
+  assert.match(sampleLibraryPaneHtml, /id="sample-library-record-list"/);
+  assert.match(sampleLibraryPaneHtml, /id="sample-library-record-preview-open-button"/);
+  assert.match(sampleLibraryPaneHtml, /查看全部记录列表/);
+  assert.match(appJs, /const SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT = 3/);
+  assert.match(appJs, /function\s+getSampleLibraryRecordPreviewItems\s*\(/);
+  assert.match(appJs, /function\s+openSampleLibraryRecordListModal\s*\(/);
+  assert.match(appJs, /function\s+buildSampleLibraryRecordListModalMarkup\s*\(/);
+  assert.match(appJs, /previewOpenButton\.hidden = items\.length === 0/);
+  assert.match(appJs, /renderSampleLibraryRecordListModal\(\)/);
+  assert.match(appJs, /if \(action === "open-sample-library-record-from-modal"\)/);
+  assert.match(appJs, /if \(action === "open-sample-library-record-list-modal"\)/);
+  assert.match(modalBuilderSource, /open-sample-library-record-from-modal/);
+  assert.doesNotMatch(modalBuilderSource, /SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT/);
+
+  const getSampleLibraryRecordPreviewItems = new Function(
+    "appState",
+    "SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT",
+    `${previewHelperSource}; return getSampleLibraryRecordPreviewItems;`
+  )({ selectedSampleLibraryRecordId: "record-4" }, 3);
+
+  const previewItems = getSampleLibraryRecordPreviewItems([
+    { id: "record-1" },
+    { id: "record-2" },
+    { id: "record-3" },
+    { id: "record-4" }
+  ]);
+
+  assert.deepEqual(
+    previewItems.map((item) => item.id),
+    ["record-1", "record-2", "record-4"],
+    "expected preview to keep the selected record visible within the 3-item cap"
+  );
+
+  const focusCalls = [];
+  const focusSampleLibraryRecordFromModal = new Function(
+    "closeSampleLibraryModal",
+    "openSampleLibraryRecord",
+    `${focusSource}; return focusSampleLibraryRecordFromModal;`
+  )(
+    () => focusCalls.push("close"),
+    (recordId, step) => focusCalls.push(["open", recordId, step])
+  );
+
+  focusSampleLibraryRecordFromModal("record-4", "base");
+  assert.deepEqual(focusCalls, ["close", ["open", "record-4", "base"]]);
+});
+
+test("sample library record modal upgrades to inline master-detail editing", async () => {
+  const { appJs, styles } = await readFrontendFiles();
+  const openInlineEditorSource = extractSourceBetween(
+    appJs,
+    "function openSampleLibraryRecordInlineEditorModal(",
+    "function buildSampleLibraryRecordInlineEditorDraft("
+  );
+  const inlineEditorSource = extractSourceBetween(
+    appJs,
+    "function buildSampleLibraryRecordInlineEditorModalMarkup(",
+    "function renderSampleLibraryRecordInlineEditorModal("
+  );
+  const listModalOpenSource = extractSourceBetween(
+    appJs,
+    'if (action === "open-sample-library-record-list-modal") {',
+    'if (action === "open-sample-library-delete-modal") {'
+  );
+
+  assert.match(appJs, /function\s+openSampleLibraryRecordInlineEditorModal\s*\(/);
+  assert.match(appJs, /function\s+buildSampleLibraryRecordInlineEditorDraft\s*\(/);
+  assert.match(appJs, /function\s+buildSampleLibraryRecordInlineEditorPatchPayload\s*\(/);
+  assert.match(appJs, /function\s+buildSampleLibraryRecordInlineEditorModalMarkup\s*\(/);
+  assert.match(appJs, /function\s+saveSampleLibraryRecordInlineEditorModal\s*\(/);
+  assert.match(appJs, /function\s+requestSampleLibraryRecordInlineEditorSwitch\s*\(/);
+  assert.match(appJs, /function\s+requestCloseSampleLibraryRecordInlineEditorModal\s*\(/);
+  assert.match(appJs, /kind:\s*"record-list-inline-editor"/);
+  assert.match(openInlineEditorSource, /kind:\s*"record-list-inline-editor"/);
+  assert.match(openInlineEditorSource, /renderSampleLibraryRecordInlineEditorModal\(\)/);
+  assert.match(listModalOpenSource, /openSampleLibraryRecordInlineEditorModal\(/);
+  assert.doesNotMatch(listModalOpenSource, /openSampleLibraryRecordListModal\(/);
+  assert.match(inlineEditorSource, /sample-library-record-inline-editor-layout/);
+  assert.match(inlineEditorSource, /sample-library-record-inline-editor-sidebar/);
+  assert.match(inlineEditorSource, /sample-library-record-inline-editor-detail/);
+  assert.match(inlineEditorSource, /buildSampleLibraryBaseEditorSectionMarkup\(/);
+  assert.match(inlineEditorSource, /buildSampleLibraryReferenceEditorSectionMarkup\(/);
+  assert.match(inlineEditorSource, /buildSampleLibraryLifecycleEditorSectionMarkup\(/);
+  assert.match(inlineEditorSource, /buildSampleLibraryCalibrationEditorSectionsMarkup\(/);
+  assert.match(inlineEditorSource, /保存整条记录/);
+  assert.match(inlineEditorSource, /data-action="switch-sample-library-record-inline-editor-record"/);
+  assert.match(inlineEditorSource, /data-action="open-sample-library-delete-modal"/);
+  assert.match(styles, /\.sample-library-record-inline-editor-layout/);
+});
+
+test("record inline editor keeps one unified patch payload and dirty-aware record switching", async () => {
+  const { appJs } = await readFrontendFiles();
+  const renderModalSource = extractSourceBetween(
+    appJs,
+    "function renderSampleLibraryRecordInlineEditorModal(",
+    "function buildSampleLibraryRecordInlineEditorSwitchConfirmModalMarkup("
+  );
+  const switchConfirmMarkupSource = extractSourceBetween(
+    appJs,
+    "function buildSampleLibraryRecordInlineEditorSwitchConfirmModalMarkup(",
+    "function renderSampleLibraryRecordInlineEditorSwitchConfirmModal("
+  );
+  const switchConfirmRenderSource = extractSourceBetween(
+    appJs,
+    "function renderSampleLibraryRecordInlineEditorSwitchConfirmModal(",
+    "function buildSampleLibraryRecordInlineEditorCloseConfirmModalMarkup("
+  );
+  const closeConfirmMarkupSource = extractSourceBetween(
+    appJs,
+    "function buildSampleLibraryRecordInlineEditorCloseConfirmModalMarkup(",
+    "function renderSampleLibraryRecordInlineEditorCloseConfirmModal("
+  );
+  const closeConfirmRenderSource = extractSourceBetween(
+    appJs,
+    "function renderSampleLibraryRecordInlineEditorCloseConfirmModal(",
+    "function requestSampleLibraryRecordInlineEditorSwitch("
+  );
+  const draftHelperSource = extractSourceBetween(
+    appJs,
+    "function buildSampleLibraryRecordInlineEditorDraft(",
+    "function buildSampleLibraryRecordInlineEditorPatchPayload("
+  );
+  const payloadHelperSource = extractSourceBetween(
+    appJs,
+    "function buildSampleLibraryRecordInlineEditorPatchPayload(",
+    "function isSampleLibraryRecordInlineEditorDirty("
+  );
+  const dirtyHelperSource = extractSourceBetween(
+    appJs,
+    "function isSampleLibraryRecordInlineEditorDirty(",
+    "function buildSampleLibraryRecordInlineEditorSidebarMarkup("
+  );
+  const switchHelperSource = extractSourceBetween(
+    appJs,
+    "function requestSampleLibraryRecordInlineEditorSwitch(",
+    "function requestCloseSampleLibraryRecordInlineEditorModal("
+  );
+  const switchConfirmSaveSource = extractSourceBetween(
+    appJs,
+    "function saveSampleLibraryRecordInlineEditorSwitchConfirmModal(",
+    "function saveSampleLibraryRecordInlineEditorCloseConfirmModal("
+  );
+  const closeHelperSource = extractSourceBetween(
+    appJs,
+    "function requestCloseSampleLibraryRecordInlineEditorModal(",
+    "function saveSampleLibraryRecordInlineEditorCloseConfirmModal("
+  );
+  const closeConfirmSaveSource = extractSourceBetween(
+    appJs,
+    "function saveSampleLibraryRecordInlineEditorCloseConfirmModal(",
+    "function saveSampleLibraryRecordInlineEditorModal("
+  );
+  const deleteModalSource = extractSourceBetween(
+    appJs,
+    "function openSampleLibraryDeleteModal(",
+    "function buildSampleLibraryReferenceEditorSectionMarkup("
+  );
+  const escapeHandlerSource = extractSourceBetween(
+    appJs,
+    'document.addEventListener("keydown", (event) => {',
+    'if (appState.sampleLibraryPoolsModal?.open) {'
+  );
+
+  const buildDraft = new Function(
+    "getSampleRecordNote",
+    "getSampleRecordCollectionType",
+    "getSampleRecordReference",
+    "getSampleRecordPublish",
+    "getSampleRecordCalibration",
+    `${draftHelperSource}; return buildSampleLibraryRecordInlineEditorDraft;`
+  )(
+    (record) => record.note || {},
+    (record) => record.note?.collectionType || "",
+    (record) => record.reference || {},
+    (record) => record.publish || {},
+    (record) => record.calibration || {}
+  );
+
+  const record = {
+    id: "note-4",
+    note: { title: "标题", body: "正文", coverText: "封面", collectionType: "all", tags: ["a"] },
+    reference: { enabled: true, tier: "passed", notes: "ref" },
+    publish: { status: "published_passed", metrics: { likes: 1, favorites: 2, comments: 3, views: 4 } },
+    calibration: { prediction: { predictedStatus: "published_passed" }, retro: { notes: "retro" } }
+  };
+
+  const draft = buildDraft(record);
+  assert.equal(draft.note.title, "标题");
+  assert.equal(draft.reference.enabled, true);
+  assert.equal(draft.publish.metrics.views, 4);
+
+  const buildPatchPayload = new Function(`${payloadHelperSource}; return buildSampleLibraryRecordInlineEditorPatchPayload;`)();
+  const payload = buildPatchPayload("note-4", draft);
+  assert.deepEqual(Object.keys(payload).sort(), ["calibration", "id", "note", "publish", "reference"]);
+  assert.equal(payload.id, "note-4");
+  assert.equal(payload.note.title, "标题");
+  assert.equal(payload.note.collectionType, "all");
+  assert.deepEqual(payload.note.tags, ["a"]);
+  assert.equal(payload.reference.enabled, true);
+  assert.equal(payload.reference.tier, "passed");
+  assert.equal(payload.publish.status, "published_passed");
+  assert.equal(payload.publish.metrics.likes, 1);
+  assert.equal(payload.publish.metrics.views, 4);
+  assert.equal(payload.calibration.prediction.predictedStatus, "published_passed");
+  assert.equal(payload.calibration.retro.notes, "retro");
+
+  const isDirty = new Function(`${dirtyHelperSource}; return isSampleLibraryRecordInlineEditorDirty;`)();
+  assert.equal(isDirty({ draft, initialSnapshot: draft }), false);
+  assert.equal(
+    isDirty({
+      draft: structuredClone(draft),
+      initialSnapshot: structuredClone(draft)
+    }),
+    false
+  );
+  assert.equal(
+    isDirty({
+      draft: { ...draft, note: { ...draft.note, title: "新标题" } },
+      initialSnapshot: draft
+    }),
+    true
+  );
+
+  assert.match(switchHelperSource, /isSampleLibraryRecordInlineEditorDirty\(/);
+  assert.match(switchHelperSource, /kind:\s*"record-list-inline-editor-switch-confirm"/);
+  assert.match(switchHelperSource, /targetRecordId:\s*String\(recordId \|\| ""\)/);
+  assert.match(switchHelperSource, /renderSampleLibraryRecordInlineEditorSwitchConfirmModal\(\)/);
+  assert.doesNotMatch(switchHelperSource, /pendingAction:\s*\{\s*type:\s*"switch-record"/);
+  assert.match(closeHelperSource, /isSampleLibraryRecordInlineEditorDirty\(/);
+  assert.match(closeHelperSource, /kind:\s*"record-list-inline-editor-close-confirm"/);
+  assert.match(closeHelperSource, /renderSampleLibraryRecordInlineEditorCloseConfirmModal\(\)/);
+  assert.doesNotMatch(closeHelperSource, /pendingAction:\s*\{\s*type:\s*"close"/);
+  assert.match(closeHelperSource, /modalState\?\.kind === "record-list-inline-editor-switch-confirm" && modalState\.returnTo\?\.kind === "record-list-inline-editor"/);
+  assert.match(closeHelperSource, /modalState\?\.kind === "delete-record" && modalState\.returnTo\?\.kind === "record-list-inline-editor"/);
+  assert.match(renderModalSource, /saveLabel:\s*"保存整条记录"/);
+  assert.match(renderModalSource, /cancelLabel:\s*"关闭"/);
+  assert.match(switchConfirmMarkupSource, /是否切换并丢弃未保存修改/);
+  assert.match(switchConfirmMarkupSource, /继续切换后，当前这条记录里尚未保存的修改会被丢弃/);
+  assert.match(switchConfirmRenderSource, /title:\s*"切换前确认"/);
+  assert.match(switchConfirmRenderSource, /saveLabel:\s*"继续切换"/);
+  assert.match(switchConfirmRenderSource, /cancelLabel:\s*"返回编辑"/);
+  assert.match(closeConfirmMarkupSource, /是否关闭并丢弃未保存修改/);
+  assert.match(closeConfirmMarkupSource, /继续关闭后，当前这条记录里尚未保存的修改会被丢弃/);
+  assert.match(closeConfirmRenderSource, /title:\s*"关闭前确认"/);
+  assert.match(closeConfirmRenderSource, /saveLabel:\s*"继续关闭"/);
+  assert.match(closeConfirmRenderSource, /cancelLabel:\s*"返回编辑"/);
+  assert.match(appJs, /saveButton\.classList\.toggle\("button-danger",\s*modalKind === "record-list-inline-editor-switch-confirm" \|\| modalKind === "record-list-inline-editor-close-confirm"\)/);
+  assert.match(appJs, /saveButton\.classList\.remove\("button-danger"\)/);
+  assert.match(switchConfirmSaveSource, /openSampleLibraryRecordInlineEditorModal\(modalState\.targetRecordId\)/);
+  assert.match(closeConfirmSaveSource, /closeSampleLibraryModal\(\)/);
+  assert.match(appJs, /modalState\?\.kind === "record-list-inline-editor-switch-confirm"[\s\S]*saveSampleLibraryRecordInlineEditorSwitchConfirmModal\(\)/);
+  assert.match(appJs, /modalState\?\.kind === "record-list-inline-editor-close-confirm"[\s\S]*saveSampleLibraryRecordInlineEditorCloseConfirmModal\(\)/);
+  assert.match(deleteModalSource, /const returnTo = appState\.sampleLibraryModal\?\.kind === "record-list-inline-editor" \? \{ \.\.\.appState\.sampleLibraryModal \} : null;/);
+  assert.match(deleteModalSource, /kind:\s*"delete-record"/);
+  assert.match(escapeHandlerSource, /appState\.sampleLibraryModal\?\.kind === "record-list-inline-editor-switch-confirm"/);
+  assert.match(escapeHandlerSource, /appState\.sampleLibraryModal\?\.kind === "record-list-inline-editor-close-confirm"/);
+  assert.match(escapeHandlerSource, /requestCloseSampleLibraryRecordInlineEditorModal\(\)/);
+  assert.match(appJs, /method:\s*"PATCH"[\s\S]*note:[\s\S]*reference:[\s\S]*publish:[\s\S]*calibration:/);
 });
 
 test("feedback review shortcuts keep candidate phrases separate from context categories", async () => {
@@ -454,13 +733,21 @@ test("reference candidate qualification uses the same content-length floor as ru
 });
 
 test("sample pool explanation distinguishes direct engagement from views-assisted qualification", async () => {
-  const { appJs } = await readFrontendFiles();
+  const { indexHtml, appJs } = await readFrontendFiles();
   assert.match(appJs, /function evaluateReferenceSampleThreshold\(metrics = \{\}\) \{/);
-  assert.match(appJs, /views >= 5000/);
+  assert.match(appJs, /supportViews:\s*3000/);
+  assert.match(appJs, /favorites:\s*10/);
+  assert.match(appJs, /comments:\s*10/);
+  assert.match(appJs, /nearComments:\s*5/);
   assert.match(appJs, /互动达标/);
   assert.match(appJs, /互动接近达标，已由高浏览数补足/);
   assert.match(appJs, /qualification\.reason \|\| "互动达标"/);
   assert.match(appJs, /只有浏览高，核心互动还没接近达标/);
+  assert.match(indexHtml, /id="sample-library-flow-reference-threshold"/);
+  assert.match(indexHtml, /id="sample-library-pools-modal-subtitle"/);
+  assert.match(appJs, /function\s+getReferenceThresholdDirectRuleText\s*\(/);
+  assert.match(appJs, /function\s+getReferenceThresholdAssistRuleText\s*\(/);
+  assert.match(appJs, /function\s+getReferenceThresholdRequirementText\s*\(/);
 });
 
 test("frontend keeps the analyze picker regression surface in the main UI file", async () => {
@@ -512,6 +799,11 @@ test("sample library base editing and record deletion now route through modal co
 
 test("frontend gates secondary sample-library and lifecycle-save actions with inline hints", async () => {
   const { appJs } = await readFrontendFiles();
+  const referenceStateSource = extractSourceBetween(
+    appJs,
+    "function syncSampleLibraryReferenceSectionState(",
+    "function getSampleLibraryCalibrationPredictionPrefillRequirementMessage("
+  );
 
   assert.match(appJs, /function\s+getSampleLibraryDetailBaseRequirementMessage\s*\(/);
   assert.match(appJs, /function\s+getSampleLibraryDetailReferenceRequirementMessage\s*\(/);
@@ -537,19 +829,58 @@ test("frontend gates secondary sample-library and lifecycle-save actions with in
   assert.match(appJs, /setActionGateHint\("rewrite-lifecycle-action-hint",\s*rewriteMessage\)/);
   assert.match(appJs, /setActionGateHint\("generation-lifecycle-action-hint",\s*generationMessage\)/);
 
-  assert.match(appJs, /byId\("sample-library-detail"\)\?\.addEventListener\("input",\s*syncSampleLibraryDetailActions\)/);
-  assert.match(appJs, /byId\("sample-library-detail"\)\?\.addEventListener\("change",\s*syncSampleLibraryDetailActions\)/);
-  assert.match(appJs, /renderSampleLibraryDetail\(selectedRecord\);[\s\S]*syncSampleLibraryDetailActions\(\)/);
+  assert.doesNotMatch(appJs, /byId\("sample-library-detail"\)\?\.addEventListener\("input",\s*syncSampleLibraryDetailActions\)/);
+  assert.doesNotMatch(appJs, /byId\("sample-library-detail"\)\?\.addEventListener\("change",\s*syncSampleLibraryDetailActions\)/);
+  assert.doesNotMatch(appJs, /renderSampleLibraryDetail\(selectedRecord\);[\s\S]*syncSampleLibraryDetailActions\(\)/);
+  assert.match(appJs, /openSampleLibraryRecordInlineEditorModal\(sampleLibraryRecord\.dataset\.sampleLibraryRecordId \|\| ""\)/);
   assert.match(appJs, /renderAnalysis\(result[\s\S]*analysis-lifecycle-action-hint/);
   assert.match(appJs, /renderRewriteResult\(result\)[\s\S]*rewrite-lifecycle-action-hint/);
   assert.match(appJs, /renderGenerationResult\(result = \{\}\)[\s\S]*generation-lifecycle-action-hint/);
   assert.match(appJs, /function\s+syncSampleLibraryReferenceSectionState\s*\(/);
   assert.match(appJs, /tierSelect\.value[\s\S]*enabledCheckbox\.checked = true/);
-  assert.match(appJs, /enabledCheckbox\.checked === false[\s\S]*tierSelect\.value = ""/);
-  assert.match(appJs, /byId\("sample-library-detail"\)\?\.addEventListener\("change",\s*syncSampleLibraryReferenceSectionState\)/);
+  assert.match(appJs, /source === "checkbox" && enabledCheckbox\.checked !== true[\s\S]*tierSelect\.value = ""/);
+  assert.doesNotMatch(appJs, /byId\("sample-library-detail"\)\?\.addEventListener\("change",\s*syncSampleLibraryReferenceSectionState\)/);
   assert.match(appJs, /const enabled = root\?\.querySelector\('\[name="enabled"\]'\)\?\.checked === true \|\| Boolean\(tier\)/);
   assert.match(appJs, /predictionMatchedLabel\(comparison\.matched\)/);
   assert.match(appJs, /comparison\.missReasonSuggestion/);
+
+  class FakeInputElement {
+    constructor(checked = false) {
+      this.checked = checked;
+    }
+  }
+
+  class FakeSelectElement {
+    constructor(value = "") {
+      this.value = value;
+    }
+  }
+
+  const syncSampleLibraryReferenceSectionState = new Function(
+    "HTMLInputElement",
+    "HTMLSelectElement",
+    "syncSampleLibraryDetailActions",
+    `${referenceStateSource}; return syncSampleLibraryReferenceSectionState;`
+  )(FakeInputElement, FakeSelectElement, () => {});
+
+  const enabledCheckbox = new FakeInputElement(false);
+  const tierSelect = new FakeSelectElement("passed");
+  const card = {
+    querySelector(selector) {
+      if (selector === '[name="enabled"]') return enabledCheckbox;
+      if (selector === '[name="tier"]') return tierSelect;
+      return null;
+    }
+  };
+
+  syncSampleLibraryReferenceSectionState(card, { source: "checkbox" });
+  assert.equal(enabledCheckbox.checked, false);
+  assert.equal(tierSelect.value, "");
+
+  tierSelect.value = "performed";
+  syncSampleLibraryReferenceSectionState(card, { source: "tier" });
+  assert.equal(enabledCheckbox.checked, true);
+  assert.equal(tierSelect.value, "performed");
 });
 
 test("frontend suggests reference promotion and rule-improvement candidates from retro outcomes", async () => {

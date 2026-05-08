@@ -99,9 +99,9 @@ function deriveActualPerformanceTier(publish = {}) {
 
   if (
     likes >= 20 ||
-    favorites >= 5 ||
-    comments >= 2 ||
-    ((likes >= 16 || favorites >= 4 || comments >= 1) && views >= 5000) ||
+    favorites >= 10 ||
+    comments >= 10 ||
+    ((likes >= 16 || favorites >= 4 || comments >= 5) && views >= 3000) ||
     status === "published_passed" ||
     status === "false_positive"
   ) {

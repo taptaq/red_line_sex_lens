@@ -9,6 +9,16 @@ import { paths } from "../src/config.js";
 import { loadAdminData } from "../src/admin.js";
 import { handleRequest } from "../src/server.js";
 
+function extractSourceBetween(source, startMarker, endMarker) {
+  const startIndex = source.indexOf(startMarker);
+  assert.notEqual(startIndex, -1, `expected ${startMarker} to exist`);
+
+  const endIndex = source.indexOf(endMarker, startIndex);
+  assert.notEqual(endIndex, -1, `expected ${endMarker} after ${startMarker}`);
+
+  return source.slice(startIndex, endIndex);
+}
+
 async function withTempFalsePositiveLog(t, run) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "false-positive-admin-"));
   const tempFile = path.join(tempDir, "false-positive-log.json");
@@ -205,8 +215,9 @@ test("admin page exposes false positive maintenance inside the sample library pa
   assert.match(indexHtml, /feedback-priority-pill/);
   assert.match(indexHtml, /id="feedback-priority-list"/);
   assert.match(indexHtml, /id="feedback-log-secondary-list"/);
-  assert.match(indexHtml, /id="false-positive-pending-list"/);
-  assert.match(indexHtml, /id="false-positive-history-list"/);
+  assert.match(indexHtml, /id="false-positive-summary"/);
+  assert.doesNotMatch(indexHtml, /id="false-positive-pending-list"/);
+  assert.doesNotMatch(indexHtml, /id="false-positive-history-list"/);
   assert.match(indexHtml, /id="feedback-log-list"/);
   assert.match(indexHtml, /id="false-positive-log-list"/);
   assert.doesNotMatch(indexHtml, /id="rules-maintenance-shortcuts"/);
@@ -237,8 +248,134 @@ test("admin page exposes false positive maintenance inside the sample library pa
   assert.match(appJs, /先人工判断/);
   assert.match(appJs, /feedback-priority-list/);
   assert.match(appJs, /feedback-log-secondary-list/);
-  assert.match(appJs, /false-positive-pending-list/);
-  assert.match(appJs, /false-positive-history-list/);
+  assert.match(appJs, /false-positive-summary/);
+});
+
+test("sample library reflow area exposes false positive summary and modal launch controls", async () => {
+  const [indexHtml, appJs] = await Promise.all([
+    fs.readFile(path.join(process.cwd(), "web/index.html"), "utf8"),
+    fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8")
+  ]);
+
+  assert.match(indexHtml, /id="false-positive-summary"/);
+  assert.match(indexHtml, /id="false-positive-preview-open-button"/);
+  assert.match(indexHtml, /查看全部误报案例/);
+  assert.doesNotMatch(indexHtml, /id="false-positive-pending-list"/);
+  assert.doesNotMatch(indexHtml, /id="false-positive-history-list"/);
+  assert.match(appJs, /function\s+buildFalsePositiveSummaryText\s*\(/);
+  assert.match(appJs, /summaryNode\.textContent = buildFalsePositiveSummaryText\(\{ pendingItems, historyItems \}\)/);
+  assert.match(appJs, /previewButton\.hidden = appState\.falsePositiveLog\.length === 0/);
+  assert.match(appJs, /function\s+openFalsePositiveListModal\s*\(/);
+  assert.match(appJs, /function\s+buildFalsePositiveListModalMarkup\s*\(/);
+  assert.match(appJs, /buildFalsePositiveListSectionMarkup\(\s*"待确认误报"/);
+  assert.match(appJs, /buildFalsePositiveListSectionMarkup\(\s*"已沉淀误报案例"/);
+  assert.match(appJs, /buildFalsePositiveEntryMarkup\(\{/);
+  assert.match(appJs, /body:\s*buildFalsePositiveListModalMarkup\(\)/);
+  assert.match(appJs, /hideSaveButton:\s*true/);
+  assert.match(appJs, /cancelLabel:\s*"关闭"/);
+  assert.match(appJs, /function\s+renderFalsePositiveListModal\s*\(/);
+  assert.match(appJs, /saveButton\.hidden = hideSaveButton/);
+  assert.match(appJs, /saveButton\.disabled = false/);
+  assert.match(appJs, /saveButton\.dataset\.busy = ""/);
+  assert.match(appJs, /saveButton\.title = ""/);
+  assert.match(appJs, /if \(appState\.sampleLibraryModal\?\.kind === "false-positive-list"[\s\S]*renderFalsePositiveListModal\(\)/);
+  assert.doesNotMatch(appJs, /modalState\?\.kind === "false-positive-list"/);
+  assert.match(appJs, /if \(action === "open-false-positive-list-modal"\)/);
+});
+
+test("false positive homepage summary runtime updates summary text button visibility and visible modal refresh", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const summarySource = extractSourceBetween(
+    appJs,
+    "function buildFalsePositiveSummaryText(",
+    "function renderFalsePositiveLog("
+  );
+  const renderSource = extractSourceBetween(
+    appJs,
+    "function renderFalsePositiveLog(",
+    "function successTierLabel("
+  );
+
+  const buildFalsePositiveSummaryText = new Function(
+    `${summarySource}; return buildFalsePositiveSummaryText;`
+  )();
+
+  assert.equal(
+    buildFalsePositiveSummaryText({ pendingItems: [], historyItems: [] }),
+    "当前没有误报样本"
+  );
+  assert.equal(
+    buildFalsePositiveSummaryText({ pendingItems: [{ id: "fp-1" }, { id: "fp-2" }], historyItems: [] }),
+    "当前有 2 条待确认误报，暂时还没有已沉淀历史案例。"
+  );
+  assert.equal(
+    buildFalsePositiveSummaryText({ pendingItems: [{ id: "fp-1" }], historyItems: [{ id: "fp-2" }, { id: "fp-3" }] }),
+    "当前有 1 条待确认误报，已沉淀 2 条历史案例。"
+  );
+
+  const appState = {
+    falsePositiveLog: [],
+    sampleLibraryModal: {
+      kind: "false-positive-list"
+    }
+  };
+  const nodes = {
+    "false-positive-preview-open-button": { hidden: true },
+    "false-positive-summary": {
+      textContent: "",
+      classList: {
+        states: new Map(),
+        toggle(name, value) {
+          this.states.set(name, Boolean(value));
+        }
+      }
+    },
+    "false-positive-log-list": { hidden: true, innerHTML: "" },
+    "sample-library-modal": { hidden: false }
+  };
+  const modalRenderCalls = [];
+  const getSortedFalsePositiveGroups = (items = []) => ({
+    pendingItems: items.filter((item) => item.status !== "platform_passed_confirmed"),
+    historyItems: items.filter((item) => item.status === "platform_passed_confirmed")
+  });
+  const byId = (id) => nodes[id] || null;
+  const renderFalsePositiveListModal = () => {
+    modalRenderCalls.push("rendered");
+  };
+
+  const renderFalsePositiveLog = new Function(
+    "appState",
+    "getSortedFalsePositiveGroups",
+    "byId",
+    "buildFalsePositiveSummaryText",
+    "renderFalsePositiveListModal",
+    `${renderSource}; return renderFalsePositiveLog;`
+  )(
+    appState,
+    getSortedFalsePositiveGroups,
+    byId,
+    buildFalsePositiveSummaryText,
+    renderFalsePositiveListModal
+  );
+
+  renderFalsePositiveLog([]);
+  assert.equal(nodes["false-positive-summary"].textContent, "当前没有误报样本");
+  assert.equal(nodes["false-positive-summary"].classList.states.get("muted"), true);
+  assert.equal(nodes["false-positive-preview-open-button"].hidden, true);
+  assert.equal(nodes["false-positive-log-list"].hidden, false);
+  assert.match(nodes["false-positive-log-list"].innerHTML, /当前没有误报样本/);
+  assert.equal(modalRenderCalls.length, 1);
+
+  renderFalsePositiveLog([
+    { id: "fp-1", status: "platform_passed_pending" },
+    { id: "fp-2", status: "platform_passed_confirmed" }
+  ]);
+  assert.equal(nodes["false-positive-summary"].textContent, "当前有 1 条待确认误报，已沉淀 1 条历史案例。");
+  assert.equal(nodes["false-positive-summary"].classList.states.get("muted"), false);
+  assert.equal(nodes["false-positive-preview-open-button"].hidden, false);
+  assert.equal(nodes["false-positive-log-list"].hidden, true);
+  assert.equal(nodes["false-positive-log-list"].innerHTML, "");
+  assert.equal(modalRenderCalls.length, 2);
 });
 
 test("recording a false positive sample refreshes the sample library reflow area and keeps false positive list visible", async () => {
@@ -255,7 +392,7 @@ test("recording a false positive sample refreshes the sample library reflow area
   assert.match(appJs, /renderFalsePositiveLog\(response\.items \|\| \[\]\)/);
   assert.match(appJs, /ensureSupportWorkspaceOpen\(\)/);
   assert.match(appJs, /activateTab\("data-maintenance", "sample-library-pane"\)/);
-  assert.match(appJs, /sample-library-reflow-panel"\)\?\.scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
+  assert.match(appJs, /false-positive-summary"\)\?\.scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
 });
 
 test("feedback rule-review action now opens a confirmation modal before jumping into rules maintenance", async () => {
