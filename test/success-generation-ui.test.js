@@ -447,6 +447,66 @@ test("sample library bootstrap leaves the record list in loading state until ref
   assert.doesNotMatch(nodes["sample-library-record-list"].innerHTML, /当前没有样本记录/);
 });
 
+test("sample library refresh re-renders summary after records change", async () => {
+  const { appJs } = await readFrontendFiles();
+  const refreshSampleLibraryWorkspaceSource = extractSourceBetween(
+    appJs,
+    "async function refreshSampleLibraryWorkspace()",
+    "function formatRate("
+  );
+
+  assert.match(refreshSampleLibraryWorkspaceSource, /appState\.sampleLibraryRecords = Array\.isArray\(payload\?\.items\) \? payload\.items : \[\]/);
+  assert.match(refreshSampleLibraryWorkspaceSource, /renderSampleLibraryWorkspace\(\);[\s\S]*renderSummary\(appState\.summaryData\)/);
+});
+
+test("analyze tag refresh treats server custom tags as authoritative over stale snapshots", async () => {
+  const { appJs } = await readFrontendFiles();
+  const loadAnalyzeTagOptionsSource = extractSourceBetween(
+    appJs,
+    "async function loadAnalyzeTagOptions()",
+    "function buildCollectionTypeOptionsMarkup("
+  );
+  const removeAnalyzeTagOptionSource = extractSourceBetween(
+    appJs,
+    "function removeAnalyzeTagOption(tag)",
+    "function renderAnalyzeTagOptions()"
+  );
+  const persistedSnapshots = [];
+  const loadAnalyzeTagOptions = new Function(
+    "uniqueStrings",
+    "loadAnalyzeCustomTagOptions",
+    "persistBootstrapSnapshotPart",
+    "renderAnalyzeTagOptions",
+    "initializeSampleLibraryImportTagPickers",
+    "persistedSnapshots",
+    `
+      let analyzeTagOptions = ["Preset", "Deleted custom"];
+      const presetAnalyzeTags = ["Preset"];
+      ${loadAnalyzeTagOptionsSource}
+      return loadAnalyzeTagOptions().then(() => ({ analyzeTagOptions, persistedSnapshots }));
+    `
+  )(
+    (items = []) => [...new Set(items.map((item) => String(item || "").trim()).filter(Boolean))],
+    async () => ["Server custom"],
+    (key, payload) => persistedSnapshots.push({ key, payload }),
+    () => {},
+    () => {},
+    persistedSnapshots
+  );
+
+  const result = await loadAnalyzeTagOptions;
+
+  assert.deepEqual(result.analyzeTagOptions, ["Preset", "Server custom"]);
+  assert.deepEqual(result.persistedSnapshots, [
+    {
+      key: "analyzeTagOptions",
+      payload: ["Preset", "Server custom"]
+    }
+  ]);
+  assert.doesNotMatch(loadAnalyzeTagOptionsSource, /\.\.\.analyzeTagOptions/);
+  assert.match(removeAnalyzeTagOptionSource, /persistBootstrapSnapshotPart\("analyzeTagOptions", analyzeTagOptions\)/);
+});
+
 test("sample library workspace exposes record preview and full-list modal controls", async () => {
   const { indexHtml, appJs } = await readFrontendFiles();
   const sampleLibraryPaneHtml = extractElementInnerHtml(indexHtml, 'id="sample-library-pane"');

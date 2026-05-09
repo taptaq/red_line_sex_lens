@@ -1246,7 +1246,7 @@ async function saveAnalyzeCustomTagOptions(options = []) {
 
 async function loadAnalyzeTagOptions() {
   const customOptions = await loadAnalyzeCustomTagOptions();
-  analyzeTagOptions = uniqueStrings([...presetAnalyzeTags, ...analyzeTagOptions, ...customOptions]);
+  analyzeTagOptions = uniqueStrings([...presetAnalyzeTags, ...customOptions]);
   persistBootstrapSnapshotPart("analyzeTagOptions", analyzeTagOptions);
   renderAnalyzeTagOptions();
   initializeSampleLibraryImportTagPickers();
@@ -5342,6 +5342,7 @@ async function refreshSampleLibraryWorkspace() {
   }
 
   renderSampleLibraryWorkspace();
+  renderSummary(appState.summaryData);
   return appState.sampleLibraryRecords;
 }
 
@@ -5655,6 +5656,7 @@ function hydrateBootstrapSnapshot() {
     appState.sampleLibraryRecords = sampleLibraryRecords;
     setSampleLibraryLoadingState("idle");
     renderSampleLibraryWorkspace();
+    renderSummary(appState.summaryData);
   }
 
   if (Array.isArray(collectionTypeOptions)) {
@@ -6705,6 +6707,7 @@ function removeAnalyzeTagOption(tag) {
   analyzeTagOptions = analyzeTagOptions.filter((item) => item !== normalizedTag);
   writeAnalyzeTags(readAnalyzeTags().filter((item) => item !== normalizedTag));
   initializeSampleLibraryImportTagPickers();
+  persistBootstrapSnapshotPart("analyzeTagOptions", analyzeTagOptions);
   saveAnalyzeCustomTagOptions(analyzeTagOptions).catch(() => {});
 }
 
