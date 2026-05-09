@@ -552,6 +552,50 @@ test("analyze tag refresh failure preserves hydrated custom tags and snapshot au
   assert.doesNotMatch(initializeAnalyzeTagPickerSource, /loadAnalyzeTagOptions\(\)/);
 });
 
+test("model option refresh failure preserves hydrated options before falling back to defaults", async () => {
+  const { appJs } = await readFrontendFiles();
+  const loadModelSelectionOptionsSource = extractSourceBetween(
+    appJs,
+    "async function loadModelSelectionOptions()",
+    "function getSelectedModelSelections()"
+  );
+  const appState = {
+    modelSelectionOptions: {
+      generation: [{ value: "hydrated", label: "Hydrated Model" }]
+    }
+  };
+  const defaultModelSelectionOptions = {
+    generation: [{ value: "default", label: "Default Model" }]
+  };
+  const persistedSnapshots = [];
+  const renderedOptions = [];
+  const loadModelSelectionOptions = new Function(
+    "appState",
+    "defaultModelSelectionOptions",
+    "apiJson",
+    "modelOptionsApi",
+    "persistBootstrapSnapshotPart",
+    "renderModelSelectionControls",
+    `${loadModelSelectionOptionsSource}; return loadModelSelectionOptions;`
+  )(
+    appState,
+    defaultModelSelectionOptions,
+    async () => {
+      throw new Error("temporary model options failure");
+    },
+    "/api/model-options",
+    (key, payload) => persistedSnapshots.push({ key, payload }),
+    (options) => renderedOptions.push(options)
+  );
+
+  const result = await loadModelSelectionOptions();
+
+  assert.equal(result, appState.modelSelectionOptions);
+  assert.deepEqual(renderedOptions, [appState.modelSelectionOptions]);
+  assert.deepEqual(persistedSnapshots, []);
+  assert.notEqual(appState.modelSelectionOptions, defaultModelSelectionOptions);
+});
+
 test("sample library record commits keep summary and bootstrap snapshots consistent", async () => {
   const { appJs } = await readFrontendFiles();
   const commitSource = extractSourceBetween(
@@ -562,6 +606,8 @@ test("sample library record commits keep summary and bootstrap snapshots consist
 
   assert.match(appJs, /function commitSampleLibraryRecords\s*\(/);
   assert.match(commitSource, /persistBootstrapSnapshotPart\("sampleLibraryRecords", appState\.sampleLibraryRecords\)/);
+  assert.match(commitSource, /sampleLibraryCount:\s*appState\.sampleLibraryRecords\.length/);
+  assert.match(commitSource, /persistBootstrapSnapshotPart\("summary", appState\.summaryData\)/);
   assert.match(commitSource, /renderSummary\(appState\.summaryData\)/);
   assert.doesNotMatch(appJs, /appState\.sampleLibraryRecords = Array\.isArray\(response\.items\) \? response\.items/);
   assert.match(appJs, /commitSampleLibraryRecords\(response\.items, appState\.sampleLibraryRecords\)/);
@@ -575,19 +621,42 @@ test("sample library record commits keep summary and bootstrap snapshots consist
   )(
     {
       sampleLibraryRecords: [{ id: "old-record" }],
-      summaryData: { sampleLibraryCount: 1 }
+      summaryData: { sampleLibraryCount: 99 }
     },
-    (key, payload) => calls.push(["persist", key, payload.map((item) => item.id)]),
+    (key, payload) =>
+      calls.push([
+        "persist",
+        key,
+        Array.isArray(payload) ? payload.map((item) => item.id) : payload.sampleLibraryCount
+      ]),
     (summary) => calls.push(["summary", summary.sampleLibraryCount])
   );
 
-  const committed = commitSampleLibraryRecords([{ id: "new-record" }]);
+  const committed = commitSampleLibraryRecords([{ id: "new-record" }, { id: "second-record" }]);
 
-  assert.deepEqual(committed, [{ id: "new-record" }]);
+  assert.deepEqual(committed, [{ id: "new-record" }, { id: "second-record" }]);
   assert.deepEqual(calls, [
-    ["persist", "sampleLibraryRecords", ["new-record"]],
-    ["summary", 1]
+    ["persist", "sampleLibraryRecords", ["new-record", "second-record"]],
+    ["persist", "summary", 2],
+    ["summary", 2]
   ]);
+});
+
+test("summary and admin refresh loading states reset after failures", async () => {
+  const { appJs } = await readFrontendFiles();
+  const refreshAdminDataStateSource = extractSourceBetween(
+    appJs,
+    "async function refreshAdminDataState()",
+    "async function refreshSummaryState()"
+  );
+  const refreshSummaryStateSource = extractSourceBetween(
+    appJs,
+    "async function refreshSummaryState()",
+    "function hydrateBootstrapSnapshot()"
+  );
+
+  assert.match(refreshAdminDataStateSource, /finally\s*\{[\s\S]*setAdminDataLoadingState\("idle"\)/);
+  assert.match(refreshSummaryStateSource, /finally\s*\{[\s\S]*setSummaryLoadingState\("idle"\)/);
 });
 
 test("sample library workspace exposes record preview and full-list modal controls", async () => {

@@ -1480,13 +1480,12 @@ async function loadModelSelectionOptions() {
     const payload = await apiJson(modelOptionsApi);
     appState.modelSelectionOptions = payload && typeof payload === "object" ? payload : defaultModelSelectionOptions;
     persistBootstrapSnapshotPart("modelOptions", appState.modelSelectionOptions);
-    renderModelSelectionControls(appState.modelSelectionOptions);
-    return appState.modelSelectionOptions;
   } catch {
-    appState.modelSelectionOptions = defaultModelSelectionOptions;
-    renderModelSelectionControls(defaultModelSelectionOptions);
-    return appState.modelSelectionOptions;
+    appState.modelSelectionOptions = appState.modelSelectionOptions || defaultModelSelectionOptions;
   }
+
+  renderModelSelectionControls(appState.modelSelectionOptions);
+  return appState.modelSelectionOptions;
 }
 
 function getSelectedModelSelections() {
@@ -5294,7 +5293,12 @@ function openSampleLibraryDetailModal(kind, recordId) {
 
 function commitSampleLibraryRecords(items, fallbackRecords = appState.sampleLibraryRecords) {
   appState.sampleLibraryRecords = Array.isArray(items) ? items : Array.isArray(fallbackRecords) ? fallbackRecords : [];
+  appState.summaryData = {
+    ...(appState.summaryData && typeof appState.summaryData === "object" ? appState.summaryData : {}),
+    sampleLibraryCount: appState.sampleLibraryRecords.length
+  };
   persistBootstrapSnapshotPart("sampleLibraryRecords", appState.sampleLibraryRecords);
+  persistBootstrapSnapshotPart("summary", appState.summaryData);
   renderSummary(appState.summaryData);
   return appState.sampleLibraryRecords;
 }
@@ -5602,38 +5606,46 @@ async function refreshInnerSpaceTermsState() {
 
 async function refreshAdminDataState() {
   setAdminDataLoadingState("loading");
-  const adminData = await apiJson("/api/admin/data");
 
-  appState.adminData = {
-    seedLexicon: Array.isArray(adminData.seedLexicon) ? adminData.seedLexicon : [],
-    customLexicon: Array.isArray(adminData.customLexicon) ? adminData.customLexicon : [],
-    innerSpaceTerms: Array.isArray(adminData.innerSpaceTerms) ? adminData.innerSpaceTerms : [],
-    feedbackLog: Array.isArray(adminData.feedbackLog) ? adminData.feedbackLog : [],
-    falsePositiveLog: Array.isArray(adminData.falsePositiveLog) ? adminData.falsePositiveLog : [],
-    reviewQueue: Array.isArray(adminData.reviewQueue) ? adminData.reviewQueue : []
-  };
+  try {
+    const adminData = await apiJson("/api/admin/data");
 
-  if (!Array.isArray(adminData.innerSpaceTerms)) {
-    await refreshInnerSpaceTermsState();
+    appState.adminData = {
+      seedLexicon: Array.isArray(adminData.seedLexicon) ? adminData.seedLexicon : [],
+      customLexicon: Array.isArray(adminData.customLexicon) ? adminData.customLexicon : [],
+      innerSpaceTerms: Array.isArray(adminData.innerSpaceTerms) ? adminData.innerSpaceTerms : [],
+      feedbackLog: Array.isArray(adminData.feedbackLog) ? adminData.feedbackLog : [],
+      falsePositiveLog: Array.isArray(adminData.falsePositiveLog) ? adminData.falsePositiveLog : [],
+      reviewQueue: Array.isArray(adminData.reviewQueue) ? adminData.reviewQueue : []
+    };
+
+    if (!Array.isArray(adminData.innerSpaceTerms)) {
+      await refreshInnerSpaceTermsState();
+    }
+
+    persistBootstrapSnapshotPart("adminData", appState.adminData);
+    renderQueue(appState.adminData.reviewQueue);
+    renderAdminData(appState.adminData);
+    renderLexiconWorkspaceModal();
+
+    return appState.adminData;
+  } finally {
+    setAdminDataLoadingState("idle");
   }
-
-  persistBootstrapSnapshotPart("adminData", appState.adminData);
-  setAdminDataLoadingState("idle");
-  renderQueue(appState.adminData.reviewQueue);
-  renderAdminData(appState.adminData);
-  renderLexiconWorkspaceModal();
-
-  return appState.adminData;
 }
 
 async function refreshSummaryState() {
   setSummaryLoadingState("loading");
-  const payload = await apiJson("/api/summary");
-  appState.summaryData = payload && typeof payload === "object" ? payload : {};
-  persistBootstrapSnapshotPart("summary", appState.summaryData);
-  setSummaryLoadingState("idle");
-  renderSummary(appState.summaryData);
-  return appState.summaryData;
+
+  try {
+    const payload = await apiJson("/api/summary");
+    appState.summaryData = payload && typeof payload === "object" ? payload : {};
+    persistBootstrapSnapshotPart("summary", appState.summaryData);
+    renderSummary(appState.summaryData);
+    return appState.summaryData;
+  } finally {
+    setSummaryLoadingState("idle");
+  }
 }
 
 function hydrateBootstrapSnapshot() {
