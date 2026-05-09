@@ -1,8 +1,102 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
+import { paths } from "../src/config.js";
 import { handleRequest } from "../src/server.js";
+
+async function withTempStyleProfileApi(t, run) {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "style-profile-api-"));
+  const originals = {
+    styleProfile: paths.styleProfile,
+    noteRecords: paths.noteRecords,
+    successSamples: paths.successSamples,
+    noteLifecycle: paths.noteLifecycle
+  };
+
+  paths.styleProfile = path.join(tempDir, "style-profile.json");
+  paths.noteRecords = path.join(tempDir, "note-records.json");
+  paths.successSamples = path.join(tempDir, "success-samples.json");
+  paths.noteLifecycle = path.join(tempDir, "note-lifecycle.json");
+
+  await Promise.all([
+    fs.writeFile(
+      paths.styleProfile,
+      `${JSON.stringify(
+        {
+          current: {
+            id: "style-profile-current",
+            status: "active",
+            topic: "旧画像",
+            name: "旧画像",
+            sourceSampleIds: ["note-reference-a", "note-reference-b"],
+            titleStyle: "旧标题风格",
+            bodyStructure: "旧正文结构",
+            tone: "旧语气",
+            preferredTags: ["旧标签"],
+            createdAt: "2026-05-01T00:00:00.000Z",
+            updatedAt: "2026-05-01T00:00:00.000Z"
+          }
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    ),
+    fs.writeFile(
+      paths.noteRecords,
+      `${JSON.stringify(
+        [
+          {
+            id: "note-reference-new-a",
+            note: {
+              title: "新参考样本 A",
+              body: "新参考样本正文 A".repeat(20),
+              tags: ["新标签"]
+            },
+            reference: {
+              enabled: true,
+              tier: "featured"
+            },
+            publish: {
+              status: "published_passed"
+            }
+          },
+          {
+            id: "note-reference-new-b",
+            note: {
+              title: "新参考样本 B",
+              body: "新参考样本正文 B".repeat(20),
+              tags: ["新标签"]
+            },
+            reference: {
+              enabled: true,
+              tier: "featured"
+            },
+            publish: {
+              status: "published_passed"
+            }
+          }
+        ],
+        null,
+        2
+      )}\n`,
+      "utf8"
+    ),
+    fs.writeFile(paths.successSamples, "[]\n", "utf8"),
+    fs.writeFile(paths.noteLifecycle, "[]\n", "utf8")
+  ]);
+
+  t.after(async () => {
+    Object.assign(paths, originals);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  return run();
+}
 
 test("style profile API routes are fully removed from the public surface", async () => {
   const listed = await invokeRoute("GET", "/api/style-profile");
@@ -20,6 +114,17 @@ test("style profile API routes are fully removed from the public surface", async
     }
   });
   assert.equal(patched.status, 404);
+});
+
+test("admin style profile read returns current profile without queuing or regenerating it", async (t) => {
+  await withTempStyleProfileApi(t, async () => {
+    const listed = await invokeRoute("GET", "/api/admin/style-profile");
+
+    assert.equal(listed.status, 200);
+    assert.equal(listed.body.styleProfile.current.topic, "旧画像");
+    assert.deepEqual(listed.body.styleProfile.current.sourceSampleIds, ["note-reference-a", "note-reference-b"]);
+    assert.equal(listed.body.styleProfileRefreshQueued, undefined);
+  });
 });
 
 async function invokeRoute(method, pathname, body = null) {
@@ -55,8 +160,18 @@ async function invokeRoute(method, pathname, body = null) {
   request.emit("end");
 
   const finished = await completion;
+  let parsedBody = null;
+  if (finished.body) {
+    try {
+      parsedBody = JSON.parse(finished.body);
+    } catch {
+      parsedBody = null;
+    }
+  }
+
   return {
     status: finished.status,
-    rawBody: finished.body
+    rawBody: finished.body,
+    body: parsedBody
   };
 }

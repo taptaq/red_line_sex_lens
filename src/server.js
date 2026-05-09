@@ -80,6 +80,7 @@ const port = 3030;
 const webRoot = path.resolve(webDir);
 const readCache = createRuntimeCache();
 const writeInvalidationTags = ["summary", "admin-data", "sample-library"];
+let styleProfileRefreshPromise = null;
 
 function invalidateReadCaches(tags = []) {
   tags.forEach((tag) => readCache.invalidateTag(tag));
@@ -87,6 +88,38 @@ function invalidateReadCaches(tags = []) {
 
 function invalidateWriteReadCaches() {
   invalidateReadCaches(writeInvalidationTags);
+}
+
+async function loadCurrentStyleProfileView() {
+  return loadStyleProfile();
+}
+
+async function buildAdminDataView() {
+  const data = await loadAdminData();
+  const styleProfile = await loadCurrentStyleProfileView();
+  return {
+    ...data,
+    styleProfile
+  };
+}
+
+function scheduleStyleProfileRefresh(reason = "") {
+  void reason;
+
+  if (!styleProfileRefreshPromise) {
+    styleProfileRefreshPromise = (async () => {
+      try {
+        await refreshAutoStyleProfile();
+        invalidateReadCaches(["admin-data"]);
+      } catch (error) {
+        console.warn("Failed to refresh style profile in background", error);
+      } finally {
+        styleProfileRefreshPromise = null;
+      }
+    })();
+  }
+
+  return styleProfileRefreshPromise;
 }
 
 function resolveWebAsset(pathname) {
@@ -141,11 +174,18 @@ async function persistSampleLibraryRecord(payload = {}) {
   invalidateWriteReadCaches();
   const item = findSampleLibraryRecord(items, nextRecord) || items[items.length - 1] || null;
   const shouldRefreshStyleProfile = item?.reference?.enabled === true;
+  let styleProfile;
   if (shouldRefreshStyleProfile) {
-    await refreshAutoStyleProfile();
+    styleProfile = await loadCurrentStyleProfileView();
+    scheduleStyleProfileRefresh("sample-library-reference-mutation");
   }
 
-  return { item, items };
+  return {
+    item,
+    items,
+    styleProfile,
+    styleProfileRefreshQueued: shouldRefreshStyleProfile ? true : undefined
+  };
 }
 
 async function patchSampleLibraryRecordAndReturn(payload = {}) {
@@ -168,11 +208,18 @@ async function patchSampleLibraryRecordAndReturn(payload = {}) {
   const referenceChanged =
     Object.prototype.hasOwnProperty.call(normalizedPayload || {}, "reference") ||
     (normalizedPayload?.publish && (item?.reference?.enabled === true || current[index]?.reference?.enabled === true));
+  let styleProfile;
   if (referenceChanged) {
-    await refreshAutoStyleProfile();
+    styleProfile = await loadCurrentStyleProfileView();
+    scheduleStyleProfileRefresh("sample-library-reference-mutation");
   }
 
-  return { item, items };
+  return {
+    item,
+    items,
+    styleProfile,
+    styleProfileRefreshQueued: referenceChanged ? true : undefined
+  };
 }
 
 async function deleteSampleLibraryRecordAndReturn(id) {
@@ -189,11 +236,17 @@ async function deleteSampleLibraryRecordAndReturn(id) {
 
   await saveNoteRecords(next);
   invalidateWriteReadCaches();
+  let styleProfile;
   if (removed?.reference?.enabled === true) {
-    await refreshAutoStyleProfile();
+    styleProfile = await loadCurrentStyleProfileView();
+    scheduleStyleProfileRefresh("sample-library-reference-mutation");
   }
 
-  return { items: next };
+  return {
+    items: next,
+    styleProfile,
+    styleProfileRefreshQueued: removed?.reference?.enabled === true ? true : undefined
+  };
 }
 
 export function lifecycleRecordToReferenceSample(item = {}) {
@@ -787,8 +840,16 @@ async function handleRequest(request, response) {
   }
 
   if (request.method === "GET" && url.pathname === "/api/admin/data") {
-    const data = await readCache.getOrLoad("admin-data", loadAdminData, { ttlMs: 10000, tags: ["admin-data"] });
+    const data = await readCache.getOrLoad("admin-data", buildAdminDataView, { ttlMs: 10000, tags: ["admin-data"] });
     return sendJson(response, 200, data);
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/admin/style-profile") {
+    const styleProfile = await loadCurrentStyleProfileView();
+    return sendJson(response, 200, {
+      ok: true,
+      styleProfile
+    });
   }
 
   if (request.method === "GET" && url.pathname === "/api/admin/false-positive-log") {
@@ -1041,11 +1102,13 @@ async function handleRequest(request, response) {
 
   if (request.method === "POST" && url.pathname === "/api/sample-library") {
     const payload = await readBody(request);
-    const { item, items } = await persistSampleLibraryRecord(payload);
+    const { item, items, styleProfile, styleProfileRefreshQueued } = await persistSampleLibraryRecord(payload);
     return sendJson(response, 200, {
       ok: true,
       item,
-      items
+      items,
+      styleProfile,
+      styleProfileRefreshQueued
     });
   }
 
@@ -1133,11 +1196,13 @@ async function handleRequest(request, response) {
 
   if (request.method === "PATCH" && url.pathname === "/api/sample-library") {
     const payload = await readBody(request);
-    const { item, items } = await patchSampleLibraryRecordAndReturn(payload);
+    const { item, items, styleProfile, styleProfileRefreshQueued } = await patchSampleLibraryRecordAndReturn(payload);
     return sendJson(response, 200, {
       ok: true,
       item,
-      items
+      items,
+      styleProfile,
+      styleProfileRefreshQueued
     });
   }
 
@@ -1230,10 +1295,12 @@ async function handleRequest(request, response) {
 
   if (request.method === "DELETE" && url.pathname === "/api/sample-library") {
     const payload = await readBody(request);
-    const { items } = await deleteSampleLibraryRecordAndReturn(payload?.id);
+    const { items, styleProfile, styleProfileRefreshQueued } = await deleteSampleLibraryRecordAndReturn(payload?.id);
     return sendJson(response, 200, {
       ok: true,
-      items
+      items,
+      styleProfile,
+      styleProfileRefreshQueued
     });
   }
 

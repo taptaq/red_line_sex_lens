@@ -13,18 +13,43 @@ async function withTempSampleLibraryApi(t, run) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "sample-library-api-"));
   const originals = {
     collectionTypes: paths.collectionTypes,
+    styleProfile: paths.styleProfile,
     successSamples: paths.successSamples,
     noteLifecycle: paths.noteLifecycle,
     noteRecords: paths.noteRecords
   };
 
   paths.collectionTypes = path.join(tempDir, "collection-types.json");
+  paths.styleProfile = path.join(tempDir, "style-profile.json");
   paths.successSamples = path.join(tempDir, "success-samples.json");
   paths.noteLifecycle = path.join(tempDir, "note-lifecycle.json");
   paths.noteRecords = path.join(tempDir, "note-records.json");
 
   await Promise.all([
     fs.writeFile(paths.collectionTypes, `${JSON.stringify({ custom: [] }, null, 2)}\n`, "utf8"),
+    fs.writeFile(
+      paths.styleProfile,
+      `${JSON.stringify(
+        {
+          current: {
+            id: "style-profile-current",
+            status: "active",
+            topic: "既存画像",
+            name: "既存画像",
+            sourceSampleIds: ["existing-reference"],
+            titleStyle: "既存タイトル",
+            bodyStructure: "既存本文",
+            tone: "既存トーン",
+            preferredTags: ["既存タグ"],
+            createdAt: "2026-05-01T00:00:00.000Z",
+            updatedAt: "2026-05-01T00:00:00.000Z"
+          }
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    ),
     fs.writeFile(paths.successSamples, "[]\n", "utf8"),
     fs.writeFile(paths.noteLifecycle, "[]\n", "utf8")
   ]);
@@ -454,6 +479,43 @@ test("sample library DELETE removes an existing canonical record", async (t) => 
 
     const listed = await invokeRoute("GET", "/api/sample-library");
     assert.deepEqual(listed.items, []);
+  });
+});
+
+test("sample library reference mutations queue style profile refresh without blocking on regeneration", async (t) => {
+  await withTempSampleLibraryApi(t, async () => {
+    const created = await invokeRoute("POST", "/api/sample-library", {
+      note: {
+        title: "参考样本标题",
+        body: "参考样本正文".repeat(20),
+        tags: ["参考"]
+      },
+      reference: {
+        enabled: true,
+        tier: "featured",
+        selectedBy: "manual"
+      },
+      publish: {
+        status: "published_passed"
+      }
+    });
+
+    assert.equal(created.status, 200);
+    assert.equal(created.ok, true);
+    assert.equal(created.styleProfileRefreshQueued, true);
+    assert.ok(created.styleProfile.current);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const deleted = await invokeRoute("DELETE", "/api/sample-library", {
+      id: created.item.id
+    });
+
+    assert.equal(deleted.status, 200);
+    assert.equal(deleted.ok, true);
+    assert.equal(deleted.styleProfileRefreshQueued, true);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
   });
 });
 
