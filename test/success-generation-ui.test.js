@@ -642,6 +642,83 @@ test("sample library record commits keep summary and bootstrap snapshots consist
   ]);
 });
 
+test("sample library bootstrap records synchronize summary count without a summary snapshot", async () => {
+  const { appJs } = await readFrontendFiles();
+  const commitSource = extractSourceBetween(
+    appJs,
+    "function commitSampleLibraryRecords(",
+    "function renderSampleLibraryWorkspace("
+  );
+  const hydrateSource = extractSourceBetween(
+    appJs,
+    "function hydrateBootstrapSnapshot()",
+    "async function refreshAll("
+  );
+  const appState = {
+    sampleLibraryRecords: [],
+    summaryData: {}
+  };
+  const persistedSnapshots = [];
+  const renderedSummaries = [];
+  const hydrateBootstrapSnapshot = new Function(
+    "appState",
+    "loadBootstrapSnapshotPart",
+    "setSampleLibraryLoadingState",
+    "renderSampleLibraryWorkspace",
+    "persistBootstrapSnapshotPart",
+    "renderSummary",
+    "renderQueue",
+    "renderAdminData",
+    "renderLexiconWorkspaceModal",
+    "renderCollectionTypeSelectors",
+    "renderModelSelectionControls",
+    "uniqueStrings",
+    "presetAnalyzeTags",
+    "renderAnalyzeTagOptions",
+    "initializeSampleLibraryImportTagPickers",
+    `
+      let analyzeTagOptions = [];
+      ${commitSource}
+      ${hydrateSource}
+      return hydrateBootstrapSnapshot;
+    `
+  )(
+    appState,
+    (key) => {
+      if (key === "sampleLibraryRecords") return [{ id: "record-1" }, { id: "record-2" }, { id: "record-3" }];
+      return null;
+    },
+    () => {},
+    () => {},
+    (key, payload) =>
+      persistedSnapshots.push([
+        key,
+        Array.isArray(payload) ? payload.map((item) => item.id) : payload.sampleLibraryCount
+      ]),
+    (summary) => renderedSummaries.push(summary.sampleLibraryCount),
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    (items = []) => [...new Set(items)],
+    [],
+    () => {},
+    () => {}
+  );
+
+  hydrateBootstrapSnapshot();
+
+  assert.deepEqual(appState.sampleLibraryRecords.map((item) => item.id), ["record-1", "record-2", "record-3"]);
+  assert.equal(appState.summaryData.sampleLibraryCount, 3);
+  assert.deepEqual(persistedSnapshots, [
+    ["sampleLibraryRecords", ["record-1", "record-2", "record-3"]],
+    ["summary", 3]
+  ]);
+  assert.deepEqual(renderedSummaries, [3]);
+  assert.match(hydrateSource, /commitSampleLibraryRecords\(sampleLibraryRecords, \[\]\)/);
+});
+
 test("summary and admin refresh loading states reset after failures", async () => {
   const { appJs } = await readFrontendFiles();
   const refreshAdminDataStateSource = extractSourceBetween(

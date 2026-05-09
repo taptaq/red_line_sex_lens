@@ -5672,10 +5672,9 @@ function hydrateBootstrapSnapshot() {
   }
 
   if (Array.isArray(sampleLibraryRecords)) {
-    appState.sampleLibraryRecords = sampleLibraryRecords;
+    commitSampleLibraryRecords(sampleLibraryRecords, []);
     setSampleLibraryLoadingState("idle");
     renderSampleLibraryWorkspace();
-    renderSummary(appState.summaryData);
   }
 
   if (Array.isArray(collectionTypeOptions)) {
