@@ -65,6 +65,31 @@ test("rewrite provider switches to kimi when REWRITE_PROVIDER is kimi", () => {
   }
 });
 
+test("rewrite provider defaults kimi text model to kimi-k2.5 when env is not set", () => {
+  const previousProvider = process.env.REWRITE_PROVIDER;
+  const previousKimiModel = process.env.KIMI_TEXT_MODEL;
+
+  process.env.REWRITE_PROVIDER = "kimi";
+  delete process.env.KIMI_TEXT_MODEL;
+
+  const config = getRewriteProviderConfig();
+
+  assert.equal(config.provider, "kimi");
+  assert.deepEqual(config.models, ["kimi-k2.5"]);
+
+  if (previousProvider === undefined) {
+    delete process.env.REWRITE_PROVIDER;
+  } else {
+    process.env.REWRITE_PROVIDER = previousProvider;
+  }
+
+  if (previousKimiModel === undefined) {
+    delete process.env.KIMI_TEXT_MODEL;
+  } else {
+    process.env.KIMI_TEXT_MODEL = previousKimiModel;
+  }
+});
+
 test("rewrite provider falls back to glm when REWRITE_PROVIDER is unsupported", () => {
   const previousProvider = process.env.REWRITE_PROVIDER;
 

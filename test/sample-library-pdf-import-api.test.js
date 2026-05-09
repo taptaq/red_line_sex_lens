@@ -9,8 +9,8 @@ import { paths } from "../src/config.js";
 import { loadNoteRecords } from "../src/data-store.js";
 import { safeHandleRequest } from "../src/server.js";
 
-async function withTempSampleLibraryPdfImportApi(t, run) {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "sample-library-pdf-import-"));
+async function withTempSampleLibraryMarkdownImportApi(t, run) {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "sample-library-markdown-import-"));
   const originals = {
     collectionTypes: paths.collectionTypes,
     successSamples: paths.successSamples,
@@ -37,25 +37,25 @@ async function withTempSampleLibraryPdfImportApi(t, run) {
   return run();
 }
 
-test("sample library PDF parse returns draft errors and commit persists only confirmed items", async (t) => {
-  await withTempSampleLibraryPdfImportApi(t, async () => {
-    const parsed = await invokeRoute("POST", "/api/sample-library/pdf-import/parse", {
-      files: [{ name: "a.pdf", contentBase64: "" }]
+test("sample library Markdown parse returns draft errors and commit persists only confirmed items", async (t) => {
+  await withTempSampleLibraryMarkdownImportApi(t, async () => {
+    const parsed = await invokeRoute("POST", "/api/sample-library/markdown-import/parse", {
+      files: [{ name: "a.md", contentBase64: "" }]
     });
 
     assert.equal(parsed.status, 200);
     assert.equal(parsed.ok, true);
     assert.equal(parsed.items.length, 1);
-    assert.equal(parsed.items[0].fileName, "a.pdf");
+    assert.equal(parsed.items[0].fileName, "a.md");
     assert.equal(parsed.items[0].status, "error");
     assert.equal(parsed.items[0].title, "");
     assert.equal(parsed.items[0].body, "");
 
-    const committed = await invokeRoute("POST", "/api/sample-library/pdf-import/commit", {
+    const committed = await invokeRoute("POST", "/api/sample-library/markdown-import/commit", {
       items: [
         {
           selected: true,
-          fileName: "a.pdf",
+          fileName: "a.md",
           title: "标题A",
           coverText: "封面A",
         body: "正文A第一段\n正文A第二段",
@@ -74,7 +74,7 @@ test("sample library PDF parse returns draft errors and commit persists only con
       },
         {
           selected: false,
-          fileName: "skip.pdf",
+          fileName: "skip.md",
           title: "跳过",
           body: "跳过正文",
           collectionType: "科普"
@@ -105,20 +105,45 @@ test("sample library PDF parse returns draft errors and commit persists only con
   });
 });
 
-test("sample library PDF commit rejects selected incomplete items before writing anything", async (t) => {
-  await withTempSampleLibraryPdfImportApi(t, async () => {
-    const committed = await invokeRoute("POST", "/api/sample-library/pdf-import/commit", {
+test("sample library Markdown parse strips heading titles and markdown syntax into plain body text", async (t) => {
+  await withTempSampleLibraryMarkdownImportApi(t, async () => {
+    const content = Buffer.from(
+      [
+        "# sample",
+        "",
+        "第一段 **正文**",
+        "- 第二段正文",
+        "[延伸阅读](https://example.com)"
+      ].join("\n"),
+      "utf8"
+    ).toString("base64");
+
+    const parsed = await invokeRoute("POST", "/api/sample-library/markdown-import/parse", {
+      files: [{ name: "sample.md", contentBase64: content }]
+    });
+
+    assert.equal(parsed.status, 200);
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.items.length, 1);
+    assert.equal(parsed.items[0].title, "sample");
+    assert.equal(parsed.items[0].body, "第一段 正文\n第二段正文\n延伸阅读");
+  });
+});
+
+test("sample library Markdown commit rejects selected incomplete items before writing anything", async (t) => {
+  await withTempSampleLibraryMarkdownImportApi(t, async () => {
+    const committed = await invokeRoute("POST", "/api/sample-library/markdown-import/commit", {
       items: [
         {
           selected: true,
-          fileName: "valid.pdf",
+          fileName: "valid.md",
           title: "先不要落库",
           body: "这条本来是有效的",
           collectionType: "科普"
         },
         {
           selected: true,
-          fileName: "invalid.pdf",
+          fileName: "invalid.md",
           title: "缺正文",
           body: "",
           collectionType: "科普"
@@ -135,27 +160,27 @@ test("sample library PDF commit rejects selected incomplete items before writing
   });
 });
 
-test("sample library PDF commit rejects mixed selected batches with invalid collection types before partial writes", async (t) => {
-  await withTempSampleLibraryPdfImportApi(t, async () => {
-    const committed = await invokeRoute("POST", "/api/sample-library/pdf-import/commit", {
+test("sample library Markdown commit rejects mixed selected batches with invalid collection types before partial writes", async (t) => {
+  await withTempSampleLibraryMarkdownImportApi(t, async () => {
+    const committed = await invokeRoute("POST", "/api/sample-library/markdown-import/commit", {
       items: [
         {
           selected: true,
-          fileName: "valid.pdf",
+          fileName: "valid.md",
           title: "先不要落库",
           body: "这条本来是有效的",
           collectionType: "科普"
         },
         {
           selected: true,
-          fileName: "invalid-type.pdf",
+          fileName: "invalid-type.md",
           title: "类型不合法",
           body: "这条会触发合集类型校验",
           collectionType: "未知类型"
         },
         {
           selected: false,
-          fileName: "skip.pdf",
+          fileName: "skip.md",
           title: "未勾选",
           body: "不应参与校验",
           collectionType: "科普"
@@ -172,8 +197,8 @@ test("sample library PDF commit rejects mixed selected batches with invalid coll
   });
 });
 
-test("sample library PDF commit rejects duplicate items against existing note records", async (t) => {
-  await withTempSampleLibraryPdfImportApi(t, async () => {
+test("sample library Markdown commit rejects duplicate items against existing note records", async (t) => {
+  await withTempSampleLibraryMarkdownImportApi(t, async () => {
     await invokeRoute("POST", "/api/sample-library", {
       source: "manual",
       stage: "draft",
@@ -186,11 +211,11 @@ test("sample library PDF commit rejects duplicate items against existing note re
       }
     });
 
-    const committed = await invokeRoute("POST", "/api/sample-library/pdf-import/commit", {
+    const committed = await invokeRoute("POST", "/api/sample-library/markdown-import/commit", {
       items: [
         {
           selected: true,
-          fileName: "duplicate.pdf",
+          fileName: "duplicate.md",
           title: "重复标题",
           coverText: "重复封面",
           body: "重复正文",
@@ -208,13 +233,13 @@ test("sample library PDF commit rejects duplicate items against existing note re
   });
 });
 
-test("sample library PDF commit rejects duplicate items within the same selected batch", async (t) => {
-  await withTempSampleLibraryPdfImportApi(t, async () => {
-    const committed = await invokeRoute("POST", "/api/sample-library/pdf-import/commit", {
+test("sample library Markdown commit rejects duplicate items within the same selected batch", async (t) => {
+  await withTempSampleLibraryMarkdownImportApi(t, async () => {
+    const committed = await invokeRoute("POST", "/api/sample-library/markdown-import/commit", {
       items: [
         {
           selected: true,
-          fileName: "a.pdf",
+          fileName: "a.md",
           title: "批次重复标题",
           coverText: "批次重复封面",
           body: "批次重复正文",
@@ -222,7 +247,7 @@ test("sample library PDF commit rejects duplicate items within the same selected
         },
         {
           selected: true,
-          fileName: "b.pdf",
+          fileName: "b.md",
           title: "批次重复标题",
           coverText: "批次重复封面",
           body: "批次重复正文",
@@ -237,6 +262,20 @@ test("sample library PDF commit rejects duplicate items within the same selected
     assert.equal(committed.ok, false);
     assert.match(committed.error, /重复/);
     assert.deepEqual(records, []);
+  });
+});
+
+test("legacy sample library PDF import routes are no longer exposed at runtime", async (t) => {
+  await withTempSampleLibraryMarkdownImportApi(t, async () => {
+    const parsed = await invokeRoute("POST", "/api/sample-library/pdf-import/parse", {
+      files: []
+    });
+    const committed = await invokeRoute("POST", "/api/sample-library/pdf-import/commit", {
+      items: []
+    });
+
+    assert.equal(parsed.status, 404);
+    assert.equal(committed.status, 404);
   });
 });
 

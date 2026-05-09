@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 
-test("sample library frontend wires parse and commit flows for PDF imports", async () => {
+test("sample library frontend wires parse and commit flows for Markdown imports", async () => {
   const appJs = await fs.readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const requirementStart = appJs.indexOf("function getSampleLibraryImportCardRequirementMessage(card)");
   const requirementEnd = appJs.indexOf("function syncSampleLibraryImportCardActions(card)", requirementStart);
@@ -14,13 +14,13 @@ test("sample library frontend wires parse and commit flows for PDF imports", asy
   const importButtonEnd = appJs.indexOf('byId("sample-library-import-input").addEventListener("change"', importButtonStart);
   const importButtonSource = appJs.slice(importButtonStart, importButtonEnd);
 
-  assert.match(appJs, /const sampleLibraryPdfImportParseApi = "\/api\/sample-library\/pdf-import\/parse"/);
-  assert.match(appJs, /const sampleLibraryPdfImportCommitApi = "\/api\/sample-library\/pdf-import\/commit"/);
+  assert.match(appJs, /const sampleLibraryMarkdownImportParseApi = "\/api\/sample-library\/markdown-import\/parse"/);
+  assert.match(appJs, /const sampleLibraryMarkdownImportCommitApi = "\/api\/sample-library\/markdown-import\/commit"/);
   assert.match(appJs, /sampleLibraryImportDrafts:\s*\[\s*\]/);
   assert.match(appJs, /async function fileToBase64\(file\)/);
   assert.match(appJs, /file\.arrayBuffer\(\)/);
-  assert.match(appJs, /async function parseSampleLibraryPdfFiles\(files = \[\]\)/);
-  assert.match(appJs, /apiJson\(sampleLibraryPdfImportParseApi/);
+  assert.match(appJs, /async function parseSampleLibraryMarkdownFiles\(files = \[\]\)/);
+  assert.match(appJs, /apiJson\(sampleLibraryMarkdownImportParseApi/);
   assert.match(appJs, /function renderSampleLibraryImportDrafts\(items = \[\]\)/);
   assert.match(appJs, /sample-library-import-result/);
   assert.match(appJs, /data-import-index/);
@@ -50,7 +50,7 @@ test("sample library frontend wires parse and commit flows for PDF imports", asy
   assert.match(appJs, /function openSampleLibraryImportAdvancedModal\(/);
   assert.match(appJs, /function saveSampleLibraryImportAdvancedModal\(/);
   assert.match(appJs, /async function commitSampleLibraryImportCard\(card\)/);
-  assert.match(appJs, /apiJson\(sampleLibraryPdfImportCommitApi/);
+  assert.match(appJs, /apiJson\(sampleLibraryMarkdownImportCommitApi/);
   assert.match(appJs, /sample-library-import-input"\)\.addEventListener\("change"/);
   assert.match(appJs, /sample-library-import-button"\)\.addEventListener\("click"/);
   assert.match(appJs, /sample-library-import-single-commit/);
@@ -101,7 +101,7 @@ test("sample library frontend wires parse and commit flows for PDF imports", asy
   assert.match(appJs, /高级属性/);
   assert.match(appJs, /参考属性/);
   assert.match(appJs, /生命周期属性/);
-  assert.match(appJs, /浏览 \${escapeHtml\(String\(normalizedPublish\.metrics\.views \|\| 0\)\)}/);
+  assert.doesNotMatch(appJs, /浏览 \${escapeHtml\(String\(normalizedPublish\.metrics\.views \|\| 0\)\)}/);
   assert.match(appJs, /value="\$\{escapeHtml\(item\?\.title \|\| ""\)\}"/);
   assert.match(appJs, /sample-library-import-card-hint/);
   assert.doesNotMatch(appJs, /<details class="sample-library-import-advanced admin-accordion">/);

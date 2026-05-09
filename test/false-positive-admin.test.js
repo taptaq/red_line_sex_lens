@@ -315,6 +315,10 @@ test("false positive homepage summary runtime updates summary text button visibi
 
   const appState = {
     falsePositiveLog: [],
+    adminDataLoading: {
+      phase: "initial",
+      error: ""
+    },
     sampleLibraryModal: {
       kind: "false-positive-list"
     }
@@ -345,26 +349,32 @@ test("false positive homepage summary runtime updates summary text button visibi
 
   const renderFalsePositiveLog = new Function(
     "appState",
+    "isAdminDataInitialLoading",
     "getSortedFalsePositiveGroups",
     "byId",
     "buildFalsePositiveSummaryText",
+    "buildAdminDataLoadingBlockMarkup",
     "renderFalsePositiveListModal",
     `${renderSource}; return renderFalsePositiveLog;`
   )(
     appState,
+    () => appState.adminDataLoading?.phase === "initial",
     getSortedFalsePositiveGroups,
     byId,
     buildFalsePositiveSummaryText,
+    (message = "加载中...") => `<div class="result-card muted">${message}</div>`,
     renderFalsePositiveListModal
   );
 
   renderFalsePositiveLog([]);
-  assert.equal(nodes["false-positive-summary"].textContent, "当前没有误报样本");
+  assert.equal(nodes["false-positive-summary"].textContent, "加载中...");
   assert.equal(nodes["false-positive-summary"].classList.states.get("muted"), true);
   assert.equal(nodes["false-positive-preview-open-button"].hidden, true);
   assert.equal(nodes["false-positive-log-list"].hidden, false);
-  assert.match(nodes["false-positive-log-list"].innerHTML, /当前没有误报样本/);
+  assert.match(nodes["false-positive-log-list"].innerHTML, /加载中/);
   assert.equal(modalRenderCalls.length, 1);
+
+  appState.adminDataLoading.phase = "idle";
 
   renderFalsePositiveLog([
     { id: "fp-1", status: "platform_passed_pending" },

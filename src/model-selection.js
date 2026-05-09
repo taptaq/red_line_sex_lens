@@ -71,7 +71,7 @@ function getRewriteGlmModel() {
 }
 
 function getRewriteKimiModel() {
-  return String(process.env.KIMI_TEXT_MODEL || "moonshot-v1-8k").trim();
+  return String(process.env.KIMI_TEXT_MODEL || "kimi-k2.5").trim();
 }
 
 function getRewriteQwenModel() {

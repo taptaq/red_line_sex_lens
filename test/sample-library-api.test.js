@@ -15,18 +15,21 @@ async function withTempSampleLibraryApi(t, run) {
     collectionTypes: paths.collectionTypes,
     successSamples: paths.successSamples,
     noteLifecycle: paths.noteLifecycle,
-    noteRecords: paths.noteRecords
+    noteRecords: paths.noteRecords,
+    styleProfile: paths.styleProfile
   };
 
   paths.collectionTypes = path.join(tempDir, "collection-types.json");
   paths.successSamples = path.join(tempDir, "success-samples.json");
   paths.noteLifecycle = path.join(tempDir, "note-lifecycle.json");
   paths.noteRecords = path.join(tempDir, "note-records.json");
+  paths.styleProfile = path.join(tempDir, "style-profile.json");
 
   await Promise.all([
     fs.writeFile(paths.collectionTypes, `${JSON.stringify({ custom: [] }, null, 2)}\n`, "utf8"),
     fs.writeFile(paths.successSamples, "[]\n", "utf8"),
-    fs.writeFile(paths.noteLifecycle, "[]\n", "utf8")
+    fs.writeFile(paths.noteLifecycle, "[]\n", "utf8"),
+    fs.writeFile(paths.styleProfile, "{}\n", "utf8")
   ]);
 
   t.after(async () => {
@@ -142,6 +145,48 @@ test("sample library API preserves learning sample types on canonical note recor
     assert.equal(listed.items[0].sampleType, "false_positive");
     assert.equal(records[0].sampleType, "false_positive");
     assert.equal(records[0].publish.status, "false_positive");
+  });
+});
+
+test("sample library API returns the latest style profile after reference-sample mutations", async (t) => {
+  await withTempSampleLibraryApi(t, async () => {
+    const created = await invokeRoute("POST", "/api/sample-library", {
+      source: "manual",
+      stage: "published_reference",
+      note: {
+        title: "参考样本标题",
+        body: "参考样本正文".repeat(40),
+        collectionType: "科普",
+        tags: ["科普", "关系"]
+      },
+      reference: {
+        enabled: true,
+        tier: "featured",
+        selectedBy: "manual"
+      },
+      publish: {
+        status: "positive_performance",
+        metrics: {
+          likes: 33,
+          favorites: 12,
+          comments: 18,
+          views: 6000
+        }
+      }
+    });
+
+    assert.equal(created.status, 200);
+    assert.equal(created.ok, true);
+    assert.equal(created.styleProfile.current.sourceSampleIds.length, 1);
+    assert.equal(created.styleProfile.current.sourceSampleIds[0], created.item.id);
+
+    const deleted = await invokeRoute("DELETE", "/api/sample-library", {
+      id: created.item.id
+    });
+
+    assert.equal(deleted.status, 200);
+    assert.equal(deleted.ok, true);
+    assert.deepEqual(deleted.styleProfile.current.sourceSampleIds, []);
   });
 });
 

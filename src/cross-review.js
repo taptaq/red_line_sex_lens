@@ -23,7 +23,7 @@ const providerConfigs = [
     label: "Kimi",
     envKey: "KIMI_API_KEY",
     endpoint: process.env.KIMI_BASE_URL || "https://api.moonshot.cn/v1/chat/completions",
-    model: process.env.KIMI_TEXT_MODEL || "moonshot-v1-8k"
+    model: process.env.KIMI_TEXT_MODEL || "kimi-k2.5"
   },
   {
     provider: "qwen",

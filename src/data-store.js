@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { isSameFeedbackNote } from "./feedback-identity.js";
-import { paths } from "./config.js";
+import { dataDir, paths } from "./config.js";
 import { buildLifecycleRecord } from "./note-lifecycle.js";
 import {
   buildNoteRecord,
@@ -442,6 +442,15 @@ export async function saveReviewQueue(items) {
 }
 
 export async function loadNoteRecords() {
+  const configuredPath = paths.noteRecords;
+  const defaultNoteRecordsPath = path.join(dataDir, "note-records.json");
+  const configuredPathIsCustom = path.resolve(configuredPath) !== path.resolve(defaultNoteRecordsPath);
+
+  if (configuredPathIsCustom && (await fileExists(configuredPath))) {
+    const items = await readJson(configuredPath, []);
+    return collapseNoteRecordsByCompatibility(dedupeNoteRecords(Array.isArray(items) ? items : []));
+  }
+
   const noteRecordsPath = resolveNoteRecordsPath();
 
   if (await fileExists(noteRecordsPath)) {

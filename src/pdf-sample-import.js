@@ -5,16 +5,10 @@ function splitNonEmptyLines(text = "") {
     .filter(Boolean);
 }
 
-function splitTrimmedLines(text = "") {
-  return String(text || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim());
-}
-
 function buildTitleFromFileName(fileName = "") {
   return String(fileName || "")
     .trim()
-    .replace(/\.pdf$/i, "")
+    .replace(/\.(?:md|markdown)$/i, "")
     .replace(/【[^】]*】/g, "")
     .trim();
 }
@@ -27,31 +21,112 @@ function normalizeForTitleComparison(value = "") {
     .toLowerCase();
 }
 
-function buildBodyFromPdfText(text = "") {
-  const lines = splitTrimmedLines(text);
-  let startIndex = 0;
+function stripMarkdownInlineSyntax(line = "") {
+  return String(line || "")
+    .replace(/!\[([^\]]*)\]\((?:[^()\\]|\\.)*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\((?:[^()\\]|\\.)*\)/g, "$1")
+    .replace(/<(https?:\/\/[^>\s]+)>/gi, "$1")
+    .replace(/<([^\s@>]+@[^\s@>]+)>/g, "$1")
+    .replace(/<\/?[^>]+>/g, " ")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/(\*\*|__)(.*?)\1/g, "$2")
+    .replace(/(\*|_)(.*?)\1/g, "$2")
+    .replace(/~~(.*?)~~/g, "$1")
+    .replace(/\\([\\`*_{}\[\]()#+\-.!>~|])/g, "$1")
+    .replace(/[*_~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-  while (startIndex < lines.length && !lines[startIndex]) {
-    startIndex += 1;
+function normalizeMarkdownLine(line = "") {
+  let normalized = String(line || "").trim();
+
+  if (!normalized) {
+    return "";
   }
 
-  while (startIndex < lines.length && /^\d+$/.test(lines[startIndex])) {
-    startIndex += 1;
+  if (/^([-*_]\s*){3,}$/u.test(normalized)) {
+    return "";
   }
 
-  while (startIndex < lines.length && !lines[startIndex]) {
-    startIndex += 1;
+  normalized = normalized
+    .replace(/^#{1,6}\s*/u, "")
+    .replace(/^>\s*/u, "")
+    .replace(/^(?:[-*+]\s+|\d+[.)]\s+)/u, "")
+    .replace(/^\[(?: |x|X)\]\s+/u, "")
+    .replace(/^\|/u, "")
+    .replace(/\|$/u, "")
+    .replace(/\s*\|\s*/gu, " ");
+
+  return stripMarkdownInlineSyntax(normalized);
+}
+
+function collapseBlankLines(lines = []) {
+  const normalized = [];
+  let previousWasBlank = true;
+
+  for (const line of Array.isArray(lines) ? lines : []) {
+    const value = String(line || "").trim();
+
+    if (!value) {
+      if (!previousWasBlank) {
+        normalized.push("");
+      }
+      previousWasBlank = true;
+      continue;
+    }
+
+    normalized.push(value);
+    previousWasBlank = false;
   }
 
-  while (startIndex < lines.length && lines[startIndex]) {
-    startIndex += 1;
+  if (normalized[normalized.length - 1] === "") {
+    normalized.pop();
   }
 
-  while (startIndex < lines.length && !lines[startIndex]) {
-    startIndex += 1;
+  return normalized;
+}
+
+function buildBodyFromMarkdownText(text = "") {
+  const lines = String(text || "").split(/\r?\n/);
+  const bodyLines = [];
+  let inCodeFence = false;
+  let inFrontMatter = false;
+  let frontMatterResolved = false;
+
+  for (const [index, rawLine] of lines.entries()) {
+    const trimmed = String(rawLine || "").trim();
+
+    if (!frontMatterResolved && index === 0 && trimmed === "---") {
+      inFrontMatter = true;
+      continue;
+    }
+
+    if (inFrontMatter) {
+      if (trimmed === "---" || trimmed === "...") {
+        inFrontMatter = false;
+        frontMatterResolved = true;
+      }
+      continue;
+    }
+
+    frontMatterResolved = true;
+
+    if (/^(```|~~~)/u.test(trimmed)) {
+      inCodeFence = !inCodeFence;
+      continue;
+    }
+
+    if (!trimmed) {
+      bodyLines.push("");
+      continue;
+    }
+
+    const normalizedLine = inCodeFence ? stripMarkdownInlineSyntax(trimmed) : normalizeMarkdownLine(trimmed);
+    bodyLines.push(normalizedLine);
   }
 
-  return lines.slice(startIndex).filter(Boolean).join("\n").trim();
+  return collapseBlankLines(bodyLines).join("\n").trim();
 }
 
 function stripLeadingTitleFragments(body = "", title = "") {
@@ -92,9 +167,9 @@ function resolveMetricValue(item = {}, key) {
   return item?.publish?.metrics?.[key] ?? item?.metrics?.[key];
 }
 
-export function buildPdfImportDraftFromText({ fileName = "", text = "" } = {}) {
+export function buildMarkdownImportDraftFromText({ fileName = "", text = "" } = {}) {
   const title = buildTitleFromFileName(fileName);
-  const body = stripLeadingTitleFragments(buildBodyFromPdfText(text), title);
+  const body = stripLeadingTitleFragments(buildBodyFromMarkdownText(text), title);
   const status = title && body ? "ready" : "needs_review";
 
   return {
@@ -102,11 +177,11 @@ export function buildPdfImportDraftFromText({ fileName = "", text = "" } = {}) {
     status,
     title,
     body,
-    error: status === "ready" ? "" : "PDF 解析结果缺少可用正文，请手动补充后再导入。"
+    error: status === "ready" ? "" : "Markdown 解析结果缺少可用正文，请手动补充后再导入。"
   };
 }
 
-export function normalizePdfImportCommitItem(item = {}) {
+export function normalizeMarkdownImportCommitItem(item = {}) {
   const tags = String(item.tags || "")
     .split(/[，,、]/)
     .map((tag) => tag.trim())
@@ -141,7 +216,7 @@ export function normalizePdfImportCommitItem(item = {}) {
   };
 }
 
-export async function parsePdfImportFiles(files = [], { extractText = extractPdfText } = {}) {
+export async function parseMarkdownImportFiles(files = [], { extractText = extractMarkdownText } = {}) {
   const items = [];
 
   for (const file of Array.isArray(files) ? files : []) {
@@ -154,21 +229,21 @@ export async function parsePdfImportFiles(files = [], { extractText = extractPdf
         status: "error",
         title: "",
         body: "",
-        error: "缺少 PDF 文件名或内容。"
+        error: "缺少 Markdown 文件名或内容。"
       });
       continue;
     }
 
     try {
       const text = await extractText(Buffer.from(contentBase64, "base64"));
-      items.push(buildPdfImportDraftFromText({ fileName, text }));
+      items.push(buildMarkdownImportDraftFromText({ fileName, text }));
     } catch (error) {
       items.push({
         fileName,
         status: "error",
         title: "",
         body: "",
-        error: error instanceof Error ? error.message : "PDF 解析失败"
+        error: error instanceof Error ? error.message : "Markdown 解析失败"
       });
     }
   }
@@ -176,8 +251,11 @@ export async function parsePdfImportFiles(files = [], { extractText = extractPdf
   return items;
 }
 
-export async function extractPdfText(buffer, parser = null) {
-  const parse = parser || (await import("pdf-parse")).default;
-  const result = await parse(buffer);
-  return String(result?.text || "").trim();
+export async function extractMarkdownText(buffer, parser = null) {
+  if (typeof parser === "function") {
+    const result = await parser(buffer);
+    return String(result?.text || result || "").trim();
+  }
+
+  return Buffer.isBuffer(buffer) ? buffer.toString("utf8").trim() : String(buffer || "").trim();
 }

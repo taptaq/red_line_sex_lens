@@ -190,6 +190,17 @@
                   <div>
                     <strong>生成候选小红书笔记</strong>
                     <p>从零生成或基于草稿优化，自动参考成功样本和当前风格画像。</p>
+                    <div class="item-actions generation-style-profile-actions">
+                      <button
+                        type="button"
+                        id="generation-style-profile-button"
+                        class="button button-ghost button-small"
+                        data-action="open-style-profile-modal"
+                        aria-controls="sample-library-modal"
+                      >
+                        查看 / 编辑当前风格画像
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <form id="generation-workbench-form" class="stacked-form form-grid">
@@ -481,7 +492,7 @@
                     aria-controls="sample-library-import-block"
                     aria-expanded="false"
                   >
-                    批量导入 PDF
+                    批量导入 Markdown
                   </button>
                   <button
                     type="button"
@@ -492,12 +503,12 @@
                   >
                     查看样本池
                   </button>
-                  <input id="sample-library-import-input" type="file" accept="application/pdf,.pdf" multiple hidden />
+                  <input id="sample-library-import-input" type="file" accept=".md,.markdown,text/markdown" multiple hidden />
                 </div>
                 <div id="sample-library-create-result" class="result-card muted">等待操作</div>
                 <section class="sample-library-import-block" id="sample-library-import-block" hidden>
                   <div class="admin-panel-body stack">
-                    <div id="sample-library-import-result" class="result-card muted">等待导入 PDF</div>
+                    <div id="sample-library-import-result" class="result-card muted">等待导入 Markdown</div>
                   </div>
                 </section>
                 <div class="sample-library-workspace" id="sample-library-workspace">

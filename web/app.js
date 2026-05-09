@@ -20,6 +20,19 @@ function joinCSV(items = []) {
   return Array.isArray(items) ? items.join(", ") : "";
 }
 
+function splitLineList(value = "") {
+  return uniqueStrings(
+    String(value || "")
+      .split(/[\n，,、]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  );
+}
+
+function joinLineList(items = []) {
+  return Array.isArray(items) ? items.join("\n") : "";
+}
+
 function uniqueStrings(items = []) {
   return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
 }
@@ -246,6 +259,187 @@ function compactText(value, maxLength = 80) {
   return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
 }
 
+function isAdminDataInitialLoading() {
+  return appState.adminDataLoading?.phase === "initial";
+}
+
+function isAdminDataRefreshing() {
+  return appState.adminDataLoading?.phase === "refresh";
+}
+
+function isSummaryInitialLoading() {
+  return appState.summaryLoading?.phase === "initial";
+}
+
+function isSummaryRefreshing() {
+  return appState.summaryLoading?.phase === "refresh";
+}
+
+function isSampleLibraryInitialLoading() {
+  return appState.sampleLibraryLoading?.phase === "initial";
+}
+
+function isSampleLibraryRefreshing() {
+  return appState.sampleLibraryLoading?.phase === "refresh";
+}
+
+function buildAdminDataLoadingBlockMarkup(message = "加载中...", { count = 2, isRefreshing = false } = {}) {
+  const cards = Array.from({ length: Math.max(1, Number(count) || 1) }, () => `
+      <article class="admin-data-loading-item">
+        <strong>${escapeHtml(message)}</strong>
+        <p>正在同步这一区块的数据，请稍候。</p>
+      </article>
+    `).join("");
+
+  return `
+    <div class="admin-data-loading-block" data-loading="${escapeHtml(String(isRefreshing))}">
+      ${cards}
+    </div>
+  `;
+}
+
+function syncAdminDataLoadingUI() {
+  const isRefreshing = isAdminDataRefreshing();
+  const loadingTargets = [
+    "review-queue",
+    "feedback-priority-list",
+    "feedback-log-secondary-list",
+    "false-positive-log-list",
+    "inner-space-terms-list",
+    "custom-lexicon-list",
+    "seed-lexicon-list"
+  ];
+
+  loadingTargets.forEach((id) => {
+    const node = byId(id);
+
+    if (node) {
+      node.dataset.loading = isRefreshing ? "true" : "";
+    }
+  });
+
+  const summaryNode = byId("false-positive-summary");
+
+  if (summaryNode) {
+    summaryNode.dataset.loading = isRefreshing ? "true" : "";
+  }
+
+  const styleProfileButton = byId("generation-style-profile-button");
+
+  if (styleProfileButton) {
+    const defaultLabel = styleProfileButton.dataset.label || styleProfileButton.textContent || "查看 / 编辑当前风格画像";
+    styleProfileButton.dataset.label = defaultLabel;
+    styleProfileButton.dataset.loading = isRefreshing ? "true" : "";
+
+    if (isAdminDataInitialLoading()) {
+      styleProfileButton.disabled = true;
+      styleProfileButton.textContent = "画像加载中...";
+      return;
+    }
+
+    styleProfileButton.disabled = false;
+    styleProfileButton.textContent = isRefreshing ? "同步画像中..." : defaultLabel;
+  }
+}
+
+function setAdminDataLoadingState(phase = "idle", error = "") {
+  appState.adminDataLoading = {
+    phase,
+    error: String(error || "").trim()
+  };
+  syncAdminDataLoadingUI();
+}
+
+function buildSummaryLoadingPlaceholdersMarkup() {
+  return [
+    {
+      label: "待处理误判",
+      meta: "正在同步误判与回流数据。"
+    },
+    {
+      label: "待补好样本",
+      meta: "正在汇总学习样本与参考候选。"
+    },
+    {
+      label: "今日内容流转",
+      meta: "正在整理当前待办和工作节奏。"
+    }
+  ]
+    .map(
+      ({ label, meta }) => `
+        <article class="summary-card summary-card-loading">
+          <span>${escapeHtml(label)}</span>
+          <strong>...</strong>
+          <p class="summary-card-meta">${escapeHtml(meta)}</p>
+          <em class="summary-card-action">加载中...</em>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function syncSummaryLoadingUI() {
+  const gridNode = byId("summary-grid");
+
+  if (!gridNode) {
+    return;
+  }
+
+  gridNode.dataset.loading = isSummaryRefreshing() ? "true" : "";
+}
+
+function setSummaryLoadingState(phase = "idle", error = "") {
+  appState.summaryLoading = {
+    phase,
+    error: String(error || "").trim()
+  };
+  syncSummaryLoadingUI();
+}
+
+function renderSummaryLoadingPlaceholders() {
+  const gridNode = byId("summary-grid");
+
+  if (!gridNode) {
+    return;
+  }
+
+  gridNode.innerHTML = buildSummaryLoadingPlaceholdersMarkup();
+}
+
+function syncSampleLibraryLoadingUI() {
+  const loadingTargets = [
+    "sample-library-record-list",
+    "sample-library-calibration-review-queue"
+  ];
+
+  loadingTargets.forEach((id) => {
+    const node = byId(id);
+
+    if (node) {
+      node.dataset.loading = isSampleLibraryRefreshing() ? "true" : "";
+    }
+  });
+
+  const countNode = byId("sample-library-list-count");
+
+  if (countNode) {
+    countNode.dataset.loading = isSampleLibraryRefreshing() ? "true" : "";
+  }
+}
+
+function setSampleLibraryLoadingState(phase = "idle", error = "") {
+  appState.sampleLibraryLoading = {
+    phase,
+    error: String(error || "").trim()
+  };
+  syncSampleLibraryLoadingUI();
+}
+
+function renderSampleLibraryLoadingPlaceholders() {
+  renderSampleLibraryList([]);
+  renderSampleLibraryCalibrationReviewQueue([]);
+}
+
 function buildRuleChangePreviewMarkup(preview = null) {
   if (!preview) {
     return "";
@@ -410,10 +604,24 @@ const appState = {
     innerSpaceTerms: [],
     feedbackLog: [],
     falsePositiveLog: [],
-    reviewQueue: []
+    reviewQueue: [],
+    styleProfile: null
+  },
+  adminDataLoading: {
+    phase: "initial",
+    error: ""
+  },
+  summaryData: null,
+  summaryLoading: {
+    phase: "initial",
+    error: ""
   },
   collectionTypeOptions: [],
   sampleLibraryRecords: [],
+  sampleLibraryLoading: {
+    phase: "initial",
+    error: ""
+  },
   selectedSampleLibraryRecordId: "",
   sampleLibraryDetailStep: "base",
   sampleLibraryCollectionFilter: "all",
@@ -439,6 +647,10 @@ const presetAnalyzeTags = [
   "身体探索",
   "关系沟通",
   "亲密关系",
+  "愉悦",
+  "大人也要玩玩具",
+  "悦己",
+  "深夜话题",
   "性教育",
   "健康科普",
   "女性成长",
@@ -456,10 +668,11 @@ const analyzeTagOptionsApi = "/api/analyze-tag-options";
 const collectionTypesApi = "/api/collection-types";
 const modelOptionsApi = "/api/model-options";
 const sampleLibraryApi = "/api/sample-library";
-const sampleLibraryPdfImportParseApi = "/api/sample-library/pdf-import/parse";
-const sampleLibraryPdfImportCommitApi = "/api/sample-library/pdf-import/commit";
+const sampleLibraryMarkdownImportParseApi = "/api/sample-library/markdown-import/parse";
+const sampleLibraryMarkdownImportCommitApi = "/api/sample-library/markdown-import/commit";
 const sampleLibraryCalibrationReplayApi = "/api/sample-library/calibration-replay";
 const innerSpaceTermsApi = "/api/admin/inner-space-terms";
+const styleProfileAdminApi = "/api/admin/style-profile";
 const SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT = 3;
 
 function syncBodyModalState() {
@@ -962,6 +1175,7 @@ async function openLexiconWorkspaceModal(tab = "custom", { prefill = null, resul
   };
 
   renderLexiconWorkspaceModal();
+  setAdminDataLoadingState("idle");
 }
 
 function closeLexiconWorkspaceModal() {
@@ -1121,31 +1335,18 @@ function renderSampleLibraryPoolsModal() {
   );
 
   modal.querySelectorAll("[data-sample-pool-tab]").forEach((button) => {
-    button.setAttribute("aria-selected", String(button.dataset.samplePoolTab === pool));
+    const tab = String(button.dataset.samplePoolTab || "reference");
+    button.textContent = formatSamplePoolTabLabel(tab, summary[tab] || 0);
+    button.setAttribute("aria-selected", String(tab === pool));
   });
 
   contentNode.innerHTML = `
-    <section class="sample-pool-summary-grid">
-      <article class="sample-pool-summary-card">
-        <strong>参考样本池</strong>
-        <p>${escapeHtml(String(summary.reference || 0))} 条</p>
-      </article>
-      <article class="sample-pool-summary-card">
-        <strong>普通样本池</strong>
-        <p>${escapeHtml(String(summary.regular || 0))} 条</p>
-      </article>
-      <article class="sample-pool-summary-card">
-        <strong>反例样本池</strong>
-        <p>${escapeHtml(String(summary.negative || 0))} 条</p>
-      </article>
-    </section>
     <section class="sample-pool-panel">
       <div class="sample-pool-panel-head">
         <div>
           <strong>${escapeHtml(description.title)}</strong>
           <p>${escapeHtml(description.subtitle)}</p>
         </div>
-        <span class="meta-pill">${escapeHtml(String(items.length))} 条记录</span>
       </div>
       <div class="sample-pool-card-list">
         ${renderSamplePoolCards(items, pool) || `<div class="result-card muted">${escapeHtml(description.empty)}</div>`}
@@ -1706,6 +1907,39 @@ function providerLabel(provider) {
 function formatDate(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "未知时间" : date.toLocaleString("zh-CN");
+}
+
+function buildStyleProfileGenerationLabel(meta = {}) {
+  const method = String(meta?.method || "").trim();
+  const provider = String(meta?.provider || "").trim();
+  const providerText = String(meta?.providerLabel || providerLabel(provider) || "本地规则").trim();
+  const model = String(meta?.model || "").trim();
+  const routeLabel = String(meta?.routeLabel || "").trim();
+
+  if (method === "model_summary" && provider) {
+    return [providerText, model, routeLabel].filter(Boolean).join(" · ");
+  }
+
+  if (method === "local_rule_fallback" && Array.isArray(meta?.attemptedProviders) && meta.attemptedProviders.length) {
+    return "本地规则汇总（模型链路已回退）";
+  }
+
+  return "本地规则汇总";
+}
+
+function syncStyleProfileStateFromPayload(payload = {}) {
+  const styleProfile = payload?.styleProfile;
+
+  if (!styleProfile || typeof styleProfile !== "object") {
+    return null;
+  }
+
+  appState.adminData = {
+    ...appState.adminData,
+    styleProfile
+  };
+
+  return styleProfile;
 }
 
 function setButtonBusy(button, isBusy, busyText) {
@@ -2565,7 +2799,18 @@ function renderCrossReviewResult(result) {
 }
 
 function renderQueue(items) {
-  byId("review-queue").innerHTML = items.length
+  const node = byId("review-queue");
+
+  if (!node) {
+    return;
+  }
+
+  if (isAdminDataInitialLoading()) {
+    node.innerHTML = buildAdminDataLoadingBlockMarkup("加载中...", { count: 2, isRefreshing: false });
+    return;
+  }
+
+  node.innerHTML = items.length
     ? items
         .map(
           (item) => `
@@ -2749,6 +2994,11 @@ function renderLexiconList(containerId, items, scope) {
     return;
   }
 
+  if (isAdminDataInitialLoading()) {
+    node.innerHTML = buildAdminDataLoadingBlockMarkup("加载中...", { count: 2, isRefreshing: false });
+    return;
+  }
+
   node.innerHTML = buildLexiconListMarkup(items, scope);
 }
 
@@ -2765,6 +3015,25 @@ function renderFeedbackLog(items) {
   });
   const pendingFeedbackItems = sortedItems.filter((item) => !String(item.decision || "").trim());
   const completedFeedbackItems = sortedItems.filter((item) => String(item.decision || "").trim());
+  const priorityNode = byId("feedback-priority-list");
+  const pendingNode = byId("feedback-log-list");
+  const completedNode = byId("feedback-log-secondary-list");
+
+  if (isAdminDataInitialLoading()) {
+    if (priorityNode) {
+      priorityNode.innerHTML = buildAdminDataLoadingBlockMarkup("加载中...", { count: 2, isRefreshing: false });
+    }
+
+    if (pendingNode) {
+      pendingNode.innerHTML = buildAdminDataLoadingBlockMarkup("加载中...", { count: 1, isRefreshing: false });
+    }
+
+    if (completedNode) {
+      completedNode.innerHTML = buildAdminDataLoadingBlockMarkup("加载中...", { count: 2, isRefreshing: false });
+    }
+    return;
+  }
+
   const buildFeedbackItemMarkup = (item) => {
     const notePreview = compactText(item.noteContent || item.body, 96);
     const needsAttention = !String(item.decision || "").trim();
@@ -2849,17 +3118,23 @@ function renderFeedbackLog(items) {
     `;
   };
 
-  byId("feedback-priority-list").innerHTML = pendingFeedbackItems.length
+  if (priorityNode) {
+    priorityNode.innerHTML = pendingFeedbackItems.length
     ? pendingFeedbackItems.map(buildFeedbackItemMarkup).join("")
     : '<div class="result-card muted">当前没有待优先处理的反馈</div>';
+  }
 
-  byId("feedback-log-list").innerHTML = pendingFeedbackItems.length
+  if (pendingNode) {
+    pendingNode.innerHTML = pendingFeedbackItems.length
     ? '<div class="result-card muted">待优先处理的违规反馈已单独置顶显示</div>'
     : '<div class="result-card muted">当前没有待处理违规反馈</div>';
+  }
 
-  byId("feedback-log-secondary-list").innerHTML = completedFeedbackItems.length
+  if (completedNode) {
+    completedNode.innerHTML = completedFeedbackItems.length
     ? completedFeedbackItems.map(buildFeedbackItemMarkup).join("")
     : '<div class="result-card muted">当前没有已处理的违规反馈</div>';
+  }
 }
 
 function getSortedFalsePositiveGroups(items = []) {
@@ -2976,6 +3251,27 @@ function renderFalsePositiveLog(items) {
   const previewButton = byId("false-positive-preview-open-button");
   const summaryNode = byId("false-positive-summary");
   const logListNode = byId("false-positive-log-list");
+
+  if (isAdminDataInitialLoading()) {
+    if (previewButton) {
+      previewButton.hidden = true;
+    }
+
+    if (summaryNode) {
+      summaryNode.textContent = "加载中...";
+      summaryNode.classList.toggle("muted", true);
+    }
+
+    if (logListNode) {
+      logListNode.hidden = false;
+      logListNode.innerHTML = buildAdminDataLoadingBlockMarkup("加载中...", { count: 2, isRefreshing: false });
+    }
+
+    if (appState.sampleLibraryModal?.kind === "false-positive-list" && byId("sample-library-modal")?.hidden === false) {
+      renderFalsePositiveListModal();
+    }
+    return;
+  }
 
   if (previewButton) {
     previewButton.hidden = appState.falsePositiveLog.length === 0;
@@ -3227,6 +3523,11 @@ function sampleLibraryPoolLabel(pool = "reference") {
   return "参考样本池";
 }
 
+function formatSamplePoolTabLabel(pool = "reference", count = 0) {
+  const normalizedCount = Math.max(0, Number(count) || 0);
+  return `${sampleLibraryPoolLabel(pool)}（${String(normalizedCount)}）`;
+}
+
 function buildSamplePoolSummary(records = []) {
   return (Array.isArray(records) ? records : []).reduce(
     (summary, record) => {
@@ -3358,6 +3659,17 @@ function getSampleLibraryCalibrationListState(record = {}) {
   };
 }
 
+function sortSampleLibraryRecordsByPublishedAtDesc(items = []) {
+  return [...(Array.isArray(items) ? items : [])].sort((left, right) => {
+    const leftPublish = getSampleRecordPublish(left);
+    const rightPublish = getSampleRecordPublish(right);
+    const leftSortTime = new Date(leftPublish.publishedAt || left.updatedAt || left.createdAt || 0).getTime() || 0;
+    const rightSortTime = new Date(rightPublish.publishedAt || right.updatedAt || right.createdAt || 0).getTime() || 0;
+
+    return rightSortTime - leftSortTime;
+  });
+}
+
 function filterSampleLibraryRecords(items = []) {
   const normalizedItems = Array.isArray(items) ? items : [];
   const filter = String(appState.sampleLibraryFilter || "all").trim() || "all";
@@ -3366,70 +3678,72 @@ function filterSampleLibraryRecords(items = []) {
     .trim()
     .toLowerCase();
 
-  return normalizedItems.filter((item) => {
-    const reference = getSampleRecordReference(item);
-    const trackedLifecycle = hasTrackedLifecycle(item);
-    const collectionType = getSampleRecordCollectionType(item);
-    const calibrationState = getSampleLibraryCalibrationListState(item);
+  return sortSampleLibraryRecordsByPublishedAtDesc(
+    normalizedItems.filter((item) => {
+      const reference = getSampleRecordReference(item);
+      const trackedLifecycle = hasTrackedLifecycle(item);
+      const collectionType = getSampleRecordCollectionType(item);
+      const calibrationState = getSampleLibraryCalibrationListState(item);
 
-    if (filter === "incomplete" && (reference.enabled || trackedLifecycle)) {
-      return false;
-    }
+      if (filter === "incomplete" && (reference.enabled || trackedLifecycle)) {
+        return false;
+      }
 
-    if (filter === "calibration_pending" && calibrationState.key !== "calibration_pending") {
-      return false;
-    }
+      if (filter === "calibration_pending" && calibrationState.key !== "calibration_pending") {
+        return false;
+      }
 
-    if (filter === "calibration_matched" && calibrationState.key !== "calibration_matched") {
-      return false;
-    }
+      if (filter === "calibration_matched" && calibrationState.key !== "calibration_matched") {
+        return false;
+      }
 
-    if (filter === "calibration_mismatch" && calibrationState.key !== "calibration_mismatch") {
-      return false;
-    }
+      if (filter === "calibration_mismatch" && calibrationState.key !== "calibration_mismatch") {
+        return false;
+      }
 
-    if (filter === "reference" && !reference.enabled) {
-      return false;
-    }
+      if (filter === "reference" && !reference.enabled) {
+        return false;
+      }
 
-    if (filter === "published" && !trackedLifecycle) {
-      return false;
-    }
+      if (filter === "published" && !trackedLifecycle) {
+        return false;
+      }
 
-    if (collectionFilter !== "all" && collectionType !== collectionFilter) {
-      return false;
-    }
+      if (collectionFilter !== "all" && collectionType !== collectionFilter) {
+        return false;
+      }
 
-    if (!search) {
-      return true;
-    }
+      if (!search) {
+        return true;
+      }
 
-    const haystack = [
-      item?.id,
-      item?.source,
-      item?.stage,
-      getSampleRecordTitle(item),
-      getSampleRecordBody(item),
-      getSampleRecordCoverText(item),
-      collectionType,
-      joinCSV(getSampleRecordTags(item)),
-      getSampleRecordReference(item)?.tier,
-      getSampleRecordPublish(item)?.status,
-      getSampleLibraryCalibrationListState(item).label,
-      buildSampleLibraryCalibrationRetroComparison({
-        prediction: getSampleRecordCalibration(item)?.prediction,
-        publish: getSampleRecordPublish(item)
-      })?.summary,
-      getSampleRecordCalibration(item)?.prediction?.predictedStatus,
-      getSampleRecordCalibration(item)?.prediction?.predictedRiskLevel,
-      riskLevelLabel(getSampleRecordCalibration(item)?.prediction?.predictedRiskLevel),
-      getSampleRecordCalibration(item)?.retro?.actualPerformanceTier
-    ]
-      .map((value) => String(value || "").toLowerCase())
-      .join("\n");
+      const haystack = [
+        item?.id,
+        item?.source,
+        item?.stage,
+        getSampleRecordTitle(item),
+        getSampleRecordBody(item),
+        getSampleRecordCoverText(item),
+        collectionType,
+        joinCSV(getSampleRecordTags(item)),
+        getSampleRecordReference(item)?.tier,
+        getSampleRecordPublish(item)?.status,
+        getSampleLibraryCalibrationListState(item).label,
+        buildSampleLibraryCalibrationRetroComparison({
+          prediction: getSampleRecordCalibration(item)?.prediction,
+          publish: getSampleRecordPublish(item)
+        })?.summary,
+        getSampleRecordCalibration(item)?.prediction?.predictedStatus,
+        getSampleRecordCalibration(item)?.prediction?.predictedRiskLevel,
+        riskLevelLabel(getSampleRecordCalibration(item)?.prediction?.predictedRiskLevel),
+        getSampleRecordCalibration(item)?.retro?.actualPerformanceTier
+      ]
+        .map((value) => String(value || "").toLowerCase())
+        .join("\n");
 
-    return haystack.includes(search);
-  });
+      return haystack.includes(search);
+    })
+  );
 }
 
 function getSelectedSampleLibraryRecord() {
@@ -3532,25 +3846,7 @@ function buildSampleLibraryRecordCardMarkup(item = {}, { action = "", actionId =
 
 function getSampleLibraryRecordPreviewItems(items = []) {
   const normalizedItems = Array.isArray(items) ? items : [];
-
-  if (normalizedItems.length <= SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT) {
-    return normalizedItems;
-  }
-
-  const previewItems = normalizedItems.slice(0, SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT);
-  const selectedId = String(appState.selectedSampleLibraryRecordId || "");
-
-  if (!selectedId) {
-    return previewItems;
-  }
-
-  const selectedIndex = normalizedItems.findIndex((item) => String(item?.id || "") === selectedId);
-
-  if (selectedIndex === -1 || selectedIndex < SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT) {
-    return previewItems;
-  }
-
-  return [...previewItems.slice(0, SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT - 1), normalizedItems[selectedIndex]];
+  return normalizedItems.slice(0, SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT);
 }
 
 function renderSampleLibraryList(items = []) {
@@ -3560,6 +3856,19 @@ function renderSampleLibraryList(items = []) {
   const previewItems = getSampleLibraryRecordPreviewItems(items);
 
   if (!listNode) {
+    return;
+  }
+
+  if (isSampleLibraryInitialLoading()) {
+    if (countNode) {
+      countNode.textContent = "加载中...";
+    }
+
+    if (previewOpenButton) {
+      previewOpenButton.hidden = true;
+    }
+
+    listNode.innerHTML = buildAdminDataLoadingBlockMarkup("加载中...", { count: 2, isRefreshing: false });
     return;
   }
 
@@ -4115,6 +4424,7 @@ async function saveSampleLibraryRecordInlineEditorModal() {
     body: JSON.stringify(payload)
   });
 
+  syncStyleProfileStateFromPayload(response);
   appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
   appState.selectedSampleLibraryRecordId = String(response.item?.id || modalState.selectedRecordId || "");
   appState.sampleLibraryModal = {
@@ -4234,6 +4544,11 @@ function renderSampleLibraryCalibrationReviewQueue(items = []) {
   const queueNode = byId("sample-library-calibration-review-queue");
 
   if (!queueNode) {
+    return;
+  }
+
+  if (isSampleLibraryInitialLoading()) {
+    queueNode.innerHTML = buildAdminDataLoadingBlockMarkup("加载中...", { count: 2, isRefreshing: false });
     return;
   }
 
@@ -4364,6 +4679,180 @@ function buildSampleLibraryModalSectionMarkup({ title = "", description = "", bo
       ${body}
     </section>
   `;
+}
+
+function buildStyleProfileModalMarkup(profileState = null) {
+  const current = profileState?.current && typeof profileState.current === "object" ? profileState.current : null;
+  const sourceSampleIds = Array.isArray(current?.sourceSampleIds) ? current.sourceSampleIds.filter(Boolean) : [];
+  const sourceSamples = Array.isArray(current?.sourceSamples) ? current.sourceSamples.filter(Boolean) : [];
+  const preferredTags = joinCSV(current?.preferredTags || []);
+  const avoidExpressions = joinLineList(current?.avoidExpressions || []);
+  const generationGuidelines = joinLineList(current?.generationGuidelines || []);
+  const generationLabel = buildStyleProfileGenerationLabel(current?.generationMeta);
+  const generationTime = current?.generationMeta?.generatedAt ? formatDate(current.generationMeta.generatedAt) : "未知时间";
+  const summaryDescription = current
+    ? `当前由 ${sourceSampleIds.length} 条参考样本沉淀；优先使用通义千问、Kimi、深度求索生成画像，失败后回退到本地规则汇总。`
+    : "当前还没有自动沉淀画像；你可以先保存一版人工初始化画像，后续随着参考样本增加，系统会继续自动沉淀。";
+  const sourceListMarkup = sourceSamples.length
+    ? sourceSamples.map(
+        (item) => `
+            <article class="style-profile-source-item">
+              <strong>${escapeHtml(item.title || item.id || "未命名参考样本")}</strong>
+              <span class="style-profile-source-chip">${escapeHtml(item.id || "未标记 ID")}${item.collectionType ? ` · ${escapeHtml(item.collectionType)}` : ""}</span>
+            </article>
+          `
+      ).join("")
+    : sourceSampleIds.length
+      ? sourceSampleIds
+          .map(
+            (item) => `
+              <article class="style-profile-source-item">
+                <strong>${escapeHtml(item)}</strong>
+                <span class="style-profile-source-chip">${escapeHtml(item)}</span>
+              </article>
+            `
+          )
+          .join("")
+      : '<p class="helper-text muted">当前还没有来源样本。</p>';
+
+  return `
+    <div class="sample-library-modal-stack compact-form">
+      ${buildSampleLibraryModalSectionMarkup({
+        title: "当前生效画像",
+        description: summaryDescription,
+        body: `
+          <div class="style-profile-summary-grid">
+            <div class="style-profile-summary-card">
+              <span class="style-profile-summary-label">主题</span>
+              <strong>${escapeHtml(current?.topic || "通用风格")}</strong>
+            </div>
+            <div class="style-profile-summary-card">
+              <span class="style-profile-summary-label">名称</span>
+              <strong>${escapeHtml(current?.name || "通用风格画像")}</strong>
+            </div>
+            <div class="style-profile-summary-card">
+              <span class="style-profile-summary-label">更新时间</span>
+              <strong>${escapeHtml(formatDate(current?.updatedAt))}</strong>
+            </div>
+            <div class="style-profile-summary-card">
+              <span class="style-profile-summary-label">生成方式</span>
+              <strong>${escapeHtml(generationLabel)}</strong>
+              <span class="helper-text">${escapeHtml(generationTime)}</span>
+            </div>
+          </div>
+          <p class="helper-text style-profile-helper-copy">优先使用通义千问、Kimi、深度求索生成画像，失败后回退到本地规则汇总。</p>
+          <div class="style-profile-source-list">${sourceListMarkup}</div>
+        `
+      })}
+      ${buildSampleLibraryModalSectionMarkup({
+        title: "手动修订",
+        description: "这里改的是当前生效画像；来源样本和自动统计仍由系统维护。",
+        body: `
+          <div class="sample-library-modal-grid style-profile-modal-grid">
+            <label>
+              <span>主题</span>
+              <input name="styleProfileTopic" value="${escapeHtml(current?.topic || "通用风格")}" placeholder="例如：亲密关系沟通" />
+            </label>
+            <label>
+              <span>画像名称</span>
+              <input name="styleProfileName" value="${escapeHtml(current?.name || "通用风格画像")}" placeholder="例如：亲密关系沟通画像" />
+            </label>
+            <label class="field-wide">
+              <span>标题风格</span>
+              <textarea name="styleProfileTitleStyle" rows="3" placeholder="总结标题节奏和语气">${escapeHtml(current?.titleStyle || "")}</textarea>
+            </label>
+            <label class="field-wide">
+              <span>正文结构</span>
+              <textarea name="styleProfileBodyStructure" rows="3" placeholder="总结正文展开顺序和结构">${escapeHtml(current?.bodyStructure || "")}</textarea>
+            </label>
+            <label class="field-wide">
+              <span>语气</span>
+              <textarea name="styleProfileTone" rows="3" placeholder="例如：温和、克制、像朋友提醒">${escapeHtml(current?.tone || "")}</textarea>
+            </label>
+            <label class="field-wide">
+              <span>偏好标签</span>
+              <input name="styleProfilePreferredTags" value="${escapeHtml(preferredTags)}" placeholder="逗号分隔，例如：沟通, 科普, 关系" />
+            </label>
+            <label class="field-wide">
+              <span>避免表达</span>
+              <textarea name="styleProfileAvoidExpressions" rows="4" placeholder="每行一条，或用逗号分隔">${escapeHtml(avoidExpressions)}</textarea>
+            </label>
+            <label class="field-wide">
+              <span>生成指导</span>
+              <textarea name="styleProfileGenerationGuidelines" rows="4" placeholder="每行一条，或用逗号分隔">${escapeHtml(generationGuidelines)}</textarea>
+            </label>
+          </div>
+          <p class="helper-text style-profile-helper-copy">保存后，后续参考样本变化仍会自动更新画像基底，但这里手动修订过的字段不会被自动覆盖。</p>
+        `
+      })}
+    </div>
+  `;
+}
+
+function readStyleProfileModalPayload() {
+  const contentNode = byId("sample-library-modal-content");
+
+  return {
+    topic: contentNode?.querySelector('[name="styleProfileTopic"]')?.value || "",
+    name: contentNode?.querySelector('[name="styleProfileName"]')?.value || "",
+    titleStyle: contentNode?.querySelector('[name="styleProfileTitleStyle"]')?.value || "",
+    bodyStructure: contentNode?.querySelector('[name="styleProfileBodyStructure"]')?.value || "",
+    tone: contentNode?.querySelector('[name="styleProfileTone"]')?.value || "",
+    preferredTags: splitCSV(contentNode?.querySelector('[name="styleProfilePreferredTags"]')?.value || ""),
+    avoidExpressions: splitLineList(contentNode?.querySelector('[name="styleProfileAvoidExpressions"]')?.value || ""),
+    generationGuidelines: splitLineList(contentNode?.querySelector('[name="styleProfileGenerationGuidelines"]')?.value || "")
+  };
+}
+
+function renderStyleProfileModal() {
+  const profile = appState.sampleLibraryModal?.profile || appState.adminData.styleProfile || null;
+  const sourceCount = Array.isArray(profile?.current?.sourceSampleIds) ? profile.current.sourceSampleIds.length : 0;
+
+  renderSampleLibraryModal({
+    title: "当前风格画像",
+    subtitle: profile?.current
+      ? `当前生效画像 · ${sourceCount} 条来源样本`
+      : "当前还没有自动沉淀画像",
+    body: buildStyleProfileModalMarkup(profile),
+    saveLabel: "保存画像"
+  });
+}
+
+async function openStyleProfileModal() {
+  const response = await apiJson(styleProfileAdminApi);
+  const profile = response.profile && typeof response.profile === "object" ? response.profile : null;
+
+  appState.adminData = {
+    ...appState.adminData,
+    styleProfile: profile
+  };
+  appState.sampleLibraryModal = {
+    kind: "style-profile",
+    profile
+  };
+
+  renderStyleProfileModal();
+}
+
+async function saveStyleProfileModal() {
+  const response = await apiJson(styleProfileAdminApi, {
+    method: "PATCH",
+    body: JSON.stringify({
+      profile: readStyleProfileModalPayload()
+    })
+  });
+  const profile = response.profile && typeof response.profile === "object" ? response.profile : null;
+
+  appState.adminData = {
+    ...appState.adminData,
+    styleProfile: profile
+  };
+  appState.sampleLibraryModal = {
+    kind: "style-profile",
+    profile
+  };
+  renderStyleProfileModal();
+  setSampleLibraryModalMessage("风格画像已保存；后续自动沉淀会保留已手动修订字段。");
 }
 
 function buildSampleLibraryBaseEditorSectionMarkup({
@@ -4580,6 +5069,7 @@ async function saveSampleLibraryCreateModal() {
     })
   });
 
+  syncStyleProfileStateFromPayload(response);
   appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
   appState.sampleLibraryFilter = "all";
   appState.sampleLibrarySearch = "";
@@ -5232,6 +5722,15 @@ async function refreshSampleLibraryWorkspace() {
     return appState.sampleLibraryRecords;
   }
 
+  const hasExistingSampleLibraryRecords = appState.sampleLibraryRecords.length > 0;
+  const phase = hasExistingSampleLibraryRecords ? "refresh" : "initial";
+
+  setSampleLibraryLoadingState(phase);
+
+  if (phase === "initial") {
+    renderSampleLibraryLoadingPlaceholders();
+  }
+
   try {
     const payload = await apiJson(sampleLibraryApi);
     appState.sampleLibraryRecords = Array.isArray(payload?.items) ? payload.items : [];
@@ -5239,6 +5738,7 @@ async function refreshSampleLibraryWorkspace() {
     appState.sampleLibraryRecords = Array.isArray(appState.sampleLibraryRecords) ? appState.sampleLibraryRecords : [];
   }
 
+  setSampleLibraryLoadingState("idle");
   renderSampleLibraryWorkspace();
   return appState.sampleLibraryRecords;
 }
@@ -5460,6 +5960,11 @@ function renderInnerSpaceTermsList(items = []) {
     return;
   }
 
+  if (isAdminDataInitialLoading()) {
+    node.innerHTML = buildAdminDataLoadingBlockMarkup("加载中...", { count: 2, isRefreshing: false });
+    return;
+  }
+
   node.innerHTML = buildInnerSpaceTermsListMarkup(items);
 }
 
@@ -5469,6 +5974,11 @@ function renderAdminData(data) {
   renderInnerSpaceTermsList(data.innerSpaceTerms || []);
   renderFeedbackLog(data.feedbackLog);
   renderFalsePositiveLog(data.falsePositiveLog || []);
+}
+
+function renderAdminDataLoadingPlaceholders() {
+  renderQueue(appState.adminData.reviewQueue || []);
+  renderAdminData(appState.adminData);
 }
 
 async function refreshInnerSpaceTermsState() {
@@ -5491,6 +6001,22 @@ async function refreshInnerSpaceTermsState() {
 }
 
 async function refreshAdminDataState() {
+  const hasExistingAdminData =
+    appState.adminData.reviewQueue.length ||
+    appState.adminData.seedLexicon.length ||
+    appState.adminData.customLexicon.length ||
+    appState.adminData.innerSpaceTerms.length ||
+    appState.adminData.feedbackLog.length ||
+    appState.adminData.falsePositiveLog.length ||
+    Boolean(appState.adminData.styleProfile);
+  const phase = hasExistingAdminData ? "refresh" : "initial";
+
+  setAdminDataLoadingState(phase);
+
+  if (phase === "initial") {
+    renderAdminDataLoadingPlaceholders();
+  }
+
   const adminData = await apiJson("/api/admin/data");
 
   appState.adminData = {
@@ -5499,7 +6025,8 @@ async function refreshAdminDataState() {
     innerSpaceTerms: Array.isArray(adminData.innerSpaceTerms) ? adminData.innerSpaceTerms : [],
     feedbackLog: Array.isArray(adminData.feedbackLog) ? adminData.feedbackLog : [],
     falsePositiveLog: Array.isArray(adminData.falsePositiveLog) ? adminData.falsePositiveLog : [],
-    reviewQueue: Array.isArray(adminData.reviewQueue) ? adminData.reviewQueue : []
+    reviewQueue: Array.isArray(adminData.reviewQueue) ? adminData.reviewQueue : [],
+    styleProfile: adminData.styleProfile && typeof adminData.styleProfile === "object" ? adminData.styleProfile : null
   };
 
   if (!Array.isArray(adminData.innerSpaceTerms)) {
@@ -5510,6 +6037,15 @@ async function refreshAdminDataState() {
 }
 
 async function refreshAll() {
+  const hasExistingSummary = Boolean(appState.summaryData);
+  const summaryPhase = hasExistingSummary ? "refresh" : "initial";
+
+  setSummaryLoadingState(summaryPhase);
+
+  if (summaryPhase === "initial") {
+    renderSummaryLoadingPlaceholders();
+  }
+
   const [summary, collectionTypePayload] = await Promise.all([
     apiJson("/api/summary"),
     apiJson(collectionTypesApi)
@@ -5518,11 +6054,14 @@ async function refreshAll() {
   await refreshAdminDataState();
   appState.collectionTypeOptions = Array.isArray(collectionTypePayload.options) ? collectionTypePayload.options : [];
   await refreshSampleLibraryWorkspace();
-  renderSummary(summary);
+  appState.summaryData = summary && typeof summary === "object" ? summary : {};
+  setSummaryLoadingState("idle");
+  renderSummary(appState.summaryData);
   renderQueue(appState.adminData.reviewQueue);
   renderAdminData(appState.adminData);
   renderLexiconWorkspaceModal();
   renderCollectionTypeSelectors();
+  setAdminDataLoadingState("idle");
 }
 
 async function fileToDataUrl(file) {
@@ -5561,7 +6100,7 @@ function setSampleLibraryImportBlockOpen(isOpen) {
 
 function getSampleLibraryImportCardRequirementMessage(card) {
   if (!card) {
-    return "请先选择 PDF 并完成解析。";
+    return "请先选择 Markdown 文件并完成解析。";
   }
 
   const title = String(card.querySelector('[name="title"]')?.value || "").trim();
@@ -5657,7 +6196,7 @@ function syncSampleLibraryImportActions() {
   });
 }
 
-async function parseSampleLibraryPdfFiles(files = []) {
+async function parseSampleLibraryMarkdownFiles(files = []) {
   const payload = {
     files: await Promise.all(
       [...files].map(async (file) => ({
@@ -5667,7 +6206,7 @@ async function parseSampleLibraryPdfFiles(files = []) {
     )
   };
 
-  return apiJson(sampleLibraryPdfImportParseApi, {
+  return apiJson(sampleLibraryMarkdownImportParseApi, {
     method: "POST",
     body: JSON.stringify(payload)
   });
@@ -5708,7 +6247,6 @@ function buildSampleLibraryImportCardAdvancedStatusMarkup({ reference, publish }
       normalizedReference.enabled ? successTierLabel(normalizedReference.tier || "passed") : "未启用"
     )}</span>
     <span class="meta-pill">生命周期：${escapeHtml(publishStatusLabel(normalizedPublish.status || "not_published"))}</span>
-    <span class="meta-pill sample-library-metric-pill">浏览 ${escapeHtml(String(normalizedPublish.metrics.views || 0))}</span>
   `;
 }
 
@@ -6112,7 +6650,7 @@ function renderSampleLibraryImportDrafts(items = []) {
   }
 
   if (!appState.sampleLibraryImportDrafts.length) {
-    resultNode.innerHTML = '<div class="result-card muted">等待导入 PDF</div>';
+    resultNode.innerHTML = '<div class="result-card muted">等待导入 Markdown</div>';
     syncSampleLibraryImportActions();
     return;
   }
@@ -6122,7 +6660,7 @@ function renderSampleLibraryImportDrafts(items = []) {
       ${appState.sampleLibraryImportDrafts
         .map((item, index) => {
           const status = String(item?.status || "").trim();
-          const helperText = item?.error || (status === "ready" ? "已完成 PDF 解析，可继续补全信息。" : "请确认解析结果后再导入。");
+          const helperText = item?.error || (status === "ready" ? "已完成 Markdown 解析，可继续补全信息。" : "请确认解析结果后再导入。");
           const defaultCollectionType =
             appState.collectionTypeOptions.length === 1 ? appState.collectionTypeOptions[0] : "";
           const reference = readSampleLibraryImportDraftReference(item);
@@ -6244,11 +6782,12 @@ async function commitSampleLibraryImportCard(card) {
     }
   ];
 
-  const response = await apiJson(sampleLibraryPdfImportCommitApi, {
+  const response = await apiJson(sampleLibraryMarkdownImportCommitApi, {
     method: "POST",
     body: JSON.stringify({ items })
   });
 
+  syncStyleProfileStateFromPayload(response);
   if (Array.isArray(response.items) && response.items.length) {
     appState.selectedSampleLibraryRecordId = String(response.items[0]?.id || appState.selectedSampleLibraryRecordId || "");
   }
@@ -6882,6 +7421,7 @@ async function saveLifecycleFromCurrent(source = "analysis", candidateId = "", c
     method: "POST",
     body: JSON.stringify(payload)
   });
+  syncStyleProfileStateFromPayload(response);
   appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
   appState.sampleLibraryFilter = "all";
   appState.sampleLibraryCollectionFilter = "all";
@@ -6929,6 +7469,7 @@ async function savePlatformOutcomeFromCurrent({
       }
     })
   });
+  syncStyleProfileStateFromPayload(response);
   appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
   appState.selectedSampleLibraryRecordId = String(response.item?.id || id);
   renderSampleLibraryWorkspace();
@@ -7201,6 +7742,7 @@ async function patchSampleLibraryRecordAndRefresh(payload, { recordId = "", next
     body: JSON.stringify(payload)
   });
 
+  syncStyleProfileStateFromPayload(response);
   appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
   appState.selectedSampleLibraryRecordId = String(response.item?.id || recordId || payload?.id || "");
   renderSampleLibraryWorkspace();
@@ -7305,6 +7847,7 @@ async function saveSampleLibraryDeleteModal() {
       id: modalState.recordId
     })
   });
+  syncStyleProfileStateFromPayload(response);
   appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : [];
   appState.selectedSampleLibraryRecordId = "";
   renderSampleLibraryWorkspace();
@@ -7312,6 +7855,11 @@ async function saveSampleLibraryDeleteModal() {
 
 async function saveSampleLibraryDetailModal() {
   const modalState = appState.sampleLibraryModal;
+
+  if (modalState?.kind === "style-profile") {
+    await saveStyleProfileModal();
+    return;
+  }
 
   if (modalState?.kind === "platform-outcome") {
     await savePlatformOutcomeModal();
@@ -8163,15 +8711,15 @@ byId("sample-library-import-input").addEventListener("change", async (event) => 
   }
 
   setSampleLibraryImportBlockOpen(true);
-  byId("sample-library-import-result").innerHTML = '<div class="result-card-shell muted">正在解析 PDF...</div>';
+  byId("sample-library-import-result").innerHTML = '<div class="result-card-shell muted">正在解析 Markdown...</div>';
 
   try {
-    const result = await parseSampleLibraryPdfFiles(files);
+    const result = await parseSampleLibraryMarkdownFiles(files);
     renderSampleLibraryImportDrafts(result.items || []);
   } catch (error) {
     appState.sampleLibraryImportDrafts = [];
     byId("sample-library-import-result").innerHTML = `
-      <div class="result-card-shell muted">${escapeHtml(error.message || "PDF 解析失败")}</div>
+      <div class="result-card-shell muted">${escapeHtml(error.message || "Markdown 解析失败")}</div>
     `;
     syncSampleLibraryImportActions();
   } finally {
@@ -8693,6 +9241,17 @@ document.addEventListener("click", async (event) => {
 
   const action = button.dataset.action;
 
+  if (action === "open-style-profile-modal") {
+    setButtonBusy(button, true, "加载中...");
+
+    try {
+      await openStyleProfileModal();
+    } finally {
+      setButtonBusy(button, false);
+    }
+    return;
+  }
+
   if (action === "open-lexicon-workspace-modal") {
     openLexiconWorkspaceModal(button.dataset.tab || "custom");
     return;
@@ -8758,6 +9317,7 @@ document.addEventListener("click", async (event) => {
           }
         })
       });
+      syncStyleProfileStateFromPayload(response);
       appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
       appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
       renderSampleLibraryWorkspace();
@@ -8778,6 +9338,7 @@ document.addEventListener("click", async (event) => {
           sampleType: "missed_violation"
         })
       });
+      syncStyleProfileStateFromPayload(response);
       appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
       appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
       appState.sampleLibraryPoolsModal.tab = "negative";
@@ -8799,6 +9360,7 @@ document.addEventListener("click", async (event) => {
           sampleType: ""
         })
       });
+      syncStyleProfileStateFromPayload(response);
       appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
       appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
       appState.sampleLibraryPoolsModal.tab = "regular";

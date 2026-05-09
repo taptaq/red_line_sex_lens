@@ -12,7 +12,7 @@ const defaultQwenEndpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1/c
 const defaultDmxapiEndpoint = "https://www.dmxapi.cn/v1/chat/completions";
 const defaultVisionModel = process.env.GLM_VISION_MODEL || "glm-4.6v";
 const defaultTextModel = process.env.GLM_TEXT_MODEL || "glm-4.6v";
-const defaultKimiTextModel = process.env.KIMI_TEXT_MODEL || "moonshot-v1-8k";
+const defaultKimiTextModel = "kimi-k2.5";
 const defaultFeedbackModel = process.env.GLM_FEEDBACK_MODEL || defaultTextModel || "glm-4.6v";
 const defaultQwenFeedbackModel = process.env.QWEN_FEEDBACK_MODEL || "qwen-plus";
 const defaultMiniMaxDmxapiModel = process.env.MINIMAX_DMXAPI_MODEL || "MiniMax-M2.7-free";
@@ -75,7 +75,7 @@ function getKimiEndpoint() {
 }
 
 function getDefaultKimiTextModel() {
-  return String(process.env.KIMI_TEXT_MODEL || defaultKimiTextModel || "moonshot-v1-8k").trim();
+  return String(process.env.KIMI_TEXT_MODEL || defaultKimiTextModel || "kimi-k2.5").trim();
 }
 
 function getDefaultQwenDmxapiModel() {
@@ -1112,7 +1112,7 @@ const routedTextProviderConfigs = {
     label: "Kimi",
     officialEndpoint: getKimiEndpoint(),
     officialEnvKey: "KIMI_API_KEY",
-    getOfficialModel: (model) => String(model || process.env.KIMI_TEXT_MODEL || "moonshot-v1-8k").trim(),
+    getOfficialModel: (model) => String(model || process.env.KIMI_TEXT_MODEL || "kimi-k2.5").trim(),
     getDmxapiModel: () => getDefaultKimiDmxapiModel(),
     dmxapiLabel: "Kimi DMXAPI"
   },

@@ -25,9 +25,21 @@ test("analyze form uses a custom dropdown picker instead of a plain text tag inp
 
 test("analyze tag picker styles use a compact wrapping capsule layout", async () => {
   const source = await fs.readFile(path.join(process.cwd(), "web/styles.css"), "utf8");
+  const selectedStart = source.indexOf(".tag-picker-selected {");
+  const selectedEnd = source.indexOf(".tag-picker-selected::-webkit-scrollbar", selectedStart);
+  const selectedSource = source.slice(selectedStart, selectedEnd);
+  const chipStart = source.indexOf(".tag-picker-selected .tag-chip {");
+  const chipEnd = source.indexOf(".tag-picker-empty {", chipStart);
+  const chipSource = source.slice(chipStart, chipEnd);
 
   assert.match(source, /\.tag-picker-options\s*\{[\s\S]*?display:\s*flex[\s\S]*?flex-wrap:\s*wrap/);
   assert.match(source, /\.tag-picker-option-row\s*\{[\s\S]*?display:\s*inline-flex/);
+  assert.match(source, /\.tag-picker-trigger\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\);/);
+  assert.match(source, /\.tag-picker-trigger-head\s*\{[\s\S]*?display:\s*flex;[\s\S]*?width:\s*100%;/);
+  assert.match(selectedSource, /display:\s*flex/);
+  assert.match(selectedSource, /flex-wrap:\s*wrap/);
+  assert.match(chipSource, /flex:\s*0 0 auto/);
+  assert.match(chipSource, /white-space:\s*nowrap/);
   assert.match(
     source,
     /\.tag-picker-option\s*\{[\s\S]*?border-radius:\s*999px[\s\S]*?border:\s*1px solid rgba\(199,\s*154,\s*69,[\s\S]*?background:\s*rgba\(255,\s*251,\s*244,/

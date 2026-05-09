@@ -9,6 +9,7 @@ import { loadSuccessSamples, loadStyleProfile, saveStyleProfile } from "../src/d
 import {
   buildAutoStyleProfileState,
   buildStyleProfile,
+  generateStyleProfileWithFallback,
   getActiveStyleProfile,
   sanitizeStyleProfileState,
   scoreContentAgainstStyleProfile
@@ -212,6 +213,164 @@ test("auto style profile state replaces current profile instead of appending his
   assert.equal(secondProfile.current.topic, "自动沉淀画像");
   assert.deepEqual(secondProfile.current.sourceSampleIds, ["record-featured"]);
   assert.deepEqual(secondProfile.versions, []);
+});
+
+test("auto style profile state reapplies manual overrides after refresh", () => {
+  const samples = [
+    {
+      id: "record-featured",
+      tier: "featured",
+      title: "高权重参考样本",
+      body: "这是一篇更完整的经验正文。".repeat(8),
+      tags: ["关系", "科普"]
+    },
+    {
+      id: "record-performed",
+      tier: "performed",
+      title: "稳定参考样本",
+      body: "正文里先结论，再给场景和建议。".repeat(6),
+      tags: ["沟通", "疗愈"]
+    }
+  ];
+
+  const profile = buildAutoStyleProfileState(
+    {
+      current: {
+        id: "style-profile-current",
+        status: "active",
+        topic: "人工修订主题",
+        name: "人工修订画像",
+        titleStyle: "旧标题风格",
+        bodyStructure: "旧正文结构",
+        tone: "旧语气",
+        preferredTags: ["旧标签"],
+        avoidExpressions: ["旧禁用词"],
+        generationGuidelines: ["旧指导"],
+        manualOverrides: {
+          topic: "人工修订主题",
+          name: "人工修订画像",
+          titleStyle: "手动标题风格",
+          bodyStructure: "手动正文结构",
+          tone: "手动语气",
+          preferredTags: ["手动标签"],
+          avoidExpressions: ["手动禁用词"],
+          generationGuidelines: ["手动指导"]
+        }
+      }
+    },
+    samples,
+    {
+      topic: "自动沉淀画像"
+    }
+  );
+
+  assert.equal(profile.current.topic, "人工修订主题");
+  assert.equal(profile.current.name, "人工修订画像");
+  assert.equal(profile.current.titleStyle, "手动标题风格");
+  assert.equal(profile.current.bodyStructure, "手动正文结构");
+  assert.equal(profile.current.tone, "手动语气");
+  assert.deepEqual(profile.current.preferredTags, ["手动标签"]);
+  assert.deepEqual(profile.current.avoidExpressions, ["手动禁用词"]);
+  assert.deepEqual(profile.current.generationGuidelines, ["手动指导"]);
+  assert.deepEqual(profile.current.sourceSampleIds, ["record-featured", "record-performed"]);
+  assert.equal(profile.current.manualOverrides?.tone, "手动语气");
+});
+
+test("style profile model chain falls through qwen and kimi before deepseek succeeds", async () => {
+  const samples = [
+    {
+      id: "record-a",
+      tier: "performed",
+      title: "参考样本 A",
+      body: "正文 A".repeat(40),
+      tags: ["关系", "沟通"]
+    },
+    {
+      id: "record-b",
+      tier: "performed",
+      title: "参考样本 B",
+      body: "正文 B".repeat(40),
+      tags: ["疗愈", "科普"]
+    }
+  ];
+  const calls = [];
+
+  const profile = await generateStyleProfileWithFallback(samples, {
+    topic: "亲密关系沟通",
+    name: "亲密关系沟通画像",
+    generateWithProvider: async ({ provider }) => {
+      calls.push(provider);
+
+      if (provider === "qwen") {
+        throw new Error("qwen unavailable");
+      }
+
+      if (provider === "kimi") {
+        throw new Error("kimi unavailable");
+      }
+
+      return {
+        provider,
+        model: "deepseek-v4-flash",
+        route: "official",
+        routeLabel: "官方",
+        attemptedRoutes: [{ route: "official", routeLabel: "官方", model: "deepseek-v4-flash", status: "ok", message: "" }],
+        parsed: {
+          topic: "亲密关系沟通",
+          name: "双人沟通画像",
+          titleStyle: "标题先抛出现实困惑，再轻一点落到关系感受。",
+          bodyStructure: "正文先给结论，再给场景和可执行建议。",
+          tone: "温和、共情、像有经验的朋友提醒。",
+          preferredTags: ["关系", "沟通"],
+          avoidExpressions: ["绝对化承诺"],
+          generationGuidelines: ["避免标题党", "多用现实场景"]
+        }
+      };
+    }
+  });
+
+  assert.deepEqual(calls, ["qwen", "kimi", "deepseek"]);
+  assert.equal(profile.generationMeta.method, "model_summary");
+  assert.equal(profile.generationMeta.provider, "deepseek");
+  assert.equal(profile.generationMeta.model, "deepseek-v4-flash");
+  assert.equal(profile.generationMeta.routeLabel, "官方");
+  assert.deepEqual(profile.sourceSampleIds, ["record-a", "record-b"]);
+  assert.equal(profile.name, "双人沟通画像");
+});
+
+test("style profile model chain falls back to local rules when all model providers fail", async () => {
+  const samples = [
+    {
+      id: "record-a",
+      tier: "performed",
+      title: "参考样本 A",
+      body: "正文 A".repeat(40),
+      tags: ["关系", "沟通"]
+    },
+    {
+      id: "record-b",
+      tier: "performed",
+      title: "参考样本 B",
+      body: "正文 B".repeat(40),
+      tags: ["疗愈", "科普"]
+    }
+  ];
+
+  const profile = await generateStyleProfileWithFallback(samples, {
+    topic: "亲密关系沟通",
+    generateWithProvider: async ({ provider }) => {
+      throw new Error(`${provider} failed`);
+    }
+  });
+
+  assert.equal(profile.generationMeta.method, "local_rule_fallback");
+  assert.equal(profile.generationMeta.providerLabel, "本地规则");
+  assert.deepEqual(
+    profile.generationMeta.attemptedProviders.map((item) => item.provider),
+    ["qwen", "kimi", "deepseek"]
+  );
+  assert.deepEqual(profile.sourceSampleIds, ["record-a", "record-b"]);
+  assert.match(profile.titleStyle, /标题/);
 });
 
 test("sanitizeStyleProfileState collapses legacy draft and versions into current-only state", () => {

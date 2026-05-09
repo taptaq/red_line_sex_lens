@@ -1,5 +1,23 @@
 import { getSuccessSampleWeight } from "./success-samples.js";
 import { ensureArray, normalizeText } from "./normalizer.js";
+import { callDeepSeekJson, callKimiJson, callQwenJson } from "./glm.js";
+import { providerDisplayLabel } from "./provider-display.js";
+
+const STYLE_PROFILE_EDITABLE_FIELDS = [
+  "topic",
+  "name",
+  "titleStyle",
+  "bodyStructure",
+  "tone",
+  "preferredTags",
+  "avoidExpressions",
+  "generationGuidelines"
+];
+const STYLE_PROFILE_MODEL_CHAIN = [
+  { provider: "qwen", caller: callQwenJson },
+  { provider: "kimi", caller: callKimiJson },
+  { provider: "deepseek", caller: callDeepSeekJson }
+];
 
 function uniqueStrings(items = []) {
   return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
@@ -38,6 +56,130 @@ function normalizeTopic(value = "") {
   return String(value || "").trim() || "通用风格";
 }
 
+function normalizeStyleProfileAttempt(item = {}) {
+  return {
+    provider: String(item.provider || "").trim(),
+    label: String(item.label || providerDisplayLabel(item.provider)).trim(),
+    model: String(item.model || "").trim(),
+    route: String(item.route || "").trim(),
+    routeLabel: String(item.routeLabel || "").trim(),
+    status: String(item.status || "").trim() || "error",
+    message: String(item.message || "").trim()
+  };
+}
+
+function buildLocalRuleGenerationMeta({ generatedAt = new Date().toISOString(), attemptedProviders = [] } = {}) {
+  return {
+    method: "local_rule_fallback",
+    provider: "",
+    providerLabel: "本地规则",
+    model: "",
+    route: "",
+    routeLabel: "",
+    generatedAt,
+    attemptedProviders
+  };
+}
+
+function sanitizeStyleProfileGenerationMeta(meta = {}, fallback = {}) {
+  const source = meta && typeof meta === "object" ? meta : fallback && typeof fallback === "object" ? fallback : {};
+  const method = ["model_summary", "local_rule_fallback"].includes(String(source.method || "").trim())
+    ? String(source.method || "").trim()
+    : "local_rule_fallback";
+  const provider = String(source.provider || "").trim();
+  const providerLabel =
+    String(source.providerLabel || "").trim() || (provider ? providerDisplayLabel(provider) : "本地规则");
+  const attemptedProviders = (Array.isArray(source.attemptedProviders) ? source.attemptedProviders : [])
+    .map(normalizeStyleProfileAttempt)
+    .filter((item) => item.provider || item.label || item.message);
+
+  return {
+    method,
+    provider,
+    providerLabel,
+    model: String(source.model || "").trim(),
+    route: String(source.route || "").trim(),
+    routeLabel: String(source.routeLabel || "").trim(),
+    generatedAt: String(source.generatedAt || fallback.generatedAt || new Date().toISOString()).trim() || new Date().toISOString(),
+    attemptedProviders
+  };
+}
+
+function tryParseJsonBlock(value = "") {
+  const text = String(value || "").trim();
+
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {}
+
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+
+  if (start === -1 || end === -1 || end <= start) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeStyleProfileManualOverrides(overrides = {}) {
+  if (!overrides || typeof overrides !== "object") {
+    return null;
+  }
+
+  const sanitized = {};
+
+  for (const field of STYLE_PROFILE_EDITABLE_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(overrides, field)) {
+      continue;
+    }
+
+    if (["preferredTags", "avoidExpressions", "generationGuidelines"].includes(field)) {
+      const values = uniqueStrings(overrides[field]);
+
+      if (values.length) {
+        sanitized[field] = values;
+      }
+      continue;
+    }
+
+    const text = String(overrides[field] || "").trim();
+
+    if (!text) {
+      continue;
+    }
+
+    sanitized[field] = field === "topic" ? normalizeTopic(text) : text;
+  }
+
+  return Object.keys(sanitized).length ? sanitized : null;
+}
+
+function applyStyleProfileManualOverrides(profile = {}, overrides = null) {
+  const base = profile && typeof profile === "object" ? { ...profile } : {};
+  const sanitizedOverrides = sanitizeStyleProfileManualOverrides(overrides);
+
+  if (!sanitizedOverrides) {
+    delete base.manualOverrides;
+    return base;
+  }
+
+  for (const [field, value] of Object.entries(sanitizedOverrides)) {
+    base[field] = Array.isArray(value) ? [...value] : value;
+  }
+
+  base.manualOverrides = sanitizedOverrides;
+  return base;
+}
+
 function normalizeProfile(profile = {}, fallback = {}) {
   if (!profile || typeof profile !== "object") {
     return null;
@@ -48,7 +190,9 @@ function normalizeProfile(profile = {}, fallback = {}) {
   const createdAt = String(profile.createdAt || fallback.createdAt || now).trim() || now;
   const updatedAt = String(profile.updatedAt || fallback.updatedAt || createdAt).trim() || createdAt;
 
-  return {
+  const manualOverrides = sanitizeStyleProfileManualOverrides(profile.manualOverrides || fallback.manualOverrides);
+  const generationMeta = sanitizeStyleProfileGenerationMeta(profile.generationMeta, fallback.generationMeta);
+  const normalized = {
     id: String(profile.id || fallback.id || "style-profile-current").trim() || "style-profile-current",
     status: "active",
     topic,
@@ -61,8 +205,11 @@ function normalizeProfile(profile = {}, fallback = {}) {
     avoidExpressions: uniqueStrings(profile.avoidExpressions || fallback.avoidExpressions),
     generationGuidelines: uniqueStrings(profile.generationGuidelines || fallback.generationGuidelines),
     createdAt,
-    updatedAt
+    updatedAt,
+    generationMeta
   };
+
+  return applyStyleProfileManualOverrides(normalized, manualOverrides);
 }
 
 function pickLegacyCurrent(profileState = {}) {
@@ -136,22 +283,239 @@ export function buildStyleProfile(successSamples = [], options = {}) {
       "正文给出具体但不过度细节化的建议"
     ],
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
+    generationMeta: sanitizeStyleProfileGenerationMeta(options.generationMeta, buildLocalRuleGenerationMeta({ generatedAt: now }))
+  };
+}
+
+function sanitizeGeneratedStyleProfilePatch(payload = {}) {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const sanitized = sanitizeStyleProfileManualOverrides(payload);
+
+  if (!sanitized?.titleStyle || !sanitized?.bodyStructure || !sanitized?.tone) {
+    return null;
+  }
+
+  return sanitized;
+}
+
+function buildStyleProfilePromptMessages(referenceSamples = [], { topic = "", name = "" } = {}) {
+  const normalizedSamples = (Array.isArray(referenceSamples) ? referenceSamples : []).map((sample) => ({
+    id: String(sample.id || "").trim(),
+    title: String(sample.title || "").trim(),
+    body: String(sample.body || "").trim(),
+    tags: ensureArray(sample.tags),
+    metrics: sample.metrics || {}
+  }));
+
+  return [
+    {
+      role: "system",
+      content:
+        "你是小红书中文内容风格编辑。请根据参考样本总结稳定风格画像，只输出 JSON 对象，不要输出 markdown、代码块或额外解释。"
+    },
+    {
+      role: "user",
+      content: [
+        `目标主题：${normalizeTopic(topic)}`,
+        `画像名称偏好：${String(name || "").trim() || `${normalizeTopic(topic)}画像`}`,
+        "请根据以下参考样本，总结一份风格画像。",
+        "输出 JSON 字段必须包含：topic, name, titleStyle, bodyStructure, tone, preferredTags, avoidExpressions, generationGuidelines。",
+        "约束：",
+        "1. preferredTags / avoidExpressions / generationGuidelines 必须是字符串数组。",
+        "2. titleStyle / bodyStructure / tone 必须是自然中文，不要空泛套话。",
+        "3. 不要编造不存在的样本内容或平台数据。",
+        `参考样本：${JSON.stringify(normalizedSamples, null, 2)}`
+      ].join("\n")
+    }
+  ];
+}
+
+function buildStyleProfileAttemptFromError(provider, error) {
+  const attemptedRoutes = Array.isArray(error?.attemptedRoutes) ? error.attemptedRoutes : [];
+  const lastAttempt = attemptedRoutes[attemptedRoutes.length - 1] || {};
+
+  return normalizeStyleProfileAttempt({
+    provider,
+    label: providerDisplayLabel(provider),
+    model: lastAttempt.model || error?.model || "",
+    route: lastAttempt.route || error?.route || "",
+    routeLabel: lastAttempt.routeLabel || error?.routeLabel || "",
+    status: "error",
+    message: error?.message || `${provider} failed`
+  });
+}
+
+async function defaultStyleProfileProviderGenerator({ provider, messages }) {
+  const config = STYLE_PROFILE_MODEL_CHAIN.find((item) => item.provider === provider);
+
+  if (!config) {
+    throw new Error(`unknown style profile provider: ${provider}`);
+  }
+
+  return config.caller({
+    temperature: 0.35,
+    maxTokens: Number(process.env.STYLE_PROFILE_MAX_TOKENS || 1200),
+    messages,
+    missingKeyMessage: `风格画像生成缺少 ${providerDisplayLabel(provider)} 可用密钥。`,
+    responseFormat: "json_object",
+    fallbackParser: tryParseJsonBlock,
+    scene: "style_profile"
+  });
+}
+
+export async function generateStyleProfileWithFallback(referenceSamples = [], options = {}) {
+  const topic = String(options.topic || "").trim();
+  const name = String(options.name || "").trim();
+  const generateWithProvider =
+    typeof options.generateWithProvider === "function" ? options.generateWithProvider : defaultStyleProfileProviderGenerator;
+  const baseProfile = buildStyleProfile(referenceSamples, { topic, name });
+  const attemptedProviders = [];
+  const messages = buildStyleProfilePromptMessages(referenceSamples, { topic, name });
+
+  for (const candidate of STYLE_PROFILE_MODEL_CHAIN) {
+    try {
+      const result = await generateWithProvider({
+        provider: candidate.provider,
+        messages,
+        referenceSamples,
+        topic,
+        name
+      });
+      const patch = sanitizeGeneratedStyleProfilePatch(result?.parsed || result);
+
+      if (!patch) {
+        throw new Error(`${providerDisplayLabel(candidate.provider)} 返回的画像字段不完整。`);
+      }
+
+      const model = String(result?.model || "").trim();
+      const route = String(result?.route || "").trim();
+      const routeLabel = String(result?.routeLabel || "").trim();
+      attemptedProviders.push(
+        normalizeStyleProfileAttempt({
+          provider: candidate.provider,
+          label: providerDisplayLabel(candidate.provider),
+          model,
+          route,
+          routeLabel,
+          status: "ok",
+          message: ""
+        })
+      );
+
+      return {
+        ...baseProfile,
+        ...patch,
+        topic: patch.topic || baseProfile.topic,
+        name: patch.name || baseProfile.name,
+        preferredTags: patch.preferredTags || baseProfile.preferredTags,
+        avoidExpressions: patch.avoidExpressions || baseProfile.avoidExpressions,
+        generationGuidelines: patch.generationGuidelines || baseProfile.generationGuidelines,
+        updatedAt: new Date().toISOString(),
+        generationMeta: sanitizeStyleProfileGenerationMeta({
+          method: "model_summary",
+          provider: candidate.provider,
+          providerLabel: providerDisplayLabel(candidate.provider),
+          model,
+          route,
+          routeLabel,
+          generatedAt: new Date().toISOString(),
+          attemptedProviders
+        })
+      };
+    } catch (error) {
+      attemptedProviders.push(buildStyleProfileAttemptFromError(candidate.provider, error));
+    }
+  }
+
+  return buildStyleProfile(referenceSamples, {
+    topic,
+    name,
+    generationMeta: buildLocalRuleGenerationMeta({
+      generatedAt: new Date().toISOString(),
+      attemptedProviders
+    })
+  });
+}
+
+export function hydrateStyleProfileSourceSamples(profileState = {}, referenceSamples = []) {
+  const sanitized = sanitizeStyleProfileState(profileState);
+  const current = sanitized.current;
+
+  if (!current) {
+    return sanitized;
+  }
+
+  const sourceSamples = current.sourceSampleIds
+    .map((id) => {
+      const sample = (Array.isArray(referenceSamples) ? referenceSamples : []).find((item) => String(item?.id || "").trim() === id);
+
+      if (!sample) {
+        return null;
+      }
+
+      return {
+        id,
+        title: String(sample.title || sample.note?.title || "").trim(),
+        collectionType: String(sample.collectionType || sample.note?.collectionType || "").trim()
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    ...sanitized,
+    current: {
+      ...current,
+      sourceSamples
+    }
   };
 }
 
 export function buildAutoStyleProfileState(profileState = {}, successSamples = [], options = {}) {
   const currentState = sanitizeStyleProfileState(profileState);
   const current = currentState.current || {};
-  const nextCurrent = buildStyleProfile(successSamples, {
-    id: current.id || options.id,
-    topic: String(options.topic || "").trim() || current.topic,
-    name: String(options.name || "").trim() || current.name
-  });
+  const nextCurrent =
+    options.generatedProfile && typeof options.generatedProfile === "object"
+      ? normalizeProfile(options.generatedProfile, {
+          id: current.id || options.id,
+          topic: String(options.topic || "").trim() || current.topic,
+          name: String(options.name || "").trim() || current.name
+        })
+      : buildStyleProfile(successSamples, {
+          id: current.id || options.id,
+          topic: String(options.topic || "").trim() || current.topic,
+          name: String(options.name || "").trim() || current.name
+        });
+  const nextCurrentWithOverrides = applyStyleProfileManualOverrides(nextCurrent, current.manualOverrides);
 
   if (current?.createdAt) {
-    nextCurrent.createdAt = current.createdAt;
+    nextCurrentWithOverrides.createdAt = current.createdAt;
   }
+
+  return sanitizeStyleProfileState({
+    current: nextCurrentWithOverrides
+  });
+}
+
+export function updateStyleProfileManualOverrides(profileState = {}, patch = {}) {
+  const currentState = sanitizeStyleProfileState(profileState);
+  const current = currentState.current || buildStyleProfile([], {});
+  const existingOverrides = sanitizeStyleProfileManualOverrides(current.manualOverrides) || {};
+  const incomingOverrides = sanitizeStyleProfileManualOverrides(patch) || {};
+  const nextOverrides = sanitizeStyleProfileManualOverrides({
+    ...existingOverrides,
+    ...incomingOverrides
+  });
+  const nextCurrent = applyStyleProfileManualOverrides(
+    {
+      ...current,
+      updatedAt: new Date().toISOString()
+    },
+    nextOverrides
+  );
 
   return sanitizeStyleProfileState({
     current: nextCurrent

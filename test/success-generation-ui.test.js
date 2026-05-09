@@ -113,7 +113,7 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(sampleLibraryPaneHtml, /id="sample-library-import-button"[\s\S]*aria-controls="sample-library-import-block"/);
   assert.match(sampleLibraryPaneHtml, /id="sample-library-import-button"[\s\S]*aria-expanded="false"/);
   assert.match(sampleLibraryPaneHtml, /id="sample-library-import-input"/);
-  assert.match(sampleLibraryPaneHtml, /accept="application\/pdf,.pdf"/);
+  assert.match(sampleLibraryPaneHtml, /accept="\.md,\.markdown,text\/markdown"/);
   assert.match(sampleLibraryPaneHtml, /id="sample-library-import-result"/);
   assert.doesNotMatch(sampleLibraryPaneHtml, /id="sample-library-import-commit-button"/);
   assert.match(sampleLibraryPaneHtml, /aria-controls="sample-library-modal"/);
@@ -211,11 +211,17 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.doesNotMatch(indexHtml, /id="style-profile-action-hint"/);
   assert.doesNotMatch(indexHtml, /name="styleProfileId"/);
   assert.doesNotMatch(indexHtml, /id="generation-style-profile-select"/);
+  assert.match(indexHtml, /id="generation-style-profile-button"/);
+  assert.match(indexHtml, /查看\s*\/\s*编辑当前风格画像/);
 
   assert.match(appJs, /\/api\/sample-library/);
+  assert.match(appJs, /\/api\/admin\/style-profile/);
   assert.match(appJs, /collectionType:\s*String\(form\.get\("collectionType"\)/);
   assert.match(appJs, /views:\s*Number\(source\.metrics\?\.views \?\? source\.views \?\? 0\) \|\| 0/);
   assert.match(appJs, /sampleLibraryRecords:\s*\[\s*\]/);
+  assert.match(appJs, /adminDataLoading:\s*\{\s*phase:\s*"initial"/);
+  assert.match(appJs, /summaryLoading:\s*\{\s*phase:\s*"initial"/);
+  assert.match(appJs, /sampleLibraryLoading:\s*\{\s*phase:\s*"initial"/);
   assert.match(appJs, /sampleLibraryCollectionFilter:\s*"all"/);
   assert.match(appJs, /selectedSampleLibraryRecordId:\s*""/);
   assert.match(appJs, /sampleLibraryDetailStep:\s*"base"/);
@@ -227,6 +233,10 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /function\s+getSampleLibraryRecordStepLabel\s*\(/);
   assert.match(appJs, /function\s+renderSampleLibraryWorkspace\s*\(/);
   assert.match(appJs, /function\s+refreshSampleLibraryWorkspace\s*\(/);
+  assert.match(appJs, /function\s+setSummaryLoadingState\s*\(/);
+  assert.match(appJs, /function\s+renderSummaryLoadingPlaceholders\s*\(/);
+  assert.match(appJs, /function\s+setSampleLibraryLoadingState\s*\(/);
+  assert.match(appJs, /function\s+renderSampleLibraryLoadingPlaceholders\s*\(/);
   assert.doesNotMatch(appJs, /function\s+renderSampleLibraryDetail\s*\(/);
   assert.doesNotMatch(appJs, /function\s+setSampleLibraryDetailStep\s*\(/);
   assert.doesNotMatch(appJs, /function\s+renderSampleLibraryDetailStepState\s*\(/);
@@ -248,6 +258,10 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /generation:\s*String\(byId\("generation-model-selection"\)\?\.value \|\| "auto"\)\.trim\(\) \|\| "auto"/);
   assert.match(appJs, /lengthMode:\s*String\(form\.get\("lengthMode"\) \|\| "short"\)\.trim\(\) \|\| "short"/);
   assert.match(appJs, /function\s+syncGenerationActions\s*\(/);
+  assert.match(appJs, /function\s+openStyleProfileModal\s*\(/);
+  assert.match(appJs, /function\s+buildStyleProfileModalMarkup\s*\(/);
+  assert.match(appJs, /function\s+saveStyleProfileModal\s*\(/);
+  assert.match(appJs, /function\s+buildStyleProfileGenerationLabel\s*\(/);
   assert.match(appJs, /function\s+getSampleLibraryCreateRequirementMessage\s*\(/);
   assert.match(appJs, /function\s+syncSampleLibraryCreateActions\s*\(/);
   assert.match(appJs, /publish:\s*\{\s*metrics:\s*\{\s*views:\s*payload\.views \|\| 0/s);
@@ -297,6 +311,7 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /ensureSupportWorkspaceOpen\(\);[\s\S]*byId\("review-queue"\)\?\.scrollIntoView/);
   assert.match(appJs, /revealSampleLibraryReflowPane\(\)/);
   assert.match(appJs, /openSampleLibraryCreateModal\(\)/);
+  assert.match(appJs, /if \(action === "open-style-profile-modal"\)/);
   assert.match(appJs, /function\s+openSampleLibraryRecord\s*\([\s\S]*openSampleLibraryRecordInlineEditorModal\(recordId\)/);
   assert.doesNotMatch(appJs, /byId\("sample-library-lifecycle-section"\)\?\.scrollIntoView/);
   assert.doesNotMatch(appJs, /sample-library-detail-step-summary/);
@@ -312,6 +327,11 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /function\s+renderSampleLibraryRecordInlineEditorModal\s*\(/);
   assert.match(appJs, /kind:\s*"record-list-inline-editor"/);
   assert.match(appJs, /function ensureSupportWorkspaceOpen\(/);
+  assert.match(appJs, /styleProfile:\s*adminData\.styleProfile && typeof adminData\.styleProfile === "object" \? adminData\.styleProfile : null/);
+  assert.match(appJs, /sourceSamples\.map/);
+  assert.match(appJs, /formatDate\(current\?\.updatedAt\)/);
+  assert.match(appJs, /优先使用通义千问、Kimi、深度求索生成画像，失败后回退到本地规则汇总/);
+  assert.match(appJs, /syncStyleProfileStateFromPayload\(response\)/);
   assert.match(appJs, /async function openLexiconWorkspaceModal\(tab = "custom"/);
   assert.match(appJs, /function closeLexiconWorkspaceModal\(/);
   assert.match(appJs, /function renderLexiconWorkspaceModal\(/);
@@ -399,9 +419,71 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   const refreshAllSource = appJs.slice(refreshAllStart, refreshAllEnd);
   assert.ok(refreshAllStart !== -1 && refreshAllEnd !== -1, "expected refreshAll source");
   assert.ok(
-    refreshAllSource.indexOf("await refreshSampleLibraryWorkspace();") < refreshAllSource.indexOf("renderSummary(summary);"),
+    refreshAllSource.indexOf("await refreshSampleLibraryWorkspace();") < refreshAllSource.indexOf("renderSummary(appState.summaryData);"),
     "expected refreshAll to update sample library state before rendering summary"
   );
+  assert.match(refreshAllSource, /const hasExistingSummary = Boolean\(appState\.summaryData\)/);
+  assert.match(refreshAllSource, /const summaryPhase = hasExistingSummary \? "refresh" : "initial";/);
+  assert.match(refreshAllSource, /setSummaryLoadingState\(summaryPhase\)/);
+  assert.match(refreshAllSource, /if \(summaryPhase === "initial"\) \{\s*renderSummaryLoadingPlaceholders\(\);/);
+});
+
+test("sample library list and summary area show loading placeholders before first data sync", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const renderSampleLibraryListSource = extractSourceBetween(
+    appJs,
+    "function renderSampleLibraryList(",
+    "function buildSampleLibraryRecordListModalMarkup("
+  );
+
+  const nodes = {
+    "sample-library-record-list": { innerHTML: "", dataset: {} },
+    "sample-library-list-count": { textContent: "", dataset: {} },
+    "sample-library-record-preview-open-button": { hidden: false }
+  };
+  const appState = {
+    sampleLibraryFilter: "all",
+    sampleLibraryCollectionFilter: "all",
+    selectedSampleLibraryRecordId: "",
+    sampleLibraryLoading: {
+      phase: "initial",
+      error: ""
+    }
+  };
+  const renderSampleLibraryListWithState = new Function(
+    "byId",
+    "appState",
+    "getSampleLibraryRecordPreviewItems",
+    "sampleLibraryFilterLabel",
+    "sampleLibraryCollectionFilterLabel",
+    "buildSampleLibraryRecordCardMarkup",
+    "isSampleLibraryInitialLoading",
+    "buildAdminDataLoadingBlockMarkup",
+    `${renderSampleLibraryListSource}; return renderSampleLibraryList;`
+  )(
+    (id) => nodes[id] || null,
+    appState,
+    (items) => items.slice(0, 3),
+    () => "全部记录",
+    () => "全部合集",
+    () => "",
+    () => appState.sampleLibraryLoading.phase === "initial",
+    (_message, { count = 2 } = {}) => `<div class="loading-block">加载中 ${count}</div>`
+  );
+
+  renderSampleLibraryListWithState([]);
+
+  assert.equal(nodes["sample-library-list-count"].textContent, "加载中...");
+  assert.equal(nodes["sample-library-record-preview-open-button"].hidden, true);
+  assert.match(nodes["sample-library-record-list"].innerHTML, /加载中/);
+  assert.doesNotMatch(nodes["sample-library-record-list"].innerHTML, /当前没有样本记录/);
+
+  assert.match(appJs, /const hasExistingSampleLibraryRecords = appState\.sampleLibraryRecords\.length > 0/);
+  assert.match(appJs, /const phase = hasExistingSampleLibraryRecords \? "refresh" : "initial";/);
+  assert.match(appJs, /setSampleLibraryLoadingState\(phase\)/);
+  assert.match(appJs, /if \(phase === "initial"\) \{\s*renderSampleLibraryLoadingPlaceholders\(\);/);
+  assert.match(appJs, /summary-grid/);
+  assert.match(appJs, /sample-library-record-list/);
 });
 
 test("sample library workspace exposes record preview and full-list modal controls", async () => {
@@ -411,6 +493,16 @@ test("sample library workspace exposes record preview and full-list modal contro
     appJs,
     "function getSampleLibraryRecordPreviewItems(",
     "function renderSampleLibraryList("
+  );
+  const sortHelperSource = extractSourceBetween(
+    appJs,
+    "function sortSampleLibraryRecordsByPublishedAtDesc(",
+    "function filterSampleLibraryRecords("
+  );
+  const filterHelperSource = extractSourceBetween(
+    appJs,
+    "function filterSampleLibraryRecords(",
+    "function getSelectedSampleLibraryRecord("
   );
   const modalBuilderSource = extractSourceBetween(
     appJs,
@@ -437,23 +529,44 @@ test("sample library workspace exposes record preview and full-list modal contro
   assert.match(modalBuilderSource, /open-sample-library-record-from-modal/);
   assert.doesNotMatch(modalBuilderSource, /SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT/);
 
+  const filterSampleLibraryRecords = new Function(
+    "appState",
+    "getSampleRecordReference",
+    "hasTrackedLifecycle",
+    "getSampleRecordCollectionType",
+    "getSampleLibraryCalibrationListState",
+    "getSampleRecordPublish",
+    `${sortHelperSource}; ${filterHelperSource}; return filterSampleLibraryRecords;`
+  )(
+    { sampleLibraryFilter: "all", sampleLibraryCollectionFilter: "all", sampleLibrarySearch: "" },
+    () => ({ enabled: false }),
+    () => false,
+    () => "default",
+    () => ({ key: "other" }),
+    (item) => item.publish || {}
+  );
+
+  const filteredItems = filterSampleLibraryRecords([
+    { id: "record-1", publish: { publishedAt: "2026-05-01" }, updatedAt: "2026-05-01T09:00:00.000Z" },
+    { id: "record-2", publish: { publishedAt: "2026-05-08" }, updatedAt: "2026-05-08T09:00:00.000Z" },
+    { id: "record-3", publish: { publishedAt: "" }, updatedAt: "2026-05-07T08:00:00.000Z", createdAt: "2026-05-07T08:00:00.000Z" },
+    { id: "record-4", publish: { publishedAt: "2026-05-06" }, updatedAt: "2026-05-06T09:00:00.000Z" }
+  ]);
+
+  assert.deepEqual(filteredItems.map((item) => item.id), ["record-2", "record-3", "record-4", "record-1"]);
+
   const getSampleLibraryRecordPreviewItems = new Function(
     "appState",
     "SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT",
     `${previewHelperSource}; return getSampleLibraryRecordPreviewItems;`
-  )({ selectedSampleLibraryRecordId: "record-4" }, 3);
+  )({ selectedSampleLibraryRecordId: "record-1" }, 3);
 
-  const previewItems = getSampleLibraryRecordPreviewItems([
-    { id: "record-1" },
-    { id: "record-2" },
-    { id: "record-3" },
-    { id: "record-4" }
-  ]);
+  const previewItems = getSampleLibraryRecordPreviewItems(filteredItems);
 
   assert.deepEqual(
     previewItems.map((item) => item.id),
-    ["record-1", "record-2", "record-4"],
-    "expected preview to keep the selected record visible within the 3-item cap"
+    ["record-2", "record-3", "record-4"],
+    "expected preview to keep the first three publish-time-desc records"
   );
 
   const focusCalls = [];
@@ -510,7 +623,14 @@ test("sample library record modal upgrades to inline master-detail editing", asy
   assert.match(inlineEditorSource, /保存整条记录/);
   assert.match(inlineEditorSource, /data-action="switch-sample-library-record-inline-editor-record"/);
   assert.match(inlineEditorSource, /data-action="open-sample-library-delete-modal"/);
-  assert.match(styles, /\.sample-library-record-inline-editor-layout/);
+  assert.match(styles, /\.sample-library-record-inline-editor-layout\s*\{[\s\S]*align-items:\s*stretch;/);
+  assert.match(styles, /\.sample-library-modal-content\s*\{[\s\S]*overflow:\s*auto;/);
+  assert.match(
+    styles,
+    /\.sample-library-modal\[data-modal-kind="record-list-inline-editor"\] \.sample-library-modal-content\s*\{[\s\S]*overflow:\s*hidden;/
+  );
+  assert.match(styles, /\.sample-library-record-inline-editor-sidebar-list\s*\{[\s\S]*overflow:\s*auto;/);
+  assert.match(styles, /\.sample-library-record-inline-editor-detail\s*\{[\s\S]*overflow:\s*auto;/);
 });
 
 test("record inline editor keeps one unified patch payload and dirty-aware record switching", async () => {
@@ -750,11 +870,27 @@ test("sample pool explanation distinguishes direct engagement from views-assiste
   assert.match(appJs, /function\s+getReferenceThresholdRequirementText\s*\(/);
 });
 
+test("sample pool modal folds counts into tab titles instead of rendering duplicate summary cards", async () => {
+  const { appJs, styles } = await readFrontendFiles();
+  const modalSource = extractSourceBetween(appJs, "function renderSampleLibraryPoolsModal()", "function openSampleLibraryPoolsModal");
+
+  assert.match(appJs, /function\s+formatSamplePoolTabLabel\s*\(/);
+  assert.match(modalSource, /button\.textContent = formatSamplePoolTabLabel\(tab,\s*summary\[tab\] \|\| 0\)/);
+  assert.doesNotMatch(modalSource, /sample-pool-summary-grid/);
+  assert.doesNotMatch(modalSource, /条记录/);
+  assert.doesNotMatch(styles, /\.sample-pool-summary-grid\s*\{/);
+  assert.doesNotMatch(styles, /\.sample-pool-summary-card\s*\{/);
+});
+
 test("frontend keeps the analyze picker regression surface in the main UI file", async () => {
   const { indexHtml, appJs } = await readFrontendFiles();
 
   assert.match(indexHtml, /id="analyze-tag-picker"/);
   assert.match(appJs, /\/api\/analyze-tag-options/);
+  assert.match(appJs, /const presetAnalyzeTags = \[[\s\S]*"愉悦"[\s\S]*\]/);
+  assert.match(appJs, /const presetAnalyzeTags = \[[\s\S]*"大人也要玩玩具"[\s\S]*\]/);
+  assert.match(appJs, /const presetAnalyzeTags = \[[\s\S]*"悦己"[\s\S]*\]/);
+  assert.match(appJs, /const presetAnalyzeTags = \[[\s\S]*"深夜话题"[\s\S]*\]/);
   assert.match(appJs, /function setAnalyzeTagDropdownOpen\(/);
   assert.match(appJs, /function toggleAnalyzePresetTag\(/);
   assert.match(appJs, /function renderAnalyzeTagOptions\(/);
@@ -954,6 +1090,16 @@ test("frontend exposes an inner-space terminology workspace for rewrite and gene
   assert.match(appJs, /if \(normalizedTab === "inner-space"\) \{[\s\S]*await refreshInnerSpaceTermsState\(\);/);
   assert.match(appJs, /if \(normalizedTab === "inner-space"\) \{[\s\S]*renderLexiconWorkspaceModal\(\);/);
   assert.match(appJs, /function renderInnerSpaceTermsList\s*\(/);
+  assert.match(appJs, /function\s+setAdminDataLoadingState\s*\(/);
+  assert.match(appJs, /function\s+syncAdminDataLoadingUI\s*\(/);
+  assert.match(appJs, /function\s+renderAdminDataLoadingPlaceholders\s*\(/);
+  assert.match(appJs, /const phase = hasExistingAdminData \? "refresh" : "initial";/);
+  assert.match(appJs, /setAdminDataLoadingState\(phase\)/);
+  assert.match(appJs, /if \(phase === "initial"\) \{\s*renderAdminDataLoadingPlaceholders\(\);/);
+  assert.match(appJs, /setAdminDataLoadingState\("idle"\)/);
+  assert.match(appJs, /renderAdminDataLoadingPlaceholders\(\)/);
+  assert.match(appJs, /data-loading="\$\{escapeHtml\(String\(isRefreshing\)\)\}"/);
+  assert.match(appJs, /加载中\.\.\./);
   assert.match(appJs, /data-lexicon-workspace-form="inner-space"/);
   assert.match(appJs, /lexicon-workspace-result/);
   assert.match(appJs, /delete-inner-space-term/);

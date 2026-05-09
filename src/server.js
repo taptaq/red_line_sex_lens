@@ -17,6 +17,7 @@ import {
 } from "./admin.js";
 import { analyzePost } from "./analyzer.js";
 import {
+  loadAnalyzeTagOptions,
   loadCollectionTypes,
   loadFalsePositiveLog,
   getMemoryRetrievalService,
@@ -27,7 +28,7 @@ import {
   loadReviewQueue,
   loadSummary,
   loadStyleProfile,
-  loadSuccessSamples,
+  saveAnalyzeTagOptions,
   saveFalsePositiveLog,
   saveNoteRecords,
   saveStyleProfile,
@@ -59,9 +60,12 @@ import { mergeRuleAndSemanticAnalysis, runSemanticReview } from "./semantic-revi
 import { filterInnerSpaceTerms } from "./inner-space-terms.js";
 import {
   buildAutoStyleProfileState,
+  generateStyleProfileWithFallback,
   getActiveStyleProfile,
+  hydrateStyleProfileSourceSamples,
+  updateStyleProfileManualOverrides
 } from "./style-profile.js";
-import { normalizePdfImportCommitItem, parsePdfImportFiles } from "./pdf-sample-import.js";
+import { normalizeMarkdownImportCommitItem, parseMarkdownImportFiles } from "./pdf-sample-import.js";
 import {
   buildSampleLibraryImportDuplicateKey,
   buildSampleLibraryImportPayload,
@@ -238,7 +242,7 @@ async function normalizeSampleLibraryPayloadCollectionType(payload = {}) {
   };
 }
 
-async function validatePdfImportCommitItems(items = []) {
+async function validateMarkdownImportCommitItems(items = []) {
   const selectedItems = (Array.isArray(items) ? items : []).filter((item) => item?.selected === true);
   const validatedPayloads = [];
   const currentRecords = await loadNoteRecords();
@@ -254,7 +258,7 @@ async function validatePdfImportCommitItems(items = []) {
   const batchDuplicateKeys = new Set();
 
   for (const [index, item] of selectedItems.entries()) {
-    const normalized = normalizePdfImportCommitItem(item);
+    const normalized = normalizeMarkdownImportCommitItem(item);
 
     if (!normalized.title || !normalized.body || !normalized.collectionType) {
       const error = new Error(`第 ${index + 1} 条已勾选导入项缺少标题、正文或合集类型。`);
@@ -325,21 +329,53 @@ function isSameLifecycleItem(left = {}, right = {}) {
 }
 
 async function refreshAutoStyleProfile({ topic = "", name = "" } = {}) {
-  const [currentProfile, successSamples] = await Promise.all([loadStyleProfile(), loadSuccessSamples()]);
+  const [currentProfile, referenceSamples] = await Promise.all([loadStyleProfile(), loadQualifiedReferenceSamples()]);
+  const currentState = currentProfile && typeof currentProfile === "object" ? currentProfile : {};
+  const current = currentState?.current || null;
 
-  if (!successSamples.length) {
-    return currentProfile;
+  if (!referenceSamples.length) {
+    if (!current) {
+      return hydrateStyleProfileSourceSamples(currentState, referenceSamples);
+    }
+
+    const nextProfile = buildAutoStyleProfileState(currentState, referenceSamples, {
+      topic: String(topic || "").trim() || current.topic,
+      name: String(name || "").trim() || current.name
+    });
+    await saveStyleProfile(nextProfile);
+    return hydrateStyleProfileSourceSamples(nextProfile, referenceSamples);
   }
 
-  const currentTopic = String(currentProfile?.current?.topic || "").trim();
-  const currentName = String(currentProfile?.current?.name || "").trim();
-  const nextProfile = buildAutoStyleProfileState(currentProfile, successSamples, {
+  const currentTopic = String(current?.topic || "").trim();
+  const currentName = String(current?.name || "").trim();
+  const generatedProfile = await generateStyleProfileWithFallback(referenceSamples, {
     topic: String(topic || "").trim() || currentTopic,
     name: String(name || "").trim() || currentName
   });
+  const nextProfile = buildAutoStyleProfileState(currentState, referenceSamples, {
+    topic: String(topic || "").trim() || currentTopic,
+    name: String(name || "").trim() || currentName,
+    generatedProfile
+  });
 
   await saveStyleProfile(nextProfile);
-  return nextProfile;
+  return hydrateStyleProfileSourceSamples(nextProfile, referenceSamples);
+}
+
+async function patchAdminStyleProfileAndReturn(patch = {}) {
+  const refreshedProfile = await refreshAutoStyleProfile({
+    topic: patch?.topic,
+    name: patch?.name
+  });
+  const nextProfile = updateStyleProfileManualOverrides(refreshedProfile, patch);
+  await saveStyleProfile(nextProfile);
+  const referenceSamples = await loadQualifiedReferenceSamples();
+  return hydrateStyleProfileSourceSamples(nextProfile, referenceSamples);
+}
+
+async function loadCurrentStyleProfileView() {
+  const [profileState, referenceSamples] = await Promise.all([loadStyleProfile(), loadQualifiedReferenceSamples()]);
+  return hydrateStyleProfileSourceSamples(profileState, referenceSamples);
 }
 
 function sendJson(response, statusCode, payload) {
@@ -764,8 +800,19 @@ async function handleRequest(request, response) {
   }
 
   if (request.method === "GET" && url.pathname === "/api/admin/data") {
-    const data = await loadAdminData();
-    return sendJson(response, 200, data);
+    const [styleProfile, data] = await Promise.all([refreshAutoStyleProfile(), loadAdminData()]);
+    return sendJson(response, 200, {
+      ...data,
+      styleProfile
+    });
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/admin/style-profile") {
+    const profile = await refreshAutoStyleProfile();
+    return sendJson(response, 200, {
+      ok: true,
+      profile
+    });
   }
 
   if (request.method === "GET" && url.pathname === "/api/admin/false-positive-log") {
@@ -805,6 +852,13 @@ async function handleRequest(request, response) {
       ok: true,
       ...buildModelSelectionOptionsPayload(),
       ...buildFeedbackModelSelectionOptionsPayload()
+    });
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/analyze-tag-options") {
+    return sendJson(response, 200, {
+      ok: true,
+      options: await loadAnalyzeTagOptions()
     });
   }
 
@@ -1008,25 +1062,36 @@ async function handleRequest(request, response) {
   if (request.method === "POST" && url.pathname === "/api/sample-library") {
     const payload = await readBody(request);
     const { item, items } = await persistSampleLibraryRecord(payload);
+    const styleProfile = await loadCurrentStyleProfileView();
     return sendJson(response, 200, {
       ok: true,
       item,
-      items
+      items,
+      styleProfile
     });
   }
 
-  if (request.method === "POST" && url.pathname === "/api/sample-library/pdf-import/parse") {
+  if (request.method === "POST" && url.pathname === "/api/analyze-tag-options") {
     const payload = await readBody(request);
-    const items = await parsePdfImportFiles(payload?.files || []);
+    await saveAnalyzeTagOptions(payload?.options || []);
+    return sendJson(response, 200, {
+      ok: true,
+      options: await loadAnalyzeTagOptions()
+    });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/sample-library/markdown-import/parse") {
+    const payload = await readBody(request);
+    const items = await parseMarkdownImportFiles(payload?.files || []);
     return sendJson(response, 200, {
       ok: true,
       items
     });
   }
 
-  if (request.method === "POST" && url.pathname === "/api/sample-library/pdf-import/commit") {
+  if (request.method === "POST" && url.pathname === "/api/sample-library/markdown-import/commit") {
     const payload = await readBody(request);
-    const validatedPayloads = await validatePdfImportCommitItems(payload?.items);
+    const validatedPayloads = await validateMarkdownImportCommitItems(payload?.items);
     const createdItems = [];
 
     for (const validatedPayload of validatedPayloads) {
@@ -1034,10 +1099,13 @@ async function handleRequest(request, response) {
       createdItems.push(saved);
     }
 
+    const styleProfile = await loadCurrentStyleProfileView();
+
     return sendJson(response, 200, {
       ok: true,
       createdCount: createdItems.length,
-      items: createdItems
+      items: createdItems,
+      styleProfile
     });
   }
 
@@ -1091,10 +1159,12 @@ async function handleRequest(request, response) {
   if (request.method === "PATCH" && url.pathname === "/api/sample-library") {
     const payload = await readBody(request);
     const { item, items } = await patchSampleLibraryRecordAndReturn(payload);
+    const styleProfile = await loadCurrentStyleProfileView();
     return sendJson(response, 200, {
       ok: true,
       item,
-      items
+      items,
+      styleProfile
     });
   }
 
@@ -1107,6 +1177,15 @@ async function handleRequest(request, response) {
       ok: true,
       item: updated,
       items
+    });
+  }
+
+  if (request.method === "PATCH" && url.pathname === "/api/admin/style-profile") {
+    const payload = await readBody(request);
+    const profile = await patchAdminStyleProfileAndReturn(payload?.profile);
+    return sendJson(response, 200, {
+      ok: true,
+      profile
     });
   }
 
@@ -1164,9 +1243,11 @@ async function handleRequest(request, response) {
   if (request.method === "DELETE" && url.pathname === "/api/sample-library") {
     const payload = await readBody(request);
     const { items } = await deleteSampleLibraryRecordAndReturn(payload?.id);
+    const styleProfile = await loadCurrentStyleProfileView();
     return sendJson(response, 200, {
       ok: true,
-      items
+      items,
+      styleProfile
     });
   }
 

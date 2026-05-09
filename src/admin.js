@@ -4,8 +4,10 @@ import {
   loadFalsePositiveLog,
   loadInnerSpaceTerms,
   loadNoteLifecycle,
+  loadQualifiedReferenceSamples,
   loadReviewQueue,
   loadSeedLexicon,
+  loadStyleProfile,
   loadSuccessSamples,
   loadWhitelist,
   saveCustomLexicon,
@@ -19,6 +21,7 @@ import {
 import { buildFalsePositiveAudit, getCandidatePhraseIssue, isValidLexiconCandidatePhrase } from "./feedback.js";
 import { sanitizeInnerSpaceTerm } from "./inner-space-terms.js";
 import { buildRuleChangePreview } from "./rule-preview.js";
+import { hydrateStyleProfileSourceSamples } from "./style-profile.js";
 
 export function normalizeLexiconLevel(value = "", riskLevel = "manual_review") {
   const text = String(value || "").trim().toLowerCase();
@@ -187,7 +190,7 @@ function enrichReviewQueueItem(item, histories = {}) {
 }
 
 export async function loadAdminData() {
-  const [seedLexicon, customLexicon, feedbackLog, reviewQueue, falsePositiveLog, successSamples, noteLifecycle, innerSpaceTerms] = await Promise.all([
+  const [seedLexicon, customLexicon, feedbackLog, reviewQueue, falsePositiveLog, successSamples, noteLifecycle, innerSpaceTerms, styleProfile, qualifiedReferenceSamples] = await Promise.all([
     loadSeedLexicon(),
     loadCustomLexicon(),
     loadFeedbackLog(),
@@ -195,7 +198,9 @@ export async function loadAdminData() {
     loadFalsePositiveLog(),
     loadSuccessSamples(),
     loadNoteLifecycle(),
-    loadInnerSpaceTerms()
+    loadInnerSpaceTerms(),
+    loadStyleProfile(),
+    loadQualifiedReferenceSamples()
   ]);
 
   return {
@@ -217,7 +222,8 @@ export async function loadAdminData() {
       })
     ),
     falsePositiveLog: falsePositiveLog.map(enrichFalsePositiveLogItem),
-    innerSpaceTerms
+    innerSpaceTerms,
+    styleProfile: hydrateStyleProfileSourceSamples(styleProfile, qualifiedReferenceSamples)
   };
 }
 
