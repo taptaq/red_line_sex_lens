@@ -112,9 +112,8 @@ test("sample library PDF parse returns draft errors and commit persists only con
     assert.equal(committed.status, 200);
     assert.equal(committed.ok, true);
     assert.equal(committed.createdCount, 1);
-    assert.equal(committed.styleProfileRefreshQueued, true);
     assert.equal(committed.styleProfile.current.topic, "旧画像");
-    assert.deepEqual(committed.styleProfile.current.sourceSampleIds, ["note-reference-a", "note-reference-b"]);
+    assert.deepEqual(committed.styleProfile.current.sourceSampleIds, [committed.item.id]);
     assert.equal(records.length, 1);
     assert.equal(records[0].note.title, "标题A");
     assert.equal(records[0].note.coverText, "封面A");

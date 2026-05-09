@@ -462,7 +462,8 @@ const appState = {
     innerSpaceTerms: [],
     feedbackLog: [],
     falsePositiveLog: [],
-    reviewQueue: []
+    reviewQueue: [],
+    styleProfile: null
   },
   collectionTypeOptions: [],
   modelSelectionOptions: null,
@@ -4218,6 +4219,8 @@ async function saveSampleLibraryRecordInlineEditorModal() {
     initialSnapshot: structuredClone(draft)
   };
   renderSampleLibraryWorkspace();
+  syncStyleProfileStateFromPayload(response);
+  await refreshSummaryState();
   renderSampleLibraryRecordInlineEditorModal();
   setSampleLibraryModalMessage("整条记录已保存。");
 }
@@ -4676,6 +4679,7 @@ async function saveSampleLibraryCreateModal() {
 
   commitSampleLibraryRecords(response.items, appState.sampleLibraryRecords);
   appState.sampleLibraryFilter = "all";
+  appState.sampleLibraryCollectionFilter = "all";
   appState.sampleLibrarySearch = "";
   appState.selectedSampleLibraryRecordId = String(response.item?.id || "");
 
@@ -4690,6 +4694,8 @@ async function saveSampleLibraryCreateModal() {
   }
 
   renderSampleLibraryWorkspace();
+  syncStyleProfileStateFromPayload(response);
+  await refreshSummaryState();
   byId("sample-library-create-result").innerHTML = '<div class="result-card-shell">样本记录已保存，可继续补参考属性和生命周期属性。</div>';
   renderCollectionTypeSelectors();
 }
@@ -4950,7 +4956,7 @@ async function saveFeedbackFalsePositiveModal() {
       createdAt: modalState.createdAt
     })
   });
-  await refreshAll();
+  await refreshSupportWorkspaceState();
   ensureSupportWorkspaceOpen();
   revealSampleLibraryReflowPane();
   byId("false-positive-summary")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -5587,6 +5593,19 @@ function renderAdminData(data) {
   renderFalsePositiveLog(data.falsePositiveLog || []);
 }
 
+function syncStyleProfileStateFromPayload(payload = {}) {
+  if (!payload?.styleProfile || typeof payload.styleProfile !== "object") {
+    return false;
+  }
+
+  appState.adminData = {
+    ...appState.adminData,
+    styleProfile: payload.styleProfile
+  };
+  persistBootstrapSnapshotPart("adminData", appState.adminData);
+  return payload.styleProfileRefreshQueued === true;
+}
+
 async function refreshInnerSpaceTermsState() {
   let items = [];
 
@@ -5618,7 +5637,8 @@ async function refreshAdminDataState() {
       innerSpaceTerms: Array.isArray(adminData.innerSpaceTerms) ? adminData.innerSpaceTerms : [],
       feedbackLog: Array.isArray(adminData.feedbackLog) ? adminData.feedbackLog : [],
       falsePositiveLog: Array.isArray(adminData.falsePositiveLog) ? adminData.falsePositiveLog : [],
-      reviewQueue: Array.isArray(adminData.reviewQueue) ? adminData.reviewQueue : []
+      reviewQueue: Array.isArray(adminData.reviewQueue) ? adminData.reviewQueue : [],
+      styleProfile: adminData?.styleProfile && typeof adminData.styleProfile === "object" ? adminData.styleProfile : null
     };
 
     if (!Array.isArray(adminData.innerSpaceTerms)) {
@@ -5648,6 +5668,10 @@ async function refreshSummaryState() {
   } finally {
     setSummaryLoadingState("idle");
   }
+}
+
+async function refreshSupportWorkspaceState() {
+  await Promise.allSettled([refreshSummaryState(), refreshAdminDataState()]);
 }
 
 function hydrateBootstrapSnapshot() {
@@ -6437,8 +6461,10 @@ async function commitSampleLibraryImportCard(card) {
     body: JSON.stringify({ items })
   });
 
-  if (Array.isArray(response.items) && response.items.length) {
-    appState.selectedSampleLibraryRecordId = String(response.items[0]?.id || appState.selectedSampleLibraryRecordId || "");
+  if (response?.item || (Array.isArray(response.items) && response.items.length)) {
+    appState.selectedSampleLibraryRecordId = String(
+      response.item?.id || response.items[0]?.id || appState.selectedSampleLibraryRecordId || ""
+    );
   }
 
   appState.sampleLibraryFilter = "all";
@@ -6458,7 +6484,10 @@ async function commitSampleLibraryImportCard(card) {
     byId("sample-library-collection-filter").value = "all";
   }
 
-  await refreshSampleLibraryWorkspace();
+  commitSampleLibraryRecords(response.items, appState.sampleLibraryRecords);
+  renderSampleLibraryWorkspace();
+  syncStyleProfileStateFromPayload(response);
+  await refreshSummaryState();
   renderSampleLibraryImportDrafts(appState.sampleLibraryImportDrafts);
 
   if (!appState.sampleLibraryImportDrafts.length) {
@@ -7073,6 +7102,8 @@ async function saveLifecycleFromCurrent(source = "analysis", candidateId = "", c
   byId("sample-library-filter") && (byId("sample-library-filter").value = "all");
   byId("sample-library-collection-filter") && (byId("sample-library-collection-filter").value = "all");
   renderSampleLibraryWorkspace();
+  syncStyleProfileStateFromPayload(response);
+  await refreshSummaryState();
   revealNoteLifecyclePane();
   return response;
 }
@@ -7114,6 +7145,8 @@ async function savePlatformOutcomeFromCurrent({
   commitSampleLibraryRecords(response.items, appState.sampleLibraryRecords);
   appState.selectedSampleLibraryRecordId = String(response.item?.id || id);
   renderSampleLibraryWorkspace();
+  syncStyleProfileStateFromPayload(response);
+  await refreshSummaryState();
   revealNoteLifecyclePane();
   return response;
 }
@@ -7386,6 +7419,8 @@ async function patchSampleLibraryRecordAndRefresh(payload, { recordId = "", next
   commitSampleLibraryRecords(response.items, appState.sampleLibraryRecords);
   appState.selectedSampleLibraryRecordId = String(response.item?.id || recordId || payload?.id || "");
   renderSampleLibraryWorkspace();
+  syncStyleProfileStateFromPayload(response);
+  await refreshSummaryState();
   return response;
 }
 
@@ -7487,9 +7522,11 @@ async function saveSampleLibraryDeleteModal() {
       id: modalState.recordId
     })
   });
-  commitSampleLibraryRecords(response.items, []);
+  commitSampleLibraryRecords(response.items, appState.sampleLibraryRecords);
   appState.selectedSampleLibraryRecordId = "";
   renderSampleLibraryWorkspace();
+  syncStyleProfileStateFromPayload(response);
+  await refreshSummaryState();
 }
 
 async function saveSampleLibraryDetailModal() {
@@ -8000,6 +8037,7 @@ document.addEventListener("submit", async (event) => {
     }
 
     renderFalsePositiveLog(response.items || []);
+    await refreshSupportWorkspaceState();
     ensureSupportWorkspaceOpen();
     revealSampleLibraryReflowPane();
   } catch (error) {
@@ -8067,7 +8105,7 @@ byId("feedback-form").addEventListener("submit", async (event) => {
     byId("feedback-screenshot-result").innerHTML =
       '<div class="result-card-shell muted">等待截图识别</div>';
     formElement.reset();
-    await refreshAll();
+    await refreshSupportWorkspaceState();
   } catch (error) {
     byId("feedback-result").innerHTML = `
       <div class="result-card-shell muted">${escapeHtml(error.message || "写入反馈失败")}</div>
@@ -8103,7 +8141,8 @@ async function handleLexiconSubmit(event, scope, resultId, busyText) {
 
     byId(resultId).innerHTML = '<div class="result-card-shell">操作成功，列表已更新。</div>';
     formElement.reset();
-    await refreshAll();
+    await refreshAdminDataState();
+    await refreshSummaryState();
   } catch (error) {
     byId(resultId).innerHTML = `
       <div class="result-card-shell muted">${escapeHtml(error.message || "保存失败")}</div>
@@ -8153,7 +8192,7 @@ byId("inner-space-terms-form").addEventListener("submit", async (event) => {
       priorityInput.value = "80";
     }
     byId("inner-space-terms-result").innerHTML = '<div class="result-card-shell">术语已保存，后续改写和生成会优先参考它。</div>';
-    await refreshAll();
+    await refreshAdminDataState();
   } catch (error) {
     byId("inner-space-terms-result").innerHTML = `
       <div class="result-card-shell muted">${escapeHtml(error.message || "保存术语失败")}</div>
@@ -8240,7 +8279,9 @@ async function submitLexiconWorkspaceLexiconForm(formElement, scope) {
       },
       resultMessage: "操作成功，列表已更新。"
     };
-    await refreshAll();
+    await refreshAdminDataState();
+    await refreshSummaryState();
+    renderLexiconWorkspaceModal();
   } catch (error) {
     setLexiconWorkspaceResultMessage(error.message || "保存失败");
   } finally {
@@ -8281,7 +8322,8 @@ async function submitLexiconWorkspaceInnerSpaceForm(formElement) {
       },
       resultMessage: "操作成功，列表已更新。"
     };
-    await refreshAll();
+    await refreshAdminDataState();
+    renderLexiconWorkspaceModal();
   } catch (error) {
     setLexiconWorkspaceResultMessage(error.message || "保存失败");
   } finally {
@@ -8929,19 +8971,17 @@ document.addEventListener("click", async (event) => {
     setButtonBusy(button, true, "移出中...");
 
     try {
-      const response = await apiJson(sampleLibraryApi, {
-        method: "PATCH",
-        body: JSON.stringify({
+      await patchSampleLibraryRecordAndRefresh(
+        {
           id: button.dataset.id,
           reference: {
             enabled: false,
             tier: "",
             notes: ""
           }
-        })
-      });
-      commitSampleLibraryRecords(response.items, appState.sampleLibraryRecords);
-      appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
+        },
+        { recordId: button.dataset.id }
+      );
       renderSampleLibraryWorkspace();
     } finally {
       setButtonBusy(button, false);
@@ -8953,15 +8993,13 @@ document.addEventListener("click", async (event) => {
     setButtonBusy(button, true, "标记中...");
 
     try {
-      const response = await apiJson(sampleLibraryApi, {
-        method: "PATCH",
-        body: JSON.stringify({
+      await patchSampleLibraryRecordAndRefresh(
+        {
           id: button.dataset.id,
           sampleType: "missed_violation"
-        })
-      });
-      commitSampleLibraryRecords(response.items, appState.sampleLibraryRecords);
-      appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
+        },
+        { recordId: button.dataset.id }
+      );
       appState.sampleLibraryPoolsModal.tab = "negative";
       renderSampleLibraryWorkspace();
     } finally {
@@ -8974,15 +9012,13 @@ document.addEventListener("click", async (event) => {
     setButtonBusy(button, true, "恢复中...");
 
     try {
-      const response = await apiJson(sampleLibraryApi, {
-        method: "PATCH",
-        body: JSON.stringify({
+      await patchSampleLibraryRecordAndRefresh(
+        {
           id: button.dataset.id,
           sampleType: ""
-        })
-      });
-      commitSampleLibraryRecords(response.items, appState.sampleLibraryRecords);
-      appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
+        },
+        { recordId: button.dataset.id }
+      );
       appState.sampleLibraryPoolsModal.tab = "regular";
       renderSampleLibraryWorkspace();
     } finally {
@@ -9110,6 +9146,10 @@ document.addEventListener("click", async (event) => {
   setButtonBusy(button, true, "处理中...");
 
   try {
+    let shouldRefreshSupportWorkspace = false;
+    let shouldRefreshAdminData = false;
+    let shouldRefreshSummary = false;
+
     if (action === "delete-lexicon") {
       await apiJson("/api/admin/lexicon", {
         method: "DELETE",
@@ -9118,6 +9158,8 @@ document.addEventListener("click", async (event) => {
           id: button.dataset.id
         })
       });
+      shouldRefreshAdminData = true;
+      shouldRefreshSummary = true;
     }
 
     if (action === "delete-inner-space-term") {
@@ -9127,6 +9169,7 @@ document.addEventListener("click", async (event) => {
           id: button.dataset.id
         })
       });
+      shouldRefreshAdminData = true;
     }
 
     if (action === "delete-feedback") {
@@ -9137,6 +9180,7 @@ document.addEventListener("click", async (event) => {
           createdAt: button.dataset.createdAt
         })
       });
+      shouldRefreshSupportWorkspace = true;
     }
 
     if (action === "delete-review") {
@@ -9146,6 +9190,7 @@ document.addEventListener("click", async (event) => {
           id: button.dataset.id
         })
       });
+      shouldRefreshSupportWorkspace = true;
     }
 
     if (action === "promote-review") {
@@ -9155,6 +9200,7 @@ document.addEventListener("click", async (event) => {
           id: button.dataset.id
         })
       });
+      shouldRefreshSupportWorkspace = true;
     }
 
     if (action === "confirm-false-positive") {
@@ -9165,6 +9211,7 @@ document.addEventListener("click", async (event) => {
           status: "platform_passed_confirmed"
         })
       });
+      shouldRefreshSupportWorkspace = true;
     }
 
     if (action === "delete-false-positive") {
@@ -9174,6 +9221,7 @@ document.addEventListener("click", async (event) => {
           id: button.dataset.id
         })
       });
+      shouldRefreshSupportWorkspace = true;
     }
 
     if (action === "run-sample-library-calibration-replay") {
@@ -9232,7 +9280,17 @@ document.addEventListener("click", async (event) => {
       await saveLifecycleFromCurrent("generation", button.dataset.candidateId, button.dataset.candidateIndex);
     }
 
-    await refreshAll();
+    if (shouldRefreshSupportWorkspace) {
+      await refreshSupportWorkspaceState();
+    }
+
+    if (shouldRefreshAdminData) {
+      await refreshAdminDataState();
+    }
+
+    if (shouldRefreshSummary) {
+      await refreshSummaryState();
+    }
   } catch (error) {
     const target =
       button.closest(".admin-item") || byId("feedback-result") || byId("custom-lexicon-result");

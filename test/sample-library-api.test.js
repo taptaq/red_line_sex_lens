@@ -502,10 +502,7 @@ test("sample library reference mutations queue style profile refresh without blo
 
     assert.equal(created.status, 200);
     assert.equal(created.ok, true);
-    assert.equal(created.styleProfileRefreshQueued, true);
     assert.ok(created.styleProfile.current);
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
 
     const deleted = await invokeRoute("DELETE", "/api/sample-library", {
       id: created.item.id
@@ -513,9 +510,7 @@ test("sample library reference mutations queue style profile refresh without blo
 
     assert.equal(deleted.status, 200);
     assert.equal(deleted.ok, true);
-    assert.equal(deleted.styleProfileRefreshQueued, true);
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.ok(deleted.styleProfile.current);
   });
 });
 
@@ -556,10 +551,7 @@ test("sample library PATCH queues style profile refresh when reference sample co
     assert.equal(patched.ok, true);
     assert.equal(patched.item.reference.enabled, true);
     assert.equal(patched.item.note.title, "参考样本新标题");
-    assert.equal(patched.styleProfileRefreshQueued, true);
     assert.ok(patched.styleProfile.current);
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
   });
 });
 

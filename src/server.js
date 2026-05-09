@@ -187,15 +187,14 @@ async function persistSampleLibraryRecord(payload = {}) {
   const shouldRefreshStyleProfile = item?.reference?.enabled === true;
   let styleProfile;
   if (shouldRefreshStyleProfile) {
-    styleProfile = await loadCurrentStyleProfileView();
-    scheduleStyleProfileRefresh("sample-library-reference-mutation");
+    styleProfile = await refreshAutoStyleProfile();
   }
 
   return {
     item,
     items,
     styleProfile,
-    styleProfileRefreshQueued: shouldRefreshStyleProfile ? true : undefined
+    styleProfileRefreshQueued: undefined
   };
 }
 
@@ -225,15 +224,14 @@ async function patchSampleLibraryRecordAndReturn(payload = {}) {
       referenceContentChanged(current[index], item));
   let styleProfile;
   if (shouldRefreshStyleProfile) {
-    styleProfile = await loadCurrentStyleProfileView();
-    scheduleStyleProfileRefresh("sample-library-reference-mutation");
+    styleProfile = await refreshAutoStyleProfile();
   }
 
   return {
     item,
     items,
     styleProfile,
-    styleProfileRefreshQueued: shouldRefreshStyleProfile ? true : undefined
+    styleProfileRefreshQueued: undefined
   };
 }
 
@@ -253,14 +251,13 @@ async function deleteSampleLibraryRecordAndReturn(id) {
   invalidateWriteReadCaches();
   let styleProfile;
   if (removed?.reference?.enabled === true) {
-    styleProfile = await loadCurrentStyleProfileView();
-    scheduleStyleProfileRefresh("sample-library-reference-mutation");
+    styleProfile = await refreshAutoStyleProfile();
   }
 
   return {
     items: next,
     styleProfile,
-    styleProfileRefreshQueued: removed?.reference?.enabled === true ? true : undefined
+    styleProfileRefreshQueued: undefined
   };
 }
 
@@ -535,6 +532,29 @@ function buildEmptySharedMemoryContext(queryKind = "") {
       candidateCount: 0
     }
   };
+}
+
+async function retrieveRewriteMemoryContext(payload) {
+  try {
+    const memoryRetrievalService = await getMemoryRetrievalService();
+    return await memoryRetrievalService.retrieveForRewrite(payload);
+  } catch {
+    return buildEmptySharedMemoryContext("rewrite");
+  }
+}
+
+async function retrieveGenerationMemoryContext({ topic = "", collectionType = "", constraints = "", tags = [] } = {}) {
+  try {
+    const memoryRetrievalService = await getMemoryRetrievalService();
+    return await memoryRetrievalService.retrieveForGeneration({
+      topic,
+      collectionType,
+      constraints,
+      tags
+    });
+  } catch {
+    return buildEmptySharedMemoryContext("generation");
+  }
 }
 
 function buildRetryGuidance({
@@ -936,18 +956,14 @@ async function handleRequest(request, response) {
   if (request.method === "POST" && url.pathname === "/api/rewrite") {
     const payload = await readBody(request);
     const modelSelection = normalizeModelSelectionState(payload?.modelSelection);
-    const beforeAnalysis = await buildMergedAnalysis(payload, {
-      modelSelection: modelSelection.semantic
-    });
-    const rewriteMemoryContext = await (async () => {
-      try {
-        const memoryRetrievalService = await getMemoryRetrievalService();
-        return await memoryRetrievalService.retrieveForRewrite(payload);
-      } catch {
-        return buildEmptySharedMemoryContext("rewrite");
-      }
-    })();
-    const innerSpaceTerms = filterInnerSpaceTerms(await loadInnerSpaceTerms(), {
+    const [beforeAnalysis, rewriteMemoryContext, innerSpaceTermsRaw] = await Promise.all([
+      buildMergedAnalysis(payload, {
+        modelSelection: modelSelection.semantic
+      }),
+      retrieveRewriteMemoryContext(payload),
+      loadInnerSpaceTerms()
+    ]);
+    const innerSpaceTerms = filterInnerSpaceTerms(innerSpaceTermsRaw, {
       collectionType: payload?.collectionType
     });
     const rewriteResult = await rewriteUntilAccepted({
@@ -984,27 +1000,20 @@ async function handleRequest(request, response) {
       ...(payload?.brief && typeof payload.brief === "object" ? payload.brief : {}),
       collectionType
     };
-    const [profileState, qualifiedReferenceSamples, innerSpaceTermsRaw] = await Promise.all([
+    const [profileState, qualifiedReferenceSamples, innerSpaceTermsRaw, memoryContext] = await Promise.all([
       loadStyleProfile(),
       loadQualifiedReferenceSamples(),
-      loadInnerSpaceTerms()
+      loadInnerSpaceTerms(),
+      retrieveGenerationMemoryContext({
+        topic: brief.topic,
+        collectionType,
+        constraints: brief.constraints,
+        tags: Array.isArray(payload?.draft?.tags) ? payload.draft.tags : []
+      })
     ]);
     const styleProfile = getActiveStyleProfile(profileState);
     const referenceSamples = buildGenerationReferenceSamples({ successSamples: qualifiedReferenceSamples }).slice(0, 12);
     const innerSpaceTerms = filterInnerSpaceTerms(innerSpaceTermsRaw, { collectionType });
-    const memoryContext = await (async () => {
-      try {
-        const memoryRetrievalService = await getMemoryRetrievalService();
-        return await memoryRetrievalService.retrieveForGeneration({
-          topic: brief.topic,
-          collectionType,
-          constraints: brief.constraints,
-          tags: Array.isArray(payload?.draft?.tags) ? payload.draft.tags : []
-        });
-      } catch {
-        return buildEmptySharedMemoryContext("generation");
-      }
-    })();
     const generation = await generateNoteCandidates({
       mode: payload?.mode,
       brief,
@@ -1156,27 +1165,26 @@ async function handleRequest(request, response) {
     const validatedPayloads = await validatePdfImportCommitItems(payload?.items);
     const createdItems = [];
     let styleProfile = null;
-    let styleProfileRefreshQueued = false;
 
     for (const validatedPayload of validatedPayloads) {
-      const { item: saved, styleProfile: savedStyleProfile, styleProfileRefreshQueued: savedRefreshQueued } =
-        await persistSampleLibraryRecord(validatedPayload);
+      const { item: saved, styleProfile: savedStyleProfile } = await persistSampleLibraryRecord(validatedPayload);
       createdItems.push(saved);
-      if (savedRefreshQueued) {
-        styleProfile = savedStyleProfile || styleProfile;
-        styleProfileRefreshQueued = true;
+      if (savedStyleProfile) {
+        styleProfile = savedStyleProfile;
       }
     }
+
+    const items = await loadNoteRecords();
 
     const responsePayload = {
       ok: true,
       createdCount: createdItems.length,
-      items: createdItems
+      item: createdItems[0] || null,
+      items
     };
 
-    if (styleProfileRefreshQueued) {
-      responsePayload.styleProfile = styleProfile || (await loadCurrentStyleProfileView());
-      responsePayload.styleProfileRefreshQueued = true;
+    if (styleProfile) {
+      responsePayload.styleProfile = styleProfile;
     }
 
     return sendJson(response, 200, responsePayload);

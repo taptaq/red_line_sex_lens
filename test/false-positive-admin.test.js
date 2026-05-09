@@ -388,7 +388,7 @@ test("recording a false positive sample refreshes the sample library reflow area
     appJs,
     /function\s+saveFeedbackFalsePositiveModal\s*\([\s\S]*await apiJson\("\/api\/admin\/feedback", \{[\s\S]*method: "DELETE"[\s\S]*noteId: modalState\.noteId[\s\S]*createdAt: modalState\.createdAt[\s\S]*\}\);/
   );
-  assert.match(appJs, /function\s+saveFeedbackFalsePositiveModal\s*\([\s\S]*await refreshAll\(\);/);
+  assert.match(appJs, /function\s+saveFeedbackFalsePositiveModal\s*\([\s\S]*await refreshSupportWorkspaceState\(\);/);
   assert.match(appJs, /renderFalsePositiveLog\(response\.items \|\| \[\]\)/);
   assert.match(appJs, /ensureSupportWorkspaceOpen\(\)/);
   assert.match(appJs, /activateTab\("data-maintenance", "sample-library-pane"\)/);

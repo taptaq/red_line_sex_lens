@@ -4,13 +4,18 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 async function readFrontendFiles() {
-  const [indexHtml, appJs, styles] = await Promise.all([
+  const [indexHtml, appJs, styles, serverJs] = await Promise.all([
     fs.readFile(path.join(process.cwd(), "web/index.html"), "utf8"),
     fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8"),
-    fs.readFile(path.join(process.cwd(), "web/styles.css"), "utf8")
+    fs.readFile(path.join(process.cwd(), "web/styles.css"), "utf8"),
+    fs.readFile(path.join(process.cwd(), "src/server.js"), "utf8")
   ]);
 
-  return { indexHtml, appJs, styles };
+  return { indexHtml, appJs, styles, serverJs };
+}
+
+async function readServerFile() {
+  return fs.readFile(path.join(process.cwd(), "src/server.js"), "utf8");
 }
 
 function extractElementInnerHtml(html, marker) {
@@ -457,6 +462,21 @@ test("sample library refresh re-renders summary after records change", async () 
 
   assert.match(refreshSampleLibraryWorkspaceSource, /commitSampleLibraryRecords\(payload\?\.items, \[\]\)/);
   assert.match(refreshSampleLibraryWorkspaceSource, /renderSampleLibraryWorkspace\(\);[\s\S]*renderSummary\(appState\.summaryData\)/);
+});
+
+test("targeted post-write refreshes avoid broad reloads and model routes preload in parallel", async () => {
+  const { appJs, serverJs } = await readFrontendFiles();
+
+  assert.match(appJs, /async function refreshSupportWorkspaceState\(\)\s*\{/);
+  assert.match(appJs, /await Promise\.allSettled\(\[refreshSummaryState\(\), refreshAdminDataState\(\)\]\)/);
+  assert.match(appJs, /function syncStyleProfileStateFromPayload\(payload = \{\}\)\s*\{/);
+  assert.match(
+    appJs,
+    /commitSampleLibraryRecords\(response\.items, appState\.sampleLibraryRecords\);[\s\S]*renderSampleLibraryWorkspace\(\);[\s\S]*syncStyleProfileStateFromPayload\(response\)/
+  );
+  assert.doesNotMatch(appJs, /await refreshAll\(\);[\s\S]*syncStyleProfileStateFromPayload\(response\)/);
+  assert.match(serverJs, /const \[beforeAnalysis, rewriteMemoryContext, innerSpaceTermsRaw\] = await Promise\.all\(\[/);
+  assert.match(serverJs, /const \[profileState, qualifiedReferenceSamples, innerSpaceTermsRaw, memoryContext\] = await Promise\.all\(\[/);
 });
 
 test("analyze tag refresh treats server custom tags as authoritative over stale snapshots", async () => {
@@ -1358,4 +1378,139 @@ test("frontend also gates prefill and lexicon submit actions that depend on prer
   assert.match(appJs, /byId\("seed-lexicon-form"\)\.addEventListener\("input",\s*syncLexiconFormActions\)/);
   assert.match(appJs, /byId\("seed-lexicon-form"\)\.addEventListener\("change",\s*syncLexiconFormActions\)/);
   assert.match(appJs, /syncSampleLibraryPrefillActions\(\);[\s\S]*syncLexiconFormActions\(\)/);
+});
+
+test("frontend narrows post-mutation refreshes to support or admin scopes instead of full app reloads", async () => {
+  const { appJs } = await readFrontendFiles();
+  const feedbackSubmitSource = extractSourceBetween(
+    appJs,
+    'byId("feedback-form").addEventListener("submit", async (event) => {',
+    "async function handleLexiconSubmit("
+  );
+  const handleLexiconSubmitSource = extractSourceBetween(
+    appJs,
+    "async function handleLexiconSubmit(",
+    'byId("seed-lexicon-form").addEventListener("submit", (event) =>'
+  );
+  const innerSpaceSubmitSource = extractSourceBetween(
+    appJs,
+    'byId("inner-space-terms-form").addEventListener("submit", async (event) => {',
+    "function updateLexiconWorkspaceDraftFromForm("
+  );
+  const patchSampleLibraryRecordSource = extractSourceBetween(
+    appJs,
+    "async function patchSampleLibraryRecordAndRefresh(",
+    "async function saveSampleLibraryDetailReferenceModal("
+  );
+  const saveSampleLibraryCreateModalSource = extractSourceBetween(
+    appJs,
+    "async function saveSampleLibraryCreateModal()",
+    'function openSampleLibraryBaseModal(recordId = "") {'
+  );
+  const saveSampleLibraryDeleteModalSource = extractSourceBetween(
+    appJs,
+    "async function saveSampleLibraryDeleteModal()",
+    "async function saveSampleLibraryDetailModal()"
+  );
+  const commitSampleLibraryImportCardSource = extractSourceBetween(
+    appJs,
+    "async function commitSampleLibraryImportCard(card) {",
+    "function getAnalyzePayload()"
+  );
+  const adminActionHandlerSource = extractSourceBetween(
+    appJs,
+    'document.addEventListener("click", async (event) => {',
+    "renderModelSelectionControls(defaultModelSelectionOptions);"
+  );
+  const lexiconWorkspaceLexiconSubmitSource = extractSourceBetween(
+    appJs,
+    "async function submitLexiconWorkspaceLexiconForm(formElement, scope) {",
+    "async function submitLexiconWorkspaceInnerSpaceForm(formElement) {"
+  );
+  const lexiconWorkspaceInnerSpaceSubmitSource = extractSourceBetween(
+    appJs,
+    "async function submitLexiconWorkspaceInnerSpaceForm(formElement) {",
+    'byId("lexicon-workspace-modal-content")?.addEventListener("submit", async (event) => {'
+  );
+
+  assert.match(appJs, /async function refreshSupportWorkspaceState\(\)\s*\{/);
+  assert.match(
+    appJs,
+    /await Promise\.allSettled\(\[\s*refreshSummaryState\(\),\s*refreshAdminDataState\(\)\s*\]\)/
+  );
+  assert.match(appJs, /function syncStyleProfileStateFromPayload\(payload = \{\}\)/);
+
+  assert.match(feedbackSubmitSource, /await refreshSupportWorkspaceState\(\);/);
+  assert.doesNotMatch(feedbackSubmitSource, /await refreshAll\(\);/);
+
+  assert.match(handleLexiconSubmitSource, /await refreshAdminDataState\(\);/);
+  assert.doesNotMatch(handleLexiconSubmitSource, /await refreshAll\(\);/);
+
+  assert.match(innerSpaceSubmitSource, /await refreshAdminDataState\(\);/);
+  assert.doesNotMatch(innerSpaceSubmitSource, /await refreshAll\(\);/);
+
+  assert.match(patchSampleLibraryRecordSource, /commitSampleLibraryRecords\(response\.items, appState\.sampleLibraryRecords\)/);
+  assert.match(patchSampleLibraryRecordSource, /syncStyleProfileStateFromPayload\(response\)/);
+  assert.match(patchSampleLibraryRecordSource, /await refreshSummaryState\(\);/);
+  assert.doesNotMatch(patchSampleLibraryRecordSource, /await refreshAll\(\);/);
+
+  assert.match(saveSampleLibraryCreateModalSource, /commitSampleLibraryRecords\(response\.items, appState\.sampleLibraryRecords\)/);
+  assert.match(saveSampleLibraryCreateModalSource, /syncStyleProfileStateFromPayload\(response\)/);
+  assert.match(saveSampleLibraryCreateModalSource, /await refreshSummaryState\(\);/);
+  assert.doesNotMatch(saveSampleLibraryCreateModalSource, /await refreshAll\(\);/);
+
+  assert.match(saveSampleLibraryDeleteModalSource, /commitSampleLibraryRecords\(response\.items, appState\.sampleLibraryRecords\)/);
+  assert.match(saveSampleLibraryDeleteModalSource, /syncStyleProfileStateFromPayload\(response\)/);
+  assert.match(saveSampleLibraryDeleteModalSource, /await refreshSummaryState\(\);/);
+  assert.doesNotMatch(saveSampleLibraryDeleteModalSource, /await refreshAll\(\);/);
+
+  assert.match(commitSampleLibraryImportCardSource, /commitSampleLibraryRecords\(response\.items, appState\.sampleLibraryRecords\)/);
+  assert.match(commitSampleLibraryImportCardSource, /syncStyleProfileStateFromPayload\(response\)/);
+  assert.match(commitSampleLibraryImportCardSource, /await refreshSummaryState\(\);/);
+  assert.doesNotMatch(commitSampleLibraryImportCardSource, /await refreshSampleLibraryWorkspace\(\);/);
+
+  assert.match(adminActionHandlerSource, /await refreshSupportWorkspaceState\(\);/);
+  assert.match(adminActionHandlerSource, /await refreshAdminDataState\(\);/);
+  assert.doesNotMatch(adminActionHandlerSource, /await refreshAll\(\);/);
+
+  assert.match(lexiconWorkspaceLexiconSubmitSource, /await refreshAdminDataState\(\);/);
+  assert.match(lexiconWorkspaceLexiconSubmitSource, /renderLexiconWorkspaceModal\(\);/);
+  assert.doesNotMatch(lexiconWorkspaceLexiconSubmitSource, /await refreshAll\(\);/);
+
+  assert.match(lexiconWorkspaceInnerSpaceSubmitSource, /await refreshAdminDataState\(\);/);
+  assert.match(lexiconWorkspaceInnerSpaceSubmitSource, /renderLexiconWorkspaceModal\(\);/);
+  assert.doesNotMatch(lexiconWorkspaceInnerSpaceSubmitSource, /await refreshAll\(\);/);
+});
+
+test("server preloads rewrite and generation model context in parallel before downstream filtering", async () => {
+  const serverJs = await readServerFile();
+  const rewriteRouteSource = extractSourceBetween(
+    serverJs,
+    'if (request.method === "POST" && url.pathname === "/api/rewrite") {',
+    'if (request.method === "POST" && url.pathname === "/api/generate-note") {'
+  );
+  const generateNoteRouteSource = extractSourceBetween(
+    serverJs,
+    'if (request.method === "POST" && url.pathname === "/api/generate-note") {',
+    'if (request.method === "POST" && url.pathname === "/api/cross-review") {'
+  );
+
+  assert.match(
+    rewriteRouteSource,
+    /const \[beforeAnalysis, rewriteMemoryContext, innerSpaceTermsRaw\] = await Promise\.all\(\[/
+  );
+  assert.match(rewriteRouteSource, /buildMergedAnalysis\(payload,\s*\{/);
+  assert.match(rewriteRouteSource, /retrieveRewriteMemoryContext\(payload\)/);
+  assert.match(rewriteRouteSource, /loadInnerSpaceTerms\(\)/);
+  assert.match(rewriteRouteSource, /const innerSpaceTerms = filterInnerSpaceTerms\(innerSpaceTermsRaw,\s*\{/);
+
+  assert.match(
+    generateNoteRouteSource,
+    /const \[profileState, qualifiedReferenceSamples, innerSpaceTermsRaw, memoryContext\] = await Promise\.all\(\[/
+  );
+  assert.match(generateNoteRouteSource, /loadStyleProfile\(\)/);
+  assert.match(generateNoteRouteSource, /loadQualifiedReferenceSamples\(\)/);
+  assert.match(generateNoteRouteSource, /loadInnerSpaceTerms\(\)/);
+  assert.match(generateNoteRouteSource, /retrieveGenerationMemoryContext\(\{/);
+  assert.match(generateNoteRouteSource, /const innerSpaceTerms = filterInnerSpaceTerms\(innerSpaceTermsRaw,\s*\{ collectionType \}\);/);
 });
