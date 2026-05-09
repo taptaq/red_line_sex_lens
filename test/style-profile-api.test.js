@@ -127,6 +127,49 @@ test("admin style profile read returns current profile without queuing or regene
   });
 });
 
+test("style profile refresh scheduler reruns once when marked dirty during an active refresh", async () => {
+  const { scheduleStyleProfileRefresh } = await import("../src/server.js");
+  let refreshCalls = 0;
+  let invalidations = 0;
+  let releaseFirstRefresh;
+  const firstRefreshStarted = new Promise((resolve) => {
+    releaseFirstRefresh = resolve;
+  });
+  let unblockFirstRefresh;
+  const firstRefreshBlocker = new Promise((resolve) => {
+    unblockFirstRefresh = resolve;
+  });
+
+  const refresh = async () => {
+    refreshCalls += 1;
+
+    if (refreshCalls === 1) {
+      releaseFirstRefresh();
+      await firstRefreshBlocker;
+    }
+  };
+
+  const invalidate = () => {
+    invalidations += 1;
+  };
+
+  const first = scheduleStyleProfileRefresh("first-test-refresh", { refresh, invalidate });
+
+  try {
+    await firstRefreshStarted;
+    const second = scheduleStyleProfileRefresh("second-test-refresh", { refresh, invalidate });
+    assert.equal(second, first);
+    unblockFirstRefresh();
+    await first;
+
+    assert.equal(refreshCalls, 2);
+    assert.equal(invalidations, 2);
+  } finally {
+    unblockFirstRefresh();
+    await first.catch(() => {});
+  }
+});
+
 async function invokeRoute(method, pathname, body = null) {
   const request = new EventEmitter();
   request.method = method;

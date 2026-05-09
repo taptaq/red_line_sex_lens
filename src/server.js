@@ -81,6 +81,7 @@ const webRoot = path.resolve(webDir);
 const readCache = createRuntimeCache();
 const writeInvalidationTags = ["summary", "admin-data", "sample-library"];
 let styleProfileRefreshPromise = null;
+let styleProfileRefreshPending = false;
 
 function invalidateReadCaches(tags = []) {
   tags.forEach((tag) => readCache.invalidateTag(tag));
@@ -103,21 +104,31 @@ async function buildAdminDataView() {
   };
 }
 
-function scheduleStyleProfileRefresh(reason = "") {
+export function scheduleStyleProfileRefresh(reason = "", options = {}) {
   void reason;
+  const refresh = typeof options.refresh === "function" ? options.refresh : refreshAutoStyleProfile;
+  const invalidate =
+    typeof options.invalidate === "function" ? options.invalidate : () => invalidateReadCaches(["admin-data"]);
 
-  if (!styleProfileRefreshPromise) {
-    styleProfileRefreshPromise = (async () => {
-      try {
-        await refreshAutoStyleProfile();
-        invalidateReadCaches(["admin-data"]);
-      } catch (error) {
-        console.warn("Failed to refresh style profile in background", error);
-      } finally {
-        styleProfileRefreshPromise = null;
-      }
-    })();
+  if (styleProfileRefreshPromise) {
+    styleProfileRefreshPending = true;
+    return styleProfileRefreshPromise;
   }
+
+  styleProfileRefreshPromise = (async () => {
+    try {
+      do {
+        styleProfileRefreshPending = false;
+        await refresh();
+        invalidate();
+      } while (styleProfileRefreshPending);
+    } catch (error) {
+      console.warn("Failed to refresh style profile in background", error);
+    } finally {
+      styleProfileRefreshPending = false;
+      styleProfileRefreshPromise = null;
+    }
+  })();
 
   return styleProfileRefreshPromise;
 }
