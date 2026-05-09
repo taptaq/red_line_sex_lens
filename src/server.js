@@ -73,10 +73,21 @@ import { replayCalibratedSamples } from "./calibration-replay.js";
 import { filterQualifiedReferenceSamples } from "./reference-samples.js";
 import { rankSamplesByWeight, withSampleWeight } from "./sample-weight.js";
 import { paths, webDir } from "./config.js";
+import { createRuntimeCache } from "./runtime-cache.js";
 
 const host = "127.0.0.1";
 const port = 3030;
 const webRoot = path.resolve(webDir);
+const readCache = createRuntimeCache();
+const writeInvalidationTags = ["summary", "admin-data", "sample-library"];
+
+function invalidateReadCaches(tags = []) {
+  tags.forEach((tag) => readCache.invalidateTag(tag));
+}
+
+function invalidateWriteReadCaches() {
+  invalidateReadCaches(writeInvalidationTags);
+}
 
 function resolveWebAsset(pathname) {
   const localPath = pathname === "/" ? "/index.html" : pathname;
@@ -127,6 +138,7 @@ async function persistSampleLibraryRecord(payload = {}) {
   const normalizedPayload = await normalizeSampleLibraryPayloadCollectionType(payload);
   const nextRecord = createSampleLibraryRecord(normalizedPayload);
   const items = await saveNoteRecords([...(await loadNoteRecords()), nextRecord]);
+  invalidateWriteReadCaches();
   const item = findSampleLibraryRecord(items, nextRecord) || items[items.length - 1] || null;
   const shouldRefreshStyleProfile = item?.reference?.enabled === true;
   if (shouldRefreshStyleProfile) {
@@ -151,6 +163,7 @@ async function patchSampleLibraryRecordAndReturn(payload = {}) {
   const next = [...current];
   next[index] = patchSampleLibraryRecord(current[index], normalizedPayload);
   const items = await saveNoteRecords(next);
+  invalidateWriteReadCaches();
   const item = findSampleLibraryRecord(items, next[index]) || null;
   const referenceChanged =
     Object.prototype.hasOwnProperty.call(normalizedPayload || {}, "reference") ||
@@ -175,6 +188,7 @@ async function deleteSampleLibraryRecordAndReturn(id) {
   }
 
   await saveNoteRecords(next);
+  invalidateWriteReadCaches();
   if (removed?.reference?.enabled === true) {
     await refreshAutoStyleProfile();
   }
@@ -703,6 +717,7 @@ async function appendFeedbackAndQueue(payload, { modelSelection = {} } = {}) {
   });
   const feedbackLog = await upsertFeedbackEntries(enrichedItems);
   const reviewQueue = await createReviewCandidates(feedbackLog, { reset: true });
+  invalidateWriteReadCaches();
   const sourceNoteIds = new Set(enrichedItems.map((item) => item.noteId));
   const derivedCandidates = reviewQueue.filter((item) => sourceNoteIds.has(item.sourceNoteId));
   const candidateSummary = derivedCandidates.reduce(
@@ -759,12 +774,12 @@ async function handleRequest(request, response) {
   }
 
   if (request.method === "GET" && url.pathname === "/api/summary") {
-    const summary = await loadSummary();
+    const summary = await readCache.getOrLoad("summary", loadSummary, { ttlMs: 5000, tags: ["summary"] });
     return sendJson(response, 200, summary);
   }
 
   if (request.method === "GET" && url.pathname === "/api/admin/data") {
-    const data = await loadAdminData();
+    const data = await readCache.getOrLoad("admin-data", loadAdminData, { ttlMs: 10000, tags: ["admin-data"] });
     return sendJson(response, 200, data);
   }
 
@@ -790,7 +805,9 @@ async function handleRequest(request, response) {
   }
 
   if (request.method === "GET" && url.pathname === "/api/sample-library") {
-    return sendItemsResponse(response, loadNoteRecords);
+    return sendItemsResponse(response, () =>
+      readCache.getOrLoad("sample-library", loadNoteRecords, { ttlMs: 10000, tags: ["sample-library"] })
+    );
   }
 
   if (request.method === "GET" && url.pathname === "/api/collection-types") {
@@ -984,6 +1001,7 @@ async function handleRequest(request, response) {
       const next = current.map((item, index) => (index === sameNoteIndex ? mergedEntry : item));
       await saveFalsePositiveLog(next);
       await createWhitelistCandidatesFromFalsePositive(mergedEntry);
+      invalidateWriteReadCaches();
       return sendJson(response, 200, {
         ok: true,
         items: next
@@ -999,6 +1017,7 @@ async function handleRequest(request, response) {
     const next = [...current, nextEntry];
     await saveFalsePositiveLog(next);
     await createWhitelistCandidatesFromFalsePositive(nextEntry);
+    invalidateWriteReadCaches();
     return sendJson(response, 200, {
       ok: true,
       items: next
@@ -1082,6 +1101,7 @@ async function handleRequest(request, response) {
     });
     await saveFalsePositiveLog(next);
     await createWhitelistCandidatesFromFalsePositive(next[index]);
+    invalidateWriteReadCaches();
     return sendJson(response, 200, {
       ok: true,
       items: next
@@ -1102,6 +1122,7 @@ async function handleRequest(request, response) {
     const payload = await readBody(request);
     const updated = await confirmFalsePositiveLogEntry(payload?.id, payload?.userNotes);
     const items = await loadFalsePositiveLog();
+    invalidateWriteReadCaches();
 
     return sendJson(response, 200, {
       ok: true,
@@ -1114,6 +1135,7 @@ async function handleRequest(request, response) {
     const payload = await readBody(request);
     await deleteFalsePositiveLogEntry(payload?.id);
     const items = await loadFalsePositiveLog();
+    invalidateWriteReadCaches();
 
     return sendJson(response, 200, {
       ok: true,
@@ -1124,12 +1146,14 @@ async function handleRequest(request, response) {
   if (request.method === "POST" && url.pathname === "/api/admin/lexicon") {
     const payload = await readBody(request);
     const entry = await addLexiconEntry(payload.scope, payload.entry);
+    invalidateWriteReadCaches();
     return sendJson(response, 200, { ok: true, entry });
   }
 
   if (request.method === "POST" && url.pathname === "/api/admin/inner-space-terms") {
     const payload = await readBody(request);
     const entry = await addInnerSpaceTerm(payload?.entry);
+    invalidateWriteReadCaches();
     return sendJson(response, 200, { ok: true, entry });
   }
 
@@ -1140,24 +1164,28 @@ async function handleRequest(request, response) {
   if (request.method === "DELETE" && url.pathname === "/api/admin/lexicon") {
     const payload = await readBody(request);
     await deleteLexiconEntry(payload.scope, payload.id);
+    invalidateWriteReadCaches();
     return sendJson(response, 200, { ok: true });
   }
 
   if (request.method === "DELETE" && url.pathname === "/api/admin/inner-space-terms") {
     const payload = await readBody(request);
     const items = await deleteInnerSpaceTerm(payload?.id);
+    invalidateWriteReadCaches();
     return sendJson(response, 200, { ok: true, items });
   }
 
   if (request.method === "DELETE" && url.pathname === "/api/admin/feedback") {
     const payload = await readBody(request);
     await deleteFeedbackEntry(payload.noteId, payload.createdAt);
+    invalidateWriteReadCaches();
     return sendJson(response, 200, { ok: true });
   }
 
   if (request.method === "DELETE" && url.pathname === "/api/admin/review-queue") {
     const payload = await readBody(request);
     await deleteReviewQueueItem(payload.id);
+    invalidateWriteReadCaches();
     return sendJson(response, 200, { ok: true });
   }
 
@@ -1173,6 +1201,7 @@ async function handleRequest(request, response) {
   if (request.method === "POST" && url.pathname === "/api/admin/review-queue/promote") {
     const payload = await readBody(request);
     const entry = await promoteReviewQueueItem(payload.id);
+    invalidateWriteReadCaches();
     return sendJson(response, 200, { ok: true, entry, item: entry });
   }
 
