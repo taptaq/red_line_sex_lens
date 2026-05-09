@@ -102,3 +102,48 @@ test("clear during an in-flight load does not let old result repopulate cache", 
   assert.equal(calls, 2);
   assert.deepEqual(next, { value: 2 });
 });
+
+test("cached value registers a later tag for invalidation", async () => {
+  const cache = createRuntimeCache();
+  let calls = 0;
+
+  const loader = async () => {
+    calls += 1;
+    return { value: calls };
+  };
+
+  const first = await cache.getOrLoad("summary", loader, { ttlMs: 1000, tags: ["summary"] });
+  const cached = await cache.getOrLoad("summary", loader, { ttlMs: 1000, tags: ["admin-data"] });
+  cache.invalidateTag("admin-data");
+  const reloaded = await cache.getOrLoad("summary", loader, { ttlMs: 1000, tags: ["summary"] });
+
+  assert.deepEqual(first, { value: 1 });
+  assert.deepEqual(cached, { value: 1 });
+  assert.equal(calls, 2);
+  assert.deepEqual(reloaded, { value: 2 });
+});
+
+test("in-flight deduped load registers a later tag for invalidation", async () => {
+  const cache = createRuntimeCache();
+  const firstLoad = createDeferred();
+  let calls = 0;
+
+  const loader = async () => {
+    calls += 1;
+    if (calls === 1) return firstLoad.promise;
+    return { value: calls };
+  };
+
+  const firstPending = cache.getOrLoad("summary", loader, { ttlMs: 1000, tags: ["summary"] });
+  const dedupedPending = cache.getOrLoad("summary", loader, { ttlMs: 1000, tags: ["admin-data"] });
+  firstLoad.resolve({ value: 1 });
+
+  const [first, deduped] = await Promise.all([firstPending, dedupedPending]);
+  cache.invalidateTag("admin-data");
+  const reloaded = await cache.getOrLoad("summary", loader, { ttlMs: 1000, tags: ["summary"] });
+
+  assert.deepEqual(first, { value: 1 });
+  assert.deepEqual(deduped, { value: 1 });
+  assert.equal(calls, 2);
+  assert.deepEqual(reloaded, { value: 2 });
+});

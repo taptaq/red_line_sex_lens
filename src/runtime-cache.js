@@ -53,6 +53,7 @@ export function createRuntimeCache() {
 
   return {
     async getOrLoad(key, loader, { ttlMs = 0, tags = [] } = {}) {
+      rememberKeyTags(key, tags);
       const current = values.get(key);
 
       if (current && current.expiresAt > Date.now()) {
@@ -63,7 +64,6 @@ export function createRuntimeCache() {
         return inflight.get(key);
       }
 
-      rememberKeyTags(key, tags);
       const keyVersionAtStart = getKeyVersion(key);
       const clearVersionAtStart = clearVersion;
 

@@ -715,50 +715,58 @@ async function appendFeedbackAndQueue(payload, { modelSelection = {} } = {}) {
   const enrichedItems = await enrichFeedbackItems(Array.isArray(payload) ? payload : [payload], {
     modelSelection
   });
-  const feedbackLog = await upsertFeedbackEntries(enrichedItems);
-  const reviewQueue = await createReviewCandidates(feedbackLog, { reset: true });
-  invalidateWriteReadCaches();
-  const sourceNoteIds = new Set(enrichedItems.map((item) => item.noteId));
-  const derivedCandidates = reviewQueue.filter((item) => sourceNoteIds.has(item.sourceNoteId));
-  const candidateSummary = derivedCandidates.reduce(
-    (summary, item) => {
-      if (item.match === "regex") {
-        summary.contextCount += 1;
-      } else {
-        summary.exactCount += 1;
-      }
+  let dirty = false;
 
-      if (item.reviewAuditSignal === "rule_gap") {
-        summary.ruleGapCount += 1;
-      }
+  try {
+    const feedbackLog = await upsertFeedbackEntries(enrichedItems);
+    dirty = true;
+    const reviewQueue = await createReviewCandidates(feedbackLog, { reset: true });
+    const sourceNoteIds = new Set(enrichedItems.map((item) => item.noteId));
+    const derivedCandidates = reviewQueue.filter((item) => sourceNoteIds.has(item.sourceNoteId));
+    const candidateSummary = derivedCandidates.reduce(
+      (summary, item) => {
+        if (item.match === "regex") {
+          summary.contextCount += 1;
+        } else {
+          summary.exactCount += 1;
+        }
 
-      return summary;
-    },
-    {
-      total: derivedCandidates.length,
-      exactCount: 0,
-      contextCount: 0,
-      ruleGapCount: 0,
-      modelAssistCount: enrichedItems.filter((item) => item.feedbackModelSuggestion).length,
-      modelLabels: [
-        ...new Set(
-          enrichedItems
-            .map((item) => {
-              const provider = String(item.feedbackModelSuggestion?.provider || "").trim();
-              const model = String(item.feedbackModelSuggestion?.model || "").trim();
-              return provider && model ? `${provider}/${model}` : model;
-            })
-            .filter(Boolean)
-        )
-      ]
+        if (item.reviewAuditSignal === "rule_gap") {
+          summary.ruleGapCount += 1;
+        }
+
+        return summary;
+      },
+      {
+        total: derivedCandidates.length,
+        exactCount: 0,
+        contextCount: 0,
+        ruleGapCount: 0,
+        modelAssistCount: enrichedItems.filter((item) => item.feedbackModelSuggestion).length,
+        modelLabels: [
+          ...new Set(
+            enrichedItems
+              .map((item) => {
+                const provider = String(item.feedbackModelSuggestion?.provider || "").trim();
+                const model = String(item.feedbackModelSuggestion?.model || "").trim();
+                return provider && model ? `${provider}/${model}` : model;
+              })
+              .filter(Boolean)
+          )
+        ]
+      }
+    );
+
+    return {
+      items: enrichedItems,
+      reviewQueue,
+      candidateSummary
+    };
+  } finally {
+    if (dirty) {
+      invalidateWriteReadCaches();
     }
-  );
-
-  return {
-    items: enrichedItems,
-    reviewQueue,
-    candidateSummary
-  };
+  }
 }
 
 async function handleRequest(request, response) {
@@ -988,40 +996,47 @@ async function handleRequest(request, response) {
     const nextEntry = buildFalsePositivePayload(payload);
     const sameNoteIndex = current.findIndex((item) => isSameFeedbackNote(item, nextEntry));
     const duplicate = current.some((item) => String(item.id || "").trim() === nextEntry.id);
+    let dirty = false;
 
-    if (sameNoteIndex >= 0) {
-      const existing = current[sameNoteIndex];
-      const mergedEntry = buildFalsePositivePayload({
-        ...existing,
-        ...payload,
-        id: existing.id,
-        createdAt: existing.createdAt,
-        analysisSnapshot: payload.analysis || payload.analysisSnapshot ? undefined : existing.analysisSnapshot
-      });
-      const next = current.map((item, index) => (index === sameNoteIndex ? mergedEntry : item));
+    try {
+      if (sameNoteIndex >= 0) {
+        const existing = current[sameNoteIndex];
+        const mergedEntry = buildFalsePositivePayload({
+          ...existing,
+          ...payload,
+          id: existing.id,
+          createdAt: existing.createdAt,
+          analysisSnapshot: payload.analysis || payload.analysisSnapshot ? undefined : existing.analysisSnapshot
+        });
+        const next = current.map((item, index) => (index === sameNoteIndex ? mergedEntry : item));
+        await saveFalsePositiveLog(next);
+        dirty = true;
+        await createWhitelistCandidatesFromFalsePositive(mergedEntry);
+        return sendJson(response, 200, {
+          ok: true,
+          items: next
+        });
+      }
+
+      if (duplicate) {
+        const error = new Error("误报样本 ID 已存在。");
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const next = [...current, nextEntry];
       await saveFalsePositiveLog(next);
-      await createWhitelistCandidatesFromFalsePositive(mergedEntry);
-      invalidateWriteReadCaches();
+      dirty = true;
+      await createWhitelistCandidatesFromFalsePositive(nextEntry);
       return sendJson(response, 200, {
         ok: true,
         items: next
       });
+    } finally {
+      if (dirty) {
+        invalidateWriteReadCaches();
+      }
     }
-
-    if (duplicate) {
-      const error = new Error("误报样本 ID 已存在。");
-      error.statusCode = 409;
-      throw error;
-    }
-
-    const next = [...current, nextEntry];
-    await saveFalsePositiveLog(next);
-    await createWhitelistCandidatesFromFalsePositive(nextEntry);
-    invalidateWriteReadCaches();
-    return sendJson(response, 200, {
-      ok: true,
-      items: next
-    });
   }
 
   if (request.method === "POST" && url.pathname === "/api/sample-library") {
@@ -1099,13 +1114,21 @@ async function handleRequest(request, response) {
         analysisSnapshot: payload.analysisSnapshot || item.analysisSnapshot
       });
     });
-    await saveFalsePositiveLog(next);
-    await createWhitelistCandidatesFromFalsePositive(next[index]);
-    invalidateWriteReadCaches();
-    return sendJson(response, 200, {
-      ok: true,
-      items: next
-    });
+    let dirty = false;
+
+    try {
+      await saveFalsePositiveLog(next);
+      dirty = true;
+      await createWhitelistCandidatesFromFalsePositive(next[index]);
+      return sendJson(response, 200, {
+        ok: true,
+        items: next
+      });
+    } finally {
+      if (dirty) {
+        invalidateWriteReadCaches();
+      }
+    }
   }
 
   if (request.method === "PATCH" && url.pathname === "/api/sample-library") {
@@ -1120,27 +1143,43 @@ async function handleRequest(request, response) {
 
   if (request.method === "PATCH" && url.pathname === "/api/admin/false-positive-log") {
     const payload = await readBody(request);
-    const updated = await confirmFalsePositiveLogEntry(payload?.id, payload?.userNotes);
-    const items = await loadFalsePositiveLog();
-    invalidateWriteReadCaches();
+    let dirty = false;
 
-    return sendJson(response, 200, {
-      ok: true,
-      item: updated,
-      items
-    });
+    try {
+      const updated = await confirmFalsePositiveLogEntry(payload?.id, payload?.userNotes);
+      dirty = true;
+      const items = await loadFalsePositiveLog();
+
+      return sendJson(response, 200, {
+        ok: true,
+        item: updated,
+        items
+      });
+    } finally {
+      if (dirty) {
+        invalidateWriteReadCaches();
+      }
+    }
   }
 
   if (request.method === "DELETE" && url.pathname === "/api/admin/false-positive-log") {
     const payload = await readBody(request);
-    await deleteFalsePositiveLogEntry(payload?.id);
-    const items = await loadFalsePositiveLog();
-    invalidateWriteReadCaches();
+    let dirty = false;
 
-    return sendJson(response, 200, {
-      ok: true,
-      items
-    });
+    try {
+      await deleteFalsePositiveLogEntry(payload?.id);
+      dirty = true;
+      const items = await loadFalsePositiveLog();
+
+      return sendJson(response, 200, {
+        ok: true,
+        items
+      });
+    } finally {
+      if (dirty) {
+        invalidateWriteReadCaches();
+      }
+    }
   }
 
   if (request.method === "POST" && url.pathname === "/api/admin/lexicon") {
