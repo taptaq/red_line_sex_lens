@@ -519,6 +519,50 @@ test("sample library reference mutations queue style profile refresh without blo
   });
 });
 
+test("sample library PATCH queues style profile refresh when reference sample content changes", async (t) => {
+  await withTempSampleLibraryApi(t, async () => {
+    const created = await invokeRoute("POST", "/api/sample-library", {
+      note: {
+        title: "参考样本旧标题",
+        body: "参考样本旧正文".repeat(20),
+        coverText: "旧封面",
+        tags: ["旧标签"],
+        collectionType: "科普"
+      },
+      reference: {
+        enabled: true,
+        tier: "featured",
+        selectedBy: "manual"
+      },
+      publish: {
+        status: "published_passed"
+      }
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const patched = await invokeRoute("PATCH", "/api/sample-library", {
+      id: created.item.id,
+      note: {
+        title: "参考样本新标题",
+        body: "参考样本新正文".repeat(20),
+        coverText: "新封面",
+        tags: ["新标签"],
+        collectionType: "疗愈指南"
+      }
+    });
+
+    assert.equal(patched.status, 200);
+    assert.equal(patched.ok, true);
+    assert.equal(patched.item.reference.enabled, true);
+    assert.equal(patched.item.note.title, "参考样本新标题");
+    assert.equal(patched.styleProfileRefreshQueued, true);
+    assert.ok(patched.styleProfile.current);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+});
+
 test("sample library DELETE returns 404 when the canonical record does not exist", async (t) => {
   await withTempSampleLibraryApi(t, async () => {
     const deleted = await invokeRoute("DELETE", "/api/sample-library", {

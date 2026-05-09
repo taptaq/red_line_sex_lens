@@ -219,8 +219,12 @@ async function patchSampleLibraryRecordAndReturn(payload = {}) {
   const referenceChanged =
     Object.prototype.hasOwnProperty.call(normalizedPayload || {}, "reference") ||
     (normalizedPayload?.publish && (item?.reference?.enabled === true || current[index]?.reference?.enabled === true));
+  const shouldRefreshStyleProfile =
+    referenceChanged ||
+    ((current[index]?.reference?.enabled === true || item?.reference?.enabled === true) &&
+      referenceContentChanged(current[index], item));
   let styleProfile;
-  if (referenceChanged) {
+  if (shouldRefreshStyleProfile) {
     styleProfile = await loadCurrentStyleProfileView();
     scheduleStyleProfileRefresh("sample-library-reference-mutation");
   }
@@ -229,7 +233,7 @@ async function patchSampleLibraryRecordAndReturn(payload = {}) {
     item,
     items,
     styleProfile,
-    styleProfileRefreshQueued: referenceChanged ? true : undefined
+    styleProfileRefreshQueued: shouldRefreshStyleProfile ? true : undefined
   };
 }
 
@@ -292,6 +296,21 @@ export function buildGenerationReferenceSamples({ successSamples = [], noteLifec
 
 function uniqueStrings(items = []) {
   return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
+function normalizeReferenceContent(item = {}) {
+  const note = item?.note || {};
+  return {
+    title: String(note.title || "").trim(),
+    body: String(note.body || note.noteContent || "").trim(),
+    coverText: String(note.coverText || "").trim(),
+    collectionType: String(note.collectionType || "").trim(),
+    tags: uniqueStrings(note.tags).sort((left, right) => left.localeCompare(right, "zh-Hans-CN"))
+  };
+}
+
+function referenceContentChanged(left = {}, right = {}) {
+  return JSON.stringify(normalizeReferenceContent(left)) !== JSON.stringify(normalizeReferenceContent(right));
 }
 
 async function loadAvailableCollectionTypes() {
