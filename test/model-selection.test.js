@@ -13,6 +13,35 @@ import {
 
 const standaloneDmxapiTextModels = getStandaloneDmxapiTextModels();
 
+async function importFresh(modulePath) {
+  return import(`${modulePath}?test=${Date.now()}-${Math.random()}`);
+}
+
+async function withEnv(overrides, run) {
+  const previous = new Map();
+
+  for (const [key, value] of Object.entries(overrides)) {
+    previous.set(key, process.env[key]);
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+
+  try {
+    return await run();
+  } finally {
+    for (const [key, value] of previous.entries()) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
 test("normalizeModelSelectionState keeps defaults and supported overrides", () => {
   assert.deepEqual(normalizeModelSelectionState(), {
     semantic: "auto",
@@ -98,6 +127,39 @@ test("buildModelSelectionOptionsPayload exposes the four main-workbench model se
     assert.ok(generationValues.includes(model));
     assert.ok(crossReviewValues.includes(model));
   }
+});
+
+test("buildModelSelectionOptionsPayload reflects DMXAPI defaults while keeping Kimi as official-only", async () => {
+  await withEnv(
+    {
+      GLM_DMXAPI_MODEL: undefined,
+      MINIMAX_DMXAPI_MODEL: undefined,
+      KIMI_DMXAPI_MODEL: undefined,
+      KIMI_TEXT_MODEL: undefined,
+      QWEN_DMXAPI_MODEL: undefined
+    },
+    async () => {
+      const { buildModelSelectionOptionsPayload: buildPayload } = await importFresh("../src/model-selection.js");
+      const payload = buildPayload();
+      const semanticGlmOption = payload.semantic.find((item) => item.value === "glm");
+      const semanticQwenOption = payload.semantic.find((item) => item.value === "qwen");
+      const rewriteKimiOption = payload.rewrite.find((item) => item.value === "kimi");
+      const rewriteQwenOption = payload.rewrite.find((item) => item.value === "qwen");
+      const semanticMiniMaxOption = payload.semantic.find((item) => item.value === "minimax");
+
+      assert.match(String(semanticGlmOption?.label || ""), /DMXAPI glm-5\.1/);
+      assert.doesNotMatch(String(semanticGlmOption?.label || ""), /glm-5\.1-free/);
+      assert.match(String(semanticQwenOption?.label || ""), /DMXAPI qwen3\.5-plus/);
+      assert.doesNotMatch(String(semanticQwenOption?.label || ""), /qwen3\.5-plus-free/);
+      assert.match(String(rewriteKimiOption?.label || ""), /kimi-k2\.5/);
+      assert.doesNotMatch(String(rewriteKimiOption?.label || ""), /DMXAPI/);
+      assert.doesNotMatch(String(rewriteKimiOption?.label || ""), /kimi-k2\.6-free/);
+      assert.match(String(rewriteQwenOption?.label || ""), /DMXAPI qwen3\.5-plus/);
+      assert.doesNotMatch(String(rewriteQwenOption?.label || ""), /qwen3\.5-plus-free/);
+      assert.match(String(semanticMiniMaxOption?.label || ""), /MiniMax-M2\.5/);
+      assert.doesNotMatch(String(semanticMiniMaxOption?.label || ""), /MiniMax-M2\.7-free/);
+    }
+  );
 });
 
 test("feedback model selection payload exposes screenshot and suggestion selectors", () => {

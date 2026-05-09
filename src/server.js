@@ -65,7 +65,12 @@ import {
   hydrateStyleProfileSourceSamples,
   updateStyleProfileManualOverrides
 } from "./style-profile.js";
-import { normalizeMarkdownImportCommitItem, parseMarkdownImportFiles } from "./pdf-sample-import.js";
+import {
+  normalizeForTitleComparison,
+  normalizeMarkdownImportCommitItem,
+  parseMarkdownImportFiles,
+  sanitizeMarkdownImportTitle
+} from "./pdf-sample-import.js";
 import {
   buildSampleLibraryImportDuplicateKey,
   buildSampleLibraryImportPayload,
@@ -302,6 +307,23 @@ async function validateMarkdownImportCommitItems(items = []) {
 
 function normalizeComparableText(value = "") {
   return String(value || "").trim();
+}
+
+function buildMarkdownImportDuplicateSkipMessage(skippedItems = []) {
+  const skippedCount = Array.isArray(skippedItems) ? skippedItems.length : 0;
+  const normalizedTitles = uniqueStrings(
+    (Array.isArray(skippedItems) ? skippedItems : [])
+      .map((item) => sanitizeMarkdownImportTitle(item?.title || item))
+      .filter(Boolean)
+  );
+
+  if (!skippedCount) {
+    return "";
+  }
+
+  return normalizedTitles.length
+    ? `已自动跳过 ${skippedCount} 条重复的 Markdown 记录：${normalizedTitles.join("、")}`
+    : `已自动跳过 ${skippedCount} 条重复的 Markdown 记录。`;
 }
 
 function isSameLifecycleItem(left = {}, right = {}) {
@@ -1082,10 +1104,57 @@ async function handleRequest(request, response) {
 
   if (request.method === "POST" && url.pathname === "/api/sample-library/markdown-import/parse") {
     const payload = await readBody(request);
-    const items = await parseMarkdownImportFiles(payload?.files || []);
+    const [records, parsedItems] = await Promise.all([loadNoteRecords(), parseMarkdownImportFiles(payload?.files || [])]);
+    const existingTitles = new Set(
+      records
+        .map((record) => normalizeForTitleComparison(record?.note?.title || ""))
+        .filter(Boolean)
+    );
+    const existingDuplicateKeys = new Set(
+      records.map((record) =>
+        buildSampleLibraryImportDuplicateKey({
+          title: record?.note?.title,
+          body: record?.note?.body,
+          coverText: record?.note?.coverText
+        })
+      )
+    );
+    const batchDuplicateKeys = new Set();
+    const skippedItems = [];
+    const items = parsedItems.filter((item) => {
+      const normalizedTitle = normalizeForTitleComparison(item?.title || "");
+      const duplicateKey = buildSampleLibraryImportDuplicateKey({
+        title: item?.title,
+        body: item?.body,
+        coverText: item?.coverText || item?.title
+      });
+
+      if (normalizedTitle && existingTitles.has(normalizedTitle)) {
+        skippedItems.push(item);
+        return false;
+      }
+
+      if (item?.status === "ready" && duplicateKey && existingDuplicateKeys.has(duplicateKey)) {
+        skippedItems.push(item);
+        return false;
+      }
+
+      if (item?.status === "ready" && duplicateKey && batchDuplicateKeys.has(duplicateKey)) {
+        skippedItems.push(item);
+        return false;
+      }
+
+      if (item?.status === "ready" && duplicateKey) {
+        batchDuplicateKeys.add(duplicateKey);
+      }
+
+      return true;
+    });
+
     return sendJson(response, 200, {
       ok: true,
-      items
+      items,
+      message: buildMarkdownImportDuplicateSkipMessage(skippedItems)
     });
   }
 

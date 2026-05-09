@@ -486,6 +486,85 @@ test("sample library list and summary area show loading placeholders before firs
   assert.match(appJs, /sample-library-record-list/);
 });
 
+test("refreshAll clears admin loading state before re-rendering admin sections", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const refreshAllSource = extractSourceBetween(appJs, "async function refreshAll()", "async function fileToDataUrl");
+
+  const appState = {
+    summaryData: null,
+    summaryLoading: { phase: "initial", error: "" },
+    adminDataLoading: { phase: "initial", error: "" },
+    adminData: {
+      seedLexicon: [],
+      customLexicon: [],
+      innerSpaceTerms: [],
+      feedbackLog: [],
+      falsePositiveLog: [],
+      reviewQueue: [],
+      styleProfile: null
+    },
+    collectionTypeOptions: []
+  };
+  const renderPhases = [];
+  const refreshAll = new Function(
+    "appState",
+    "apiJson",
+    "collectionTypesApi",
+    "refreshAdminDataState",
+    "refreshSampleLibraryWorkspace",
+    "setSummaryLoadingState",
+    "renderSummaryLoadingPlaceholders",
+    "renderSummary",
+    "renderQueue",
+    "renderAdminData",
+    "renderLexiconWorkspaceModal",
+    "renderCollectionTypeSelectors",
+    "setAdminDataLoadingState",
+    `${refreshAllSource}; return refreshAll;`
+  )(
+    appState,
+    async (url) =>
+      url === "/api/summary"
+        ? { reviewQueueCount: 0, feedbackCount: 0, sampleLibraryCount: 0 }
+        : { options: [{ value: "collection-a", label: "合集 A" }] },
+    "/api/collection-types",
+    async () => {
+      appState.adminData = {
+        seedLexicon: [],
+        customLexicon: [],
+        innerSpaceTerms: [],
+        feedbackLog: [],
+        falsePositiveLog: [],
+        reviewQueue: [{ id: "review-1", phrase: "词条" }],
+        styleProfile: null
+      };
+    },
+    async () => [],
+    (phase) => {
+      appState.summaryLoading.phase = phase;
+    },
+    () => {},
+    () => {},
+    () => {
+      renderPhases.push(`queue:${appState.adminDataLoading.phase}`);
+    },
+    () => {
+      renderPhases.push(`admin:${appState.adminDataLoading.phase}`);
+    },
+    () => {
+      renderPhases.push(`modal:${appState.adminDataLoading.phase}`);
+    },
+    () => {},
+    (phase, error = "") => {
+      appState.adminDataLoading = { phase, error: String(error || "") };
+    }
+  );
+
+  await refreshAll();
+
+  assert.deepEqual(renderPhases, ["queue:idle", "admin:idle", "modal:idle"]);
+});
+
 test("sample library workspace exposes record preview and full-list modal controls", async () => {
   const { indexHtml, appJs } = await readFrontendFiles();
   const sampleLibraryPaneHtml = extractElementInnerHtml(indexHtml, 'id="sample-library-pane"');
@@ -855,9 +934,12 @@ test("reference candidate qualification uses the same content-length floor as ru
 test("sample pool explanation distinguishes direct engagement from views-assisted qualification", async () => {
   const { indexHtml, appJs } = await readFrontendFiles();
   assert.match(appJs, /function evaluateReferenceSampleThreshold\(metrics = \{\}\) \{/);
-  assert.match(appJs, /supportViews:\s*3000/);
+  assert.match(appJs, /likes:\s*30/);
+  assert.match(appJs, /supportViews:\s*1000/);
   assert.match(appJs, /favorites:\s*10/);
   assert.match(appJs, /comments:\s*10/);
+  assert.match(appJs, /nearLikes:\s*15/);
+  assert.match(appJs, /nearFavorites:\s*5/);
   assert.match(appJs, /nearComments:\s*5/);
   assert.match(appJs, /互动达标/);
   assert.match(appJs, /互动接近达标，已由高浏览数补足/);

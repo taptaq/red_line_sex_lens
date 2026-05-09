@@ -13,7 +13,53 @@ function buildTitleFromFileName(fileName = "") {
     .trim();
 }
 
-function normalizeForTitleComparison(value = "") {
+export function sanitizeMarkdownImportTitle(value = "") {
+  return String(value || "")
+    .replace(/【[^】]*】/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractTitleFromMarkdownText(text = "") {
+  const lines = String(text || "").split(/\r?\n/);
+  let inFrontMatter = false;
+  let frontMatterResolved = false;
+
+  for (const [index, rawLine] of lines.entries()) {
+    const trimmed = String(rawLine || "").trim();
+
+    if (!frontMatterResolved && index === 0 && trimmed === "---") {
+      inFrontMatter = true;
+      continue;
+    }
+
+    if (inFrontMatter) {
+      if (trimmed === "---" || trimmed === "...") {
+        inFrontMatter = false;
+        frontMatterResolved = true;
+      }
+      continue;
+    }
+
+    frontMatterResolved = true;
+
+    if (!trimmed) {
+      continue;
+    }
+
+    const headingMatch = trimmed.match(/^#\s+(.+)$/u);
+
+    if (headingMatch) {
+      return stripMarkdownInlineSyntax(headingMatch[1]);
+    }
+
+    break;
+  }
+
+  return "";
+}
+
+export function normalizeForTitleComparison(value = "") {
   return String(value || "")
     .normalize("NFKC")
     .replace(/【[^】]*】/g, "")
@@ -168,7 +214,7 @@ function resolveMetricValue(item = {}, key) {
 }
 
 export function buildMarkdownImportDraftFromText({ fileName = "", text = "" } = {}) {
-  const title = buildTitleFromFileName(fileName);
+  const title = sanitizeMarkdownImportTitle(extractTitleFromMarkdownText(text) || buildTitleFromFileName(fileName));
   const body = stripLeadingTitleFragments(buildBodyFromMarkdownText(text), title);
   const status = title && body ? "ready" : "needs_review";
 

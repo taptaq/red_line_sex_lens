@@ -48,7 +48,7 @@ test("suggestFeedbackCandidates uses DMXAPI Qwen first when available", async ()
       DEEPSEEK_API_KEY: "",
       DMXAPI_API_KEY: "dmxapi-test",
       QWEN_FEEDBACK_MODEL: "qwen-plus",
-      QWEN_DMXAPI_MODEL: "qwen3.5-plus-free"
+      QWEN_DMXAPI_MODEL: "qwen3.5-plus"
     },
     async () => {
       const calls = [];
@@ -56,7 +56,7 @@ test("suggestFeedbackCandidates uses DMXAPI Qwen first when available", async ()
       globalThis.fetch = async (url) => {
         calls.push(String(url));
         return createJsonResponse(200, {
-          model: "qwen3.5-plus-free",
+          model: "qwen3.5-plus",
           choices: [
             {
               message: {
@@ -81,7 +81,7 @@ test("suggestFeedbackCandidates uses DMXAPI Qwen first when available", async ()
         });
 
         assert.equal(result.provider, "qwen");
-        assert.equal(result.model, "qwen3.5-plus-free");
+        assert.equal(result.model, "qwen3.5-plus");
         assert.deepEqual(result.suspiciousPhrases, ["边界短语"]);
         assert.deepEqual(calls, ["https://www.dmxapi.cn/v1/chat/completions"]);
       } finally {
@@ -99,7 +99,7 @@ test("suggestFeedbackCandidates respects an explicit qwen selection", async () =
       DEEPSEEK_API_KEY: "deepseek-test",
       DMXAPI_API_KEY: "dmxapi-test",
       QWEN_FEEDBACK_MODEL: "qwen-plus",
-      QWEN_DMXAPI_MODEL: "qwen3.5-plus-free"
+      QWEN_DMXAPI_MODEL: "qwen3.5-plus"
     },
     async () => {
       const calls = [];
@@ -108,7 +108,7 @@ test("suggestFeedbackCandidates respects an explicit qwen selection", async () =
         const body = JSON.parse(String(options.body || "{}"));
         calls.push({ url: String(url), model: body.model });
         return createJsonResponse(200, {
-          model: "qwen3.5-plus-free",
+          model: "qwen3.5-plus",
           choices: [
             {
               message: {
@@ -134,7 +134,7 @@ test("suggestFeedbackCandidates respects an explicit qwen selection", async () =
         });
 
         assert.equal(result.provider, "qwen");
-        assert.deepEqual(calls, [{ url: "https://www.dmxapi.cn/v1/chat/completions", model: "qwen3.5-plus-free" }]);
+        assert.deepEqual(calls, [{ url: "https://www.dmxapi.cn/v1/chat/completions", model: "qwen3.5-plus" }]);
       } finally {
         globalThis.fetch = originalFetch;
       }
@@ -196,7 +196,7 @@ test("callRoutedTextProviderJson uses DMXAPI GLM first when available", async ()
     {
       GLM_API_KEY: "glm-test",
       DMXAPI_API_KEY: "dmxapi-test",
-      GLM_DMXAPI_MODEL: "glm-5.1-free",
+      GLM_DMXAPI_MODEL: "glm-5.1",
       GLM_TEXT_MODEL: "glm-4.6v"
     },
     async () => {
@@ -207,7 +207,7 @@ test("callRoutedTextProviderJson uses DMXAPI GLM first when available", async ()
         calls.push({ url: String(url), model: body.model, stream: body.stream, top_p: body.top_p });
 
         return createJsonResponse(200, {
-          model: "glm-5.1-free",
+          model: "glm-5.1",
           choices: [
             {
               message: {
@@ -230,13 +230,13 @@ test("callRoutedTextProviderJson uses DMXAPI GLM first when available", async ()
           timeoutMs: 1000
         });
 
-        assert.equal(result.model, "glm-5.1-free");
+        assert.equal(result.model, "glm-5.1");
         assert.equal(result.route, "dmxapi");
         assert.equal(result.routeLabel, "DMXAPI");
         assert.deepEqual(calls, [
           {
             url: "https://www.dmxapi.cn/v1/chat/completions",
-            model: "glm-5.1-free",
+            model: "glm-5.1",
             stream: false,
             top_p: undefined
           }
@@ -300,7 +300,7 @@ test("callRoutedTextProviderJson sends json_object response_format to DMXAPI fir
     {
       GLM_API_KEY: "glm-test",
       DMXAPI_API_KEY: "dmxapi-test",
-      GLM_DMXAPI_MODEL: "glm-5.1-free",
+      GLM_DMXAPI_MODEL: "glm-5.1",
       GLM_TEXT_MODEL: "glm-4.6v"
     },
     async () => {
@@ -311,7 +311,7 @@ test("callRoutedTextProviderJson sends json_object response_format to DMXAPI fir
         calls.push({ url: String(url), body });
 
         return createJsonResponse(200, {
-          model: "glm-5.1-free",
+          model: "glm-5.1",
           choices: [
             {
               message: {
@@ -349,7 +349,7 @@ test("callRoutedTextProviderJson falls back to plain DMXAPI request when respons
     {
       GLM_API_KEY: "glm-test",
       DMXAPI_API_KEY: "dmxapi-test",
-      GLM_DMXAPI_MODEL: "glm-5.1-free",
+      GLM_DMXAPI_MODEL: "glm-5.1",
       GLM_TEXT_MODEL: "glm-4.6v"
     },
     async () => {
@@ -364,7 +364,7 @@ test("callRoutedTextProviderJson falls back to plain DMXAPI request when respons
         }
 
         return createJsonResponse(200, {
-          model: "glm-5.1-free",
+          model: "glm-5.1",
           choices: [
             {
               message: {
@@ -387,7 +387,7 @@ test("callRoutedTextProviderJson falls back to plain DMXAPI request when respons
           timeoutMs: 1000
         });
 
-        assert.equal(result.model, "glm-5.1-free");
+        assert.equal(result.model, "glm-5.1");
         assert.equal(calls.length, 2);
         assert.deepEqual(calls[0].body.response_format, { type: "json_object" });
         assert.equal("response_format" in calls[1].body, false);
@@ -398,13 +398,13 @@ test("callRoutedTextProviderJson falls back to plain DMXAPI request when respons
   );
 });
 
-test("callRoutedTextProviderJson falls back to official Kimi after DMXAPI failure", async () => {
+test("callRoutedTextProviderJson sends Kimi directly to the official Moonshot endpoint", async () => {
   await withEnv(
     {
       DMXAPI_API_KEY: "dmxapi-test",
       KIMI_API_KEY: "kimi-test",
       KIMI_BASE_URL: "https://api.moonshot.cn/v1/chat/completions",
-      KIMI_DMXAPI_MODEL: "kimi-k2.6-free",
+      KIMI_DMXAPI_MODEL: "kimi-k2.5",
       KIMI_TEXT_MODEL: "moonshot-v1-8k"
     },
     async () => {
@@ -413,10 +413,6 @@ test("callRoutedTextProviderJson falls back to official Kimi after DMXAPI failur
       globalThis.fetch = async (url, options = {}) => {
         const body = JSON.parse(String(options.body || "{}"));
         calls.push({ url: String(url), model: body.model, stream: body.stream, top_p: body.top_p });
-
-        if (String(url) === "https://www.dmxapi.cn/v1/chat/completions") {
-          return createJsonResponse(500, { error: { message: "dmxapi unavailable" } });
-        }
 
         return createJsonResponse(200, {
           model: "moonshot-v1-8k",
@@ -445,12 +441,11 @@ test("callRoutedTextProviderJson falls back to official Kimi after DMXAPI failur
         assert.equal(result.model, "moonshot-v1-8k");
         assert.equal(result.route, "official");
         assert.equal(result.routeLabel, "官方");
-        assert.equal(calls[0].url, "https://www.dmxapi.cn/v1/chat/completions");
-        assert.equal(calls[0].model, "kimi-k2.6-free");
-        assert.equal(calls[0].stream, false);
+        assert.equal(calls.length, 1);
+        assert.equal(calls[0].url, "https://api.moonshot.cn/v1/chat/completions");
+        assert.equal(calls[0].model, "moonshot-v1-8k");
+        assert.equal(calls[0].stream, undefined);
         assert.equal(calls[0].top_p, undefined);
-        assert.equal(calls[1].url, "https://api.moonshot.cn/v1/chat/completions");
-        assert.equal(calls[1].model, "moonshot-v1-8k");
       } finally {
         globalThis.fetch = originalFetch;
       }
@@ -466,7 +461,7 @@ test("runSemanticReview falls back to DashScope Qwen after DMXAPI permission fai
       GLM_API_KEY: "",
       DEEPSEEK_API_KEY: "",
       QWEN_SEMANTIC_MODEL: "qwen-plus",
-      QWEN_DMXAPI_MODEL: "qwen3.5-plus-free"
+      QWEN_DMXAPI_MODEL: "qwen3.5-plus"
     },
     async () => {
       const calls = [];
@@ -474,7 +469,7 @@ test("runSemanticReview falls back to DashScope Qwen after DMXAPI permission fai
       globalThis.fetch = async (url, options = {}) => {
         const body = JSON.parse(String(options.body || "{}"));
         calls.push({ url: String(url), model: body.model });
-        if (body.model === "glm-5.1-free") {
+        if (body.model === "glm-5.1") {
           return createJsonResponse(500, { error: { message: "glm dmxapi unavailable" } });
         }
         if (String(url) === "https://www.dmxapi.cn/v1/chat/completions") {
@@ -518,7 +513,7 @@ test("runSemanticReview falls back to DashScope Qwen after DMXAPI permission fai
           calls.some(
             (call) =>
               call.url === "https://www.dmxapi.cn/v1/chat/completions" &&
-              call.model === "qwen3.5-plus-free"
+              call.model === "qwen3.5-plus"
           )
         );
         assert.ok(
@@ -543,7 +538,7 @@ test("runSemanticReview uses DMXAPI GLM first and records route metadata", async
       DEEPSEEK_API_KEY: "",
       DMXAPI_API_KEY: "dmxapi-test",
       GLM_SEMANTIC_MODEL: "glm-4.6v",
-      GLM_DMXAPI_MODEL: "glm-5.1-free"
+      GLM_DMXAPI_MODEL: "glm-5.1"
     },
     async () => {
       const calls = [];
@@ -553,7 +548,7 @@ test("runSemanticReview uses DMXAPI GLM first and records route metadata", async
         calls.push({ url: String(url), model: body.model });
 
         return createJsonResponse(200, {
-          model: "glm-5.1-free",
+          model: "glm-5.1",
           choices: [
             {
               message: {
@@ -582,12 +577,12 @@ test("runSemanticReview uses DMXAPI GLM first and records route metadata", async
 
         assert.equal(result.status, "ok");
         assert.equal(result.review.provider, "glm");
-        assert.equal(result.review.model, "glm-5.1-free");
+        assert.equal(result.review.model, "glm-5.1");
         assert.equal(result.review.route, "dmxapi");
         assert.equal(result.review.routeLabel, "DMXAPI");
         assert.equal(result.providersTried[0].routeLabel, "DMXAPI");
         assert.equal(calls[0].url, "https://www.dmxapi.cn/v1/chat/completions");
-        assert.equal(calls[0].model, "glm-5.1-free");
+        assert.equal(calls[0].model, "glm-5.1");
       } finally {
         globalThis.fetch = originalFetch;
       }
@@ -599,7 +594,7 @@ test("callRoutedTextProviderJson supports DMXAPI-only MiniMax provider", async (
   await withEnv(
     {
       DMXAPI_API_KEY: "dmxapi-test",
-      MINIMAX_DMXAPI_MODEL: "MiniMax-M2.7-free"
+      MINIMAX_DMXAPI_MODEL: "MiniMax-M2.5"
     },
     async () => {
       const calls = [];
@@ -609,7 +604,7 @@ test("callRoutedTextProviderJson supports DMXAPI-only MiniMax provider", async (
         calls.push({ url: String(url), model: body.model });
 
         return createJsonResponse(200, {
-          model: "MiniMax-M2.7-free",
+          model: "MiniMax-M2.5",
           choices: [
             {
               message: {
@@ -631,10 +626,10 @@ test("callRoutedTextProviderJson supports DMXAPI-only MiniMax provider", async (
           timeoutMs: 1000
         });
 
-        assert.equal(result.model, "MiniMax-M2.7-free");
+        assert.equal(result.model, "MiniMax-M2.5");
         assert.equal(result.route, "dmxapi");
         assert.equal(result.routeLabel, "DMXAPI");
-        assert.deepEqual(calls, [{ url: "https://www.dmxapi.cn/v1/chat/completions", model: "MiniMax-M2.7-free" }]);
+        assert.deepEqual(calls, [{ url: "https://www.dmxapi.cn/v1/chat/completions", model: "MiniMax-M2.5" }]);
       } finally {
         globalThis.fetch = originalFetch;
       }
@@ -649,20 +644,20 @@ test("runSemanticReview can return MiniMax as a standalone provider", async () =
       DASHSCOPE_API_KEY: "",
       DEEPSEEK_API_KEY: "",
       DMXAPI_API_KEY: "dmxapi-test",
-      MINIMAX_DMXAPI_MODEL: "MiniMax-M2.7-free"
+      MINIMAX_DMXAPI_MODEL: "MiniMax-M2.5"
     },
     async () => {
       const originalFetch = globalThis.fetch;
       globalThis.fetch = async (url, options = {}) => {
         const body = JSON.parse(String(options.body || "{}"));
 
-        if (body.model === "glm-5.1-free" || body.model === "qwen3.5-plus-free") {
+        if (body.model === "glm-5.1" || body.model === "qwen3.5-plus") {
           return createJsonResponse(500, { error: { message: "upstream unavailable" } });
         }
 
-        if (body.model === "MiniMax-M2.7-free") {
+        if (body.model === "MiniMax-M2.5") {
           return createJsonResponse(200, {
-            model: "MiniMax-M2.7-free",
+            model: "MiniMax-M2.5",
             choices: [
               {
                 message: {
@@ -694,7 +689,7 @@ test("runSemanticReview can return MiniMax as a standalone provider", async () =
 
         assert.equal(result.status, "ok");
         assert.equal(result.review.provider, "minimax");
-        assert.equal(result.review.model, "MiniMax-M2.7-free");
+        assert.equal(result.review.model, "MiniMax-M2.5");
         const minimaxAttempt = result.providersTried.find((item) => item.provider === "minimax");
         assert.ok(minimaxAttempt);
         assert.equal(minimaxAttempt.status, "ok");
@@ -714,7 +709,7 @@ test("runSemanticReview sends a larger default token budget to reduce truncated 
       DEEPSEEK_API_KEY: "",
       DMXAPI_API_KEY: "dmxapi-test",
       GLM_SEMANTIC_MODEL: "glm-4.6v",
-      GLM_DMXAPI_MODEL: "glm-5.1-free"
+      GLM_DMXAPI_MODEL: "glm-5.1"
     },
     async () => {
       const calls = [];
@@ -724,7 +719,7 @@ test("runSemanticReview sends a larger default token budget to reduce truncated 
         calls.push({ url: String(url), model: body.model, max_tokens: body.max_tokens });
 
         return createJsonResponse(200, {
-          model: "glm-5.1-free",
+          model: "glm-5.1",
           choices: [
             {
               message: {
@@ -752,7 +747,7 @@ test("runSemanticReview sends a larger default token budget to reduce truncated 
         });
 
         assert.equal(calls[0].url, "https://www.dmxapi.cn/v1/chat/completions");
-        assert.equal(calls[0].model, "glm-5.1-free");
+        assert.equal(calls[0].model, "glm-5.1");
         assert.equal(calls[0].max_tokens, 900);
       } finally {
         globalThis.fetch = originalFetch;
@@ -768,7 +763,7 @@ test("suggestFeedbackCandidates falls back to DashScope Qwen for DMXAPI 400 erro
       DASHSCOPE_API_KEY: "dashscope-test",
       DEEPSEEK_API_KEY: "",
       DMXAPI_API_KEY: "dmxapi-test",
-      QWEN_DMXAPI_MODEL: "qwen3.5-plus-free"
+      QWEN_DMXAPI_MODEL: "qwen3.5-plus"
     },
     async () => {
       const calls = [];

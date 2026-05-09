@@ -19,19 +19,15 @@ function uniqueNonEmpty(items = []) {
 }
 
 function getGlmDmxapiModel() {
-  return String(process.env.GLM_DMXAPI_MODEL || "glm-5.1-free").trim();
+  return String(process.env.GLM_DMXAPI_MODEL || "glm-5.1").trim();
 }
 
 function getQwenDmxapiModel() {
-  return String(process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus-free").trim();
+  return String(process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus").trim();
 }
 
 function getMiniMaxDmxapiModel() {
-  return String(process.env.MINIMAX_DMXAPI_MODEL || "MiniMax-M2.7-free").trim();
-}
-
-function getKimiDmxapiModel() {
-  return String(process.env.KIMI_DMXAPI_MODEL || "kimi-k2.6-free").trim();
+  return String(process.env.MINIMAX_DMXAPI_MODEL || "MiniMax-M2.5").trim();
 }
 
 export function getStandaloneDmxapiTextModels() {
@@ -132,7 +128,7 @@ export function buildModelSelectionOptionsPayload() {
       label: `默认自动 / 当前优先 ${providerDisplayLabel(getRewriteProviderPreference())}`
     },
     buildProviderOption("glm", providerDisplayLabel("glm"), getGlmDmxapiModel(), getRewriteGlmModel()),
-    buildProviderOption("kimi", providerDisplayLabel("kimi"), getKimiDmxapiModel(), getRewriteKimiModel()),
+    buildProviderOption("kimi", providerDisplayLabel("kimi"), "", getRewriteKimiModel()),
     buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getRewriteQwenModel()),
     buildProviderOption("minimax", providerDisplayLabel("minimax"), getMiniMaxDmxapiModel()),
     buildProviderOption("deepseek", providerDisplayLabel("deepseek"), "", getRewriteDeepSeekModel())
@@ -145,7 +141,7 @@ export function buildModelSelectionOptionsPayload() {
       label: `默认自动 / 当前优先 ${providerDisplayLabel(getRewriteProviderPreference())}`
     },
     buildProviderOption("glm", providerDisplayLabel("glm"), getGlmDmxapiModel(), getRewriteGlmModel()),
-    buildProviderOption("kimi", providerDisplayLabel("kimi"), getKimiDmxapiModel(), getRewriteKimiModel()),
+    buildProviderOption("kimi", providerDisplayLabel("kimi"), "", getRewriteKimiModel()),
     buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getRewriteQwenModel()),
     buildProviderOption("minimax", providerDisplayLabel("minimax"), getMiniMaxDmxapiModel()),
     buildProviderOption("deepseek", providerDisplayLabel("deepseek"), "", getRewriteDeepSeekModel())
@@ -158,7 +154,7 @@ export function buildModelSelectionOptionsPayload() {
       label: "默认模型组 / 并行调用全部交叉复判模型"
     },
     buildProviderOption("glm", providerDisplayLabel("glm"), getGlmDmxapiModel(), getCrossReviewGlmModel()),
-    buildProviderOption("kimi", providerDisplayLabel("kimi"), getKimiDmxapiModel(), getRewriteKimiModel()),
+    buildProviderOption("kimi", providerDisplayLabel("kimi"), "", getRewriteKimiModel()),
     buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getCrossReviewQwenModel()),
     buildProviderOption("minimax", providerDisplayLabel("minimax"), getMiniMaxDmxapiModel()),
     buildProviderOption("deepseek", providerDisplayLabel("deepseek"), "", getCrossReviewDeepSeekModel())

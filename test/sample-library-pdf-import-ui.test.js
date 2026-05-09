@@ -23,6 +23,7 @@ test("sample library frontend wires parse and commit flows for Markdown imports"
   assert.match(appJs, /apiJson\(sampleLibraryMarkdownImportParseApi/);
   assert.match(appJs, /function renderSampleLibraryImportDrafts\(items = \[\]\)/);
   assert.match(appJs, /sample-library-import-result/);
+  assert.match(appJs, /result\.message \|\| ""/);
   assert.match(appJs, /data-import-index/);
   assert.match(appJs, /name="collectionType"/);
   assert.match(appJs, /name="coverText"/);
@@ -54,6 +55,7 @@ test("sample library frontend wires parse and commit flows for Markdown imports"
   assert.match(appJs, /sample-library-import-input"\)\.addEventListener\("change"/);
   assert.match(appJs, /sample-library-import-button"\)\.addEventListener\("click"/);
   assert.match(appJs, /sample-library-import-single-commit/);
+  assert.match(appJs, /sample-library-import-remove/);
 
   assert.equal(requirementStart > -1, true);
   assert.match(requirementSource, /if \(!card\)/);
@@ -95,6 +97,7 @@ test("sample library frontend wires parse and commit flows for Markdown imports"
   assert.match(appJs, /class="tag-picker-trigger sample-library-import-tag-trigger"/);
   assert.match(appJs, /class="tag-picker-dropdown sample-library-import-tag-dropdown"/);
   assert.match(appJs, /data-action="sample-library-import-single-commit"/);
+  assert.match(appJs, /data-action="sample-library-import-remove"/);
   assert.match(appJs, /data-action="sample-library-import-open-advanced-modal"/);
   assert.match(appJs, /<span>封面文案<\/span>/);
   assert.match(appJs, /<span>浏览数<\/span>/);

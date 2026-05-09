@@ -15,10 +15,9 @@ const defaultTextModel = process.env.GLM_TEXT_MODEL || "glm-4.6v";
 const defaultKimiTextModel = "kimi-k2.5";
 const defaultFeedbackModel = process.env.GLM_FEEDBACK_MODEL || defaultTextModel || "glm-4.6v";
 const defaultQwenFeedbackModel = process.env.QWEN_FEEDBACK_MODEL || "qwen-plus";
-const defaultMiniMaxDmxapiModel = process.env.MINIMAX_DMXAPI_MODEL || "MiniMax-M2.7-free";
-const defaultGlmDmxapiModel = process.env.GLM_DMXAPI_MODEL || "glm-5.1-free";
-const defaultKimiDmxapiModel = process.env.KIMI_DMXAPI_MODEL || "kimi-k2.6-free";
-const defaultQwenDmxapiModel = process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus-free";
+const defaultMiniMaxDmxapiModel = process.env.MINIMAX_DMXAPI_MODEL || "MiniMax-M2.5";
+const defaultGlmDmxapiModel = process.env.GLM_DMXAPI_MODEL || "glm-5.1";
+const defaultQwenDmxapiModel = process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus";
 const defaultDeepSeekFeedbackModel = process.env.DEEPSEEK_FEEDBACK_MODEL || "deepseek-v4-flash";
 const humanizerPassEnabled = process.env.HUMANIZER_PASS_ENABLED !== "false";
 const feedbackModelCandidates = [defaultFeedbackModel, "glm-4.6-flashX"].filter(
@@ -79,19 +78,15 @@ function getDefaultKimiTextModel() {
 }
 
 function getDefaultQwenDmxapiModel() {
-  return String(process.env.QWEN_DMXAPI_MODEL || defaultQwenDmxapiModel || "qwen3.5-plus-free").trim();
+  return String(process.env.QWEN_DMXAPI_MODEL || defaultQwenDmxapiModel || "qwen3.5-plus").trim();
 }
 
 function getDefaultMiniMaxDmxapiModel() {
-  return String(process.env.MINIMAX_DMXAPI_MODEL || defaultMiniMaxDmxapiModel || "MiniMax-M2.7-free").trim();
+  return String(process.env.MINIMAX_DMXAPI_MODEL || defaultMiniMaxDmxapiModel || "MiniMax-M2.5").trim();
 }
 
 function getDefaultGlmDmxapiModel() {
-  return String(process.env.GLM_DMXAPI_MODEL || defaultGlmDmxapiModel || "glm-5.1-free").trim();
-}
-
-function getDefaultKimiDmxapiModel() {
-  return String(process.env.KIMI_DMXAPI_MODEL || defaultKimiDmxapiModel || "kimi-k2.6-free").trim();
+  return String(process.env.GLM_DMXAPI_MODEL || defaultGlmDmxapiModel || "glm-5.1").trim();
 }
 
 function getRewriteProviderPreference() {
@@ -1113,8 +1108,9 @@ const routedTextProviderConfigs = {
     officialEndpoint: getKimiEndpoint(),
     officialEnvKey: "KIMI_API_KEY",
     getOfficialModel: (model) => String(model || process.env.KIMI_TEXT_MODEL || "kimi-k2.5").trim(),
-    getDmxapiModel: () => getDefaultKimiDmxapiModel(),
-    dmxapiLabel: "Kimi DMXAPI"
+    getDmxapiModel: () => "",
+    dmxapiLabel: "Kimi 官方",
+    supportsDmxapi: false
   },
   qwen: {
     provider: "qwen",

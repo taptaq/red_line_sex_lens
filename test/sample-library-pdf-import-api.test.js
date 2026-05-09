@@ -130,6 +130,61 @@ test("sample library Markdown parse strips heading titles and markdown syntax in
   });
 });
 
+test("sample library Markdown parse auto-skips drafts whose titles already exist in note records and returns a message", async (t) => {
+  await withTempSampleLibraryMarkdownImportApi(t, async () => {
+    await invokeRoute("POST", "/api/sample-library", {
+      source: "manual",
+      stage: "draft",
+      note: {
+        title: "重复标题",
+        coverText: "旧封面",
+        body: "旧正文",
+        collectionType: "科普",
+        tags: ["旧标签"]
+      }
+    });
+
+    const duplicateContent = Buffer.from(["# 【批量导入】重复标题", "", "这条应该被自动跳过"].join("\n"), "utf8").toString("base64");
+    const freshContent = Buffer.from(["# 新标题", "", "这条应该保留下来"].join("\n"), "utf8").toString("base64");
+
+    const parsed = await invokeRoute("POST", "/api/sample-library/markdown-import/parse", {
+      files: [
+        { name: "duplicate.md", contentBase64: duplicateContent },
+        { name: "fresh.md", contentBase64: freshContent }
+      ]
+    });
+
+    assert.equal(parsed.status, 200);
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.items.length, 1);
+    assert.equal(parsed.items[0].title, "新标题");
+    assert.match(parsed.message, /已自动跳过 1 条重复的 Markdown 记录/);
+    assert.match(parsed.message, /重复标题/);
+    assert.doesNotMatch(parsed.message, /【批量导入】/);
+  });
+});
+
+test("sample library Markdown parse auto-skips duplicate drafts within the same batch and keeps only one", async (t) => {
+  await withTempSampleLibraryMarkdownImportApi(t, async () => {
+    const firstContent = Buffer.from(["# 批次重复标题", "", "同一段正文内容"].join("\n"), "utf8").toString("base64");
+    const secondContent = Buffer.from(["# 批次重复标题", "", "同一段正文内容"].join("\n"), "utf8").toString("base64");
+
+    const parsed = await invokeRoute("POST", "/api/sample-library/markdown-import/parse", {
+      files: [
+        { name: "first.md", contentBase64: firstContent },
+        { name: "second.md", contentBase64: secondContent }
+      ]
+    });
+
+    assert.equal(parsed.status, 200);
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.items.length, 1);
+    assert.equal(parsed.items[0].title, "批次重复标题");
+    assert.match(parsed.message, /已自动跳过 1 条重复的 Markdown 记录/);
+    assert.match(parsed.message, /批次重复标题/);
+  });
+});
+
 test("sample library Markdown commit rejects selected incomplete items before writing anything", async (t) => {
   await withTempSampleLibraryMarkdownImportApi(t, async () => {
     const committed = await invokeRoute("POST", "/api/sample-library/markdown-import/commit", {

@@ -38,13 +38,13 @@ function uniqueStrings(items = []) {
 }
 
 const REFERENCE_METRIC_THRESHOLD = {
-  likes: 20,
+  likes: 30,
   favorites: 10,
   comments: 10,
-  nearLikes: 16,
-  nearFavorites: 4,
+  nearLikes: 15,
+  nearFavorites: 5,
   nearComments: 5,
-  supportViews: 3000
+  supportViews: 1000
 };
 
 function formatReferenceThresholdRule(parts = [], { joiner = "、", lastJoiner = " 或" } = {}) {
@@ -628,6 +628,7 @@ const appState = {
   sampleLibraryFilter: "all",
   sampleLibrarySearch: "",
   sampleLibraryImportDrafts: [],
+  sampleLibraryImportMessage: "",
   sampleLibraryCalibrationReplayResult: null,
   sampleLibraryModal: null,
   lexiconWorkspaceModal: {
@@ -6056,12 +6057,12 @@ async function refreshAll() {
   await refreshSampleLibraryWorkspace();
   appState.summaryData = summary && typeof summary === "object" ? summary : {};
   setSummaryLoadingState("idle");
+  setAdminDataLoadingState("idle");
   renderSummary(appState.summaryData);
   renderQueue(appState.adminData.reviewQueue);
   renderAdminData(appState.adminData);
   renderLexiconWorkspaceModal();
   renderCollectionTypeSelectors();
-  setAdminDataLoadingState("idle");
 }
 
 async function fileToDataUrl(file) {
@@ -6353,6 +6354,19 @@ function getSampleLibraryImportCards() {
   return [...document.querySelectorAll("[data-import-index]")];
 }
 
+function removeSampleLibraryImportDraft(index) {
+  const normalizedIndex = Number(index);
+
+  if (!Number.isInteger(normalizedIndex) || normalizedIndex < 0) {
+    return;
+  }
+
+  appState.sampleLibraryImportDrafts = appState.sampleLibraryImportDrafts.filter((_, itemIndex) => itemIndex !== normalizedIndex);
+  renderSampleLibraryImportDrafts(appState.sampleLibraryImportDrafts, {
+    message: appState.sampleLibraryImportMessage
+  });
+}
+
 function getOpenSampleLibraryImportCard(index) {
   return document.querySelector(`[data-import-index="${Number(index)}"]`);
 }
@@ -6642,7 +6656,10 @@ function saveSampleLibraryImportAdvancedModal() {
 
 function renderSampleLibraryImportDrafts(items = []) {
   const resultNode = byId("sample-library-import-result");
+  const options = arguments[1] || {};
+  const message = String(options?.message || "").trim();
   appState.sampleLibraryImportDrafts = Array.isArray(items) ? items : [];
+  appState.sampleLibraryImportMessage = message;
 
   if (!resultNode) {
     syncSampleLibraryImportActions();
@@ -6650,12 +6667,15 @@ function renderSampleLibraryImportDrafts(items = []) {
   }
 
   if (!appState.sampleLibraryImportDrafts.length) {
-    resultNode.innerHTML = '<div class="result-card muted">等待导入 Markdown</div>';
+    resultNode.innerHTML = message
+      ? `<div class="result-card-shell">${escapeHtml(message)}</div>`
+      : '<div class="result-card muted">等待导入 Markdown</div>';
     syncSampleLibraryImportActions();
     return;
   }
 
   resultNode.innerHTML = `
+    ${message ? `<div class="result-card-shell">${escapeHtml(message)}</div>` : ""}
     <div class="sample-library-import-list">
       ${appState.sampleLibraryImportDrafts
         .map((item, index) => {
@@ -6733,6 +6753,7 @@ function renderSampleLibraryImportDrafts(items = []) {
                 </div>
               </article>
               <div class="inline-actions">
+                <button type="button" class="button button-ghost" data-action="sample-library-import-remove">移除这条</button>
                 <button type="button" class="button button-alt" data-action="sample-library-import-single-commit">确认导入</button>
               </div>
               <p class="helper-text">${escapeHtml(helperText)}</p>
@@ -8715,7 +8736,7 @@ byId("sample-library-import-input").addEventListener("change", async (event) => 
 
   try {
     const result = await parseSampleLibraryMarkdownFiles(files);
-    renderSampleLibraryImportDrafts(result.items || []);
+    renderSampleLibraryImportDrafts(result.items || [], { message: result.message || "" });
   } catch (error) {
     appState.sampleLibraryImportDrafts = [];
     byId("sample-library-import-result").innerHTML = `
@@ -8746,6 +8767,13 @@ byId("sample-library-import-block")?.addEventListener("click", async (event) => 
     event.target instanceof Element ? event.target.closest('[data-action="sample-library-import-open-advanced-modal"]') : null;
   if (advancedButton) {
     openSampleLibraryImportAdvancedModal(card.dataset.importIndex || "");
+    return;
+  }
+
+  const removeButton =
+    event.target instanceof Element ? event.target.closest('[data-action="sample-library-import-remove"]') : null;
+  if (removeButton) {
+    removeSampleLibraryImportDraft(card.dataset.importIndex || "");
     return;
   }
 

@@ -31,7 +31,7 @@ const providerConfigs = [
     label: "MiniMax",
     envKey: "DMXAPI_API_KEY",
     endpoint: "https://www.dmxapi.cn/v1/chat/completions",
-    model: process.env.MINIMAX_DMXAPI_MODEL || "MiniMax-M2.7-free"
+    model: process.env.MINIMAX_DMXAPI_MODEL || "MiniMax-M2.5"
   },
   {
     provider: "deepseek",

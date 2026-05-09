@@ -1,3 +1,5 @@
+import { referenceMetricThreshold } from "./reference-samples.js";
+
 function normalizeString(value) {
   return String(value || "").trim();
 }
@@ -98,10 +100,13 @@ function deriveActualPerformanceTier(publish = {}) {
   }
 
   if (
-    likes >= 20 ||
-    favorites >= 10 ||
-    comments >= 10 ||
-    ((likes >= 16 || favorites >= 4 || comments >= 5) && views >= 3000) ||
+    likes >= referenceMetricThreshold.likes ||
+    favorites >= referenceMetricThreshold.favorites ||
+    comments >= referenceMetricThreshold.comments ||
+    ((likes >= referenceMetricThreshold.nearLikes ||
+      favorites >= referenceMetricThreshold.nearFavorites ||
+      comments >= referenceMetricThreshold.nearComments) &&
+      views >= referenceMetricThreshold.supportViews) ||
     status === "published_passed" ||
     status === "false_positive"
   ) {
