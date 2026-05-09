@@ -24,6 +24,55 @@ function uniqueStrings(items = []) {
   return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
 }
 
+const BOOTSTRAP_SNAPSHOT_KEYS = {
+  summary: "redline:bootstrap:summary",
+  adminData: "redline:bootstrap:admin-data",
+  sampleLibraryRecords: "redline:bootstrap:sample-library-records",
+  collectionTypeOptions: "redline:bootstrap:collection-type-options",
+  modelOptions: "redline:bootstrap:model-options",
+  analyzeTagOptions: "redline:bootstrap:analyze-tag-options"
+};
+const BOOTSTRAP_SNAPSHOT_MAX_AGE_MS = 5 * 60 * 1000;
+
+function loadBootstrapSnapshotPart(key, maxAgeMs = BOOTSTRAP_SNAPSHOT_MAX_AGE_MS) {
+  try {
+    const raw = localStorage.getItem(BOOTSTRAP_SNAPSHOT_KEYS[key]);
+
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (!parsed?.savedAt || Date.now() - parsed.savedAt > maxAgeMs) {
+      return null;
+    }
+
+    return parsed.payload ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function persistBootstrapSnapshotPart(key, payload) {
+  try {
+    localStorage.setItem(
+      BOOTSTRAP_SNAPSHOT_KEYS[key],
+      JSON.stringify({
+        savedAt: Date.now(),
+        payload
+      })
+    );
+  } catch {
+    // Snapshot writes are best-effort; live refresh remains the source of truth.
+  }
+}
+
+function clearBootstrapSnapshotPart(key) {
+  try {
+    localStorage.removeItem(BOOTSTRAP_SNAPSHOT_KEYS[key]);
+  } catch {
+    // Ignore storage failures so bootstrapping never blocks the app.
+  }
+}
+
 const REFERENCE_METRIC_THRESHOLD = {
   likes: 20,
   favorites: 10,
@@ -404,6 +453,9 @@ const appState = {
   latestGeneration: null,
   latestAnalysisFalsePositiveSource: null,
   falsePositiveLog: [],
+  summaryData: {},
+  summaryLoading: "idle",
+  adminDataLoading: "idle",
   adminData: {
     seedLexicon: [],
     customLexicon: [],
@@ -413,7 +465,9 @@ const appState = {
     reviewQueue: []
   },
   collectionTypeOptions: [],
+  modelSelectionOptions: null,
   sampleLibraryRecords: [],
+  sampleLibraryLoading: "idle",
   selectedSampleLibraryRecordId: "",
   sampleLibraryDetailStep: "base",
   sampleLibraryCollectionFilter: "all",
@@ -1190,6 +1244,15 @@ async function saveAnalyzeCustomTagOptions(options = []) {
   });
 }
 
+async function loadAnalyzeTagOptions() {
+  const customOptions = await loadAnalyzeCustomTagOptions();
+  analyzeTagOptions = uniqueStrings([...presetAnalyzeTags, ...analyzeTagOptions, ...customOptions]);
+  persistBootstrapSnapshotPart("analyzeTagOptions", analyzeTagOptions);
+  renderAnalyzeTagOptions();
+  initializeSampleLibraryImportTagPickers();
+  return analyzeTagOptions;
+}
+
 function buildCollectionTypeOptionsMarkup({
   options = [],
   value = "",
@@ -1250,7 +1313,9 @@ function renderCollectionTypeSelectors() {
 async function loadCollectionTypeOptions() {
   const payload = await apiJson(collectionTypesApi);
   appState.collectionTypeOptions = Array.isArray(payload.options) ? payload.options : [];
+  persistBootstrapSnapshotPart("collectionTypeOptions", appState.collectionTypeOptions);
   renderCollectionTypeSelectors();
+  return appState.collectionTypeOptions;
 }
 
 const defaultModelSelectionOptions = {
@@ -1412,9 +1477,14 @@ function renderModelSelectionControls(options = defaultModelSelectionOptions) {
 async function loadModelSelectionOptions() {
   try {
     const payload = await apiJson(modelOptionsApi);
-    renderModelSelectionControls(payload);
+    appState.modelSelectionOptions = payload && typeof payload === "object" ? payload : defaultModelSelectionOptions;
+    persistBootstrapSnapshotPart("modelOptions", appState.modelSelectionOptions);
+    renderModelSelectionControls(appState.modelSelectionOptions);
+    return appState.modelSelectionOptions;
   } catch {
+    appState.modelSelectionOptions = defaultModelSelectionOptions;
     renderModelSelectionControls(defaultModelSelectionOptions);
+    return appState.modelSelectionOptions;
   }
 }
 
@@ -2019,6 +2089,18 @@ function syncCrossReviewActions() {
 
   setGatedButtonState(crossReviewButton, enabled, requirementMessage);
   setActionGateHint("cross-review-action-hint", requirementMessage || recommendationMessage);
+}
+
+function setSummaryLoadingState(state = "idle") {
+  appState.summaryLoading = state;
+}
+
+function setAdminDataLoadingState(state = "idle") {
+  appState.adminDataLoading = state;
+}
+
+function setSampleLibraryLoadingState(state = "idle") {
+  appState.sampleLibraryLoading = state;
 }
 
 function renderSummary(summary = {}) {
@@ -3557,11 +3639,23 @@ function renderSampleLibraryList(items = []) {
   const listNode = byId("sample-library-record-list");
   const countNode = byId("sample-library-list-count");
   const previewOpenButton = byId("sample-library-record-preview-open-button");
-  const previewItems = getSampleLibraryRecordPreviewItems(items);
 
   if (!listNode) {
     return;
   }
+
+  if (appState.sampleLibraryLoading === "loading") {
+    if (countNode) {
+      countNode.textContent = "加载中...";
+    }
+    if (previewOpenButton) {
+      previewOpenButton.hidden = true;
+    }
+    listNode.innerHTML = '<div class="result-card muted">加载中...</div>';
+    return;
+  }
+
+  const previewItems = getSampleLibraryRecordPreviewItems(items);
 
   if (countNode) {
     countNode.textContent = `${items.length} 条 · ${sampleLibraryFilterLabel(appState.sampleLibraryFilter)} · ${sampleLibraryCollectionFilterLabel(
@@ -5232,11 +5326,19 @@ async function refreshSampleLibraryWorkspace() {
     return appState.sampleLibraryRecords;
   }
 
+  if (!Array.isArray(appState.sampleLibraryRecords) || appState.sampleLibraryRecords.length === 0) {
+    setSampleLibraryLoadingState("loading");
+    renderSampleLibraryWorkspace();
+  }
+
   try {
     const payload = await apiJson(sampleLibraryApi);
     appState.sampleLibraryRecords = Array.isArray(payload?.items) ? payload.items : [];
+    persistBootstrapSnapshotPart("sampleLibraryRecords", appState.sampleLibraryRecords);
   } catch {
     appState.sampleLibraryRecords = Array.isArray(appState.sampleLibraryRecords) ? appState.sampleLibraryRecords : [];
+  } finally {
+    setSampleLibraryLoadingState("idle");
   }
 
   renderSampleLibraryWorkspace();
@@ -5491,6 +5593,7 @@ async function refreshInnerSpaceTermsState() {
 }
 
 async function refreshAdminDataState() {
+  setAdminDataLoadingState("loading");
   const adminData = await apiJson("/api/admin/data");
 
   appState.adminData = {
@@ -5506,23 +5609,86 @@ async function refreshAdminDataState() {
     await refreshInnerSpaceTermsState();
   }
 
-  return appState.adminData;
-}
-
-async function refreshAll() {
-  const [summary, collectionTypePayload] = await Promise.all([
-    apiJson("/api/summary"),
-    apiJson(collectionTypesApi)
-  ]);
-
-  await refreshAdminDataState();
-  appState.collectionTypeOptions = Array.isArray(collectionTypePayload.options) ? collectionTypePayload.options : [];
-  await refreshSampleLibraryWorkspace();
-  renderSummary(summary);
+  persistBootstrapSnapshotPart("adminData", appState.adminData);
+  setAdminDataLoadingState("idle");
   renderQueue(appState.adminData.reviewQueue);
   renderAdminData(appState.adminData);
   renderLexiconWorkspaceModal();
-  renderCollectionTypeSelectors();
+
+  return appState.adminData;
+}
+
+async function refreshSummaryState() {
+  setSummaryLoadingState("loading");
+  const payload = await apiJson("/api/summary");
+  appState.summaryData = payload && typeof payload === "object" ? payload : {};
+  persistBootstrapSnapshotPart("summary", appState.summaryData);
+  setSummaryLoadingState("idle");
+  renderSummary(appState.summaryData);
+  return appState.summaryData;
+}
+
+function hydrateBootstrapSnapshot() {
+  const summary = loadBootstrapSnapshotPart("summary");
+  const adminData = loadBootstrapSnapshotPart("adminData");
+  const sampleLibraryRecords = loadBootstrapSnapshotPart("sampleLibraryRecords");
+  const collectionTypeOptions = loadBootstrapSnapshotPart("collectionTypeOptions");
+  const modelOptions = loadBootstrapSnapshotPart("modelOptions");
+  const savedAnalyzeTagOptions = loadBootstrapSnapshotPart("analyzeTagOptions");
+
+  if (summary && typeof summary === "object") {
+    appState.summaryData = summary;
+    renderSummary(appState.summaryData);
+  }
+
+  if (adminData && typeof adminData === "object") {
+    appState.adminData = {
+      ...appState.adminData,
+      ...adminData
+    };
+    renderQueue(appState.adminData.reviewQueue);
+    renderAdminData(appState.adminData);
+    renderLexiconWorkspaceModal();
+  }
+
+  if (Array.isArray(sampleLibraryRecords)) {
+    appState.sampleLibraryRecords = sampleLibraryRecords;
+    setSampleLibraryLoadingState("idle");
+    renderSampleLibraryWorkspace();
+  }
+
+  if (Array.isArray(collectionTypeOptions)) {
+    appState.collectionTypeOptions = collectionTypeOptions;
+    renderCollectionTypeSelectors();
+  }
+
+  if (modelOptions && typeof modelOptions === "object") {
+    appState.modelSelectionOptions = modelOptions;
+    renderModelSelectionControls(appState.modelSelectionOptions);
+  }
+
+  if (Array.isArray(savedAnalyzeTagOptions)) {
+    analyzeTagOptions = uniqueStrings([...presetAnalyzeTags, ...savedAnalyzeTagOptions]);
+    renderAnalyzeTagOptions();
+    initializeSampleLibraryImportTagPickers();
+  }
+}
+
+async function refreshAll({ useSnapshot = true } = {}) {
+  if (useSnapshot) {
+    hydrateBootstrapSnapshot();
+  }
+
+  const refreshTasks = [
+    refreshSummaryState(),
+    refreshAdminDataState(),
+    refreshSampleLibraryWorkspace(),
+    loadCollectionTypeOptions(),
+    loadModelSelectionOptions(),
+    loadAnalyzeTagOptions()
+  ];
+
+  await Promise.allSettled(refreshTasks);
 }
 
 async function fileToDataUrl(file) {
@@ -6670,13 +6836,7 @@ function initializeAnalyzeTagPicker() {
   analyzeTagOptions = [...presetAnalyzeTags];
   setAnalyzeTagDropdownOpen(false);
   renderAnalyzeTagOptions();
-  loadAnalyzeCustomTagOptions()
-    .then((customOptions) => {
-      analyzeTagOptions = uniqueStrings([...presetAnalyzeTags, ...analyzeTagOptions, ...customOptions]);
-      renderAnalyzeTagOptions();
-      initializeSampleLibraryImportTagPickers();
-    })
-    .catch(() => {});
+  loadAnalyzeTagOptions().catch(() => {});
 
   trigger.addEventListener("click", (event) => {
     event.preventDefault();
@@ -9072,9 +9232,6 @@ refreshAll().catch((error) => {
     <div class="result-card-shell muted">${escapeHtml(error.message || "初始化失败")}</div>
   `;
 });
-
-loadModelSelectionOptions().catch(() => {});
-loadCollectionTypeOptions().catch(() => {});
 
 syncAnalyzeActions();
 syncFeedbackActions();

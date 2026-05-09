@@ -259,6 +259,20 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /function\s+syncReferenceThresholdCopy\s*\(/);
   assert.match(appJs, /byId\("sample-library-flow-reference-threshold"\)/);
   assert.match(appJs, /byId\("sample-library-pools-modal-subtitle"\)/);
+  assert.match(appJs, /const BOOTSTRAP_SNAPSHOT_KEYS = \{/);
+  assert.match(appJs, /function loadBootstrapSnapshotPart\s*\(/);
+  assert.match(appJs, /function persistBootstrapSnapshotPart\s*\(/);
+  assert.match(appJs, /function clearBootstrapSnapshotPart\s*\(/);
+  assert.match(appJs, /async function refreshSummaryState\s*\(/);
+  assert.match(appJs, /async function refreshAll\(\{ useSnapshot = true \} = \{\}\)\s*\{/);
+  assert.match(appJs, /loadBootstrapSnapshotPart\("summary"\)/);
+  assert.match(appJs, /loadBootstrapSnapshotPart\("adminData"\)/);
+  assert.match(appJs, /loadBootstrapSnapshotPart\("sampleLibraryRecords"\)/);
+  assert.match(appJs, /const refreshTasks = \[/);
+  assert.match(appJs, /refreshSummaryState\(\)/);
+  assert.match(appJs, /refreshAdminDataState\(\)/);
+  assert.match(appJs, /refreshSampleLibraryWorkspace\(\)/);
+  assert.match(appJs, /await Promise\.allSettled\(refreshTasks\)/);
   assert.doesNotMatch(sampleLibraryPaneHtml, /id="sample-library-reference-pool-section"/);
   assert.doesNotMatch(sampleLibraryPaneHtml, /id="sample-library-regular-pool-section"/);
   assert.doesNotMatch(sampleLibraryPaneHtml, /id="sample-library-negative-pool-section"/);
@@ -394,14 +408,43 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(styles, /@media\s*\(max-width:\s*1360px\)\s*\{[\s\S]*\.item-actions\s*\{[\s\S]*display:\s*grid;/);
   assert.match(styles, /@media\s*\(max-width:\s*1360px\)\s*\{[\s\S]*\.item-actions\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(180px,\s*1fr\)\)/);
 
-  const refreshAllStart = appJs.indexOf("async function refreshAll()");
+  const refreshAllStart = appJs.indexOf("async function refreshAll({ useSnapshot = true } = {})");
   const refreshAllEnd = appJs.indexOf("async function fileToDataUrl", refreshAllStart);
   const refreshAllSource = appJs.slice(refreshAllStart, refreshAllEnd);
   assert.ok(refreshAllStart !== -1 && refreshAllEnd !== -1, "expected refreshAll source");
-  assert.ok(
-    refreshAllSource.indexOf("await refreshSampleLibraryWorkspace();") < refreshAllSource.indexOf("renderSummary(summary);"),
-    "expected refreshAll to update sample library state before rendering summary"
+  assert.match(refreshAllSource, /hydrateBootstrapSnapshot\(\)/);
+  assert.match(refreshAllSource, /await Promise\.allSettled\(refreshTasks\)/);
+});
+
+test("sample library bootstrap leaves the record list in loading state until refresh completes", async () => {
+  const { appJs } = await readFrontendFiles();
+  const renderSampleLibraryListSource = extractSourceBetween(
+    appJs,
+    "function renderSampleLibraryList(",
+    "function buildSampleLibraryRecordListModalMarkup("
   );
+  const nodes = {
+    "sample-library-list-count": { textContent: "" },
+    "sample-library-record-list": { innerHTML: "" },
+    "sample-library-record-preview-open-button": { hidden: false }
+  };
+  const appState = {
+    sampleLibraryLoading: "loading",
+    sampleLibraryFilter: "all",
+    sampleLibraryCollectionFilter: "all",
+    selectedSampleLibraryRecordId: ""
+  };
+  const renderSampleLibraryList = new Function(
+    "byId",
+    "appState",
+    `${renderSampleLibraryListSource}; return renderSampleLibraryList;`
+  )((id) => nodes[id] || null, appState);
+
+  renderSampleLibraryList([]);
+
+  assert.equal(nodes["sample-library-list-count"].textContent, "加载中...");
+  assert.match(nodes["sample-library-record-list"].innerHTML, /加载中/);
+  assert.doesNotMatch(nodes["sample-library-record-list"].innerHTML, /当前没有样本记录/);
 });
 
 test("sample library workspace exposes record preview and full-list modal controls", async () => {
