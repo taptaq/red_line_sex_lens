@@ -642,7 +642,7 @@ test("sample library record commits keep summary and bootstrap snapshots consist
   ]);
 });
 
-test("sample library bootstrap records synchronize summary count without a summary snapshot", async () => {
+test("sample library bootstrap records synchronize summary count without renewing snapshot TTL", async () => {
   const { appJs } = await readFrontendFiles();
   const commitSource = extractSourceBetween(
     appJs,
@@ -711,12 +711,9 @@ test("sample library bootstrap records synchronize summary count without a summa
 
   assert.deepEqual(appState.sampleLibraryRecords.map((item) => item.id), ["record-1", "record-2", "record-3"]);
   assert.equal(appState.summaryData.sampleLibraryCount, 3);
-  assert.deepEqual(persistedSnapshots, [
-    ["sampleLibraryRecords", ["record-1", "record-2", "record-3"]],
-    ["summary", 3]
-  ]);
+  assert.deepEqual(persistedSnapshots, []);
   assert.deepEqual(renderedSummaries, [3]);
-  assert.match(hydrateSource, /commitSampleLibraryRecords\(sampleLibraryRecords, \[\]\)/);
+  assert.match(hydrateSource, /commitSampleLibraryRecords\(sampleLibraryRecords, \[\], \{ persist: false \}\)/);
 });
 
 test("summary and admin refresh loading states reset after failures", async () => {

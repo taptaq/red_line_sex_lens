@@ -5291,14 +5291,16 @@ function openSampleLibraryDetailModal(kind, recordId) {
   renderSampleLibraryModal(buildSampleLibraryDetailModalConfig(kind, record));
 }
 
-function commitSampleLibraryRecords(items, fallbackRecords = appState.sampleLibraryRecords) {
+function commitSampleLibraryRecords(items, fallbackRecords = appState.sampleLibraryRecords, { persist = true } = {}) {
   appState.sampleLibraryRecords = Array.isArray(items) ? items : Array.isArray(fallbackRecords) ? fallbackRecords : [];
   appState.summaryData = {
     ...(appState.summaryData && typeof appState.summaryData === "object" ? appState.summaryData : {}),
     sampleLibraryCount: appState.sampleLibraryRecords.length
   };
-  persistBootstrapSnapshotPart("sampleLibraryRecords", appState.sampleLibraryRecords);
-  persistBootstrapSnapshotPart("summary", appState.summaryData);
+  if (persist) {
+    persistBootstrapSnapshotPart("sampleLibraryRecords", appState.sampleLibraryRecords);
+    persistBootstrapSnapshotPart("summary", appState.summaryData);
+  }
   renderSummary(appState.summaryData);
   return appState.sampleLibraryRecords;
 }
@@ -5672,7 +5674,7 @@ function hydrateBootstrapSnapshot() {
   }
 
   if (Array.isArray(sampleLibraryRecords)) {
-    commitSampleLibraryRecords(sampleLibraryRecords, []);
+    commitSampleLibraryRecords(sampleLibraryRecords, [], { persist: false });
     setSampleLibraryLoadingState("idle");
     renderSampleLibraryWorkspace();
   }
