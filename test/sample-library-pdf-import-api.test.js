@@ -13,18 +13,43 @@ async function withTempSampleLibraryPdfImportApi(t, run) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "sample-library-pdf-import-"));
   const originals = {
     collectionTypes: paths.collectionTypes,
+    styleProfile: paths.styleProfile,
     successSamples: paths.successSamples,
     noteLifecycle: paths.noteLifecycle,
     noteRecords: paths.noteRecords
   };
 
   paths.collectionTypes = path.join(tempDir, "collection-types.json");
+  paths.styleProfile = path.join(tempDir, "style-profile.json");
   paths.successSamples = path.join(tempDir, "success-samples.json");
   paths.noteLifecycle = path.join(tempDir, "note-lifecycle.json");
   paths.noteRecords = path.join(tempDir, "note-records.json");
 
   await Promise.all([
     fs.writeFile(paths.collectionTypes, `${JSON.stringify({ custom: [] }, null, 2)}\n`, "utf8"),
+    fs.writeFile(
+      paths.styleProfile,
+      `${JSON.stringify(
+        {
+          current: {
+            id: "style-profile-current",
+            status: "active",
+            topic: "旧画像",
+            name: "旧画像",
+            sourceSampleIds: ["note-reference-a", "note-reference-b"],
+            titleStyle: "旧标题风格",
+            bodyStructure: "旧正文结构",
+            tone: "旧语气",
+            preferredTags: ["旧标签"],
+            createdAt: "2026-05-01T00:00:00.000Z",
+            updatedAt: "2026-05-01T00:00:00.000Z"
+          }
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    ),
     fs.writeFile(paths.successSamples, "[]\n", "utf8"),
     fs.writeFile(paths.noteLifecycle, "[]\n", "utf8")
   ]);
@@ -87,6 +112,9 @@ test("sample library PDF parse returns draft errors and commit persists only con
     assert.equal(committed.status, 200);
     assert.equal(committed.ok, true);
     assert.equal(committed.createdCount, 1);
+    assert.equal(committed.styleProfileRefreshQueued, true);
+    assert.equal(committed.styleProfile.current.topic, "旧画像");
+    assert.deepEqual(committed.styleProfile.current.sourceSampleIds, ["note-reference-a", "note-reference-b"]);
     assert.equal(records.length, 1);
     assert.equal(records[0].note.title, "标题A");
     assert.equal(records[0].note.coverText, "封面A");

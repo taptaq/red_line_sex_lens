@@ -1136,17 +1136,31 @@ async function handleRequest(request, response) {
     const payload = await readBody(request);
     const validatedPayloads = await validatePdfImportCommitItems(payload?.items);
     const createdItems = [];
+    let styleProfile = null;
+    let styleProfileRefreshQueued = false;
 
     for (const validatedPayload of validatedPayloads) {
-      const { item: saved } = await persistSampleLibraryRecord(validatedPayload);
+      const { item: saved, styleProfile: savedStyleProfile, styleProfileRefreshQueued: savedRefreshQueued } =
+        await persistSampleLibraryRecord(validatedPayload);
       createdItems.push(saved);
+      if (savedRefreshQueued) {
+        styleProfile = savedStyleProfile || styleProfile;
+        styleProfileRefreshQueued = true;
+      }
     }
 
-    return sendJson(response, 200, {
+    const responsePayload = {
       ok: true,
       createdCount: createdItems.length,
       items: createdItems
-    });
+    };
+
+    if (styleProfileRefreshQueued) {
+      responsePayload.styleProfile = styleProfile || (await loadCurrentStyleProfileView());
+      responsePayload.styleProfileRefreshQueued = true;
+    }
+
+    return sendJson(response, 200, responsePayload);
   }
 
   if (request.method === "POST" && url.pathname === "/api/sample-library/calibration-replay") {
