@@ -3645,17 +3645,6 @@ function renderSampleLibraryList(items = []) {
     return;
   }
 
-  if (appState.sampleLibraryLoading === "loading") {
-    if (countNode) {
-      countNode.textContent = "加载中...";
-    }
-    if (previewOpenButton) {
-      previewOpenButton.hidden = true;
-    }
-    listNode.innerHTML = '<div class="result-card muted">加载中...</div>';
-    return;
-  }
-
   const previewItems = getSampleLibraryRecordPreviewItems(items);
 
   if (countNode) {

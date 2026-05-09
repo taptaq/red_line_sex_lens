@@ -111,7 +111,7 @@
                       </label>
                       <div class="model-action-control">
                         <select id="semantic-model-selection" name="semanticModelSelection" class="model-action-select">
-                          <option value="auto">默认自动 / 加载中...</option>
+                          <option value="auto">默认自动 / 依次尝试当前语义复判模型</option>
                         </select>
                         <p class="helper-text">按当前语义复判模型选择执行，不再根据历史调用表现自动推荐。</p>
                         <button type="submit" class="button button-ghost" id="analyze-button" disabled>运行检测</button>
@@ -123,7 +123,7 @@
                       </label>
                       <div class="model-action-control">
                         <select id="rewrite-model-selection" name="rewriteModelSelection" class="model-action-select">
-                          <option value="auto">默认自动 / 加载中...</option>
+                          <option value="auto">默认自动 / 使用当前默认改写模型</option>
                         </select>
                         <p class="helper-text">改写仍由你手动选择模型，不再展示基于历史表现的动态建议。</p>
                         <button type="button" class="button button-ghost" id="rewrite-button" disabled>一键合规改写</button>
@@ -141,7 +141,7 @@
                         </label>
                         <div class="model-action-control">
                           <select id="cross-review-model-selection" name="crossReviewModelSelection" class="model-action-select">
-                            <option value="group">默认模型组 / 加载中...</option>
+                            <option value="group">默认模型组 / 并行调用全部交叉复判模型</option>
                           </select>
                           <p class="helper-text">交叉复判只保留独立模型组选择，不再根据历史表现给出推荐。</p>
                           <button type="button" class="button button-ghost" id="cross-review-button" disabled>模型交叉复判</button>
@@ -202,7 +202,7 @@
                   <label>
                     <span>生成模型</span>
                     <select name="generationModelSelection" id="generation-model-selection">
-                      <option value="auto">默认自动 / 加载中...</option>
+                      <option value="auto">默认自动 / 使用当前默认生成模型</option>
                     </select>
                   </label>
                   <label>
@@ -307,7 +307,7 @@
                         name="feedbackScreenshotModelSelection"
                         class="model-action-select"
                       >
-                        <option value="auto">默认自动 / 加载中...</option>
+                        <option value="auto">默认自动 / 当前视觉识别模型</option>
                       </select>
                       <button type="button" class="button button-ghost" id="feedback-recognize">
                         识别截图并回填
@@ -324,7 +324,7 @@
                         name="feedbackSuggestionModelSelection"
                         class="model-action-select"
                       >
-                        <option value="auto">默认自动 / 加载中...</option>
+                        <option value="auto">默认自动 / 顺序尝试候选补充模型</option>
                       </select>
                       <p class="helper-text">只写入文件元信息和识别摘要，不会把整张图片保存到日志。</p>
                     </div>

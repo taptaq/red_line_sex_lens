@@ -421,7 +421,7 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(refreshAllSource, /await Promise\.allSettled\(refreshTasks\)/);
 });
 
-test("sample library bootstrap leaves the record list in loading state until refresh completes", async () => {
+test("sample library bootstrap shows an empty state instead of a loading placeholder when there are no records yet", async () => {
   const { appJs } = await readFrontendFiles();
   const renderSampleLibraryListSource = extractSourceBetween(
     appJs,
@@ -442,14 +442,25 @@ test("sample library bootstrap leaves the record list in loading state until ref
   const renderSampleLibraryList = new Function(
     "byId",
     "appState",
+    "getSampleLibraryRecordPreviewItems",
+    "sampleLibraryFilterLabel",
+    "sampleLibraryCollectionFilterLabel",
+    "buildSampleLibraryRecordCardMarkup",
     `${renderSampleLibraryListSource}; return renderSampleLibraryList;`
-  )((id) => nodes[id] || null, appState);
+  )(
+    (id) => nodes[id] || null,
+    appState,
+    (items) => items,
+    () => "全部状态",
+    () => "全部合集",
+    () => ""
+  );
 
   renderSampleLibraryList([]);
 
-  assert.equal(nodes["sample-library-list-count"].textContent, "加载中...");
-  assert.match(nodes["sample-library-record-list"].innerHTML, /加载中/);
-  assert.doesNotMatch(nodes["sample-library-record-list"].innerHTML, /当前没有样本记录/);
+  assert.equal(nodes["sample-library-list-count"].textContent, "0 条 · 全部状态 · 全部合集");
+  assert.match(nodes["sample-library-record-list"].innerHTML, /当前没有样本记录/);
+  assert.doesNotMatch(nodes["sample-library-record-list"].innerHTML, /加载中/);
 });
 
 test("sample library refresh re-renders summary after records change", async () => {

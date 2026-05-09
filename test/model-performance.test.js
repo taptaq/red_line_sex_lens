@@ -31,6 +31,8 @@ test("frontend no longer exposes model performance dashboard or dynamic recommen
   assert.doesNotMatch(indexHtml, /id="rewrite-model-recommendation"/);
   assert.doesNotMatch(indexHtml, /id="cross-review-model-recommendation"/);
   assert.doesNotMatch(indexHtml, /模型建议加载中/);
+  assert.doesNotMatch(indexHtml, /默认自动 \/ 加载中\.\.\./);
+  assert.doesNotMatch(indexHtml, /默认模型组 \/ 加载中\.\.\./);
   assert.doesNotMatch(styles, /\.model-performance-grid/);
   assert.doesNotMatch(styles, /\.model-performance-section-head/);
   assert.doesNotMatch(styles, /\.model-recommendation-hint/);
