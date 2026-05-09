@@ -1226,12 +1226,8 @@ function closeSampleLibraryPoolsModal() {
 }
 
 async function loadAnalyzeCustomTagOptions() {
-  try {
-    const payload = await apiJson(analyzeTagOptionsApi);
-    return uniqueStrings(Array.isArray(payload?.options) ? payload.options : []);
-  } catch {
-    return [];
-  }
+  const payload = await apiJson(analyzeTagOptionsApi);
+  return uniqueStrings(Array.isArray(payload?.options) ? payload.options : []);
 }
 
 async function saveAnalyzeCustomTagOptions(options = []) {
@@ -1245,9 +1241,14 @@ async function saveAnalyzeCustomTagOptions(options = []) {
 }
 
 async function loadAnalyzeTagOptions() {
-  const customOptions = await loadAnalyzeCustomTagOptions();
-  analyzeTagOptions = uniqueStrings([...presetAnalyzeTags, ...customOptions]);
-  persistBootstrapSnapshotPart("analyzeTagOptions", analyzeTagOptions);
+  try {
+    const customOptions = await loadAnalyzeCustomTagOptions();
+    analyzeTagOptions = uniqueStrings([...presetAnalyzeTags, ...customOptions]);
+    persistBootstrapSnapshotPart("analyzeTagOptions", analyzeTagOptions);
+  } catch {
+    analyzeTagOptions = uniqueStrings(analyzeTagOptions);
+  }
+
   renderAnalyzeTagOptions();
   initializeSampleLibraryImportTagPickers();
   return analyzeTagOptions;
@@ -4209,7 +4210,7 @@ async function saveSampleLibraryRecordInlineEditorModal() {
     body: JSON.stringify(payload)
   });
 
-  appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+  commitSampleLibraryRecords(response.items, appState.sampleLibraryRecords);
   appState.selectedSampleLibraryRecordId = String(response.item?.id || modalState.selectedRecordId || "");
   appState.sampleLibraryModal = {
     ...modalState,
@@ -4674,7 +4675,7 @@ async function saveSampleLibraryCreateModal() {
     })
   });
 
-  appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+  commitSampleLibraryRecords(response.items, appState.sampleLibraryRecords);
   appState.sampleLibraryFilter = "all";
   appState.sampleLibrarySearch = "";
   appState.selectedSampleLibraryRecordId = String(response.item?.id || "");
@@ -5291,6 +5292,13 @@ function openSampleLibraryDetailModal(kind, recordId) {
   renderSampleLibraryModal(buildSampleLibraryDetailModalConfig(kind, record));
 }
 
+function commitSampleLibraryRecords(items, fallbackRecords = appState.sampleLibraryRecords) {
+  appState.sampleLibraryRecords = Array.isArray(items) ? items : Array.isArray(fallbackRecords) ? fallbackRecords : [];
+  persistBootstrapSnapshotPart("sampleLibraryRecords", appState.sampleLibraryRecords);
+  renderSummary(appState.summaryData);
+  return appState.sampleLibraryRecords;
+}
+
 function renderSampleLibraryWorkspace() {
   const workspaceNode = byId("sample-library-workspace");
   const listNode = byId("sample-library-record-list");
@@ -5333,8 +5341,7 @@ async function refreshSampleLibraryWorkspace() {
 
   try {
     const payload = await apiJson(sampleLibraryApi);
-    appState.sampleLibraryRecords = Array.isArray(payload?.items) ? payload.items : [];
-    persistBootstrapSnapshotPart("sampleLibraryRecords", appState.sampleLibraryRecords);
+    commitSampleLibraryRecords(payload?.items, []);
   } catch {
     appState.sampleLibraryRecords = Array.isArray(appState.sampleLibraryRecords) ? appState.sampleLibraryRecords : [];
   } finally {
@@ -6839,7 +6846,6 @@ function initializeAnalyzeTagPicker() {
   analyzeTagOptions = [...presetAnalyzeTags];
   setAnalyzeTagDropdownOpen(false);
   renderAnalyzeTagOptions();
-  loadAnalyzeTagOptions().catch(() => {});
 
   trigger.addEventListener("click", (event) => {
     event.preventDefault();
@@ -7045,7 +7051,7 @@ async function saveLifecycleFromCurrent(source = "analysis", candidateId = "", c
     method: "POST",
     body: JSON.stringify(payload)
   });
-  appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+  commitSampleLibraryRecords(response.items, appState.sampleLibraryRecords);
   appState.sampleLibraryFilter = "all";
   appState.sampleLibraryCollectionFilter = "all";
   appState.sampleLibrarySearch = "";
@@ -7092,7 +7098,7 @@ async function savePlatformOutcomeFromCurrent({
       }
     })
   });
-  appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+  commitSampleLibraryRecords(response.items, appState.sampleLibraryRecords);
   appState.selectedSampleLibraryRecordId = String(response.item?.id || id);
   renderSampleLibraryWorkspace();
   revealNoteLifecyclePane();
@@ -7364,7 +7370,7 @@ async function patchSampleLibraryRecordAndRefresh(payload, { recordId = "", next
     body: JSON.stringify(payload)
   });
 
-  appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+  commitSampleLibraryRecords(response.items, appState.sampleLibraryRecords);
   appState.selectedSampleLibraryRecordId = String(response.item?.id || recordId || payload?.id || "");
   renderSampleLibraryWorkspace();
   return response;
@@ -7468,7 +7474,7 @@ async function saveSampleLibraryDeleteModal() {
       id: modalState.recordId
     })
   });
-  appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : [];
+  commitSampleLibraryRecords(response.items, []);
   appState.selectedSampleLibraryRecordId = "";
   renderSampleLibraryWorkspace();
 }
@@ -8921,7 +8927,7 @@ document.addEventListener("click", async (event) => {
           }
         })
       });
-      appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+      commitSampleLibraryRecords(response.items, appState.sampleLibraryRecords);
       appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
       renderSampleLibraryWorkspace();
     } finally {
@@ -8941,7 +8947,7 @@ document.addEventListener("click", async (event) => {
           sampleType: "missed_violation"
         })
       });
-      appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+      commitSampleLibraryRecords(response.items, appState.sampleLibraryRecords);
       appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
       appState.sampleLibraryPoolsModal.tab = "negative";
       renderSampleLibraryWorkspace();
@@ -8962,7 +8968,7 @@ document.addEventListener("click", async (event) => {
           sampleType: ""
         })
       });
-      appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
+      commitSampleLibraryRecords(response.items, appState.sampleLibraryRecords);
       appState.selectedSampleLibraryRecordId = String(response.item?.id || button.dataset.id || "");
       appState.sampleLibraryPoolsModal.tab = "regular";
       renderSampleLibraryWorkspace();

@@ -455,7 +455,7 @@ test("sample library refresh re-renders summary after records change", async () 
     "function formatRate("
   );
 
-  assert.match(refreshSampleLibraryWorkspaceSource, /appState\.sampleLibraryRecords = Array\.isArray\(payload\?\.items\) \? payload\.items : \[\]/);
+  assert.match(refreshSampleLibraryWorkspaceSource, /commitSampleLibraryRecords\(payload\?\.items, \[\]\)/);
   assert.match(refreshSampleLibraryWorkspaceSource, /renderSampleLibraryWorkspace\(\);[\s\S]*renderSummary\(appState\.summaryData\)/);
 });
 
@@ -505,6 +505,89 @@ test("analyze tag refresh treats server custom tags as authoritative over stale 
   ]);
   assert.doesNotMatch(loadAnalyzeTagOptionsSource, /\.\.\.analyzeTagOptions/);
   assert.match(removeAnalyzeTagOptionSource, /persistBootstrapSnapshotPart\("analyzeTagOptions", analyzeTagOptions\)/);
+});
+
+test("analyze tag refresh failure preserves hydrated custom tags and snapshot authority", async () => {
+  const { appJs } = await readFrontendFiles();
+  const loadAnalyzeTagOptionsSource = extractSourceBetween(
+    appJs,
+    "async function loadAnalyzeTagOptions()",
+    "function buildCollectionTypeOptionsMarkup("
+  );
+  const initializeAnalyzeTagPickerSource = extractSourceBetween(
+    appJs,
+    "function initializeAnalyzeTagPicker()",
+    "function revealNoteLifecyclePane()"
+  );
+  const persistedSnapshots = [];
+  const loadAnalyzeTagOptions = new Function(
+    "uniqueStrings",
+    "loadAnalyzeCustomTagOptions",
+    "persistBootstrapSnapshotPart",
+    "renderAnalyzeTagOptions",
+    "initializeSampleLibraryImportTagPickers",
+    "persistedSnapshots",
+    `
+      let analyzeTagOptions = ["Preset", "Hydrated custom"];
+      const presetAnalyzeTags = ["Preset"];
+      ${loadAnalyzeTagOptionsSource}
+      return loadAnalyzeTagOptions().then(() => ({ analyzeTagOptions, persistedSnapshots }));
+    `
+  )(
+    (items = []) => [...new Set(items.map((item) => String(item || "").trim()).filter(Boolean))],
+    async () => {
+      throw new Error("temporary network failure");
+    },
+    (key, payload) => persistedSnapshots.push({ key, payload }),
+    () => {},
+    () => {},
+    persistedSnapshots
+  );
+
+  const result = await loadAnalyzeTagOptions;
+
+  assert.deepEqual(result.analyzeTagOptions, ["Preset", "Hydrated custom"]);
+  assert.deepEqual(result.persistedSnapshots, []);
+  assert.match(loadAnalyzeTagOptionsSource, /catch/);
+  assert.doesNotMatch(initializeAnalyzeTagPickerSource, /loadAnalyzeTagOptions\(\)/);
+});
+
+test("sample library record commits keep summary and bootstrap snapshots consistent", async () => {
+  const { appJs } = await readFrontendFiles();
+  const commitSource = extractSourceBetween(
+    appJs,
+    "function commitSampleLibraryRecords(",
+    "function renderSampleLibraryWorkspace("
+  );
+
+  assert.match(appJs, /function commitSampleLibraryRecords\s*\(/);
+  assert.match(commitSource, /persistBootstrapSnapshotPart\("sampleLibraryRecords", appState\.sampleLibraryRecords\)/);
+  assert.match(commitSource, /renderSummary\(appState\.summaryData\)/);
+  assert.doesNotMatch(appJs, /appState\.sampleLibraryRecords = Array\.isArray\(response\.items\) \? response\.items/);
+  assert.match(appJs, /commitSampleLibraryRecords\(response\.items, appState\.sampleLibraryRecords\)/);
+
+  const calls = [];
+  const commitSampleLibraryRecords = new Function(
+    "appState",
+    "persistBootstrapSnapshotPart",
+    "renderSummary",
+    `${commitSource}; return commitSampleLibraryRecords;`
+  )(
+    {
+      sampleLibraryRecords: [{ id: "old-record" }],
+      summaryData: { sampleLibraryCount: 1 }
+    },
+    (key, payload) => calls.push(["persist", key, payload.map((item) => item.id)]),
+    (summary) => calls.push(["summary", summary.sampleLibraryCount])
+  );
+
+  const committed = commitSampleLibraryRecords([{ id: "new-record" }]);
+
+  assert.deepEqual(committed, [{ id: "new-record" }]);
+  assert.deepEqual(calls, [
+    ["persist", "sampleLibraryRecords", ["new-record"]],
+    ["summary", 1]
+  ]);
 });
 
 test("sample library workspace exposes record preview and full-list modal controls", async () => {
