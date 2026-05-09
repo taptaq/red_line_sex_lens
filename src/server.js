@@ -1146,8 +1146,8 @@ async function handleRequest(request, response) {
     let dirty = false;
 
     try {
-      const updated = await confirmFalsePositiveLogEntry(payload?.id, payload?.userNotes);
       dirty = true;
+      const updated = await confirmFalsePositiveLogEntry(payload?.id, payload?.userNotes);
       const items = await loadFalsePositiveLog();
 
       return sendJson(response, 200, {
@@ -1239,9 +1239,17 @@ async function handleRequest(request, response) {
 
   if (request.method === "POST" && url.pathname === "/api/admin/review-queue/promote") {
     const payload = await readBody(request);
-    const entry = await promoteReviewQueueItem(payload.id);
-    invalidateWriteReadCaches();
-    return sendJson(response, 200, { ok: true, entry, item: entry });
+    let dirty = false;
+
+    try {
+      dirty = true;
+      const entry = await promoteReviewQueueItem(payload.id);
+      return sendJson(response, 200, { ok: true, entry, item: entry });
+    } finally {
+      if (dirty) {
+        invalidateWriteReadCaches();
+      }
+    }
   }
 
   response.writeHead(404);
