@@ -158,7 +158,7 @@ test("sample library Markdown parse auto-skips drafts whose titles already exist
     assert.equal(parsed.ok, true);
     assert.equal(parsed.items.length, 1);
     assert.equal(parsed.items[0].title, "新标题");
-    assert.match(parsed.message, /已自动跳过 1 条重复的 Markdown 记录/);
+    assert.match(parsed.message, /已自动跳过 1 条与已有学习样本重复的 Markdown 记录/);
     assert.match(parsed.message, /重复标题/);
     assert.doesNotMatch(parsed.message, /【批量导入】/);
   });
@@ -180,8 +180,43 @@ test("sample library Markdown parse auto-skips duplicate drafts within the same 
     assert.equal(parsed.ok, true);
     assert.equal(parsed.items.length, 1);
     assert.equal(parsed.items[0].title, "批次重复标题");
-    assert.match(parsed.message, /已自动跳过 1 条重复的 Markdown 记录/);
+    assert.match(parsed.message, /已自动跳过 1 条与本批其他导入项重复的 Markdown 记录/);
     assert.match(parsed.message, /批次重复标题/);
+  });
+});
+
+test("sample library Markdown parse groups existing and batch duplicate skip messages separately", async (t) => {
+  await withTempSampleLibraryMarkdownImportApi(t, async () => {
+    await invokeRoute("POST", "/api/sample-library", {
+      source: "manual",
+      stage: "draft",
+      note: {
+        title: "已有重复标题",
+        coverText: "已有封面",
+        body: "已有正文",
+        collectionType: "科普",
+        tags: ["旧标签"]
+      }
+    });
+
+    const existingDuplicateContent = Buffer.from(["# 已有重复标题", "", "会被已有样本过滤"].join("\n"), "utf8").toString("base64");
+    const batchFirstContent = Buffer.from(["# 批次保留标题", "", "同一段批次正文"].join("\n"), "utf8").toString("base64");
+    const batchDuplicateContent = Buffer.from(["# 批次保留标题", "", "同一段批次正文"].join("\n"), "utf8").toString("base64");
+
+    const parsed = await invokeRoute("POST", "/api/sample-library/markdown-import/parse", {
+      files: [
+        { name: "existing.md", contentBase64: existingDuplicateContent },
+        { name: "batch-first.md", contentBase64: batchFirstContent },
+        { name: "batch-duplicate.md", contentBase64: batchDuplicateContent }
+      ]
+    });
+
+    assert.equal(parsed.status, 200);
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.items.length, 1);
+    assert.equal(parsed.items[0].title, "批次保留标题");
+    assert.match(parsed.message, /已自动跳过 1 条与已有学习样本重复的 Markdown 记录：已有重复标题/);
+    assert.match(parsed.message, /已自动跳过 1 条与本批其他导入项重复的 Markdown 记录：批次保留标题/);
   });
 });
 

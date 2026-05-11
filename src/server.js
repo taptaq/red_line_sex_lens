@@ -309,21 +309,36 @@ function normalizeComparableText(value = "") {
   return String(value || "").trim();
 }
 
-function buildMarkdownImportDuplicateSkipMessage(skippedItems = []) {
-  const skippedCount = Array.isArray(skippedItems) ? skippedItems.length : 0;
-  const normalizedTitles = uniqueStrings(
-    (Array.isArray(skippedItems) ? skippedItems : [])
+function buildMarkdownImportDuplicateSkipMessage({ existingItems = [], batchItems = [] } = {}) {
+  const messageParts = [];
+  const normalizedExistingTitles = uniqueStrings(
+    (Array.isArray(existingItems) ? existingItems : [])
+      .map((item) => sanitizeMarkdownImportTitle(item?.title || item))
+      .filter(Boolean)
+  );
+  const normalizedBatchTitles = uniqueStrings(
+    (Array.isArray(batchItems) ? batchItems : [])
       .map((item) => sanitizeMarkdownImportTitle(item?.title || item))
       .filter(Boolean)
   );
 
-  if (!skippedCount) {
-    return "";
+  if (Array.isArray(existingItems) && existingItems.length) {
+    messageParts.push(
+      normalizedExistingTitles.length
+        ? `已自动跳过 ${existingItems.length} 条与已有学习样本重复的 Markdown 记录：${normalizedExistingTitles.join("、")}`
+        : `已自动跳过 ${existingItems.length} 条与已有学习样本重复的 Markdown 记录。`
+    );
   }
 
-  return normalizedTitles.length
-    ? `已自动跳过 ${skippedCount} 条重复的 Markdown 记录：${normalizedTitles.join("、")}`
-    : `已自动跳过 ${skippedCount} 条重复的 Markdown 记录。`;
+  if (Array.isArray(batchItems) && batchItems.length) {
+    messageParts.push(
+      normalizedBatchTitles.length
+        ? `已自动跳过 ${batchItems.length} 条与本批其他导入项重复的 Markdown 记录：${normalizedBatchTitles.join("、")}`
+        : `已自动跳过 ${batchItems.length} 条与本批其他导入项重复的 Markdown 记录。`
+    );
+  }
+
+  return messageParts.join("；");
 }
 
 function isSameLifecycleItem(left = {}, right = {}) {
@@ -1120,7 +1135,8 @@ async function handleRequest(request, response) {
       )
     );
     const batchDuplicateKeys = new Set();
-    const skippedItems = [];
+    const skippedExistingItems = [];
+    const skippedBatchItems = [];
     const items = parsedItems.filter((item) => {
       const normalizedTitle = normalizeForTitleComparison(item?.title || "");
       const duplicateKey = buildSampleLibraryImportDuplicateKey({
@@ -1130,17 +1146,17 @@ async function handleRequest(request, response) {
       });
 
       if (normalizedTitle && existingTitles.has(normalizedTitle)) {
-        skippedItems.push(item);
+        skippedExistingItems.push(item);
         return false;
       }
 
       if (item?.status === "ready" && duplicateKey && existingDuplicateKeys.has(duplicateKey)) {
-        skippedItems.push(item);
+        skippedExistingItems.push(item);
         return false;
       }
 
       if (item?.status === "ready" && duplicateKey && batchDuplicateKeys.has(duplicateKey)) {
-        skippedItems.push(item);
+        skippedBatchItems.push(item);
         return false;
       }
 
@@ -1154,7 +1170,10 @@ async function handleRequest(request, response) {
     return sendJson(response, 200, {
       ok: true,
       items,
-      message: buildMarkdownImportDuplicateSkipMessage(skippedItems)
+      message: buildMarkdownImportDuplicateSkipMessage({
+        existingItems: skippedExistingItems,
+        batchItems: skippedBatchItems
+      })
     });
   }
 

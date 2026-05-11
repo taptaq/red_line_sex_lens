@@ -31,7 +31,7 @@
       "正文给出具体但不过度细节化的建议"
     ],
     "createdAt": "2026-05-04T10:01:28.165Z",
-    "updatedAt": "2026-05-09T11:09:54.421Z",
+    "updatedAt": "2026-05-11T03:53:36.760Z",
     "generationMeta": {
       "method": "model_summary",
       "provider": "kimi",
@@ -39,7 +39,7 @@
       "model": "moonshot-v1-8k",
       "route": "official",
       "routeLabel": "官方",
-      "generatedAt": "2026-05-09T11:09:54.421Z",
+      "generatedAt": "2026-05-11T03:53:36.760Z",
       "attemptedProviders": [
         {
           "provider": "qwen",
