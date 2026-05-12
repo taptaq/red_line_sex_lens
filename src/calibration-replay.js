@@ -42,7 +42,8 @@ function getRecordPublish(record = {}) {
       likes: normalizeMetric(publish.metrics?.likes),
       favorites: normalizeMetric(publish.metrics?.favorites),
       comments: normalizeMetric(publish.metrics?.comments),
-      views: normalizeMetric(publish.metrics?.views)
+      views: normalizeMetric(publish.metrics?.views),
+      shares: normalizeMetric(publish.metrics?.shares)
     }
   };
 }
@@ -86,6 +87,7 @@ function deriveActualPerformanceTier(publish = {}) {
   const favorites = normalizeMetric(publish?.metrics?.favorites);
   const comments = normalizeMetric(publish?.metrics?.comments);
   const views = normalizeMetric(publish?.metrics?.views);
+  const shares = normalizeMetric(publish?.metrics?.shares);
 
   if (status === "not_published") {
     return "";
@@ -103,9 +105,12 @@ function deriveActualPerformanceTier(publish = {}) {
     likes >= referenceMetricThreshold.likes ||
     favorites >= referenceMetricThreshold.favorites ||
     comments >= referenceMetricThreshold.comments ||
+    shares >= referenceMetricThreshold.shares ||
+    views >= referenceMetricThreshold.directViews ||
     ((likes >= referenceMetricThreshold.nearLikes ||
       favorites >= referenceMetricThreshold.nearFavorites ||
-      comments >= referenceMetricThreshold.nearComments) &&
+      comments >= referenceMetricThreshold.nearComments ||
+      shares >= referenceMetricThreshold.nearShares) &&
       views >= referenceMetricThreshold.supportViews) ||
     status === "published_passed" ||
     status === "false_positive"

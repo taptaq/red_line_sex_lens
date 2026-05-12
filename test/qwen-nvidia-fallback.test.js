@@ -405,7 +405,7 @@ test("callRoutedTextProviderJson sends Kimi directly to the official Moonshot en
       KIMI_API_KEY: "kimi-test",
       KIMI_BASE_URL: "https://api.moonshot.cn/v1/chat/completions",
       KIMI_DMXAPI_MODEL: "kimi-k2.5",
-      KIMI_TEXT_MODEL: "moonshot-v1-8k"
+      KIMI_TEXT_MODEL: "kimi-k2.5"
     },
     async () => {
       const calls = [];
@@ -415,7 +415,7 @@ test("callRoutedTextProviderJson sends Kimi directly to the official Moonshot en
         calls.push({ url: String(url), model: body.model, stream: body.stream, top_p: body.top_p });
 
         return createJsonResponse(200, {
-          model: "moonshot-v1-8k",
+          model: "kimi-k2.5",
           choices: [
             {
               message: {
@@ -433,17 +433,17 @@ test("callRoutedTextProviderJson sends Kimi directly to the official Moonshot en
         const { callRoutedTextProviderJson } = await importFresh("../src/glm.js");
         const result = await callRoutedTextProviderJson({
           provider: "kimi",
-          model: "moonshot-v1-8k",
+          model: "kimi-k2.5",
           messages: [{ role: "user", content: "hello" }],
           timeoutMs: 1000
         });
 
-        assert.equal(result.model, "moonshot-v1-8k");
+        assert.equal(result.model, "kimi-k2.5");
         assert.equal(result.route, "official");
         assert.equal(result.routeLabel, "官方");
         assert.equal(calls.length, 1);
         assert.equal(calls[0].url, "https://api.moonshot.cn/v1/chat/completions");
-        assert.equal(calls[0].model, "moonshot-v1-8k");
+        assert.equal(calls[0].model, "kimi-k2.5");
         assert.equal(calls[0].stream, undefined);
         assert.equal(calls[0].top_p, undefined);
       } finally {

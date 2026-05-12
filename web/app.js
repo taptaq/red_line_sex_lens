@@ -39,11 +39,14 @@ function uniqueStrings(items = []) {
 
 const REFERENCE_METRIC_THRESHOLD = {
   likes: 30,
-  favorites: 10,
+  favorites: 20,
   comments: 10,
+  shares: 20,
   nearLikes: 15,
-  nearFavorites: 5,
+  nearFavorites: 10,
   nearComments: 5,
+  nearShares: 10,
+  directViews: 2000,
   supportViews: 1000
 };
 
@@ -70,7 +73,9 @@ function getReferenceThresholdDirectRuleText({ joiner = "、", lastJoiner = " �
     [
       `点赞 >= ${REFERENCE_METRIC_THRESHOLD.likes}`,
       `收藏 >= ${REFERENCE_METRIC_THRESHOLD.favorites}`,
-      `评论 >= ${REFERENCE_METRIC_THRESHOLD.comments}`
+      `评论 >= ${REFERENCE_METRIC_THRESHOLD.comments}`,
+      `分享 >= ${REFERENCE_METRIC_THRESHOLD.shares}`,
+      `浏览 >= ${REFERENCE_METRIC_THRESHOLD.directViews}`
     ],
     { joiner, lastJoiner }
   );
@@ -81,7 +86,8 @@ function getReferenceThresholdAssistRuleText({ joiner = "、", lastJoiner = " �
     [
       `点赞 >= ${REFERENCE_METRIC_THRESHOLD.nearLikes}`,
       `收藏 >= ${REFERENCE_METRIC_THRESHOLD.nearFavorites}`,
-      `评论 >= ${REFERENCE_METRIC_THRESHOLD.nearComments}`
+      `评论 >= ${REFERENCE_METRIC_THRESHOLD.nearComments}`,
+      `分享 >= ${REFERENCE_METRIC_THRESHOLD.nearShares}`
     ],
     { joiner, lastJoiner }
   );
@@ -515,16 +521,12 @@ function openSampleLibraryRecord(recordId = "", step = "base") {
   revealSampleLibraryPane();
   appState.sampleLibraryFilter = "all";
   appState.sampleLibraryCollectionFilter = "all";
-  appState.sampleLibrarySearch = "";
   appState.selectedSampleLibraryRecordId = String(recordId || "");
   if (byId("sample-library-filter")) {
     byId("sample-library-filter").value = "all";
   }
   if (byId("sample-library-collection-filter")) {
     byId("sample-library-collection-filter").value = "all";
-  }
-  if (byId("sample-library-search-input")) {
-    byId("sample-library-search-input").value = "";
   }
   renderSampleLibraryWorkspace();
   openSampleLibraryRecordInlineEditorModal(recordId);
@@ -627,6 +629,13 @@ const appState = {
   sampleLibraryCollectionFilter: "all",
   sampleLibraryFilter: "all",
   sampleLibrarySearch: "",
+  sampleLibraryMetricFilters: {
+    likes: "",
+    favorites: "",
+    comments: "",
+    views: "",
+    shares: ""
+  },
   sampleLibraryImportDrafts: [],
   sampleLibraryImportMessage: "",
   sampleLibraryCalibrationReplayResult: null,
@@ -639,7 +648,15 @@ const appState = {
   },
   sampleLibraryPoolsModal: {
     open: false,
-    tab: "reference"
+    tab: "reference",
+    search: "",
+    metricFilters: {
+      likes: "",
+      favorites: "",
+      comments: "",
+      views: "",
+      shares: ""
+    }
   }
 };
 
@@ -1243,6 +1260,9 @@ function buildSamplePoolActionMarkup(record = {}, pool = "reference") {
 
     return `
       ${primaryAction}
+      <button type="button" class="button button-danger button-small" data-action="open-sample-library-delete-modal" data-id="${recordId}">
+        删除样本
+      </button>
       <button type="button" class="button button-ghost button-small" data-action="open-sample-library-record" data-id="${recordId}">
         回到原记录
       </button>
@@ -1257,6 +1277,9 @@ function buildSamplePoolActionMarkup(record = {}, pool = "reference") {
       <button type="button" class="button button-ghost button-small" data-action="mark-sample-as-negative" data-id="${recordId}">
         标记为反例
       </button>
+      <button type="button" class="button button-danger button-small" data-action="open-sample-library-delete-modal" data-id="${recordId}">
+        删除样本
+      </button>
       <button type="button" class="button button-ghost button-small" data-action="open-sample-library-record" data-id="${recordId}">
         回到原记录
       </button>
@@ -1269,6 +1292,9 @@ function buildSamplePoolActionMarkup(record = {}, pool = "reference") {
     </button>
     <button type="button" class="button button-ghost button-small" data-action="remove-sample-from-reference-pool" data-id="${recordId}">
       移出参考池
+    </button>
+    <button type="button" class="button button-danger button-small" data-action="open-sample-library-delete-modal" data-id="${recordId}">
+      删除样本
     </button>
     <button type="button" class="button button-ghost button-small" data-action="open-sample-library-record" data-id="${recordId}">
       回到原记录
@@ -1289,13 +1315,16 @@ function renderSamplePoolCards(items = [], pool = "reference") {
       const publish = getSampleRecordPublish(record);
       const reference = getSampleRecordReference(record);
       const tags = getSampleRecordTags(record);
+      const whyLabel = getSamplePoolWhyLabel(record);
+      const whyHelper = getSamplePoolWhyHelperText(record);
 
       return `
         <article class="sample-pool-card result-card-shell">
           <div class="sample-pool-card-head">
             <div>
               <strong>${escapeHtml(title)}</strong>
-              <p>${escapeHtml(getSamplePoolWhyLabel(record))}</p>
+              <p>${escapeHtml(whyLabel)}</p>
+              ${whyHelper ? `<p class="sample-pool-why-helper">${escapeHtml(whyHelper)}</p>` : ""}
             </div>
             <span class="meta-pill">${escapeHtml(sampleLibraryPoolLabel(pool))}</span>
           </div>
@@ -1309,6 +1338,7 @@ function renderSamplePoolCards(items = [], pool = "reference") {
             <span class="meta-pill sample-library-metric-pill">藏 ${escapeHtml(String(publish.metrics.favorites || 0))}</span>
             <span class="meta-pill sample-library-metric-pill">评 ${escapeHtml(String(publish.metrics.comments || 0))}</span>
             <span class="meta-pill sample-library-metric-pill">浏览 ${escapeHtml(String(publish.metrics.views || 0))}</span>
+            <span class="meta-pill sample-library-metric-pill">分享 ${escapeHtml(String(publish.metrics.shares || 0))}</span>
           </div>
           <p class="helper-text">标签：${escapeHtml(joinCSV(tags) || "未填写")}</p>
           <div class="item-actions">
@@ -1320,6 +1350,51 @@ function renderSamplePoolCards(items = [], pool = "reference") {
     .join("");
 }
 
+function syncSampleLibraryPoolsModalSearchResults() {
+  const modal = byId("sample-library-pools-modal");
+  const contentNode = byId("sample-library-pools-modal-content");
+
+  if (!modal || !contentNode) {
+    return;
+  }
+
+  const pool = String(appState.sampleLibraryPoolsModal?.tab || "reference").trim() || "reference";
+  const poolSearch = String(appState.sampleLibraryPoolsModal?.search || "");
+  const poolMetricFilters = appState.sampleLibraryPoolsModal?.metricFilters || {};
+  const allRecords = Array.isArray(appState.sampleLibraryRecords) ? appState.sampleLibraryRecords : [];
+  const filteredRecords = filterSamplePoolRecords(allRecords, {
+    search: poolSearch,
+    metricFilters: poolMetricFilters
+  });
+  const summary = buildSamplePoolSummary(appState.sampleLibraryRecords);
+  const filteredSummary = buildSamplePoolSummary(filteredRecords);
+  const description = buildSamplePoolDescription(pool);
+  const poolRecords = allRecords.filter((record) => classifySampleLibraryPool(record) === pool);
+  const items = filteredRecords.filter((record) => classifySampleLibraryPool(record) === pool);
+  const hasPoolFilters =
+    Boolean(poolSearch.trim()) ||
+    Object.values(poolMetricFilters).some((value) => String(value || "").trim());
+  const emptyMessage = hasPoolFilters && !items.length && poolRecords.length ? "当前筛选下没有匹配的记录。" : description.empty;
+  const helperNode = contentNode.querySelector('[data-role="sample-pool-search-helper"]');
+  const listNode = contentNode.querySelector('[data-role="sample-pool-card-list"]');
+
+  modal.querySelectorAll("[data-sample-pool-tab]").forEach((button) => {
+    const tab = String(button.dataset.samplePoolTab || "reference");
+    button.textContent = formatSamplePoolTabLabel(tab, filteredSummary[tab] || 0);
+    button.setAttribute("aria-selected", String(tab === pool));
+  });
+
+  if (helperNode) {
+    helperNode.textContent = hasPoolFilters
+      ? `当前筛选：参考 ${filteredSummary.reference} / 普通 ${filteredSummary.regular} / 反例 ${filteredSummary.negative}`
+      : `全部样本：参考 ${summary.reference} / 普通 ${summary.regular} / 反例 ${summary.negative}`;
+  }
+
+  if (listNode) {
+    listNode.innerHTML = renderSamplePoolCards(items, pool) || `<div class="result-card muted">${escapeHtml(emptyMessage)}</div>`;
+  }
+}
+
 function renderSampleLibraryPoolsModal() {
   const modal = byId("sample-library-pools-modal");
   const contentNode = byId("sample-library-pools-modal-content");
@@ -1329,15 +1404,26 @@ function renderSampleLibraryPoolsModal() {
   }
 
   const pool = String(appState.sampleLibraryPoolsModal?.tab || "reference").trim() || "reference";
+  const poolSearch = String(appState.sampleLibraryPoolsModal?.search || "");
+  const poolMetricFilters = appState.sampleLibraryPoolsModal?.metricFilters || {};
+  const allRecords = Array.isArray(appState.sampleLibraryRecords) ? appState.sampleLibraryRecords : [];
+  const filteredRecords = filterSamplePoolRecords(allRecords, {
+    search: poolSearch,
+    metricFilters: poolMetricFilters
+  });
   const summary = buildSamplePoolSummary(appState.sampleLibraryRecords);
+  const filteredSummary = buildSamplePoolSummary(filteredRecords);
   const description = buildSamplePoolDescription(pool);
-  const items = (Array.isArray(appState.sampleLibraryRecords) ? appState.sampleLibraryRecords : []).filter(
-    (record) => classifySampleLibraryPool(record) === pool
-  );
+  const poolRecords = allRecords.filter((record) => classifySampleLibraryPool(record) === pool);
+  const items = filteredRecords.filter((record) => classifySampleLibraryPool(record) === pool);
+  const hasPoolFilters =
+    Boolean(poolSearch.trim()) ||
+    Object.values(poolMetricFilters).some((value) => String(value || "").trim());
+  const emptyMessage = hasPoolFilters && !items.length && poolRecords.length ? "当前筛选下没有匹配的记录。" : description.empty;
 
   modal.querySelectorAll("[data-sample-pool-tab]").forEach((button) => {
     const tab = String(button.dataset.samplePoolTab || "reference");
-    button.textContent = formatSamplePoolTabLabel(tab, summary[tab] || 0);
+    button.textContent = formatSamplePoolTabLabel(tab, filteredSummary[tab] || 0);
     button.setAttribute("aria-selected", String(tab === pool));
   });
 
@@ -1349,8 +1435,46 @@ function renderSampleLibraryPoolsModal() {
           <p>${escapeHtml(description.subtitle)}</p>
         </div>
       </div>
-      <div class="sample-pool-card-list">
-        ${renderSamplePoolCards(items, pool) || `<div class="result-card muted">${escapeHtml(description.empty)}</div>`}
+      <label class="sample-pool-toolbar">
+        <span>按标题搜索全部样本池</span>
+        <input name="samplePoolTitleFilter" value="${escapeHtml(poolSearch)}" placeholder="输入标题关键词，统一筛选 3 个样本池" />
+      </label>
+      <div class="sample-pool-metric-filters">
+        <label>
+          <span>最低点赞</span>
+          <input name="samplePoolLikesFilter" type="number" min="0" step="1" value="${escapeHtml(String(poolMetricFilters.likes || ""))}" placeholder="例如 30" />
+        </label>
+        <label>
+          <span>最低收藏</span>
+          <input name="samplePoolFavoritesFilter" type="number" min="0" step="1" value="${escapeHtml(String(poolMetricFilters.favorites || ""))}" placeholder="例如 10" />
+        </label>
+        <label>
+          <span>最低评论</span>
+          <input name="samplePoolCommentsFilter" type="number" min="0" step="1" value="${escapeHtml(String(poolMetricFilters.comments || ""))}" placeholder="例如 5" />
+        </label>
+        <label>
+          <span>最低浏览</span>
+          <input name="samplePoolViewsFilter" type="number" min="0" step="1" value="${escapeHtml(String(poolMetricFilters.views || ""))}" placeholder="例如 1000" />
+        </label>
+        <label>
+          <span>最低分享</span>
+          <input name="samplePoolSharesFilter" type="number" min="0" step="1" value="${escapeHtml(String(poolMetricFilters.shares || ""))}" placeholder="例如 10" />
+        </label>
+      </div>
+      <div class="item-actions">
+        <button type="button" class="button button-ghost button-small" data-action="clear-sample-pool-filters">
+          清空全部筛选
+        </button>
+      </div>
+      <p class="helper-text" data-role="sample-pool-search-helper">
+        ${
+          hasPoolFilters
+            ? escapeHtml(`当前筛选：参考 ${filteredSummary.reference} / 普通 ${filteredSummary.regular} / 反例 ${filteredSummary.negative}`)
+            : escapeHtml(`全部样本：参考 ${summary.reference} / 普通 ${summary.regular} / 反例 ${summary.negative}`)
+        }
+      </p>
+      <div class="sample-pool-card-list" data-role="sample-pool-card-list">
+        ${renderSamplePoolCards(items, pool) || `<div class="result-card muted">${escapeHtml(emptyMessage)}</div>`}
       </div>
     </section>
   `;
@@ -1359,7 +1483,15 @@ function renderSampleLibraryPoolsModal() {
 function openSampleLibraryPoolsModal(pool = "reference") {
   appState.sampleLibraryPoolsModal = {
     open: true,
-    tab: ["reference", "regular", "negative"].includes(pool) ? pool : "reference"
+    tab: ["reference", "regular", "negative"].includes(pool) ? pool : "reference",
+    search: "",
+    metricFilters: {
+      likes: "",
+      favorites: "",
+      comments: "",
+      views: "",
+      shares: ""
+    }
   };
   renderSampleLibraryPoolsModal();
   setSampleLibraryPoolsModalOpen(true);
@@ -1368,7 +1500,15 @@ function openSampleLibraryPoolsModal(pool = "reference") {
 function closeSampleLibraryPoolsModal() {
   appState.sampleLibraryPoolsModal = {
     open: false,
-    tab: String(appState.sampleLibraryPoolsModal?.tab || "reference")
+    tab: String(appState.sampleLibraryPoolsModal?.tab || "reference"),
+    search: "",
+    metricFilters: {
+      likes: "",
+      favorites: "",
+      comments: "",
+      views: "",
+      shares: ""
+    }
   };
   setSampleLibraryPoolsModalOpen(false);
 }
@@ -1707,7 +1847,7 @@ function buildPlatformOutcomeActions(source = "analysis", options = {}) {
   `;
 }
 
-function buildPlatformOutcomeModalMarkup({ publishStatus = "published_passed", notes = "", views = 0 } = {}) {
+function buildPlatformOutcomeModalMarkup({ publishStatus = "published_passed", notes = "", views = 0, shares = 0 } = {}) {
   const option = getPlatformOutcomeOption(publishStatus);
 
   return `
@@ -1726,6 +1866,10 @@ function buildPlatformOutcomeModalMarkup({ publishStatus = "published_passed", n
             <span>浏览数</span>
             <input name="platformOutcomeViews" type="number" min="0" value="${escapeHtml(String(views || 0))}" />
           </label>
+          <label>
+            <span>分享数</span>
+            <input name="platformOutcomeShares" type="number" min="0" value="${escapeHtml(String(shares || 0))}" />
+          </label>
         </div>
         <label>
           <span>回填备注</span>
@@ -1742,7 +1886,8 @@ function openPlatformOutcomeModal({
   candidateId = "",
   candidateIndex = "",
   notes = "",
-  views = 0
+  views = 0,
+  shares = 0
 } = {}) {
   appState.sampleLibraryModal = {
     kind: "platform-outcome",
@@ -1751,13 +1896,14 @@ function openPlatformOutcomeModal({
     candidateId,
     candidateIndex,
     notes,
-    views
+    views,
+    shares
   };
 
   renderSampleLibraryModal({
     title: "回填平台结果",
     subtitle: `${lifecycleSourceLabel(source)} · ${publishStatusLabel(publishStatus)}`,
-    body: buildPlatformOutcomeModalMarkup({ publishStatus, notes, views }),
+    body: buildPlatformOutcomeModalMarkup({ publishStatus, notes, views, shares }),
     saveLabel: "确认回填"
   });
 }
@@ -1767,7 +1913,8 @@ function readPlatformOutcomeModalPayload() {
 
   return {
     notes: contentNode?.querySelector('[name="platformOutcomeNotes"]')?.value || "",
-    views: contentNode?.querySelector('[name="platformOutcomeViews"]')?.value || 0
+    views: contentNode?.querySelector('[name="platformOutcomeViews"]')?.value || 0,
+    shares: contentNode?.querySelector('[name="platformOutcomeShares"]')?.value || 0
   };
 }
 
@@ -2076,6 +2223,7 @@ function deriveSampleLibraryActualPerformanceTier(publish = {}) {
   const favorites = Number(publish?.metrics?.favorites || 0) || 0;
   const comments = Number(publish?.metrics?.comments || 0) || 0;
   const views = Number(publish?.metrics?.views || 0) || 0;
+  const shares = Number(publish?.metrics?.shares || 0) || 0;
 
   if (status === "not_published") {
     return "";
@@ -2093,9 +2241,12 @@ function deriveSampleLibraryActualPerformanceTier(publish = {}) {
     likes >= REFERENCE_METRIC_THRESHOLD.likes ||
     favorites >= REFERENCE_METRIC_THRESHOLD.favorites ||
     comments >= REFERENCE_METRIC_THRESHOLD.comments ||
+    shares >= REFERENCE_METRIC_THRESHOLD.shares ||
+    views >= REFERENCE_METRIC_THRESHOLD.directViews ||
     ((likes >= REFERENCE_METRIC_THRESHOLD.nearLikes ||
       favorites >= REFERENCE_METRIC_THRESHOLD.nearFavorites ||
-      comments >= REFERENCE_METRIC_THRESHOLD.nearComments) &&
+      comments >= REFERENCE_METRIC_THRESHOLD.nearComments ||
+      shares >= REFERENCE_METRIC_THRESHOLD.nearShares) &&
       views >= REFERENCE_METRIC_THRESHOLD.supportViews) ||
     status === "published_passed" ||
     status === "false_positive"
@@ -3341,7 +3492,8 @@ function getSampleRecordPublish(record = {}) {
       likes: Number(source.metrics?.likes ?? source.likes ?? 0) || 0,
       favorites: Number(source.metrics?.favorites ?? source.favorites ?? 0) || 0,
       comments: Number(source.metrics?.comments ?? source.comments ?? 0) || 0,
-      views: Number(source.metrics?.views ?? source.views ?? 0) || 0
+      views: Number(source.metrics?.views ?? source.views ?? 0) || 0,
+      shares: Number(source.metrics?.shares ?? source.shares ?? 0) || 0
     }
   };
 }
@@ -3431,6 +3583,7 @@ function hasTrackedLifecycle(record = {}) {
     publish.metrics.favorites > 0 ||
     publish.metrics.comments > 0 ||
     publish.metrics.views > 0 ||
+    publish.metrics.shares > 0 ||
     Boolean(publish.notes || publish.publishedAt || publish.platformReason)
   );
 }
@@ -3444,31 +3597,45 @@ function evaluateReferenceSampleThreshold(metrics = {}) {
   const favorites = Number(metrics?.favorites || 0) || 0;
   const comments = Number(metrics?.comments || 0) || 0;
   const views = Number(metrics?.views || 0) || 0;
+  const shares = Number(metrics?.shares || 0) || 0;
 
   const nearQualified =
     likes >= REFERENCE_METRIC_THRESHOLD.nearLikes ||
     favorites >= REFERENCE_METRIC_THRESHOLD.nearFavorites ||
-    comments >= REFERENCE_METRIC_THRESHOLD.nearComments;
+    comments >= REFERENCE_METRIC_THRESHOLD.nearComments ||
+    shares >= REFERENCE_METRIC_THRESHOLD.nearShares;
   const highViews = views >= REFERENCE_METRIC_THRESHOLD.supportViews;
-  const directQualified =
+  const directEngagementQualified =
     likes >= REFERENCE_METRIC_THRESHOLD.likes ||
     favorites >= REFERENCE_METRIC_THRESHOLD.favorites ||
-    comments >= REFERENCE_METRIC_THRESHOLD.comments;
+    comments >= REFERENCE_METRIC_THRESHOLD.comments ||
+    shares >= REFERENCE_METRIC_THRESHOLD.shares;
+  const directViewsQualified = views >= REFERENCE_METRIC_THRESHOLD.directViews;
 
-  if (directQualified) {
+  if (directEngagementQualified) {
     return {
       qualified: true,
-      reason: "互动达标",
+      reason: "互动直达达标",
       mode: "engagement",
       nearQualified: true,
       highViews
     };
   }
 
+  if (directViewsQualified) {
+    return {
+      qualified: true,
+      reason: "浏览直达达标",
+      mode: "views_direct",
+      nearQualified,
+      highViews: true
+    };
+  }
+
   if (nearQualified && highViews) {
     return {
       qualified: true,
-      reason: "互动接近达标，已由高浏览数补足",
+      reason: "互动接近达标，已由高浏览补足",
       mode: "views_assist",
       nearQualified,
       highViews
@@ -3529,6 +3696,46 @@ function formatSamplePoolTabLabel(pool = "reference", count = 0) {
   return `${sampleLibraryPoolLabel(pool)}（${String(normalizedCount)}）`;
 }
 
+function filterSamplePoolRecordsByTitle(records = [], search = "") {
+  const normalizedRecords = Array.isArray(records) ? records : [];
+  const keyword = String(search || "")
+    .trim()
+    .toLowerCase();
+
+  if (!keyword) {
+    return normalizedRecords;
+  }
+
+  return normalizedRecords.filter((record) => String(getSampleRecordTitle(record) || "").toLowerCase().includes(keyword));
+}
+
+function filterSamplePoolRecords(records = [], { search = "", metricFilters = {} } = {}) {
+  const normalizedRecords = filterSamplePoolRecordsByTitle(records, search);
+  const minimumLikes = normalizeSampleLibraryMetricFilterValue(metricFilters.likes);
+  const minimumFavorites = normalizeSampleLibraryMetricFilterValue(metricFilters.favorites);
+  const minimumComments = normalizeSampleLibraryMetricFilterValue(metricFilters.comments);
+  const minimumViews = normalizeSampleLibraryMetricFilterValue(metricFilters.views);
+  const minimumShares = normalizeSampleLibraryMetricFilterValue(metricFilters.shares);
+
+  return normalizedRecords.filter((record) => {
+    const publish = getSampleRecordPublish(record);
+    const metrics = publish?.metrics || publish || {};
+    const likes = Number(metrics.likes || 0) || 0;
+    const favorites = Number(metrics.favorites || 0) || 0;
+    const comments = Number(metrics.comments || 0) || 0;
+    const views = Number(metrics.views || 0) || 0;
+    const shares = Number(metrics.shares || 0) || 0;
+
+    return (
+      likes >= minimumLikes &&
+      favorites >= minimumFavorites &&
+      comments >= minimumComments &&
+      views >= minimumViews &&
+      shares >= minimumShares
+    );
+  });
+}
+
 function buildSamplePoolSummary(records = []) {
   return (Array.isArray(records) ? records : []).reduce(
     (summary, record) => {
@@ -3552,7 +3759,7 @@ function getSamplePoolWhyLabel(record = {}) {
   const qualification = getReferenceQualification(record);
 
   if (pool === "reference") {
-    return `${qualification.reason || "互动达标"}，会参与生成、改写和内容校验提示。`;
+    return `${qualification.reason || "已达参考门槛"}，会参与生成、改写和内容校验提示。`;
   }
 
   if (pool === "negative") {
@@ -3595,6 +3802,29 @@ function getSamplePoolWhyLabel(record = {}) {
   }
 
   return "当前先作为普通样本沉淀，用于去重、检索和后续筛选。";
+}
+
+function getSamplePoolWhyHelperText(record = {}) {
+  const pool = classifySampleLibraryPool(record);
+  const qualification = getReferenceQualification(record);
+
+  if (pool !== "reference") {
+    return "";
+  }
+
+  if (qualification.mode === "engagement") {
+    return "说明：点赞、收藏、评论或分享里，至少一项已经单独达到参考门槛。";
+  }
+
+  if (qualification.mode === "views_direct") {
+    return "说明：当前由浏览数单独达到参考门槛，不依赖互动补足。";
+  }
+
+  if (qualification.mode === "views_assist") {
+    return "说明：互动已接近参考门槛，再由高浏览补足后进入参考池。";
+  }
+
+  return "";
 }
 
 function hasCalibration(record = {}) {
@@ -3671,13 +3901,20 @@ function sortSampleLibraryRecordsByPublishedAtDesc(items = []) {
   });
 }
 
+function normalizeSampleLibraryMetricFilterValue(value = "") {
+  const normalized = Number(String(value ?? "").trim());
+
+  if (!Number.isFinite(normalized) || normalized <= 0) {
+    return 0;
+  }
+
+  return normalized;
+}
+
 function filterSampleLibraryRecords(items = []) {
   const normalizedItems = Array.isArray(items) ? items : [];
   const filter = String(appState.sampleLibraryFilter || "all").trim() || "all";
   const collectionFilter = String(appState.sampleLibraryCollectionFilter || "all").trim() || "all";
-  const search = String(appState.sampleLibrarySearch || "")
-    .trim()
-    .toLowerCase();
 
   return sortSampleLibraryRecordsByPublishedAtDesc(
     normalizedItems.filter((item) => {
@@ -3714,35 +3951,7 @@ function filterSampleLibraryRecords(items = []) {
         return false;
       }
 
-      if (!search) {
-        return true;
-      }
-
-      const haystack = [
-        item?.id,
-        item?.source,
-        item?.stage,
-        getSampleRecordTitle(item),
-        getSampleRecordBody(item),
-        getSampleRecordCoverText(item),
-        collectionType,
-        joinCSV(getSampleRecordTags(item)),
-        getSampleRecordReference(item)?.tier,
-        getSampleRecordPublish(item)?.status,
-        getSampleLibraryCalibrationListState(item).label,
-        buildSampleLibraryCalibrationRetroComparison({
-          prediction: getSampleRecordCalibration(item)?.prediction,
-          publish: getSampleRecordPublish(item)
-        })?.summary,
-        getSampleRecordCalibration(item)?.prediction?.predictedStatus,
-        getSampleRecordCalibration(item)?.prediction?.predictedRiskLevel,
-        riskLevelLabel(getSampleRecordCalibration(item)?.prediction?.predictedRiskLevel),
-        getSampleRecordCalibration(item)?.retro?.actualPerformanceTier
-      ]
-        .map((value) => String(value || "").toLowerCase())
-        .join("\n");
-
-      return haystack.includes(search);
+      return true;
     })
   );
 }
@@ -3835,6 +4044,7 @@ function buildSampleLibraryRecordCardMarkup(item = {}, { action = "", actionId =
         }
         <span class="meta-pill">${escapeHtml(collectionTypeLabel(collectionType))}</span>
         <span class="meta-pill">浏览 ${escapeHtml(String(publish.metrics.views || 0))}</span>
+        <span class="meta-pill">分享 ${escapeHtml(String(publish.metrics.shares || 0))}</span>
         <span class="meta-pill">${escapeHtml(lifecycleSourceLabel(item?.source || "manual"))}</span>
         <span class="meta-pill">${escapeHtml(formatDate(item?.updatedAt || item?.createdAt))}</span>
       </div>
@@ -3960,6 +4170,7 @@ function openSampleLibraryRecordInlineEditorModal(recordId = "") {
   appState.sampleLibraryModal = {
     kind: "record-list-inline-editor",
     selectedRecordId: String(selectedRecord?.id || ""),
+    titleFilter: "",
     draft,
     initialSnapshot: structuredClone(draft)
   };
@@ -3994,7 +4205,8 @@ function buildSampleLibraryRecordInlineEditorDraft(record = {}) {
         likes: Number(publish?.metrics?.likes ?? 0) || 0,
         favorites: Number(publish?.metrics?.favorites ?? 0) || 0,
         comments: Number(publish?.metrics?.comments ?? 0) || 0,
-        views: Number(publish?.metrics?.views ?? 0) || 0
+        views: Number(publish?.metrics?.views ?? 0) || 0,
+        shares: Number(publish?.metrics?.shares ?? 0) || 0
       }
     },
     calibration: {
@@ -4046,7 +4258,8 @@ function buildSampleLibraryRecordInlineEditorPatchPayload(recordId = "", draft =
         likes: Number(draft?.publish?.metrics?.likes ?? 0) || 0,
         favorites: Number(draft?.publish?.metrics?.favorites ?? 0) || 0,
         comments: Number(draft?.publish?.metrics?.comments ?? 0) || 0,
-        views: Number(draft?.publish?.metrics?.views ?? 0) || 0
+        views: Number(draft?.publish?.metrics?.views ?? 0) || 0,
+        shares: Number(draft?.publish?.metrics?.shares ?? 0) || 0
       }
     },
     calibration: {
@@ -4080,48 +4293,75 @@ function isSampleLibraryRecordInlineEditorDirty({ draft = null, initialSnapshot 
   return JSON.stringify(draft || {}) !== JSON.stringify(initialSnapshot || {});
 }
 
-function buildSampleLibraryRecordInlineEditorSidebarMarkup(items = [], modalState = {}) {
-  const selectedRecordId = String(modalState?.selectedRecordId || "");
-  const dirty = isSampleLibraryRecordInlineEditorDirty(modalState);
-  const sidebarItemsMarkup = items.length
-    ? items
-        .map((item) => {
-          const isActive = String(item.id || "") === selectedRecordId;
-          const note = getSampleRecordNote(item);
-          const publish = getSampleRecordPublish(item);
-          const reference = getSampleRecordReference(item);
+function filterSampleLibraryRecordInlineEditorItems(items = [], titleFilter = "") {
+  const normalizedItems = Array.isArray(items) ? items : [];
+  const keyword = String(titleFilter || "")
+    .trim()
+    .toLowerCase();
 
-          return `
-            <button
-              type="button"
-              class="sample-library-record-inline-editor-sidebar-item${isActive ? " is-active" : ""}"
-              data-action="switch-sample-library-record-inline-editor-record"
-              data-id="${escapeHtml(item.id || "")}"
-            >
-              <strong>${escapeHtml(getSampleRecordTitle(item) || "未命名样本记录")}</strong>
-              <span>${escapeHtml(compactText(note.body || note.coverText || "未填写正文", 54))}</span>
-              <span class="sample-library-record-inline-editor-sidebar-meta">
-                ${escapeHtml(reference.enabled ? successTierLabel(reference.tier || "passed") : "未启用参考")} ·
-                ${escapeHtml(publishStatusLabel(publish.status || "not_published"))}
-              </span>
-            </button>
-          `;
-        })
-        .join("")
-    : '<div class="result-card muted">当前筛选下没有记录。</div>';
+  if (!keyword) {
+    return normalizedItems;
+  }
+
+  return normalizedItems.filter((item) => String(getSampleRecordTitle(item) || "").toLowerCase().includes(keyword));
+}
+
+function getSampleLibraryRecordInlineEditorFilterSummaryText(count = 0) {
+  return `${count} 条 · ${sampleLibraryFilterLabel(appState.sampleLibraryFilter)} · ${sampleLibraryCollectionFilterLabel(
+    appState.sampleLibraryCollectionFilter
+  )}`;
+}
+
+function buildSampleLibraryRecordInlineEditorSidebarListMarkup(items = [], modalState = {}) {
+  const selectedRecordId = String(modalState?.selectedRecordId || "");
+
+  if (!items.length) {
+    return '<div class="result-card muted">当前筛选下没有记录。</div>';
+  }
+
+  return items
+    .map((item) => {
+      const isActive = String(item.id || "") === selectedRecordId;
+      const note = getSampleRecordNote(item);
+      const publish = getSampleRecordPublish(item);
+      const reference = getSampleRecordReference(item);
+
+      return `
+        <button
+          type="button"
+          class="sample-library-record-inline-editor-sidebar-item${isActive ? " is-active" : ""}"
+          data-action="switch-sample-library-record-inline-editor-record"
+          data-id="${escapeHtml(item.id || "")}"
+        >
+          <strong>${escapeHtml(getSampleRecordTitle(item) || "未命名样本记录")}</strong>
+          <span>${escapeHtml(compactText(note.body || note.coverText || "未填写正文", 54))}</span>
+          <span class="sample-library-record-inline-editor-sidebar-meta">
+            ${escapeHtml(reference.enabled ? successTierLabel(reference.tier || "passed") : "未启用参考")} ·
+            ${escapeHtml(publishStatusLabel(publish.status || "not_published"))}
+          </span>
+        </button>
+      `;
+    })
+    .join("");
+}
+
+function buildSampleLibraryRecordInlineEditorSidebarMarkup(items = [], modalState = {}) {
+  const dirty = isSampleLibraryRecordInlineEditorDirty(modalState);
+  const titleFilter = String(modalState?.titleFilter || "");
+  const sidebarItemsMarkup = buildSampleLibraryRecordInlineEditorSidebarListMarkup(items, modalState);
 
   return `
     <aside class="sample-library-record-inline-editor-sidebar-panel">
       <div class="sample-library-record-inline-editor-sidebar-head">
         <strong>当前筛选记录</strong>
-        <p>${escapeHtml(
-          `${items.length} 条 · ${sampleLibraryFilterLabel(appState.sampleLibraryFilter)} · ${sampleLibraryCollectionFilterLabel(
-            appState.sampleLibraryCollectionFilter
-          )}`
-        )}</p>
-        <p class="helper-text">${dirty ? "当前记录有未保存修改，切换前请先保存。" : "左侧切换记录，右侧统一编辑四块信息。"}</p>
+        <p data-role="record-inline-editor-filter-summary">${escapeHtml(getSampleLibraryRecordInlineEditorFilterSummaryText(items.length))}</p>
+        <label class="sample-library-record-inline-editor-filter">
+          <span>按标题筛选</span>
+          <input name="recordTitleFilter" value="${escapeHtml(titleFilter)}" placeholder="按标题筛选记录" />
+        </label>
+        <p class="helper-text" data-role="record-inline-editor-filter-helper">${dirty ? "当前记录有未保存修改，切换前请先保存。" : "左侧切换记录，右侧统一编辑四块信息。"}</p>
       </div>
-      <div class="sample-library-record-inline-editor-sidebar-list">${sidebarItemsMarkup}</div>
+      <div class="sample-library-record-inline-editor-sidebar-list" data-role="record-inline-editor-filter-list">${sidebarItemsMarkup}</div>
     </aside>
   `;
 }
@@ -4155,7 +4395,8 @@ function readSampleLibraryRecordInlineEditorDraftFromModal() {
         likes: Number(contentNode?.querySelector('[name="likes"]')?.value || 0) || 0,
         favorites: Number(contentNode?.querySelector('[name="favorites"]')?.value || 0) || 0,
         comments: Number(contentNode?.querySelector('[name="comments"]')?.value || 0) || 0,
-        views: Number(contentNode?.querySelector('[name="views"]')?.value || 0) || 0
+        views: Number(contentNode?.querySelector('[name="views"]')?.value || 0) || 0,
+        shares: Number(contentNode?.querySelector('[name="shares"]')?.value || 0) || 0
       }
     },
     calibration: {
@@ -4184,11 +4425,41 @@ function readSampleLibraryRecordInlineEditorDraftFromModal() {
   };
 }
 
-function buildSampleLibraryRecordInlineEditorModalMarkup({ items = [], modalState = {} } = {}) {
-  const selectedRecord =
-    items.find((item) => String(item.id || "") === String(modalState?.selectedRecordId || "")) ||
-    items[0] ||
-    null;
+function syncSampleLibraryRecordInlineEditorFilterResults() {
+  const modalState = appState.sampleLibraryModal;
+
+  if (modalState?.kind !== "record-list-inline-editor") {
+    return;
+  }
+
+  const contentNode = byId("sample-library-modal-content");
+
+  if (!contentNode) {
+    return;
+  }
+
+  const allItems = filterSampleLibraryRecords(appState.sampleLibraryRecords);
+  const items = filterSampleLibraryRecordInlineEditorItems(allItems, modalState.titleFilter || "");
+  const summaryNode = contentNode.querySelector('[data-role="record-inline-editor-filter-summary"]');
+  const helperNode = contentNode.querySelector('[data-role="record-inline-editor-filter-helper"]');
+  const listNode = contentNode.querySelector('[data-role="record-inline-editor-filter-list"]');
+
+  if (summaryNode) {
+    summaryNode.textContent = getSampleLibraryRecordInlineEditorFilterSummaryText(items.length);
+  }
+
+  if (helperNode) {
+    helperNode.textContent = isSampleLibraryRecordInlineEditorDirty(modalState)
+      ? "当前记录有未保存修改，切换前请先保存。"
+      : "左侧切换记录，右侧统一编辑四块信息。";
+  }
+
+  if (listNode) {
+    listNode.innerHTML = buildSampleLibraryRecordInlineEditorSidebarListMarkup(items, modalState);
+  }
+}
+
+function buildSampleLibraryRecordInlineEditorModalMarkup({ sidebarItems = [], selectedRecord = null, modalState = {} } = {}) {
   const draft = modalState?.draft || buildSampleLibraryRecordInlineEditorDraft(selectedRecord || {});
   const comparisonMatched = draft?.calibration?.retro?.predictionMatched === true;
 
@@ -4196,7 +4467,7 @@ function buildSampleLibraryRecordInlineEditorModalMarkup({ items = [], modalStat
     <div class="sample-library-record-inline-editor-layout">
       <!-- data-action="switch-sample-library-record-inline-editor-record" -->
       <div class="sample-library-record-inline-editor-sidebar">
-        ${buildSampleLibraryRecordInlineEditorSidebarMarkup(items, modalState)}
+        ${buildSampleLibraryRecordInlineEditorSidebarMarkup(sidebarItems, modalState)}
       </div>
       <div class="sample-library-record-inline-editor-detail">
         ${
@@ -4237,7 +4508,7 @@ function buildSampleLibraryRecordInlineEditorModalMarkup({ items = [], modalStat
                 })}
               </div>
             `
-            : '<div class="result-card muted">当前筛选下没有可编辑的记录。</div>'
+            : '<div class="result-card muted">当前标题筛选下没有可编辑的记录。</div>'
         }
       </div>
     </div>
@@ -4245,13 +4516,33 @@ function buildSampleLibraryRecordInlineEditorModalMarkup({ items = [], modalStat
 }
 
 function renderSampleLibraryRecordInlineEditorModal() {
-  const items = filterSampleLibraryRecords(appState.sampleLibraryRecords);
+  const modalState = appState.sampleLibraryModal || {};
+  const allItems = filterSampleLibraryRecords(appState.sampleLibraryRecords);
+  const items = filterSampleLibraryRecordInlineEditorItems(allItems, modalState.titleFilter || "");
+  const selectedRecord =
+    allItems.find((item) => String(item.id || "") === String(modalState?.selectedRecordId || "")) ||
+    allItems[0] ||
+    null;
+  const selectedRecordId = String(selectedRecord?.id || "");
+  const selectionChanged = selectedRecordId !== String(modalState?.selectedRecordId || "");
+  const draft = selectionChanged ? buildSampleLibraryRecordInlineEditorDraft(selectedRecord || {}) : modalState.draft;
+  const initialSnapshot = selectionChanged ? structuredClone(draft) : modalState.initialSnapshot;
+
+  appState.sampleLibraryModal = {
+    ...modalState,
+    kind: "record-list-inline-editor",
+    selectedRecordId,
+    titleFilter: String(modalState?.titleFilter || ""),
+    draft: draft || buildSampleLibraryRecordInlineEditorDraft(selectedRecord || {}),
+    initialSnapshot: initialSnapshot || structuredClone(draft || buildSampleLibraryRecordInlineEditorDraft(selectedRecord || {}))
+  };
 
   renderSampleLibraryModal({
     title: "完整记录内联编辑",
     subtitle: "左侧切换记录，右侧一次性查看并编辑基础内容、参考属性、生命周期和预判复盘。",
     body: buildSampleLibraryRecordInlineEditorModalMarkup({
-      items,
+      sidebarItems: items,
+      selectedRecord,
       modalState: appState.sampleLibraryModal || {}
     }),
     saveLabel: "保存整条记录",
@@ -4863,6 +5154,7 @@ function buildSampleLibraryBaseEditorSectionMarkup({
   collectionType = "",
   tags = [],
   views = 0,
+  shares = 0,
   includeViews = false,
   includePrefillActions = false
 } = {}) {
@@ -4896,6 +5188,10 @@ function buildSampleLibraryBaseEditorSectionMarkup({
                 <label>
                   <span>浏览数</span>
                   <input name="views" type="number" min="0" value="${escapeHtml(String(views || 0))}" placeholder="浏览数" />
+                </label>
+                <label>
+                  <span>分享数</span>
+                  <input name="shares" type="number" min="0" value="${escapeHtml(String(shares || 0))}" placeholder="分享数" />
                 </label>
               `
               : ""
@@ -4960,7 +5256,8 @@ function readSampleLibraryCreateModalPayload() {
     coverText: contentNode?.querySelector('[name="coverText"]')?.value || "",
     collectionType: contentNode?.querySelector('[name="collectionType"]')?.value || "",
     tags: splitCSV(contentNode?.querySelector('[name="tags"]')?.value || ""),
-    views: contentNode?.querySelector('[name="views"]')?.value || 0
+    views: contentNode?.querySelector('[name="views"]')?.value || 0,
+    shares: contentNode?.querySelector('[name="shares"]')?.value || 0
   };
 }
 
@@ -5058,7 +5355,8 @@ async function saveSampleLibraryCreateModal() {
       },
       publish: {
         metrics: {
-          views: payload.views || 0
+          views: payload.views || 0,
+          shares: payload.shares || 0
         }
       },
       snapshots: {
@@ -5073,7 +5371,15 @@ async function saveSampleLibraryCreateModal() {
   syncStyleProfileStateFromPayload(response);
   appState.sampleLibraryRecords = Array.isArray(response.items) ? response.items : appState.sampleLibraryRecords;
   appState.sampleLibraryFilter = "all";
+  appState.sampleLibraryCollectionFilter = "all";
   appState.sampleLibrarySearch = "";
+  appState.sampleLibraryMetricFilters = {
+    likes: "",
+    favorites: "",
+    comments: "",
+    views: "",
+    shares: ""
+  };
   appState.selectedSampleLibraryRecordId = String(response.item?.id || "");
 
   if (byId("sample-library-search-input")) {
@@ -5084,6 +5390,21 @@ async function saveSampleLibraryCreateModal() {
   }
   if (byId("sample-library-collection-filter")) {
     byId("sample-library-collection-filter").value = "all";
+  }
+  if (byId("sample-library-likes-filter")) {
+    byId("sample-library-likes-filter").value = "";
+  }
+  if (byId("sample-library-favorites-filter")) {
+    byId("sample-library-favorites-filter").value = "";
+  }
+  if (byId("sample-library-comments-filter")) {
+    byId("sample-library-comments-filter").value = "";
+  }
+  if (byId("sample-library-views-filter")) {
+    byId("sample-library-views-filter").value = "";
+  }
+  if (byId("sample-library-shares-filter")) {
+    byId("sample-library-shares-filter").value = "";
   }
 
   renderSampleLibraryWorkspace();
@@ -5402,6 +5723,10 @@ function buildSampleLibraryLifecycleEditorSectionMarkup(publish = {}, { notesFie
             <span>浏览数</span>
             <input name="views" type="number" min="0" value="${escapeHtml(String(publish.metrics.views || 0))}" />
           </label>
+          <label>
+            <span>分享数</span>
+            <input name="shares" type="number" min="0" value="${escapeHtml(String(publish.metrics.shares || 0))}" />
+          </label>
         </div>
         <label class="field-wide">
           <span>平台原因</span>
@@ -5641,7 +5966,8 @@ function readSampleLibraryModalLifecyclePayload() {
       likes: contentNode?.querySelector('[name="likes"]')?.value || 0,
       favorites: contentNode?.querySelector('[name="favorites"]')?.value || 0,
       comments: contentNode?.querySelector('[name="comments"]')?.value || 0,
-      views: contentNode?.querySelector('[name="views"]')?.value || 0
+      views: contentNode?.querySelector('[name="views"]')?.value || 0,
+      shares: contentNode?.querySelector('[name="shares"]')?.value || 0
     }
   };
 }
@@ -6234,7 +6560,8 @@ function readSampleLibraryImportDraftPublish(item = {}) {
       likes: Number(source?.metrics?.likes ?? source?.likes ?? 0) || 0,
       favorites: Number(source?.metrics?.favorites ?? source?.favorites ?? 0) || 0,
       comments: Number(source?.metrics?.comments ?? source?.comments ?? 0) || 0,
-      views: Number(source?.metrics?.views ?? source?.views ?? 0) || 0
+      views: Number(source?.metrics?.views ?? source?.views ?? 0) || 0,
+      shares: Number(source?.metrics?.shares ?? source?.shares ?? 0) || 0
     }
   };
 }
@@ -6733,6 +7060,10 @@ function renderSampleLibraryImportDrafts(items = []) {
                   <span>浏览数</span>
                   <input name="views" type="number" min="0" value="${escapeHtml(String(item?.views ?? 0))}" />
                 </label>
+                <label>
+                  <span>分享数</span>
+                  <input name="shares" type="number" min="0" value="${escapeHtml(String(item?.shares ?? 0))}" />
+                </label>
               </div>
               <article class="sample-library-detail-summary-card">
                 <div>
@@ -6799,7 +7130,8 @@ async function commitSampleLibraryImportCard(card) {
       likes: card.querySelector('[name="likes"]')?.value || "0",
       favorites: card.querySelector('[name="favorites"]')?.value || "0",
       comments: card.querySelector('[name="comments"]')?.value || "0",
-      views: card.querySelector('[name="views"]')?.value || "0"
+      views: card.querySelector('[name="views"]')?.value || "0",
+      shares: card.querySelector('[name="shares"]')?.value || "0"
     }
   ];
 
@@ -6816,6 +7148,13 @@ async function commitSampleLibraryImportCard(card) {
   appState.sampleLibraryFilter = "all";
   appState.sampleLibraryCollectionFilter = "all";
   appState.sampleLibrarySearch = "";
+  appState.sampleLibraryMetricFilters = {
+    likes: "",
+    favorites: "",
+    comments: "",
+    views: "",
+    shares: ""
+  };
   appState.sampleLibraryImportDrafts = appState.sampleLibraryImportDrafts.filter((_, itemIndex) => itemIndex !== index);
 
   if (byId("sample-library-search-input")) {
@@ -6828,6 +7167,21 @@ async function commitSampleLibraryImportCard(card) {
 
   if (byId("sample-library-collection-filter")) {
     byId("sample-library-collection-filter").value = "all";
+  }
+  if (byId("sample-library-likes-filter")) {
+    byId("sample-library-likes-filter").value = "";
+  }
+  if (byId("sample-library-favorites-filter")) {
+    byId("sample-library-favorites-filter").value = "";
+  }
+  if (byId("sample-library-comments-filter")) {
+    byId("sample-library-comments-filter").value = "";
+  }
+  if (byId("sample-library-views-filter")) {
+    byId("sample-library-views-filter").value = "";
+  }
+  if (byId("sample-library-shares-filter")) {
+    byId("sample-library-shares-filter").value = "";
   }
 
   await refreshSampleLibraryWorkspace();
@@ -7447,10 +7801,22 @@ async function saveLifecycleFromCurrent(source = "analysis", candidateId = "", c
   appState.sampleLibraryFilter = "all";
   appState.sampleLibraryCollectionFilter = "all";
   appState.sampleLibrarySearch = "";
+  appState.sampleLibraryMetricFilters = {
+    likes: "",
+    favorites: "",
+    comments: "",
+    views: "",
+    shares: ""
+  };
   appState.selectedSampleLibraryRecordId = String(response.item?.id || "");
   byId("sample-library-search-input") && (byId("sample-library-search-input").value = "");
   byId("sample-library-filter") && (byId("sample-library-filter").value = "all");
   byId("sample-library-collection-filter") && (byId("sample-library-collection-filter").value = "all");
+  byId("sample-library-likes-filter") && (byId("sample-library-likes-filter").value = "");
+  byId("sample-library-favorites-filter") && (byId("sample-library-favorites-filter").value = "");
+  byId("sample-library-comments-filter") && (byId("sample-library-comments-filter").value = "");
+  byId("sample-library-views-filter") && (byId("sample-library-views-filter").value = "");
+  byId("sample-library-shares-filter") && (byId("sample-library-shares-filter").value = "");
   renderSampleLibraryWorkspace();
   revealNoteLifecyclePane();
   return response;
@@ -7462,7 +7828,8 @@ async function savePlatformOutcomeFromCurrent({
   candidateId = "",
   candidateIndex = "",
   notes = "",
-  views = 0
+  views = 0,
+  shares = 0
 } = {}) {
   const saved = await saveLifecycleFromCurrent(source, candidateId, candidateIndex);
   const id = String(saved.item?.id || appState.selectedSampleLibraryRecordId || "").trim();
@@ -7474,7 +7841,8 @@ async function savePlatformOutcomeFromCurrent({
   const payload = {
     status: publishStatus,
     notes,
-    views: Number(views || 0) || 0
+    views: Number(views || 0) || 0,
+    shares: Number(shares || 0) || 0
   };
 
   const response = await apiJson(sampleLibraryApi, {
@@ -7485,7 +7853,8 @@ async function savePlatformOutcomeFromCurrent({
         status: payload.status,
         notes: payload.notes,
         metrics: {
-          views: payload.views || 0
+          views: payload.views || 0,
+          shares: payload.shares || 0
         }
       }
     })
@@ -7844,7 +8213,8 @@ async function savePlatformOutcomeModal() {
     candidateId: modalState.candidateId,
     candidateIndex: modalState.candidateIndex,
     notes: payload.notes,
-    views: payload.views
+    views: payload.views,
+    shares: payload.shares
   });
 
   const resultNode = byId("sample-library-create-result");
@@ -8962,6 +9332,15 @@ byId("sample-library-modal-content")?.addEventListener("change", (event) => {
       : "";
   const modalState = appState.sampleLibraryModal;
 
+  if (fieldName === "recordTitleFilter" && modalState?.kind === "record-list-inline-editor") {
+    appState.sampleLibraryModal = {
+      ...modalState,
+      titleFilter: event.target instanceof HTMLInputElement ? event.target.value || "" : ""
+    };
+    syncSampleLibraryRecordInlineEditorFilterResults();
+    return;
+  }
+
   if (fieldName === "referenceEnabled") {
     syncSampleLibraryImportCardReferenceSectionState(byId("sample-library-modal-content"), { source: "checkbox" });
   }
@@ -8998,8 +9377,21 @@ byId("sample-library-modal-content")?.addEventListener("change", (event) => {
   }
 });
 
-byId("sample-library-modal-content")?.addEventListener("input", () => {
+byId("sample-library-modal-content")?.addEventListener("input", (event) => {
   const modalState = appState.sampleLibraryModal;
+  const fieldName =
+    event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement
+      ? String(event.target.name || "")
+      : "";
+
+  if (fieldName === "recordTitleFilter" && modalState?.kind === "record-list-inline-editor") {
+    appState.sampleLibraryModal = {
+      ...modalState,
+      titleFilter: event.target instanceof HTMLInputElement ? event.target.value || "" : ""
+    };
+    syncSampleLibraryRecordInlineEditorFilterResults();
+    return;
+  }
 
   if (modalState?.kind === "record-list-inline-editor") {
     appState.sampleLibraryModal = {
@@ -9189,13 +9581,46 @@ byId("sample-library-modal-save")?.addEventListener("click", async () => {
   }
 });
 
-byId("rewrite-model-selection").addEventListener("change", () => {
-  syncCrossReviewModelSelectionRules();
+byId("sample-library-pools-modal-content")?.addEventListener("input", (event) => {
+  const fieldName = event.target instanceof HTMLInputElement ? String(event.target.name || "") : "";
+  const inputValue = event.target instanceof HTMLInputElement ? event.target.value || "" : "";
+
+  if (
+    fieldName === "samplePoolTitleFilter" ||
+    fieldName === "samplePoolLikesFilter" ||
+    fieldName === "samplePoolFavoritesFilter" ||
+    fieldName === "samplePoolCommentsFilter" ||
+    fieldName === "samplePoolViewsFilter" ||
+    fieldName === "samplePoolSharesFilter"
+  ) {
+    const nextMetricFilters = {
+      ...(appState.sampleLibraryPoolsModal?.metricFilters || {
+        likes: "",
+        favorites: "",
+        comments: "",
+        views: "",
+        shares: ""
+      })
+    };
+
+    if (fieldName === "samplePoolLikesFilter") nextMetricFilters.likes = inputValue;
+    if (fieldName === "samplePoolFavoritesFilter") nextMetricFilters.favorites = inputValue;
+    if (fieldName === "samplePoolCommentsFilter") nextMetricFilters.comments = inputValue;
+    if (fieldName === "samplePoolViewsFilter") nextMetricFilters.views = inputValue;
+    if (fieldName === "samplePoolSharesFilter") nextMetricFilters.shares = inputValue;
+
+    appState.sampleLibraryPoolsModal = {
+      open: true,
+      tab: String(appState.sampleLibraryPoolsModal?.tab || "reference"),
+      search: fieldName === "samplePoolTitleFilter" ? inputValue : String(appState.sampleLibraryPoolsModal?.search || ""),
+      metricFilters: nextMetricFilters
+    };
+    syncSampleLibraryPoolsModalSearchResults();
+  }
 });
 
-byId("sample-library-search-input").addEventListener("input", (event) => {
-  appState.sampleLibrarySearch = String(event.currentTarget.value || "");
-  renderSampleLibraryWorkspace();
+byId("rewrite-model-selection").addEventListener("change", () => {
+  syncCrossReviewModelSelectionRules();
 });
 
 byId("sample-library-filter").addEventListener("change", (event) => {
@@ -9226,14 +9651,24 @@ document.addEventListener("click", async (event) => {
 
   const samplePoolTab = event.target.closest("[data-sample-pool-tab]");
 
-  if (samplePoolTab) {
-    appState.sampleLibraryPoolsModal = {
-      open: true,
-      tab: String(samplePoolTab.dataset.samplePoolTab || "reference")
-    };
-    renderSampleLibraryPoolsModal();
-    return;
-  }
+      if (samplePoolTab) {
+        appState.sampleLibraryPoolsModal = {
+          open: true,
+          tab: String(samplePoolTab.dataset.samplePoolTab || "reference"),
+          search: String(appState.sampleLibraryPoolsModal?.search || ""),
+          metricFilters: {
+            ...(appState.sampleLibraryPoolsModal?.metricFilters || {
+              likes: "",
+              favorites: "",
+              comments: "",
+              views: "",
+              shares: ""
+            })
+          }
+        };
+        renderSampleLibraryPoolsModal();
+        return;
+      }
 
   const lexiconWorkspaceTab = event.target.closest("[data-lexicon-workspace-tab]");
 
@@ -9315,15 +9750,32 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
-  if (action === "close-sample-library-pools-modal") {
-    closeSampleLibraryPoolsModal();
-    return;
-  }
+      if (action === "close-sample-library-pools-modal") {
+        closeSampleLibraryPoolsModal();
+        return;
+      }
 
-  if (action === "promote-sample-to-reference" || action === "adjust-reference-sample") {
-    openSampleLibraryDetailModal("reference", button.dataset.id);
-    return;
-  }
+      if (action === "clear-sample-pool-filters") {
+        appState.sampleLibraryPoolsModal = {
+          open: true,
+          tab: String(appState.sampleLibraryPoolsModal?.tab || "reference"),
+          search: "",
+          metricFilters: {
+            likes: "",
+            favorites: "",
+            comments: "",
+            views: "",
+            shares: ""
+          }
+        };
+        renderSampleLibraryPoolsModal();
+        return;
+      }
+
+      if (action === "promote-sample-to-reference" || action === "adjust-reference-sample") {
+        openSampleLibraryDetailModal("reference", button.dataset.id);
+        return;
+      }
 
   if (action === "open-sample-library-lifecycle-from-pool") {
     openSampleLibraryDetailModal("lifecycle", button.dataset.id);
@@ -9473,14 +9925,15 @@ document.addEventListener("click", async (event) => {
       return;
     }
 
-    openPlatformOutcomeModal({
-      source,
-      publishStatus: button.dataset.publishStatus,
-      candidateId: button.dataset.candidateId,
-      candidateIndex: button.dataset.candidateIndex,
-      notes: button.dataset.note || "",
-      views: 0
-    });
+        openPlatformOutcomeModal({
+          source,
+          publishStatus: button.dataset.publishStatus,
+          candidateId: button.dataset.candidateId,
+          candidateIndex: button.dataset.candidateIndex,
+          notes: button.dataset.note || "",
+          views: 0,
+          shares: 0
+        });
     return;
   }
 

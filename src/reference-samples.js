@@ -2,11 +2,14 @@ import { ensureArray, normalizeText } from "./normalizer.js";
 
 export const referenceMetricThreshold = {
   likes: 30,
-  favorites: 10,
+  favorites: 20,
   comments: 10,
+  shares: 20,
   nearLikes: 15,
-  nearFavorites: 5,
+  nearFavorites: 10,
   nearComments: 5,
+  nearShares: 10,
+  directViews: 2000,
   supportViews: 1000
 };
 
@@ -136,32 +139,45 @@ export function evaluateReferenceSampleThreshold(metrics = {}) {
   const favorites = normalizeMetric(metrics.favorites);
   const comments = normalizeMetric(metrics.comments);
   const views = normalizeMetric(metrics.views);
+  const shares = normalizeMetric(metrics.shares);
 
   const nearQualified =
     likes >= referenceMetricThreshold.nearLikes ||
     favorites >= referenceMetricThreshold.nearFavorites ||
-    comments >= referenceMetricThreshold.nearComments;
+    comments >= referenceMetricThreshold.nearComments ||
+    shares >= referenceMetricThreshold.nearShares;
   const highViews = views >= referenceMetricThreshold.supportViews;
-
-  const directQualified =
+  const directEngagementQualified =
     likes >= referenceMetricThreshold.likes ||
     favorites >= referenceMetricThreshold.favorites ||
-    comments >= referenceMetricThreshold.comments;
+    comments >= referenceMetricThreshold.comments ||
+    shares >= referenceMetricThreshold.shares;
+  const directViewsQualified = views >= referenceMetricThreshold.directViews;
 
-  if (directQualified) {
+  if (directEngagementQualified) {
     return {
       qualified: true,
-      reason: "互动达标",
+      reason: "互动直达达标",
       mode: "engagement",
       nearQualified: true,
       highViews
     };
   }
 
+  if (directViewsQualified) {
+    return {
+      qualified: true,
+      reason: "浏览直达达标",
+      mode: "views_direct",
+      nearQualified,
+      highViews: true
+    };
+  }
+
   if (nearQualified && highViews) {
     return {
       qualified: true,
-      reason: "互动接近达标，已由高浏览数补足",
+      reason: "互动接近达标，已由高浏览补足",
       mode: "views_assist",
       nearQualified,
       highViews

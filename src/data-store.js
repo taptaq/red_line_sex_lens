@@ -137,7 +137,8 @@ function normalizeMetrics(metrics = {}) {
     likes: normalizeMetric(metrics.likes),
     favorites: normalizeMetric(metrics.favorites),
     comments: normalizeMetric(metrics.comments),
-    views: normalizeMetric(metrics.views)
+    views: normalizeMetric(metrics.views),
+    shares: normalizeMetric(metrics.shares)
   };
 }
 
@@ -348,7 +349,10 @@ function noteRecordToSuccessSample(record = {}) {
   return withSampleWeight({
     id: normalizeString(record.id),
     tier: reference.tier || "passed",
+    referenceTier: reference.tier || "passed",
+    referenceSelectedBy: reference.selectedBy,
     status: publish.status,
+    publishStatus: publish.status,
     confidence: isManualReference ? "confirmed" : "pending",
     sourceQuality: isManualReference ? "manual_verified" : "imported",
     title: normalizeString(note.title),
@@ -359,6 +363,7 @@ function noteRecordToSuccessSample(record = {}) {
     sourcePlatform: "xiaohongshu",
     source,
     publishedAt: publish.publishedAt,
+    platformReason: publish.platformReason,
     metrics: publish.metrics,
     notes: referenceNotes,
     analysisSnapshot: record.snapshots?.analysis || null,

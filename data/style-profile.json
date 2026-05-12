@@ -6,40 +6,54 @@
     "topic": "通用风格",
     "name": "通用风格画像",
     "sourceSampleIds": [
+      "note-e5d632e9e403649f",
       "note-671a8a3e55280196",
       "note-ba16b81589dc26e3",
       "note-884e55edf4a34ac9"
     ],
-    "titleStyle": "标题平均约 7 字，优先保持清晰、克制、带一点真实经验感。",
-    "bodyStructure": "正文平均约 900 字，优先短段落、先结论后场景，再给可执行建议。",
-    "tone": "温和、克制、像朋友提醒，避免强营销和夸张刺激。",
+    "titleStyle": "口语化短句，带感叹号或问号，使用第一人称或直接对话式，常含网络流行语或夸张表达",
+    "bodyStructure": "开头用感叹句或设问引入，正文分点列举或场景化描述，穿插表情符号和括号内吐槽，结尾设互动提问或总结升华",
+    "tone": "幽默自嘲，轻松调侃，带点戏精和社死感，但内核温暖积极",
     "preferredTags": [
-      "科普",
-      "回退"
+      "愉悦",
+      "深夜话题",
+      "大人也要玩玩具",
+      "伪装",
+      "社死",
+      "悦己",
+      "女性",
+      "女生小玩具",
+      "涨知识",
+      "diy",
+      "快乐的大人",
+      "抽象"
     ],
     "avoidExpressions": [
-      "绝对化承诺",
-      "强导流",
-      "低俗擦边",
-      "过度教程化"
+      "严肃说教",
+      "专业术语堆砌",
+      "负面抱怨",
+      "直接描述性行为细节",
+      "过度露骨词汇"
     ],
     "generationGuidelines": [
-      "保留科普",
-      "沟通",
-      "经验分享语境",
-      "减少刺激性标题党表达",
-      "正文给出具体但不过度细节化的建议"
+      "标题用口语化短句，带感叹号或问号，制造悬念或共鸣",
+      "正文开头用感叹句或设问，快速抓住注意力",
+      "分点或场景化叙述，每点用【】或数字标注，穿插表情符号",
+      "加入括号内吐槽或心理活动，增强幽默感和代入感",
+      "结尾设置互动问题或投票选项，引导评论",
+      "标签包含愉悦、深夜话题、大人也要玩玩具等核心词",
+      "整体语气轻松自嘲，避免说教或负面抱怨"
     ],
     "createdAt": "2026-05-04T10:01:28.165Z",
-    "updatedAt": "2026-05-11T03:53:36.760Z",
+    "updatedAt": "2026-05-12T02:08:47.795Z",
     "generationMeta": {
       "method": "model_summary",
-      "provider": "kimi",
-      "providerLabel": "Kimi",
-      "model": "moonshot-v1-8k",
-      "route": "official",
-      "routeLabel": "官方",
-      "generatedAt": "2026-05-11T03:53:36.760Z",
+      "provider": "deepseek",
+      "providerLabel": "深度求索",
+      "model": "deepseek-v4-flash",
+      "route": "dmxapi",
+      "routeLabel": "DMXAPI",
+      "generatedAt": "2026-05-12T02:08:47.795Z",
       "attemptedProviders": [
         {
           "provider": "qwen",
@@ -53,37 +67,107 @@
         {
           "provider": "kimi",
           "label": "Kimi",
-          "model": "moonshot-v1-8k",
+          "model": "kimi-k2.5",
           "route": "official",
           "routeLabel": "官方",
+          "status": "error",
+          "message": "invalid temperature: only 1 is allowed for this model"
+        },
+        {
+          "provider": "deepseek",
+          "label": "深度求索",
+          "model": "deepseek-v4-flash",
+          "route": "dmxapi",
+          "routeLabel": "DMXAPI",
           "status": "ok",
           "message": ""
         }
       ]
     },
-    "manualOverrides": {
+    "autoBase": {
+      "id": "style-profile-current",
+      "status": "active",
       "topic": "通用风格",
       "name": "通用风格画像",
-      "titleStyle": "标题平均约 7 字，优先保持清晰、克制、带一点真实经验感。",
-      "bodyStructure": "正文平均约 900 字，优先短段落、先结论后场景，再给可执行建议。",
-      "tone": "温和、克制、像朋友提醒，避免强营销和夸张刺激。",
+      "sourceSampleIds": [
+        "note-e5d632e9e403649f",
+        "note-671a8a3e55280196",
+        "note-ba16b81589dc26e3",
+        "note-884e55edf4a34ac9"
+      ],
+      "titleStyle": "口语化短句，带感叹号或问号，使用第一人称或直接对话式，常含网络流行语或夸张表达",
+      "bodyStructure": "开头用感叹句或设问引入，正文分点列举或场景化描述，穿插表情符号和括号内吐槽，结尾设互动提问或总结升华",
+      "tone": "幽默自嘲，轻松调侃，带点戏精和社死感，但内核温暖积极",
       "preferredTags": [
-        "科普",
-        "回退"
+        "愉悦",
+        "深夜话题",
+        "大人也要玩玩具",
+        "伪装",
+        "社死",
+        "悦己",
+        "女性",
+        "女生小玩具",
+        "涨知识",
+        "diy",
+        "快乐的大人",
+        "抽象"
       ],
       "avoidExpressions": [
-        "绝对化承诺",
-        "强导流",
-        "低俗擦边",
-        "过度教程化"
+        "严肃说教",
+        "专业术语堆砌",
+        "负面抱怨",
+        "直接描述性行为细节",
+        "过度露骨词汇"
       ],
       "generationGuidelines": [
-        "保留科普",
-        "沟通",
-        "经验分享语境",
-        "减少刺激性标题党表达",
-        "正文给出具体但不过度细节化的建议"
-      ]
+        "标题用口语化短句，带感叹号或问号，制造悬念或共鸣",
+        "正文开头用感叹句或设问，快速抓住注意力",
+        "分点或场景化叙述，每点用【】或数字标注，穿插表情符号",
+        "加入括号内吐槽或心理活动，增强幽默感和代入感",
+        "结尾设置互动问题或投票选项，引导评论",
+        "标签包含愉悦、深夜话题、大人也要玩玩具等核心词",
+        "整体语气轻松自嘲，避免说教或负面抱怨"
+      ],
+      "createdAt": "2026-05-04T10:01:28.165Z",
+      "updatedAt": "2026-05-12T02:08:47.795Z",
+      "generationMeta": {
+        "method": "model_summary",
+        "provider": "deepseek",
+        "providerLabel": "深度求索",
+        "model": "deepseek-v4-flash",
+        "route": "dmxapi",
+        "routeLabel": "DMXAPI",
+        "generatedAt": "2026-05-12T02:08:47.795Z",
+        "attemptedProviders": [
+          {
+            "provider": "qwen",
+            "label": "通义千问",
+            "model": "qwen-plus",
+            "route": "official",
+            "routeLabel": "官方",
+            "status": "error",
+            "message": "Access denied, please make sure your account is in good standing. For details, see: https://help.aliyun.com/zh/model-studio/error-code#overdue-payment"
+          },
+          {
+            "provider": "kimi",
+            "label": "Kimi",
+            "model": "kimi-k2.5",
+            "route": "official",
+            "routeLabel": "官方",
+            "status": "error",
+            "message": "invalid temperature: only 1 is allowed for this model"
+          },
+          {
+            "provider": "deepseek",
+            "label": "深度求索",
+            "model": "deepseek-v4-flash",
+            "route": "dmxapi",
+            "routeLabel": "DMXAPI",
+            "status": "ok",
+            "message": ""
+          }
+        ]
+      }
     }
   },
   "versions": []

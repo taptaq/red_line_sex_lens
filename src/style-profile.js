@@ -18,6 +18,7 @@ const STYLE_PROFILE_MODEL_CHAIN = [
   { provider: "kimi", caller: callKimiJson },
   { provider: "deepseek", caller: callDeepSeekJson }
 ];
+const STYLE_PROFILE_LIST_FIELDS = new Set(["preferredTags", "avoidExpressions", "generationGuidelines"]);
 
 function uniqueStrings(items = []) {
   return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
@@ -163,6 +164,139 @@ function sanitizeStyleProfileManualOverrides(overrides = {}) {
   return Object.keys(sanitized).length ? sanitized : null;
 }
 
+function cloneEditableFieldValue(field, value) {
+  return STYLE_PROFILE_LIST_FIELDS.has(field) ? uniqueStrings(value) : String(value || "").trim();
+}
+
+function normalizeEditableFieldValue(field, value) {
+  if (STYLE_PROFILE_LIST_FIELDS.has(field)) {
+    return uniqueStrings(value);
+  }
+
+  const text = String(value || "").trim();
+  return field === "topic" ? normalizeTopic(text) : text;
+}
+
+function areEditableFieldValuesEqual(field, left, right) {
+  if (STYLE_PROFILE_LIST_FIELDS.has(field)) {
+    const leftValues = uniqueStrings(left);
+    const rightValues = uniqueStrings(right);
+
+    return leftValues.length === rightValues.length && leftValues.every((value, index) => value === rightValues[index]);
+  }
+
+  return normalizeEditableFieldValue(field, left) === normalizeEditableFieldValue(field, right);
+}
+
+function applyEditableFields(target = {}, source = {}) {
+  const next = { ...target };
+
+  for (const field of STYLE_PROFILE_EDITABLE_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(source, field)) {
+      continue;
+    }
+
+    next[field] = cloneEditableFieldValue(field, source[field]);
+  }
+
+  return next;
+}
+
+function buildNormalizedProfileCore(profile = {}, fallback = {}) {
+  if (!profile || typeof profile !== "object") {
+    return null;
+  }
+
+  const topic = normalizeTopic(profile.topic || fallback.topic);
+  const now = new Date().toISOString();
+  const createdAt = String(profile.createdAt || fallback.createdAt || now).trim() || now;
+  const updatedAt = String(profile.updatedAt || fallback.updatedAt || createdAt).trim() || createdAt;
+
+  return {
+    id: String(profile.id || fallback.id || "style-profile-current").trim() || "style-profile-current",
+    status: "active",
+    topic,
+    name: String(profile.name || fallback.name || `${topic}画像`).trim() || `${topic}画像`,
+    sourceSampleIds: uniqueStrings(profile.sourceSampleIds || fallback.sourceSampleIds),
+    titleStyle: String(profile.titleStyle || fallback.titleStyle || "").trim(),
+    bodyStructure: String(profile.bodyStructure || fallback.bodyStructure || "").trim(),
+    tone: String(profile.tone || fallback.tone || "").trim(),
+    preferredTags: uniqueStrings(profile.preferredTags || fallback.preferredTags),
+    avoidExpressions: uniqueStrings(profile.avoidExpressions || fallback.avoidExpressions),
+    generationGuidelines: uniqueStrings(profile.generationGuidelines || fallback.generationGuidelines),
+    createdAt,
+    updatedAt,
+    generationMeta: sanitizeStyleProfileGenerationMeta(profile.generationMeta, fallback.generationMeta)
+  };
+}
+
+function sanitizeStyleProfileAutoBase(profile = {}, fallback = {}) {
+  const normalized = buildNormalizedProfileCore(profile, fallback);
+  return normalized || null;
+}
+
+function isLegacyMirroredManualOverrides(profile = {}, manualOverrides = null) {
+  const sanitizedOverrides = sanitizeStyleProfileManualOverrides(manualOverrides);
+
+  if (!profile || typeof profile !== "object" || !sanitizedOverrides || profile.autoBase) {
+    return false;
+  }
+
+  const keys = Object.keys(sanitizedOverrides);
+
+  if (keys.length < 6) {
+    return false;
+  }
+
+  return keys.every((field) => areEditableFieldValuesEqual(field, sanitizedOverrides[field], profile[field]));
+}
+
+function retainExplicitManualOverrides(overrides = null, autoBase = null) {
+  const sanitizedOverrides = sanitizeStyleProfileManualOverrides(overrides);
+
+  if (!sanitizedOverrides) {
+    return null;
+  }
+
+  if (!autoBase) {
+    return sanitizedOverrides;
+  }
+
+  const next = {};
+
+  for (const [field, value] of Object.entries(sanitizedOverrides)) {
+    if (!areEditableFieldValuesEqual(field, value, autoBase[field])) {
+      next[field] = cloneEditableFieldValue(field, value);
+    }
+  }
+
+  return Object.keys(next).length ? next : null;
+}
+
+function buildManualOverridesFromPatch(patch = {}, { currentOverrides = null, autoBase = null } = {}) {
+  const existing = sanitizeStyleProfileManualOverrides(currentOverrides) || {};
+  const baseline = autoBase && typeof autoBase === "object" ? autoBase : {};
+  const next = { ...existing };
+
+  for (const field of STYLE_PROFILE_EDITABLE_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(patch, field)) {
+      continue;
+    }
+
+    const normalizedValue = normalizeEditableFieldValue(field, patch[field]);
+    const isEmptyValue = STYLE_PROFILE_LIST_FIELDS.has(field) ? normalizedValue.length === 0 : !normalizedValue;
+
+    if (isEmptyValue || areEditableFieldValuesEqual(field, normalizedValue, baseline[field])) {
+      delete next[field];
+      continue;
+    }
+
+    next[field] = cloneEditableFieldValue(field, normalizedValue);
+  }
+
+  return Object.keys(next).length ? next : null;
+}
+
 function applyStyleProfileManualOverrides(profile = {}, overrides = null) {
   const base = profile && typeof profile === "object" ? { ...profile } : {};
   const sanitizedOverrides = sanitizeStyleProfileManualOverrides(overrides);
@@ -185,31 +319,23 @@ function normalizeProfile(profile = {}, fallback = {}) {
     return null;
   }
 
-  const topic = normalizeTopic(profile.topic || fallback.topic);
-  const now = new Date().toISOString();
-  const createdAt = String(profile.createdAt || fallback.createdAt || now).trim() || now;
-  const updatedAt = String(profile.updatedAt || fallback.updatedAt || createdAt).trim() || createdAt;
+  const normalized = buildNormalizedProfileCore(profile, fallback);
+  const autoBase = sanitizeStyleProfileAutoBase(profile.autoBase || fallback.autoBase);
+  let manualOverrides = sanitizeStyleProfileManualOverrides(profile.manualOverrides || fallback.manualOverrides);
 
-  const manualOverrides = sanitizeStyleProfileManualOverrides(profile.manualOverrides || fallback.manualOverrides);
-  const generationMeta = sanitizeStyleProfileGenerationMeta(profile.generationMeta, fallback.generationMeta);
-  const normalized = {
-    id: String(profile.id || fallback.id || "style-profile-current").trim() || "style-profile-current",
-    status: "active",
-    topic,
-    name: String(profile.name || fallback.name || `${topic}画像`).trim() || `${topic}画像`,
-    sourceSampleIds: uniqueStrings(profile.sourceSampleIds || fallback.sourceSampleIds),
-    titleStyle: String(profile.titleStyle || fallback.titleStyle || "").trim(),
-    bodyStructure: String(profile.bodyStructure || fallback.bodyStructure || "").trim(),
-    tone: String(profile.tone || fallback.tone || "").trim(),
-    preferredTags: uniqueStrings(profile.preferredTags || fallback.preferredTags),
-    avoidExpressions: uniqueStrings(profile.avoidExpressions || fallback.avoidExpressions),
-    generationGuidelines: uniqueStrings(profile.generationGuidelines || fallback.generationGuidelines),
-    createdAt,
-    updatedAt,
-    generationMeta
-  };
+  if (isLegacyMirroredManualOverrides(profile, manualOverrides)) {
+    manualOverrides = null;
+  } else {
+    manualOverrides = retainExplicitManualOverrides(manualOverrides, autoBase);
+  }
 
-  return applyStyleProfileManualOverrides(normalized, manualOverrides);
+  const nextProfile = applyStyleProfileManualOverrides(normalized, manualOverrides);
+
+  if (autoBase) {
+    nextProfile.autoBase = autoBase;
+  }
+
+  return nextProfile;
 }
 
 function pickLegacyCurrent(profileState = {}) {
@@ -306,9 +432,21 @@ function buildStyleProfilePromptMessages(referenceSamples = [], { topic = "", na
   const normalizedSamples = (Array.isArray(referenceSamples) ? referenceSamples : []).map((sample) => ({
     id: String(sample.id || "").trim(),
     title: String(sample.title || "").trim(),
+    coverText: String(sample.coverText || "").trim(),
     body: String(sample.body || "").trim(),
     tags: ensureArray(sample.tags),
-    metrics: sample.metrics || {}
+    collectionType: String(sample.collectionType || sample.note?.collectionType || "").trim(),
+    source: String(sample.source || "").trim(),
+    referenceTier: String(sample.referenceTier || sample.reference?.tier || sample.tier || "").trim(),
+    referenceSelectedBy: String(sample.referenceSelectedBy || sample.reference?.selectedBy || "").trim(),
+    publishStatus: String(sample.publishStatus || sample.publish?.status || sample.status || "").trim(),
+    platformReason: String(sample.platformReason || sample.publish?.platformReason || "").trim(),
+    publishedAt: String(sample.publishedAt || sample.publish?.publishedAt || "").trim(),
+    notes: String(sample.notes || "").trim(),
+    sampleWeight: getSuccessSampleWeight(sample),
+    metrics: sample.metrics || {},
+    analysisSnapshot: sample.analysisSnapshot || null,
+    rewriteSnapshot: sample.rewriteSnapshot || null
   }));
 
   return [
@@ -328,6 +466,7 @@ function buildStyleProfilePromptMessages(referenceSamples = [], { topic = "", na
         "1. preferredTags / avoidExpressions / generationGuidelines 必须是字符串数组。",
         "2. titleStyle / bodyStructure / tone 必须是自然中文，不要空泛套话。",
         "3. 不要编造不存在的样本内容或平台数据。",
+        "4. 优先根据标题、封面文案、正文结构、标签、合集类型、入池层级、发布时间、互动指标与备注来归纳真实风格差异。",
         `参考样本：${JSON.stringify(normalizedSamples, null, 2)}`
       ].join("\n")
     }
@@ -489,10 +628,19 @@ export function buildAutoStyleProfileState(profileState = {}, successSamples = [
           topic: String(options.topic || "").trim() || current.topic,
           name: String(options.name || "").trim() || current.name
         });
-  const nextCurrentWithOverrides = applyStyleProfileManualOverrides(nextCurrent, current.manualOverrides);
+  const previousAutoBase = sanitizeStyleProfileAutoBase(current.autoBase);
+  const nextAutoBase = sanitizeStyleProfileAutoBase(nextCurrent, current);
+  const nextOverrides = isLegacyMirroredManualOverrides(current, current.manualOverrides)
+    ? null
+    : retainExplicitManualOverrides(current.manualOverrides, previousAutoBase);
+  const nextCurrentWithOverrides = applyStyleProfileManualOverrides(nextAutoBase, nextOverrides);
+  nextCurrentWithOverrides.autoBase = nextAutoBase;
 
   if (current?.createdAt) {
     nextCurrentWithOverrides.createdAt = current.createdAt;
+    if (nextCurrentWithOverrides.autoBase) {
+      nextCurrentWithOverrides.autoBase.createdAt = current.createdAt;
+    }
   }
 
   return sanitizeStyleProfileState({
@@ -503,19 +651,24 @@ export function buildAutoStyleProfileState(profileState = {}, successSamples = [
 export function updateStyleProfileManualOverrides(profileState = {}, patch = {}) {
   const currentState = sanitizeStyleProfileState(profileState);
   const current = currentState.current || buildStyleProfile([], {});
-  const existingOverrides = sanitizeStyleProfileManualOverrides(current.manualOverrides) || {};
-  const incomingOverrides = sanitizeStyleProfileManualOverrides(patch) || {};
-  const nextOverrides = sanitizeStyleProfileManualOverrides({
-    ...existingOverrides,
-    ...incomingOverrides
+  const autoBase = sanitizeStyleProfileAutoBase(current.autoBase, current) || sanitizeStyleProfileAutoBase(current);
+  const nextOverrides = buildManualOverridesFromPatch(patch, {
+    currentOverrides: current.manualOverrides,
+    autoBase
   });
-  const nextCurrent = applyStyleProfileManualOverrides(
+  const nextBaseProfile = applyEditableFields(
     {
       ...current,
       updatedAt: new Date().toISOString()
     },
+    autoBase || current
+  );
+  const nextCurrent = applyStyleProfileManualOverrides(
+    nextBaseProfile,
     nextOverrides
   );
+
+  nextCurrent.autoBase = autoBase;
 
   return sanitizeStyleProfileState({
     current: nextCurrent

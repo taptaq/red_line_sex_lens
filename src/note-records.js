@@ -81,7 +81,8 @@ function normalizeMetrics(metrics = {}) {
     likes: normalizeMetric(metrics.likes),
     favorites: normalizeMetric(metrics.favorites),
     comments: normalizeMetric(metrics.comments),
-    views: normalizeMetric(metrics.views)
+    views: normalizeMetric(metrics.views),
+    shares: normalizeMetric(metrics.shares)
   };
 }
 
@@ -158,7 +159,8 @@ function mergeMetrics(left = {}, right = {}) {
     likes: Math.max(normalizeMetric(left.likes), normalizeMetric(right.likes)),
     favorites: Math.max(normalizeMetric(left.favorites), normalizeMetric(right.favorites)),
     comments: Math.max(normalizeMetric(left.comments), normalizeMetric(right.comments)),
-    views: Math.max(normalizeMetric(left.views), normalizeMetric(right.views))
+    views: Math.max(normalizeMetric(left.views), normalizeMetric(right.views)),
+    shares: Math.max(normalizeMetric(left.shares), normalizeMetric(right.shares))
   };
 }
 

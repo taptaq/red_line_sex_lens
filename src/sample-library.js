@@ -45,7 +45,8 @@ export function buildSampleLibraryImportPayload(item = {}) {
         likes: resolveMetricValue(item, "likes"),
         favorites: resolveMetricValue(item, "favorites"),
         comments: resolveMetricValue(item, "comments"),
-        views: resolveMetricValue(item, "views")
+        views: resolveMetricValue(item, "views"),
+        shares: resolveMetricValue(item, "shares")
       }
     },
     reference: {
@@ -181,6 +182,9 @@ export function patchSampleLibraryRecord(current = {}, payload = {}) {
       }
       if (hasOwn(payload.publish.metrics, "views")) {
         next.publish.metrics.views = payload.publish.metrics.views;
+      }
+      if (hasOwn(payload.publish.metrics, "shares")) {
+        next.publish.metrics.shares = payload.publish.metrics.shares;
       }
     }
   }

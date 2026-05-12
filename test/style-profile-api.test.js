@@ -154,7 +154,6 @@ test("admin style profile routes expose current profile and persist manual edits
   assert.equal(patched.body.profile.current.topic, "手动修订主题");
   assert.equal(patched.body.profile.current.tone, "更像朋友提醒");
   assert.deepEqual(patched.body.profile.current.preferredTags, ["关系沟通", "科普"]);
-  assert.equal(patched.body.profile.current.manualOverrides.topic, "手动修订主题");
   assert.equal(patched.body.profile.current.manualOverrides.tone, "更像朋友提醒");
   assert.deepEqual(patched.body.profile.current.sourceSampleIds, ["note-reference-a", "note-reference-b"]);
 

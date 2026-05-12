@@ -12,7 +12,8 @@ import {
   generateStyleProfileWithFallback,
   getActiveStyleProfile,
   sanitizeStyleProfileState,
-  scoreContentAgainstStyleProfile
+  scoreContentAgainstStyleProfile,
+  updateStyleProfileManualOverrides
 } from "../src/style-profile.js";
 
 async function withTempStyleProfile(t, run) {
@@ -215,7 +216,7 @@ test("auto style profile state replaces current profile instead of appending his
   assert.deepEqual(secondProfile.versions, []);
 });
 
-test("auto style profile state reapplies manual overrides after refresh", () => {
+test("auto style profile state preserves explicit manual overrides after refresh", () => {
   const samples = [
     {
       id: "record-featured",
@@ -238,23 +239,28 @@ test("auto style profile state reapplies manual overrides after refresh", () => 
       current: {
         id: "style-profile-current",
         status: "active",
-        topic: "人工修订主题",
-        name: "人工修订画像",
-        titleStyle: "旧标题风格",
+        topic: "自动沉淀画像",
+        name: "自动沉淀画像",
+        titleStyle: "手动标题风格",
         bodyStructure: "旧正文结构",
-        tone: "旧语气",
-        preferredTags: ["旧标签"],
+        tone: "手动语气",
+        preferredTags: ["手动标签"],
         avoidExpressions: ["旧禁用词"],
         generationGuidelines: ["旧指导"],
+        autoBase: {
+          topic: "自动沉淀画像",
+          name: "自动沉淀画像",
+          titleStyle: "旧标题风格",
+          bodyStructure: "旧正文结构",
+          tone: "旧语气",
+          preferredTags: ["旧标签"],
+          avoidExpressions: ["旧禁用词"],
+          generationGuidelines: ["旧指导"]
+        },
         manualOverrides: {
-          topic: "人工修订主题",
-          name: "人工修订画像",
           titleStyle: "手动标题风格",
-          bodyStructure: "手动正文结构",
           tone: "手动语气",
-          preferredTags: ["手动标签"],
-          avoidExpressions: ["手动禁用词"],
-          generationGuidelines: ["手动指导"]
+          preferredTags: ["手动标签"]
         }
       }
     },
@@ -264,16 +270,177 @@ test("auto style profile state reapplies manual overrides after refresh", () => 
     }
   );
 
-  assert.equal(profile.current.topic, "人工修订主题");
-  assert.equal(profile.current.name, "人工修订画像");
+  assert.equal(profile.current.topic, "自动沉淀画像");
+  assert.equal(profile.current.name, "自动沉淀画像");
   assert.equal(profile.current.titleStyle, "手动标题风格");
-  assert.equal(profile.current.bodyStructure, "手动正文结构");
+  assert.match(profile.current.bodyStructure, /正文/);
   assert.equal(profile.current.tone, "手动语气");
   assert.deepEqual(profile.current.preferredTags, ["手动标签"]);
-  assert.deepEqual(profile.current.avoidExpressions, ["手动禁用词"]);
-  assert.deepEqual(profile.current.generationGuidelines, ["手动指导"]);
+  assert.deepEqual(profile.current.avoidExpressions, ["绝对化承诺", "强导流", "低俗擦边", "过度教程化"]);
+  assert.ok(profile.current.generationGuidelines.length >= 1);
   assert.deepEqual(profile.current.sourceSampleIds, ["record-featured", "record-performed"]);
   assert.equal(profile.current.manualOverrides?.tone, "手动语气");
+});
+
+test("auto style profile state drops legacy mirrored manual overrides during refresh", () => {
+  const generatedProfile = {
+    id: "style-profile-current",
+    status: "active",
+    topic: "新画像主题",
+    name: "新画像名称",
+    sourceSampleIds: ["record-featured"],
+    titleStyle: "新的标题风格，更贴近参考样本。",
+    bodyStructure: "新的正文结构，先场景后建议。",
+    tone: "新的语气，更具体。",
+    preferredTags: ["关系", "沟通"],
+    avoidExpressions: ["绝对化承诺"],
+    generationGuidelines: ["多引用真实场景"],
+    createdAt: "2026-05-10T00:00:00.000Z",
+    updatedAt: "2026-05-11T00:00:00.000Z"
+  };
+
+  const profile = buildAutoStyleProfileState(
+    {
+      current: {
+        ...generatedProfile,
+        titleStyle: "旧的被锁死标题风格",
+        bodyStructure: "旧的被锁死正文结构",
+        tone: "旧的被锁死语气",
+        preferredTags: ["旧标签"],
+        avoidExpressions: ["旧禁用词"],
+        generationGuidelines: ["旧指导"],
+        manualOverrides: {
+          topic: "新画像主题",
+          name: "新画像名称",
+          titleStyle: "旧的被锁死标题风格",
+          bodyStructure: "旧的被锁死正文结构",
+          tone: "旧的被锁死语气",
+          preferredTags: ["旧标签"],
+          avoidExpressions: ["旧禁用词"],
+          generationGuidelines: ["旧指导"]
+        }
+      }
+    },
+    [],
+    {
+      generatedProfile
+    }
+  );
+
+  assert.equal(profile.current.titleStyle, "新的标题风格，更贴近参考样本。");
+  assert.equal(profile.current.bodyStructure, "新的正文结构，先场景后建议。");
+  assert.equal(profile.current.tone, "新的语气，更具体。");
+  assert.deepEqual(profile.current.preferredTags, ["关系", "沟通"]);
+  assert.equal(profile.current.manualOverrides, undefined);
+});
+
+test("style profile update stores only fields that differ from auto baseline", () => {
+  const profileState = {
+    current: {
+      id: "style-profile-current",
+      status: "active",
+      topic: "通用风格",
+      name: "通用风格画像",
+      sourceSampleIds: ["record-featured"],
+      titleStyle: "自动标题风格",
+      bodyStructure: "自动正文结构",
+      tone: "自动语气",
+      preferredTags: ["科普", "沟通"],
+      avoidExpressions: ["绝对化承诺"],
+      generationGuidelines: ["先结论后建议"],
+      autoBase: {
+        topic: "通用风格",
+        name: "通用风格画像",
+        titleStyle: "自动标题风格",
+        bodyStructure: "自动正文结构",
+        tone: "自动语气",
+        preferredTags: ["科普", "沟通"],
+        avoidExpressions: ["绝对化承诺"],
+        generationGuidelines: ["先结论后建议"]
+      }
+    }
+  };
+
+  const next = updateStyleProfileManualOverrides(profileState, {
+    topic: "通用风格",
+    name: "通用风格画像",
+    titleStyle: "自动标题风格",
+    bodyStructure: "自动正文结构",
+    tone: "更像朋友提醒",
+    preferredTags: ["科普", "沟通"],
+    avoidExpressions: ["绝对化承诺"],
+    generationGuidelines: ["先结论后建议"]
+  });
+
+  assert.equal(next.current.tone, "更像朋友提醒");
+  assert.deepEqual(next.current.manualOverrides, {
+    tone: "更像朋友提醒"
+  });
+});
+
+test("style profile model prompt includes rich reference sample context", async () => {
+  const samples = [
+    {
+      id: "record-a",
+      tier: "featured",
+      title: "参考样本 A",
+      body: "正文 A".repeat(10),
+      coverText: "封面文案 A",
+      tags: ["关系", "沟通"],
+      source: "manual",
+      collectionType: "reference_pool",
+      publishedAt: "2026-05-09T00:00:00.000Z",
+      metrics: {
+        likes: 35,
+        favorites: 22,
+        comments: 11,
+        shares: 24,
+        views: 3200
+      },
+      reference: {
+        enabled: true,
+        tier: "featured",
+        selectedBy: "rule"
+      },
+      publish: {
+        status: "positive_performance",
+        platformReason: "高互动入池"
+      },
+      notes: "样本备注"
+    }
+  ];
+  let capturedMessages = null;
+
+  await generateStyleProfileWithFallback(samples, {
+    topic: "亲密关系沟通",
+    name: "亲密关系沟通画像",
+    generateWithProvider: async ({ messages }) => {
+      capturedMessages = messages;
+      return {
+        model: "test-model",
+        route: "official",
+        routeLabel: "官方",
+        parsed: {
+          topic: "亲密关系沟通",
+          name: "亲密关系沟通画像",
+          titleStyle: "标题更口语。",
+          bodyStructure: "先结论再展开。",
+          tone: "温和克制。",
+          preferredTags: ["关系", "沟通"],
+          avoidExpressions: ["绝对化承诺"],
+          generationGuidelines: ["多用真实场景"]
+        }
+      };
+    }
+  });
+
+  const prompt = capturedMessages?.[1]?.content || "";
+  assert.match(prompt, /"coverText": "封面文案 A"/);
+  assert.match(prompt, /"collectionType": "reference_pool"/);
+  assert.match(prompt, /"referenceTier": "featured"/);
+  assert.match(prompt, /"publishStatus": "positive_performance"/);
+  assert.match(prompt, /"platformReason": "高互动入池"/);
+  assert.match(prompt, /"shares": 24/);
 });
 
 test("style profile model chain falls through qwen and kimi before deepseek succeeds", async () => {

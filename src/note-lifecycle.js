@@ -38,7 +38,8 @@ function normalizeMetrics(metrics = {}) {
     likes: Math.max(0, Math.floor(Number(metrics.likes) || 0)),
     favorites: Math.max(0, Math.floor(Number(metrics.favorites) || 0)),
     comments: Math.max(0, Math.floor(Number(metrics.comments) || 0)),
-    views: Math.max(0, Math.floor(Number(metrics.views) || 0))
+    views: Math.max(0, Math.floor(Number(metrics.views) || 0)),
+    shares: Math.max(0, Math.floor(Number(metrics.shares) || 0))
   };
 }
 

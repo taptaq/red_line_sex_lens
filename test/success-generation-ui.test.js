@@ -120,12 +120,18 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(sampleLibraryPaneHtml, /aria-expanded="false"/);
   assert.match(indexHtml, /新增学习样本/);
   assert.match(appJs, /saveLabel:\s*"保存学习样本"/);
-  assert.match(indexHtml, /id="sample-library-search-input"/);
   assert.match(indexHtml, /id="sample-library-filter"/);
   assert.match(indexHtml, /id="sample-library-collection-filter"/);
+  assert.doesNotMatch(indexHtml, /id="sample-library-search-input"/);
+  assert.doesNotMatch(indexHtml, /id="sample-library-likes-filter"/);
+  assert.doesNotMatch(indexHtml, /id="sample-library-favorites-filter"/);
+  assert.doesNotMatch(indexHtml, /id="sample-library-comments-filter"/);
+  assert.doesNotMatch(indexHtml, /id="sample-library-views-filter"/);
+  assert.doesNotMatch(indexHtml, /id="sample-library-shares-filter"/);
   assert.match(indexHtml, /name="collectionType"/);
   assert.match(appJs, /<select name="collectionType">/);
   assert.match(appJs, /name="views"/);
+  assert.match(appJs, /name="shares"/);
   assert.match(indexHtml, /id="analyze-collection-type-select"/);
   assert.match(indexHtml, /id="generation-collection-type-select"/);
   assert.match(indexHtml, /id="generation-model-selection"/);
@@ -218,6 +224,7 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /\/api\/admin\/style-profile/);
   assert.match(appJs, /collectionType:\s*String\(form\.get\("collectionType"\)/);
   assert.match(appJs, /views:\s*Number\(source\.metrics\?\.views \?\? source\.views \?\? 0\) \|\| 0/);
+  assert.match(appJs, /shares:\s*Number\(source\.metrics\?\.shares \?\? source\.shares \?\? 0\) \|\| 0/);
   assert.match(appJs, /sampleLibraryRecords:\s*\[\s*\]/);
   assert.match(appJs, /adminDataLoading:\s*\{\s*phase:\s*"initial"/);
   assert.match(appJs, /summaryLoading:\s*\{\s*phase:\s*"initial"/);
@@ -226,7 +233,6 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /selectedSampleLibraryRecordId:\s*""/);
   assert.match(appJs, /sampleLibraryDetailStep:\s*"base"/);
   assert.match(appJs, /sampleLibraryFilter:\s*"all"/);
-  assert.match(appJs, /sampleLibrarySearch:\s*""/);
   assert.match(appJs, /function\s+filterSampleLibraryRecords\s*\(/);
   assert.match(appJs, /function\s+getSelectedSampleLibraryRecord\s*\(/);
   assert.match(appJs, /function\s+renderSampleLibraryList\s*\(/);
@@ -389,7 +395,9 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /class="lifecycle-primary-grid"/);
   assert.match(appJs, /class="lifecycle-metrics-grid"/);
   assert.match(appJs, /<span>浏览数<\/span>/);
+  assert.match(appJs, /<span>分享数<\/span>/);
   assert.match(appJs, /浏览 \${escapeHtml\(String\(publish\.metrics\.views \|\| 0\)\)}/);
+  assert.match(appJs, /分享 \${escapeHtml\(String\(publish\.metrics\.shares \|\| 0\)\)}/);
   assert.match(styles, /\.lifecycle-primary-grid\s*\{/);
   assert.match(styles, /\.lifecycle-metrics-grid\s*\{/);
   assert.match(styles, /\.sample-library-metric-grid\s*\{/);
@@ -617,7 +625,7 @@ test("sample library workspace exposes record preview and full-list modal contro
     "getSampleRecordPublish",
     `${sortHelperSource}; ${filterHelperSource}; return filterSampleLibraryRecords;`
   )(
-    { sampleLibraryFilter: "all", sampleLibraryCollectionFilter: "all", sampleLibrarySearch: "" },
+    { sampleLibraryFilter: "all", sampleLibraryCollectionFilter: "all" },
     () => ({ enabled: false }),
     () => false,
     () => "default",
@@ -674,6 +682,11 @@ test("sample library record modal upgrades to inline master-detail editing", asy
     "function buildSampleLibraryRecordInlineEditorModalMarkup(",
     "function renderSampleLibraryRecordInlineEditorModal("
   );
+  const sidebarSource = extractSourceBetween(
+    appJs,
+    "function buildSampleLibraryRecordInlineEditorSidebarMarkup(",
+    "function readSampleLibraryRecordInlineEditorDraftFromModal("
+  );
   const listModalOpenSource = extractSourceBetween(
     appJs,
     'if (action === "open-sample-library-record-list-modal") {',
@@ -682,12 +695,14 @@ test("sample library record modal upgrades to inline master-detail editing", asy
 
   assert.match(appJs, /function\s+openSampleLibraryRecordInlineEditorModal\s*\(/);
   assert.match(appJs, /function\s+buildSampleLibraryRecordInlineEditorDraft\s*\(/);
+  assert.match(appJs, /function\s+filterSampleLibraryRecordInlineEditorItems\s*\(/);
   assert.match(appJs, /function\s+buildSampleLibraryRecordInlineEditorPatchPayload\s*\(/);
   assert.match(appJs, /function\s+buildSampleLibraryRecordInlineEditorModalMarkup\s*\(/);
   assert.match(appJs, /function\s+saveSampleLibraryRecordInlineEditorModal\s*\(/);
   assert.match(appJs, /function\s+requestSampleLibraryRecordInlineEditorSwitch\s*\(/);
   assert.match(appJs, /function\s+requestCloseSampleLibraryRecordInlineEditorModal\s*\(/);
   assert.match(appJs, /kind:\s*"record-list-inline-editor"/);
+  assert.match(openInlineEditorSource, /titleFilter:\s*""/);
   assert.match(openInlineEditorSource, /kind:\s*"record-list-inline-editor"/);
   assert.match(openInlineEditorSource, /renderSampleLibraryRecordInlineEditorModal\(\)/);
   assert.match(listModalOpenSource, /openSampleLibraryRecordInlineEditorModal\(/);
@@ -695,6 +710,7 @@ test("sample library record modal upgrades to inline master-detail editing", asy
   assert.match(inlineEditorSource, /sample-library-record-inline-editor-layout/);
   assert.match(inlineEditorSource, /sample-library-record-inline-editor-sidebar/);
   assert.match(inlineEditorSource, /sample-library-record-inline-editor-detail/);
+  assert.match(sidebarSource, /name="recordTitleFilter"/);
   assert.match(inlineEditorSource, /buildSampleLibraryBaseEditorSectionMarkup\(/);
   assert.match(inlineEditorSource, /buildSampleLibraryReferenceEditorSectionMarkup\(/);
   assert.match(inlineEditorSource, /buildSampleLibraryLifecycleEditorSectionMarkup\(/);
@@ -706,10 +722,15 @@ test("sample library record modal upgrades to inline master-detail editing", asy
   assert.match(styles, /\.sample-library-modal-content\s*\{[\s\S]*overflow:\s*auto;/);
   assert.match(
     styles,
-    /\.sample-library-modal\[data-modal-kind="record-list-inline-editor"\] \.sample-library-modal-content\s*\{[\s\S]*overflow:\s*hidden;/
+    /\.sample-library-modal\[data-modal-kind="record-list-inline-editor"\] \.sample-library-modal-dialog\s*\{[\s\S]*height:\s*min\(860px,\s*calc\(100vh - 2rem\)\);/
+  );
+  assert.match(
+    styles,
+    /\.sample-library-modal\[data-modal-kind="record-list-inline-editor"\] \.sample-library-modal-content\s*\{[\s\S]*height:\s*100%;[\s\S]*overflow:\s*hidden;/
   );
   assert.match(styles, /\.sample-library-record-inline-editor-sidebar-list\s*\{[\s\S]*overflow:\s*auto;/);
   assert.match(styles, /\.sample-library-record-inline-editor-detail\s*\{[\s\S]*overflow:\s*auto;/);
+  assert.match(styles, /\.sample-library-record-inline-editor-filter\s*\{/);
 });
 
 test("record inline editor keeps one unified patch payload and dirty-aware record switching", async () => {
@@ -752,6 +773,11 @@ test("record inline editor keeps one unified patch payload and dirty-aware recor
   const dirtyHelperSource = extractSourceBetween(
     appJs,
     "function isSampleLibraryRecordInlineEditorDirty(",
+    "function filterSampleLibraryRecordInlineEditorItems("
+  );
+  const filterItemsHelperSource = extractSourceBetween(
+    appJs,
+    "function filterSampleLibraryRecordInlineEditorItems(",
     "function buildSampleLibraryRecordInlineEditorSidebarMarkup("
   );
   const switchHelperSource = extractSourceBetween(
@@ -773,6 +799,16 @@ test("record inline editor keeps one unified patch payload and dirty-aware recor
     appJs,
     "function saveSampleLibraryRecordInlineEditorCloseConfirmModal(",
     "function saveSampleLibraryRecordInlineEditorModal("
+  );
+  const modalChangeHandlerSource = extractSourceBetween(
+    appJs,
+    'byId("sample-library-modal-content")?.addEventListener("change", (event) => {',
+    'byId("sample-library-modal-content")?.addEventListener("input", (event) => {'
+  );
+  const modalInputHandlerSource = extractSourceBetween(
+    appJs,
+    'byId("sample-library-modal-content")?.addEventListener("input", (event) => {',
+    'byId("sample-library-modal-content")?.addEventListener("click", (event) => {'
   );
   const deleteModalSource = extractSourceBetween(
     appJs,
@@ -804,7 +840,7 @@ test("record inline editor keeps one unified patch payload and dirty-aware recor
     id: "note-4",
     note: { title: "标题", body: "正文", coverText: "封面", collectionType: "all", tags: ["a"] },
     reference: { enabled: true, tier: "passed", notes: "ref" },
-    publish: { status: "published_passed", metrics: { likes: 1, favorites: 2, comments: 3, views: 4 } },
+    publish: { status: "published_passed", metrics: { likes: 1, favorites: 2, comments: 3, views: 4, shares: 5 } },
     calibration: { prediction: { predictedStatus: "published_passed" }, retro: { notes: "retro" } }
   };
 
@@ -812,6 +848,7 @@ test("record inline editor keeps one unified patch payload and dirty-aware recor
   assert.equal(draft.note.title, "标题");
   assert.equal(draft.reference.enabled, true);
   assert.equal(draft.publish.metrics.views, 4);
+  assert.equal(draft.publish.metrics.shares, 5);
 
   const buildPatchPayload = new Function(`${payloadHelperSource}; return buildSampleLibraryRecordInlineEditorPatchPayload;`)();
   const payload = buildPatchPayload("note-4", draft);
@@ -825,8 +862,25 @@ test("record inline editor keeps one unified patch payload and dirty-aware recor
   assert.equal(payload.publish.status, "published_passed");
   assert.equal(payload.publish.metrics.likes, 1);
   assert.equal(payload.publish.metrics.views, 4);
+  assert.equal(payload.publish.metrics.shares, 5);
   assert.equal(payload.calibration.prediction.predictedStatus, "published_passed");
   assert.equal(payload.calibration.retro.notes, "retro");
+
+  const filterInlineEditorItems = new Function(
+    "getSampleRecordTitle",
+    `${filterItemsHelperSource}; return filterSampleLibraryRecordInlineEditorItems;`
+  )((item) => String(item?.note?.title || item?.title || ""));
+  assert.deepEqual(
+    filterInlineEditorItems(
+      [
+        { id: "record-1", note: { title: "纸片人入门" } },
+        { id: "record-2", note: { title: "玩具避坑清单" } },
+        { id: "record-3", note: { title: "纸片人进阶玩法" } }
+      ],
+      "纸片人"
+    ).map((item) => item.id),
+    ["record-1", "record-3"]
+  );
 
   const isDirty = new Function(`${dirtyHelperSource}; return isSampleLibraryRecordInlineEditorDirty;`)();
   assert.equal(isDirty({ draft, initialSnapshot: draft }), false);
@@ -858,6 +912,10 @@ test("record inline editor keeps one unified patch payload and dirty-aware recor
   assert.match(closeHelperSource, /modalState\?\.kind === "delete-record" && modalState\.returnTo\?\.kind === "record-list-inline-editor"/);
   assert.match(renderModalSource, /saveLabel:\s*"保存整条记录"/);
   assert.match(renderModalSource, /cancelLabel:\s*"关闭"/);
+  assert.match(appJs, /function\s+syncSampleLibraryRecordInlineEditorFilterResults\s*\(/);
+  assert.match(renderModalSource, /const allItems = filterSampleLibraryRecords\(appState\.sampleLibraryRecords\);/);
+  assert.match(renderModalSource, /const items = filterSampleLibraryRecordInlineEditorItems\(\s*allItems,/);
+  assert.match(renderModalSource, /const selectedRecord =\s*allItems\.find\(/);
   assert.match(switchConfirmMarkupSource, /是否切换并丢弃未保存修改/);
   assert.match(switchConfirmMarkupSource, /继续切换后，当前这条记录里尚未保存的修改会被丢弃/);
   assert.match(switchConfirmRenderSource, /title:\s*"切换前确认"/);
@@ -876,6 +934,30 @@ test("record inline editor keeps one unified patch payload and dirty-aware recor
   assert.match(appJs, /modalState\?\.kind === "record-list-inline-editor-close-confirm"[\s\S]*saveSampleLibraryRecordInlineEditorCloseConfirmModal\(\)/);
   assert.match(deleteModalSource, /const returnTo = appState\.sampleLibraryModal\?\.kind === "record-list-inline-editor" \? \{ \.\.\.appState\.sampleLibraryModal \} : null;/);
   assert.match(deleteModalSource, /kind:\s*"delete-record"/);
+  assert.match(
+    modalChangeHandlerSource,
+    /fieldName === "recordTitleFilter"[\s\S]*syncSampleLibraryRecordInlineEditorFilterResults\(\);/
+  );
+  assert.match(
+    modalInputHandlerSource,
+    /fieldName === "recordTitleFilter"[\s\S]*syncSampleLibraryRecordInlineEditorFilterResults\(\);/
+  );
+  assert.doesNotMatch(
+    modalChangeHandlerSource,
+    /fieldName === "recordTitleFilter"[\s\S]*renderSampleLibraryRecordInlineEditorModal\(\);/
+  );
+  assert.doesNotMatch(
+    modalInputHandlerSource,
+    /fieldName === "recordTitleFilter"[\s\S]*renderSampleLibraryRecordInlineEditorModal\(\);/
+  );
+  assert.doesNotMatch(
+    modalChangeHandlerSource,
+    /fieldName === "recordTitleFilter"[\s\S]*setSelectionRange\(/
+  );
+  assert.doesNotMatch(
+    modalInputHandlerSource,
+    /fieldName === "recordTitleFilter"[\s\S]*setSelectionRange\(/
+  );
   assert.match(escapeHandlerSource, /appState\.sampleLibraryModal\?\.kind === "record-list-inline-editor-switch-confirm"/);
   assert.match(escapeHandlerSource, /appState\.sampleLibraryModal\?\.kind === "record-list-inline-editor-close-confirm"/);
   assert.match(escapeHandlerSource, /requestCloseSampleLibraryRecordInlineEditorModal\(\)/);
@@ -912,6 +994,8 @@ test("negative pool actions route false positive lifecycle records to lifecycle 
 
   assert.ok(actionMarkupStart !== -1 && actionMarkupEnd !== -1, "expected buildSamplePoolActionMarkup source");
   assert.match(actionMarkupSource, /\["limited", "violation", "false_positive"\]\.includes\(publish\.status\)/);
+  assert.match(actionMarkupSource, /data-action="open-sample-library-delete-modal"/);
+  assert.match(actionMarkupSource, /class="button button-danger button-small" data-action="open-sample-library-delete-modal"/);
   assert.doesNotMatch(
     actionMarkupSource,
     /\["limited", "violation"\]\.includes\(publish\.status\)[\s\S]*restore-sample-from-negative-pool/
@@ -932,32 +1016,103 @@ test("reference candidate qualification uses the same content-length floor as ru
 });
 
 test("sample pool explanation distinguishes direct engagement from views-assisted qualification", async () => {
-  const { indexHtml, appJs } = await readFrontendFiles();
+  const { indexHtml, appJs, styles } = await readFrontendFiles();
   assert.match(appJs, /function evaluateReferenceSampleThreshold\(metrics = \{\}\) \{/);
   assert.match(appJs, /likes:\s*30/);
+  assert.match(appJs, /directViews:\s*2000/);
   assert.match(appJs, /supportViews:\s*1000/);
-  assert.match(appJs, /favorites:\s*10/);
+  assert.match(appJs, /favorites:\s*20/);
   assert.match(appJs, /comments:\s*10/);
+  assert.match(appJs, /shares:\s*20/);
   assert.match(appJs, /nearLikes:\s*15/);
-  assert.match(appJs, /nearFavorites:\s*5/);
+  assert.match(appJs, /nearFavorites:\s*10/);
   assert.match(appJs, /nearComments:\s*5/);
-  assert.match(appJs, /互动达标/);
-  assert.match(appJs, /互动接近达标，已由高浏览数补足/);
-  assert.match(appJs, /qualification\.reason \|\| "互动达标"/);
+  assert.match(appJs, /nearShares:\s*10/);
+  assert.match(appJs, /互动直达达标/);
+  assert.match(appJs, /浏览直达达标/);
+  assert.match(appJs, /互动接近达标，已由高浏览补足/);
+  assert.doesNotMatch(appJs, /qualification\.reason \|\| "互动达标"/);
+  assert.match(appJs, /function\s+getSamplePoolWhyHelperText\s*\(/);
+  assert.match(appJs, /至少一项已经单独达到参考门槛/);
+  assert.match(appJs, /当前由浏览数单独达到参考门槛/);
+  assert.match(appJs, /再由高浏览补足后进入参考池/);
+  assert.match(appJs, /sample-pool-why-helper/);
   assert.match(appJs, /只有浏览高，核心互动还没接近达标/);
   assert.match(indexHtml, /id="sample-library-flow-reference-threshold"/);
   assert.match(indexHtml, /id="sample-library-pools-modal-subtitle"/);
   assert.match(appJs, /function\s+getReferenceThresholdDirectRuleText\s*\(/);
   assert.match(appJs, /function\s+getReferenceThresholdAssistRuleText\s*\(/);
   assert.match(appJs, /function\s+getReferenceThresholdRequirementText\s*\(/);
+  assert.match(styles, /\.sample-pool-why-helper\s*\{/);
 });
 
 test("sample pool modal folds counts into tab titles instead of rendering duplicate summary cards", async () => {
   const { appJs, styles } = await readFrontendFiles();
   const modalSource = extractSourceBetween(appJs, "function renderSampleLibraryPoolsModal()", "function openSampleLibraryPoolsModal");
+  const poolsContentInputSource = extractSourceBetween(
+    appJs,
+    'byId("sample-library-modal-save")?.addEventListener("click", async () => {',
+    'byId("rewrite-model-selection").addEventListener("change", () => {'
+  );
+  const poolsTabClickSource = extractSourceBetween(
+    appJs,
+    'const samplePoolTab = event.target.closest("[data-sample-pool-tab]");',
+    'const lexiconWorkspaceTab = event.target.closest("[data-lexicon-workspace-tab]");'
+  );
 
   assert.match(appJs, /function\s+formatSamplePoolTabLabel\s*\(/);
-  assert.match(modalSource, /button\.textContent = formatSamplePoolTabLabel\(tab,\s*summary\[tab\] \|\| 0\)/);
+  assert.match(appJs, /function\s+filterSamplePoolRecordsByTitle\s*\(/);
+  assert.match(appJs, /function\s+syncSampleLibraryPoolsModalSearchResults\s*\(/);
+  assert.match(
+    appJs,
+    /sampleLibraryPoolsModal:\s*\{\s*open:\s*false,\s*tab:\s*"reference",\s*search:\s*"",\s*metricFilters:\s*\{\s*likes:\s*"",\s*favorites:\s*"",\s*comments:\s*"",\s*views:\s*"",\s*shares:\s*""\s*\}\s*\}/
+  );
+  assert.match(modalSource, /const poolSearch = String\(appState\.sampleLibraryPoolsModal\?\.search \|\| ""\);/);
+  assert.match(modalSource, /const poolMetricFilters = appState\.sampleLibraryPoolsModal\?\.metricFilters \|\| \{\}/);
+  assert.match(modalSource, /const filteredRecords = filterSamplePoolRecords\(/);
+  assert.match(modalSource, /const filteredSummary = buildSamplePoolSummary\(filteredRecords\);/);
+  assert.match(modalSource, /button\.textContent = formatSamplePoolTabLabel\(tab,\s*filteredSummary\[tab\] \|\| 0\)/);
+  assert.match(modalSource, /name="samplePoolTitleFilter"/);
+  assert.match(modalSource, /name="samplePoolLikesFilter"/);
+  assert.match(modalSource, /name="samplePoolFavoritesFilter"/);
+  assert.match(modalSource, /name="samplePoolCommentsFilter"/);
+  assert.match(modalSource, /name="samplePoolViewsFilter"/);
+  assert.match(modalSource, /name="samplePoolSharesFilter"/);
+  assert.match(modalSource, /data-action="clear-sample-pool-filters"/);
+  assert.match(modalSource, /清空全部筛选/);
+  assert.match(modalSource, /value="\$\{escapeHtml\(poolSearch\)\}"/);
+  assert.match(modalSource, /按标题搜索全部样本池/);
+  assert.match(modalSource, /当前筛选下没有匹配的记录/);
+  assert.match(
+    appJs,
+    /open:\s*true,\s*tab:\s*\["reference", "regular", "negative"\]\.includes\(pool\) \? pool : "reference",\s*search:\s*"",\s*metricFilters:\s*\{\s*likes:\s*"",\s*favorites:\s*"",\s*comments:\s*"",\s*views:\s*"",\s*shares:\s*""\s*\}/
+  );
+  assert.match(
+    appJs,
+    /open:\s*false,\s*tab:\s*String\(appState\.sampleLibraryPoolsModal\?\.tab \|\| "reference"\),\s*search:\s*"",\s*metricFilters:\s*\{\s*likes:\s*"",\s*favorites:\s*"",\s*comments:\s*"",\s*views:\s*"",\s*shares:\s*""\s*\}/
+  );
+  assert.match(
+    poolsContentInputSource,
+    /byId\("sample-library-pools-modal-content"\)\?\.addEventListener\("input", \(event\) => \{[\s\S]*fieldName === "samplePoolTitleFilter"[\s\S]*syncSampleLibraryPoolsModalSearchResults\(\);/
+  );
+  assert.doesNotMatch(
+    poolsContentInputSource,
+    /fieldName === "samplePoolTitleFilter"[\s\S]*renderSampleLibraryPoolsModal\(\);/
+  );
+  assert.match(poolsContentInputSource, /fieldName === "samplePoolLikesFilter"/);
+  assert.match(poolsContentInputSource, /fieldName === "samplePoolFavoritesFilter"/);
+  assert.match(poolsContentInputSource, /fieldName === "samplePoolCommentsFilter"/);
+  assert.match(poolsContentInputSource, /fieldName === "samplePoolViewsFilter"/);
+  assert.match(poolsContentInputSource, /fieldName === "samplePoolSharesFilter"/);
+  assert.match(appJs, /if \(action === "clear-sample-pool-filters"\)/);
+  assert.match(
+    appJs,
+    /action === "clear-sample-pool-filters"[\s\S]*sampleLibraryPoolsModal = \{[\s\S]*open:\s*true,[\s\S]*tab:\s*String\(appState\.sampleLibraryPoolsModal\?\.tab \|\| "reference"\),[\s\S]*search:\s*"",[\s\S]*metricFilters:\s*\{\s*likes:\s*"",\s*favorites:\s*"",\s*comments:\s*"",\s*views:\s*"",\s*shares:\s*""\s*\}/
+  );
+  assert.match(
+    poolsTabClickSource,
+    /sampleLibraryPoolsModal = \{[\s\S]*open:\s*true,[\s\S]*tab:\s*String\(samplePoolTab\.dataset\.samplePoolTab \|\| "reference"\),[\s\S]*search:\s*String\(appState\.sampleLibraryPoolsModal\?\.search \|\| ""\),[\s\S]*metricFilters:\s*\{[\s\S]*appState\.sampleLibraryPoolsModal\?\.metricFilters/
+  );
   assert.doesNotMatch(modalSource, /sample-pool-summary-grid/);
   assert.doesNotMatch(modalSource, /条记录/);
   assert.doesNotMatch(styles, /\.sample-pool-summary-grid\s*\{/);
@@ -976,6 +1131,12 @@ test("frontend keeps the analyze picker regression surface in the main UI file",
   assert.match(appJs, /function setAnalyzeTagDropdownOpen\(/);
   assert.match(appJs, /function toggleAnalyzePresetTag\(/);
   assert.match(appJs, /function renderAnalyzeTagOptions\(/);
+  assert.doesNotMatch(appJs, /byId\("sample-library-search-input"\)\.addEventListener\("input"/);
+  assert.doesNotMatch(appJs, /byId\("sample-library-likes-filter"\)\.addEventListener\("input"/);
+  assert.doesNotMatch(appJs, /byId\("sample-library-favorites-filter"\)\.addEventListener\("input"/);
+  assert.doesNotMatch(appJs, /byId\("sample-library-comments-filter"\)\.addEventListener\("input"/);
+  assert.doesNotMatch(appJs, /byId\("sample-library-views-filter"\)\.addEventListener\("input"/);
+  assert.doesNotMatch(appJs, /byId\("sample-library-shares-filter"\)\.addEventListener\("input"/);
 });
 
 test("sample library create button toggles with explicit expanded state and scroll feedback", async () => {
@@ -1124,7 +1285,6 @@ test("frontend surfaces calibration visibility directly in the sample-library li
   assert.match(appJs, /filter === "calibration_mismatch"/);
   assert.match(appJs, /sample-library-calibration-pill/);
   assert.match(appJs, /riskLevelLabel\(calibration\.prediction\.predictedRiskLevel\)/);
-  assert.match(appJs, /getSampleLibraryCalibrationListState\(item\)\.label/);
   assert.match(styles, /\.sample-library-calibration-pill/);
 });
 
@@ -1212,10 +1372,12 @@ test("frontend exposes platform outcome shortcuts from analysis rewrite and gene
   assert.match(appJs, /效果一般/);
   assert.match(appJs, /系统误判/);
   assert.match(appJs, /name="platformOutcomeViews"/);
+  assert.match(appJs, /name="platformOutcomeShares"/);
   assert.match(appJs, /name="platformOutcomeNotes"/);
   assert.match(appJs, /publishStatus:\s*button\.dataset\.publishStatus/);
   assert.match(appJs, /openPlatformOutcomeModal\(\{/);
   assert.match(appJs, /views:\s*payload\.views \|\| 0/);
+  assert.match(appJs, /shares:\s*payload\.shares \|\| 0/);
   assert.match(appJs, /await savePlatformOutcomeFromCurrent/);
 });
 

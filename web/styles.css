@@ -1611,6 +1611,12 @@ li + li {
   gap: 0.85rem;
 }
 
+.sample-pool-metric-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.85rem;
+}
+
 .sample-library-create-block {
   margin-top: -0.15rem;
 }
@@ -1689,6 +1695,7 @@ body.modal-open {
 
 .sample-library-modal[data-modal-kind="record-list-inline-editor"] .sample-library-modal-dialog {
   width: min(1220px, calc(100vw - 2rem));
+  height: min(860px, calc(100vh - 2rem));
 }
 
 .sample-library-modal-header {
@@ -1720,6 +1727,7 @@ body.modal-open {
 }
 
 .sample-library-modal[data-modal-kind="record-list-inline-editor"] .sample-library-modal-content {
+  height: 100%;
   min-height: 0;
   overflow: hidden;
 }
@@ -1844,6 +1852,21 @@ body.modal-open {
   gap: 0.35rem;
   padding: 1rem 1rem 0.85rem;
   border-bottom: 1px solid rgba(54, 43, 31, 0.08);
+}
+
+.sample-library-record-inline-editor-filter {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.sample-library-record-inline-editor-filter span {
+  font-size: 0.92rem;
+  color: rgba(54, 43, 31, 0.72);
+}
+
+.sample-library-record-inline-editor-filter input {
+  width: 100%;
 }
 
 .sample-library-record-inline-editor-sidebar-head p {
@@ -2148,6 +2171,21 @@ body.modal-open {
   padding: 1rem;
 }
 
+.sample-pool-toolbar {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.sample-pool-toolbar span {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.sample-pool-toolbar input {
+  min-width: 0;
+}
+
 .sample-pool-panel-head {
   display: flex;
   justify-content: space-between;
@@ -2160,6 +2198,12 @@ body.modal-open {
   margin: 0.3rem 0 0;
   color: var(--muted);
   line-height: 1.58;
+}
+
+.sample-pool-why-helper {
+  margin-top: 0.45rem;
+  font-size: 0.84rem;
+  color: rgba(92, 67, 42, 0.78);
 }
 
 .sample-pool-card-list {
@@ -3349,6 +3393,10 @@ body.modal-open {
     width: min(100vw - 1rem, 100%);
     max-height: calc(100vh - 1rem);
     border-radius: 22px;
+  }
+
+  .sample-library-modal[data-modal-kind="record-list-inline-editor"] .sample-library-modal-dialog {
+    height: auto;
   }
 
   .sample-library-modal-header,
