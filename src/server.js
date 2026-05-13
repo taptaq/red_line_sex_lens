@@ -50,13 +50,14 @@ import { isSameFeedbackNote } from "./feedback-identity.js";
 import {
   buildFeedbackModelSelectionOptionsPayload,
   buildModelSelectionOptionsPayload,
+  getSemanticComparisonSelections,
   normalizeFeedbackModelSelectionState,
   normalizeModelSelectionState
 } from "./model-selection.js";
 import { runCrossModelReview } from "./cross-review.js";
 import { generateNoteCandidates, repairGenerationCandidate, scoreGenerationCandidates } from "./generation-workbench.js";
 import { recognizeFeedbackScreenshot, rewritePostForCompliance, suggestFeedbackCandidates } from "./glm.js";
-import { mergeRuleAndSemanticAnalysis, runSemanticReview } from "./semantic-review.js";
+import { mergeRuleAndSemanticAnalysis, runSemanticReview, runSemanticReviewComparison } from "./semantic-review.js";
 import { filterInnerSpaceTerms } from "./inner-space-terms.js";
 import {
   buildAutoStyleProfileState,
@@ -479,6 +480,42 @@ async function buildMergedAnalysis(input, { modelSelection = "auto" } = {}) {
   return mergeRuleAndSemanticAnalysis(analysis, semanticReview);
 }
 
+function buildAnalyzeComparisonSummary(comparisons = []) {
+  const items = Array.isArray(comparisons) ? comparisons : [];
+  const finalVerdicts = [...new Set(items.map((item) => String(item?.mergedAnalysis?.finalVerdict || "").trim()).filter(Boolean))];
+  const semanticVerdicts = [...new Set(items.map((item) => String(item?.semanticReview?.review?.verdict || "").trim()).filter(Boolean))];
+  const completedModels = items.filter((item) => item?.semanticReview?.status === "ok").length;
+
+  return {
+    totalModels: items.length,
+    completedModels,
+    disagreementCount: Math.max(0, finalVerdicts.length - 1),
+    finalVerdicts,
+    semanticVerdicts,
+    comparedAt: new Date().toISOString()
+  };
+}
+
+async function buildAnalyzeComparison(input, { compareSelections = [] } = {}) {
+  const ruleAnalysis = await analyzePost(input);
+  const comparisons = await runSemanticReviewComparison({
+    input,
+    analysis: ruleAnalysis,
+    compareSelections
+  });
+
+  return {
+    ok: true,
+    ruleAnalysis,
+    comparisons,
+    summary: buildAnalyzeComparisonSummary(comparisons),
+    comparedModels: getSemanticComparisonSelections(compareSelections).map((item) => ({
+      value: item.value,
+      label: item.label
+    }))
+  };
+}
+
 const verdictRank = {
   pass: 0,
   observe: 1,
@@ -837,11 +874,8 @@ async function handleRequest(request, response) {
   }
 
   if (request.method === "GET" && url.pathname === "/api/admin/data") {
-    const [styleProfile, data] = await Promise.all([refreshAutoStyleProfile(), loadAdminData()]);
-    return sendJson(response, 200, {
-      ...data,
-      styleProfile
-    });
+    const data = await loadAdminData();
+    return sendJson(response, 200, data);
   }
 
   if (request.method === "GET" && url.pathname === "/api/admin/style-profile") {
@@ -904,6 +938,14 @@ async function handleRequest(request, response) {
     const modelSelection = normalizeModelSelectionState(payload?.modelSelection);
     const result = await buildMergedAnalysis(payload, {
       modelSelection: modelSelection.semantic
+    });
+    return sendJson(response, 200, result);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/analyze/compare") {
+    const payload = await readBody(request);
+    const result = await buildAnalyzeComparison(payload, {
+      compareSelections: Array.isArray(payload?.compareSelections) ? payload.compareSelections : []
     });
     return sendJson(response, 200, result);
   }

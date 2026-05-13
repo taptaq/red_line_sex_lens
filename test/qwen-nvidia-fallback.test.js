@@ -48,7 +48,7 @@ test("suggestFeedbackCandidates uses DMXAPI Qwen first when available", async ()
       DEEPSEEK_API_KEY: "",
       DMXAPI_API_KEY: "dmxapi-test",
       QWEN_FEEDBACK_MODEL: "qwen-plus",
-      QWEN_DMXAPI_MODEL: "qwen3.5-plus"
+      QWEN_DMXAPI_MODEL: "qwen3.5-plus-2026-02-15"
     },
     async () => {
       const calls = [];
@@ -56,7 +56,7 @@ test("suggestFeedbackCandidates uses DMXAPI Qwen first when available", async ()
       globalThis.fetch = async (url) => {
         calls.push(String(url));
         return createJsonResponse(200, {
-          model: "qwen3.5-plus",
+          model: "qwen3.5-plus-2026-02-15",
           choices: [
             {
               message: {
@@ -81,7 +81,7 @@ test("suggestFeedbackCandidates uses DMXAPI Qwen first when available", async ()
         });
 
         assert.equal(result.provider, "qwen");
-        assert.equal(result.model, "qwen3.5-plus");
+        assert.equal(result.model, "qwen3.5-plus-2026-02-15");
         assert.deepEqual(result.suspiciousPhrases, ["边界短语"]);
         assert.deepEqual(calls, ["https://www.dmxapi.cn/v1/chat/completions"]);
       } finally {
@@ -99,7 +99,7 @@ test("suggestFeedbackCandidates respects an explicit qwen selection", async () =
       DEEPSEEK_API_KEY: "deepseek-test",
       DMXAPI_API_KEY: "dmxapi-test",
       QWEN_FEEDBACK_MODEL: "qwen-plus",
-      QWEN_DMXAPI_MODEL: "qwen3.5-plus"
+      QWEN_DMXAPI_MODEL: "qwen3.5-plus-2026-02-15"
     },
     async () => {
       const calls = [];
@@ -108,7 +108,7 @@ test("suggestFeedbackCandidates respects an explicit qwen selection", async () =
         const body = JSON.parse(String(options.body || "{}"));
         calls.push({ url: String(url), model: body.model });
         return createJsonResponse(200, {
-          model: "qwen3.5-plus",
+          model: "qwen3.5-plus-2026-02-15",
           choices: [
             {
               message: {
@@ -134,7 +134,7 @@ test("suggestFeedbackCandidates respects an explicit qwen selection", async () =
         });
 
         assert.equal(result.provider, "qwen");
-        assert.deepEqual(calls, [{ url: "https://www.dmxapi.cn/v1/chat/completions", model: "qwen3.5-plus" }]);
+        assert.deepEqual(calls, [{ url: "https://www.dmxapi.cn/v1/chat/completions", model: "qwen3.5-plus-2026-02-15" }]);
       } finally {
         globalThis.fetch = originalFetch;
       }
@@ -404,7 +404,6 @@ test("callRoutedTextProviderJson sends Kimi directly to the official Moonshot en
       DMXAPI_API_KEY: "dmxapi-test",
       KIMI_API_KEY: "kimi-test",
       KIMI_BASE_URL: "https://api.moonshot.cn/v1/chat/completions",
-      KIMI_DMXAPI_MODEL: "kimi-k2.5",
       KIMI_TEXT_MODEL: "kimi-k2.5"
     },
     async () => {
@@ -453,17 +452,15 @@ test("callRoutedTextProviderJson sends Kimi directly to the official Moonshot en
   );
 });
 
-test("runSemanticReview falls back to DashScope Qwen after DMXAPI permission failure", async () => {
+test("runSemanticReview keeps Qwen on DMXAPI only after permission failure", async () => {
   await withEnv(
     {
-      DASHSCOPE_API_KEY: "dashscope-test",
       DMXAPI_API_KEY: "dmxapi-test",
       GLM_API_KEY: "",
       DEEPSEEK_API_KEY: "",
-      QWEN_SEMANTIC_MODEL: "qwen-plus",
       QWEN_DMXAPI_MODEL: "qwen3.5-plus"
     },
-    async () => {
+    async () => {qwen3.5-plus-2026-02-15
       const calls = [];
       const originalFetch = globalThis.fetch;
       globalThis.fetch = async (url, options = {}) => {
@@ -475,26 +472,7 @@ test("runSemanticReview falls back to DashScope Qwen after DMXAPI permission fai
         if (String(url) === "https://www.dmxapi.cn/v1/chat/completions") {
           return createJsonResponse(403, { error: { message: "forbidden: model access denied" } });
         }
-
-        return createJsonResponse(200, {
-          model: "qwen-plus",
-          choices: [
-            {
-              message: {
-                content: JSON.stringify({
-                  verdict: "observe",
-                  confidence: 0.61,
-                  categories: ["边界表达"],
-                  reasons: ["fallback review"],
-                  implicitSignals: [],
-                  safeSignals: ["沟通语境"],
-                  summary: "dmxapi fallback success",
-                  suggestion: ""
-                })
-              }
-            }
-          ]
-        });
+        throw new Error(`unexpected url: ${String(url)}`);
       };
 
       try {
@@ -504,11 +482,10 @@ test("runSemanticReview falls back to DashScope Qwen after DMXAPI permission fai
           analysis: { verdict: "manual_review", hits: [], suggestions: [] }
         });
 
-        assert.equal(result.status, "ok");
-        assert.equal(result.review.provider, "qwen");
-        assert.equal(result.review.model, "qwen-plus");
+        assert.equal(result.status, "unavailable");
+        assert.equal(result.review, undefined);
         assert.equal(result.providersTried[1].attemptedRoutes[0].routeLabel, "DMXAPI");
-        assert.equal(result.providersTried[1].attemptedRoutes[1].routeLabel, "官方");
+        assert.equal(result.providersTried[1].attemptedRoutes.length, 1);
         assert.ok(
           calls.some(
             (call) =>
@@ -516,12 +493,9 @@ test("runSemanticReview falls back to DashScope Qwen after DMXAPI permission fai
               call.model === "qwen3.5-plus"
           )
         );
-        assert.ok(
-          calls.some(
-            (call) =>
-              call.url === "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions" &&
-              call.model === "qwen-plus"
-          )
+        assert.equal(
+          calls.some((call) => call.url === "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"),
+          false
         );
       } finally {
         globalThis.fetch = originalFetch;
@@ -538,7 +512,7 @@ test("runSemanticReview uses DMXAPI GLM first and records route metadata", async
       DEEPSEEK_API_KEY: "",
       DMXAPI_API_KEY: "dmxapi-test",
       GLM_SEMANTIC_MODEL: "glm-4.6v",
-      GLM_DMXAPI_MODEL: "glm-5.1"
+      GLM_DMXAPI_MODEL: "glm-5qwen3.5-plus-2026-02-15
     },
     async () => {
       const calls = [];
@@ -676,7 +650,7 @@ test("runSemanticReview can return MiniMax as a standalone provider", async () =
             ]
           });
         }
-
+qwen3.5-plus-2026-02-15
         return createJsonResponse(500, { error: { message: "unexpected model" } });
       };
 
@@ -756,11 +730,83 @@ test("runSemanticReview sends a larger default token budget to reduce truncated 
   );
 });
 
-test("suggestFeedbackCandidates falls back to DashScope Qwen for DMXAPI 400 errors", async () => {
+test("runSemanticReview includes analysis memory context in the semantic prompt", async () => {
+  await withEnv(
+    {
+      GLM_API_KEY: "glm-test",
+      DASHSCOPE_API_KEY: "",
+      DEEPSEEK_API_KEY: "",
+      DMXAPI_API_KEY: "dmxapi-test",
+      GLM_SEMANTIC_MODEL: "glm-4.6v",
+      GLM_DMXAPI_MODEL: "glm-5.1"
+    },
+    async () => {
+      const calls = [];
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async (url, options = {}) => {
+        const body = JSON.parse(String(options.body || "{}"));
+        calls.push({ url: String(url), messages: body.messages });
+
+        return createJsonResponse(200, {
+          model: "glm-5.1",
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  verdict: "observe",
+                  confidence: 0.7,
+                  categories: ["教育语境"],
+                  reasons: ["glm via dmxapi"],
+                  implicitSignals: [],
+                  safeSignals: ["科普"],
+                  summary: "glm dmxapi ok",
+                  suggestion: ""
+                })
+              }
+            }
+          ]
+        });
+      };
+
+      try {
+        const { runSemanticReview } = await importFresh("../src/semantic-review.js");
+        await runSemanticReview({
+          input: { title: "测试标题", body: "测试正文", tags: ["关系"] },
+          analysis: {
+            verdict: "manual_review",
+            hits: [],
+            suggestions: [],
+            memoryContext: {
+              referenceSamples: [
+                {
+                  title: "关系沟通练习",
+                  body: "先讲边界感，再讲沟通方式。"
+                }
+              ],
+              memoryCards: [{ summary: "相似内容里要弱化教程感和刺激感。" }],
+              riskFeedback: [{ riskCategories: ["导流与私域"] }],
+              falsePositiveHints: [{ title: "中性经验分享可保留" }]
+            }
+          }
+        });
+
+        const userPrompt = String(calls[0]?.messages?.[1]?.content || "");
+        assert.match(userPrompt, /共享记忆提示/);
+        assert.match(userPrompt, /关系沟通练习/);
+        assert.match(userPrompt, /相似内容里要弱化教程感和刺激感/);
+        assert.match(userPrompt, /导流与私域/);
+        assert.match(userPrompt, /误报保护提示/);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    }
+  );
+});
+
+test("suggestFeedbackCandidates keeps Qwen on DMXAPI only for 400 errors", async () => {
   await withEnv(
     {
       GLM_API_KEY: "",
-      DASHSCOPE_API_KEY: "dashscope-test",
       DEEPSEEK_API_KEY: "",
       DMXAPI_API_KEY: "dmxapi-test",
       QWEN_DMXAPI_MODEL: "qwen3.5-plus"
@@ -770,52 +816,34 @@ test("suggestFeedbackCandidates falls back to DashScope Qwen for DMXAPI 400 erro
       const originalFetch = globalThis.fetch;
       globalThis.fetch = async (url) => {
         calls.push(String(url));
-        if (calls.length === 1) {
-          return createJsonResponse(400, { error: { message: "invalid parameter: temperature" } });
-        }
-
-        return createJsonResponse(200, {
-          model: "qwen-plus",
-          choices: [
-            {
-              message: {
-                content: JSON.stringify({
-                  suspiciousPhrases: ["400 fallback"],
-                  contextCategories: [],
-                  summary: "fallback from 400",
-                  notes: "",
-                  confidence: 0.76
-                })
-              }
-            }
-          ]
-        });
+        return createJsonResponse(400, { error: { message: "invalid parameter: temperature" } });
       };
 
       try {
         const { suggestFeedbackCandidates } = await importFresh("../src/glm.js");
-        const result = await suggestFeedbackCandidates({
-          noteContent: "测试文案",
-          platformReason: "疑似导流"
-        });
-
-        assert.equal(result.provider, "qwen");
-        assert.equal(result.model, "qwen-plus");
-        assert.deepEqual(result.suspiciousPhrases, ["400 fallback"]);
-        assert.equal(calls[0], "https://www.dmxapi.cn/v1/chat/completions");
-        assert.equal(calls[1], "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions");
+        await assert.rejects(
+          () =>
+            suggestFeedbackCandidates({
+              noteContent: "测试文案",
+              platformReason: "疑似导流"
+            }),
+          /DMXAPI|invalid parameter/
+        );
+        assert.deepEqual(calls, [
+          "https://www.dmxapi.cn/v1/chat/completions",
+          "https://www.dmxapi.cn/v1/chat/completions"
+        ]);
       } finally {
         globalThis.fetch = originalFetch;
-      }
+      }qwen3.5-plus-2026-02-15
     }
   );
 });
 
-test("suggestFeedbackCandidates skips DMXAPI and uses DashScope when DMXAPI is not configured", async () => {
+test("suggestFeedbackCandidates reports Qwen unavailable when DMXAPI is not configured", async () => {
   await withEnv(
     {
       GLM_API_KEY: "",
-      DASHSCOPE_API_KEY: "dashscope-test",
       DEEPSEEK_API_KEY: "",
       DMXAPI_API_KEY: ""
     },
@@ -824,33 +852,20 @@ test("suggestFeedbackCandidates skips DMXAPI and uses DashScope when DMXAPI is n
       const originalFetch = globalThis.fetch;
       globalThis.fetch = async (url) => {
         calls.push(String(url));
-        return createJsonResponse(200, {
-          model: "qwen-plus",
-          choices: [
-            {
-              message: {
-                content: JSON.stringify({
-                  suspiciousPhrases: ["official only"],
-                  contextCategories: [],
-                  summary: "dashscope only",
-                  notes: "",
-                  confidence: 0.7
-                })
-              }
-            }
-          ]
-        });
+        throw new Error(`unexpected url: ${String(url)}`);
       };
 
       try {
         const { suggestFeedbackCandidates } = await importFresh("../src/glm.js");
-        const result = await suggestFeedbackCandidates({
-          noteContent: "测试文案",
-          platformReason: "疑似导流"
-        });
-
-        assert.equal(result.model, "qwen-plus");
-        assert.deepEqual(calls, ["https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"]);
+        await assert.rejects(
+          () =>
+            suggestFeedbackCandidates({
+              noteContent: "测试文案",
+              platformReason: "疑似导流"
+            }),
+          /DMXAPI_API_KEY/
+        );
+        assert.deepEqual(calls, []);
       } finally {
         globalThis.fetch = originalFetch;
       }

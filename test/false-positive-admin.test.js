@@ -275,6 +275,8 @@ test("sample library reflow area exposes false positive summary and modal launch
   assert.match(appJs, /cancelLabel:\s*"关闭"/);
   assert.match(appJs, /function\s+renderFalsePositiveListModal\s*\(/);
   assert.match(appJs, /saveButton\.hidden = hideSaveButton/);
+  assert.match(appJs, /hideCancelButton = false/);
+  assert.match(appJs, /cancelButton\.hidden = hideCancelButton/);
   assert.match(appJs, /saveButton\.disabled = false/);
   assert.match(appJs, /saveButton\.dataset\.busy = ""/);
   assert.match(appJs, /saveButton\.title = ""/);

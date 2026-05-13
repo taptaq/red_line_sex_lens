@@ -1,6 +1,6 @@
 import "./env.js";
 import { callDeepSeekJson, callDmxapiTextJson, callGlmJson, callMiniMaxJson, callQwenJson } from "./glm.js";
-import { filterProviderConfigsBySelection } from "./model-selection.js";
+import { filterProviderConfigsBySelection, getSemanticComparisonSelections } from "./model-selection.js";
 import { resolveDisplayProvider, splitProviderResultForDisplay } from "./provider-display.js";
 
 const severityRank = {
@@ -22,9 +22,9 @@ const providerConfigs = [
   {
     provider: "qwen",
     label: "通义千问",
-    envKey: "DASHSCOPE_API_KEY",
-    endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
-    model: process.env.QWEN_SEMANTIC_MODEL || process.env.QWEN_CROSS_REVIEW_MODEL || "qwen-plus"
+    envKey: "DMXAPI_API_KEY",
+    endpoint: "https://www.dmxapi.cn/v1/chat/completions",
+    model: process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus"
   },
   {
     provider: "minimax",
@@ -185,7 +185,78 @@ function summarizeAnalysis(analysis = {}) {
   }));
 }
 
+function normalizeMemorySampleTitle(sample = {}) {
+  return String(sample.payload?.note?.title || sample.payload?.title || sample.title || "").trim();
+}
+
+function normalizeMemorySampleBody(sample = {}) {
+  return String(sample.payload?.note?.body || sample.payload?.body || sample.body || "").trim();
+}
+
+function clipText(value = "", maxLength = 120) {
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
+function buildSemanticMemoryPrompt(memoryContext = null) {
+  if (!memoryContext || typeof memoryContext !== "object") {
+    return "";
+  }
+
+  const referenceSection = Array.isArray(memoryContext.referenceSamples)
+    ? memoryContext.referenceSamples
+        .slice(0, 3)
+        .map((sample, index) => {
+          const title = normalizeMemorySampleTitle(sample);
+          const body = clipText(normalizeMemorySampleBody(sample), 100);
+          const lines = [`共享参考样本 ${index + 1}：${title || "未命名样本"}`];
+
+          if (body) {
+            lines.push(`相似安全表达：${body}`);
+          }
+
+          return lines.join("\n");
+        })
+        .filter(Boolean)
+        .join("\n\n")
+    : "";
+
+  const cardSection = Array.isArray(memoryContext.memoryCards)
+    ? memoryContext.memoryCards
+        .slice(0, 4)
+        .map((card, index) => {
+          const summary = clipText(card.summary || card.title || "", 100);
+          return summary ? `风险记忆 ${index + 1}：${summary}` : "";
+        })
+        .filter(Boolean)
+        .join("\n")
+    : "";
+
+  const riskCategories = normalizeStringList(
+    (Array.isArray(memoryContext.riskFeedback) ? memoryContext.riskFeedback : []).flatMap((item) =>
+      Array.isArray(item?.riskCategories) ? item.riskCategories : []
+    )
+  );
+  const riskSection = riskCategories.length
+    ? `历史相似违规风险：${riskCategories.join("、")}`
+    : "";
+
+  const falsePositiveSection = Array.isArray(memoryContext.falsePositiveHints) && memoryContext.falsePositiveHints.length
+    ? "误报保护提示：历史相似放行样本表明，中性经验分享、克制语气、非导流表达不要被机械误杀。"
+    : "";
+
+  return [
+    referenceSection ? `共享记忆提示：\n${referenceSection}` : "",
+    cardSection ? `长期记忆卡片：\n${cardSection}` : "",
+    riskSection,
+    falsePositiveSection
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 function buildMessages(input = {}, analysis = {}) {
+  const sharedMemoryPrompt = buildSemanticMemoryPrompt(analysis?.memoryContext);
+
   return [
     {
       role: "system",
@@ -194,6 +265,7 @@ function buildMessages(input = {}, analysis = {}) {
         "你的任务不是找表面敏感词，而是理解整段内容的真实意图、表达语境、隐晦暗示、角色扮演、导流意图、擦边氛围与教程化倾向。",
         "请按小红书审核语境做强语义判断，尤其关注导流、低俗擦边、未成年人边界、两性用品宣传展示、教程化敏感内容、夸大承诺。",
         "请把规则检测结果当作参考，但你需要独立判断，不能机械复述规则结果。",
+        "如果给了长期记忆检索结果，请把它当作历史相似案例参考，但最终仍以当前内容本身的真实语义为准。",
         "输出必须是 JSON。"
       ].join("\n")
     },
@@ -224,7 +296,8 @@ function buildMessages(input = {}, analysis = {}) {
         `标签：${Array.isArray(input.tags) ? input.tags.join("、") : String(input.tags || "")}`,
         `规则检测结论：${String(analysis.verdict || "")}`,
         `规则命中摘要：${JSON.stringify(summarizeAnalysis(analysis))}`,
-        `规则建议：${JSON.stringify((analysis.suggestions || []).slice(0, 3))}`
+        `规则建议：${JSON.stringify((analysis.suggestions || []).slice(0, 3))}`,
+        sharedMemoryPrompt
       ].join("\n")
     }
   ];
@@ -448,34 +521,199 @@ function stricterVerdict(left = "pass", right = "pass") {
   return (severityRank[left] ?? 0) >= (severityRank[right] ?? 0) ? left : right;
 }
 
+function softerVerdict(verdict = "pass") {
+  if (verdict === "manual_review") {
+    return "observe";
+  }
+
+  if (verdict === "observe") {
+    return "pass";
+  }
+
+  return verdict;
+}
+
+function normalizeEvidenceScore(item = {}) {
+  const retrievalWeight = Number(item?.retrievalWeight ?? item?.sampleWeight ?? 0);
+  const confidence = Number(item?.confidence ?? item?.payload?.confidence ?? 0);
+  const safeRetrievalWeight = Number.isFinite(retrievalWeight) ? Math.max(0, retrievalWeight) : 0;
+  const confidenceBoost = Number.isFinite(confidence) && confidence > 0 ? Math.min(0.6, confidence * 0.4) : 0;
+
+  return Math.round((safeRetrievalWeight + confidenceBoost) * 100) / 100;
+}
+
+function sumTopEvidenceScores(items = [], limit = 2) {
+  return Math.round(
+    (Array.isArray(items) ? items : [])
+      .map((item) => normalizeEvidenceScore(item))
+      .sort((left, right) => right - left)
+      .slice(0, limit)
+      .reduce((total, score) => total + score, 0) * 100
+  ) / 100;
+}
+
+function uniqueSignalStrings(items = []) {
+  return [...new Set((Array.isArray(items) ? items : []).map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
+function buildMemoryCalibration(analysis = {}, baseVerdict = "pass") {
+  const memoryContext = analysis?.memoryContext && typeof analysis.memoryContext === "object" ? analysis.memoryContext : null;
+  const stableVerdict = String(baseVerdict || "pass").trim() || "pass";
+
+  const baseCalibration = {
+    applied: false,
+    direction: "none",
+    fromVerdict: stableVerdict,
+    toVerdict: stableVerdict,
+    riskScore: 0,
+    safeScore: 0,
+    categories: [],
+    reasons: []
+  };
+
+  if (!memoryContext || stableVerdict === "hard_block") {
+    return baseCalibration;
+  }
+
+  const riskFeedback = Array.isArray(memoryContext.riskFeedback) ? memoryContext.riskFeedback : [];
+  const falsePositiveHints = Array.isArray(memoryContext.falsePositiveHints) ? memoryContext.falsePositiveHints : [];
+  const referenceSamples = Array.isArray(memoryContext.referenceSamples) ? memoryContext.referenceSamples : [];
+
+  const riskScore = sumTopEvidenceScores(riskFeedback, 2);
+  const safeScore = Math.round((sumTopEvidenceScores(falsePositiveHints, 2) + sumTopEvidenceScores(referenceSamples, 2)) * 100) / 100;
+  const riskCategories = uniqueSignalStrings(
+    riskFeedback.flatMap((item) => [
+      ...(Array.isArray(item?.riskCategories) ? item.riskCategories : []),
+      item?.payload?.platformReason || "",
+      item?.payload?.feedbackModelSuggestion?.suggestedCategory || ""
+    ])
+  );
+
+  if (stableVerdict === "manual_review" && safeScore >= 2.4) {
+    return {
+      applied: true,
+      direction: "safety_soften",
+      fromVerdict: stableVerdict,
+      toVerdict: softerVerdict(stableVerdict),
+      riskScore,
+      safeScore,
+      categories: [],
+      reasons: ["长期记忆命中高可信误报/参考样本，当前内容更接近历史安全表达，综合降为观察。"]
+    };
+  }
+
+  if (stableVerdict === "pass" && riskScore >= 2.2) {
+    return {
+      applied: true,
+      direction: "risk_raise",
+      fromVerdict: stableVerdict,
+      toVerdict: "observe",
+      riskScore,
+      safeScore,
+      categories: riskCategories,
+      reasons: ["长期记忆命中高相似违规案例，虽然当前规则与语义未直接拦截，仍建议提升为观察。"]
+    };
+  }
+
+  if (stableVerdict === "observe" && riskScore >= 2.8 && safeScore < 2.4) {
+    return {
+      applied: true,
+      direction: "risk_raise",
+      fromVerdict: stableVerdict,
+      toVerdict: "manual_review",
+      riskScore,
+      safeScore,
+      categories: riskCategories,
+      reasons: ["长期记忆显示相似内容存在较强违规先例，综合提升为人工复核。"]
+    };
+  }
+
+  return {
+    ...baseCalibration,
+    riskScore,
+    safeScore,
+    categories: riskCategories
+  };
+}
+
 export function mergeRuleAndSemanticAnalysis(analysis = {}, semanticReview = null) {
   const semantic = semanticReview?.status === "ok" ? semanticReview.review : null;
-  const finalVerdict = semantic ? stricterVerdict(analysis.verdict, semantic.verdict) : analysis.verdict;
+  const mergedVerdict = semantic ? stricterVerdict(analysis.verdict, semantic.verdict) : analysis.verdict;
+  const memoryCalibration = buildMemoryCalibration(analysis, mergedVerdict);
+  const finalVerdict = memoryCalibration.applied ? memoryCalibration.toVerdict : mergedVerdict;
 
   return {
     ...analysis,
     semanticReview,
+    finalVerdictBeforeMemoryCalibration: mergedVerdict,
+    memoryCalibration,
     finalVerdict,
-    finalCategories: normalizeStringList([...(analysis.categories || []), ...(semantic?.categories || [])]),
+    finalCategories: normalizeStringList([
+      ...(analysis.categories || []),
+      ...(semantic?.categories || []),
+      ...(memoryCalibration?.categories || [])
+    ]),
     finalReasons: normalizeStringList([
       ...((analysis.hits || []).map((hit) => hit.reason || hit.evidence || "").filter(Boolean)),
       ...(semantic?.reasons || []),
-      semantic?.summary || ""
+      semantic?.summary || "",
+      ...((memoryCalibration?.reasons || []).filter(Boolean))
     ]),
     semanticEnabled: Boolean(semanticReview),
     semanticAvailable: Boolean(semantic)
   };
 }
 
-export async function runSemanticReview({ input = {}, analysis = {}, modelSelection = "auto" }) {
-  const hasContent = Boolean(
+function hasSemanticReviewContent(input = {}) {
+  return Boolean(
     String(input.title || "").trim() ||
       String(input.body || "").trim() ||
       String(input.coverText || "").trim() ||
       (Array.isArray(input.tags) && input.tags.length)
   );
+}
 
-  if (!hasContent) {
+function normalizeProvidersTriedForDisplay(result, config = {}) {
+  return splitProviderResultForDisplay(result, {
+    provider: config.provider,
+    label: config.label,
+    model: config.model
+  }).map((item) => ({
+    provider: item.provider,
+    label: item.label,
+    status: item.status,
+    model: item.review?.model || item.model || config.model,
+    route: item.review?.route || item.route || "",
+    routeLabel: item.review?.routeLabel || item.routeLabel || "",
+    attemptedRoutes: Array.isArray(item.attemptedRoutes)
+      ? item.attemptedRoutes
+      : item.review?.route
+        ? [
+            {
+              route: item.review.route,
+              routeLabel: item.review.routeLabel || "",
+              model: item.review.model || "",
+              status: item.status,
+              message: item.message || ""
+            }
+          ]
+        : [],
+    message: item.message || ""
+  }));
+}
+
+function buildUnavailableSemanticReviewResult(providersTried = []) {
+  return {
+    status: "unavailable",
+    providersTried,
+    message: providersTried.some((item) => item.status !== "unconfigured")
+      ? "语义复判模型暂时不可用，已退回规则检测结果。"
+      : "当前未配置语义复判模型，已退回规则检测结果。"
+  };
+}
+
+export async function runSemanticReview({ input = {}, analysis = {}, modelSelection = "auto" }) {
+  if (!hasSemanticReviewContent(input)) {
     return {
       status: "skipped",
       providersTried: [],
@@ -488,34 +726,7 @@ export async function runSemanticReview({ input = {}, analysis = {}, modelSelect
 
   for (const config of activeProviderConfigs) {
     const result = await callProvider(config, input, analysis);
-    providersTried.push(
-      ...splitProviderResultForDisplay(result, {
-        provider: config.provider,
-        label: config.label,
-        model: config.model
-      }).map((item) => ({
-        provider: item.provider,
-        label: item.label,
-        status: item.status,
-        model: item.review?.model || item.model || config.model,
-        route: item.review?.route || item.route || "",
-        routeLabel: item.review?.routeLabel || item.routeLabel || "",
-        attemptedRoutes: Array.isArray(item.attemptedRoutes)
-          ? item.attemptedRoutes
-          : item.review?.route
-            ? [
-                {
-                  route: item.review.route,
-                  routeLabel: item.review.routeLabel || "",
-                  model: item.review.model || "",
-                  status: item.status,
-                  message: item.message || ""
-                }
-              ]
-            : [],
-        message: item.message || ""
-      }))
-    );
+    providersTried.push(...normalizeProvidersTriedForDisplay(result, config));
 
     if (result.status === "ok") {
       return {
@@ -526,11 +737,68 @@ export async function runSemanticReview({ input = {}, analysis = {}, modelSelect
     }
   }
 
-  return {
-    status: "unavailable",
-    providersTried,
-    message: providersTried.some((item) => item.status !== "unconfigured")
-      ? "语义复判模型暂时不可用，已退回规则检测结果。"
-      : "当前未配置语义复判模型，已退回规则检测结果。"
-  };
+  return buildUnavailableSemanticReviewResult(providersTried);
+}
+
+export async function runSemanticReviewComparison({ input = {}, analysis = {}, compareSelections = [] } = {}) {
+  const selectionOptions = getSemanticComparisonSelections(compareSelections);
+
+  if (!hasSemanticReviewContent(input)) {
+    return selectionOptions.map((item) => ({
+      selection: item.value,
+      label: item.label,
+      durationMs: 0,
+      semanticReview: {
+        status: "skipped",
+        providersTried: [],
+        message: "缺少可用于语义复判的内容。"
+      },
+      mergedAnalysis: mergeRuleAndSemanticAnalysis(analysis, {
+        status: "skipped",
+        providersTried: [],
+        message: "缺少可用于语义复判的内容。"
+      })
+    }));
+  }
+
+  const results = await Promise.all(
+    selectionOptions.map(async (item) => {
+      const startedAt = Date.now();
+      const activeProviderConfigs = filterProviderConfigsBySelection(providerConfigs, item.value);
+      const providersTried = [];
+
+      for (const config of activeProviderConfigs) {
+        const result = await callProvider(config, input, analysis);
+        providersTried.push(...normalizeProvidersTriedForDisplay(result, config));
+
+        if (result.status === "ok") {
+          const semanticReview = {
+            status: "ok",
+            providersTried,
+            review: result.review
+          };
+
+          return {
+            selection: item.value,
+            label: item.label,
+            durationMs: Date.now() - startedAt,
+            semanticReview,
+            mergedAnalysis: mergeRuleAndSemanticAnalysis(analysis, semanticReview)
+          };
+        }
+      }
+
+      const semanticReview = buildUnavailableSemanticReviewResult(providersTried);
+
+      return {
+        selection: item.value,
+        label: item.label,
+        durationMs: Date.now() - startedAt,
+        semanticReview,
+        mergedAnalysis: mergeRuleAndSemanticAnalysis(analysis, semanticReview)
+      };
+    })
+  );
+
+  return results;
 }

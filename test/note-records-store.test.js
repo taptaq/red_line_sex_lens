@@ -6,6 +6,7 @@ import path from "node:path";
 
 import { paths } from "../src/config.js";
 import {
+  deriveNoteRecordViews,
   loadNoteLifecycle,
   loadNoteRecords,
   replaceNoteRecordCompatibilityView,
@@ -111,7 +112,8 @@ test("migrateSuccessSampleToNoteRecord keeps top-level legacy metrics including 
     likes: 12,
     favorites: 5,
     comments: 3,
-    views: 88
+    views: 88,
+    shares: 0
   });
 });
 
@@ -245,7 +247,7 @@ test("mergeNoteRecords preserves existing publish and reference details during p
   });
 
   assert.equal(merged.publish.status, "positive_performance");
-  assert.deepEqual(merged.publish.metrics, { likes: 36, favorites: 12, comments: 4, views: 240 });
+  assert.deepEqual(merged.publish.metrics, { likes: 36, favorites: 12, comments: 4, views: 240, shares: 0 });
   assert.equal(merged.publish.notes, "原始备注");
   assert.equal(merged.publish.publishedAt, "2026-04-22");
   assert.equal(merged.publish.platformReason, "passed");
@@ -746,4 +748,113 @@ test("legacy cold-start merge preserves success-sample views when lifecycle payl
     assert.equal(records.length, 1);
     assert.equal(records[0].publish.metrics.views, 320);
   });
+});
+
+test("deriveNoteRecordViews builds success samples reference samples and lifecycle views from one note-record list", () => {
+  const noteRecords = [
+    buildNoteRecord({
+      id: "qualified-reference",
+      source: "manual",
+      stage: "published_reference",
+      note: {
+        title: "高表现参考样本",
+        body: "这是一个足够长、可以进入参考样本池的正文内容。".repeat(2),
+        tags: ["关系", "沟通"]
+      },
+      reference: {
+        enabled: true,
+        tier: "performed"
+      },
+      publish: {
+        status: "positive_performance",
+        metrics: { likes: 36, favorites: 2, comments: 1, views: 1200, shares: 0 }
+      }
+    }),
+    buildNoteRecord({
+      id: "plain-reference",
+      source: "manual",
+      stage: "published_reference",
+      note: {
+        title: "普通参考样本",
+        body: "这是普通参考样本正文",
+        tags: ["经验"]
+      },
+      reference: {
+        enabled: true,
+        tier: "passed"
+      },
+      publish: {
+        status: "published_passed",
+        metrics: { likes: 1, favorites: 0, comments: 0, views: 20, shares: 0 }
+      }
+    }),
+    buildNoteRecord({
+      id: "lifecycle-only",
+      source: "generation_final",
+      stage: "published",
+      note: {
+        title: "生命周期样本",
+        body: "生命周期正文",
+        tags: ["发布"]
+      },
+      publish: {
+        status: "not_published",
+        metrics: { likes: 0, favorites: 0, comments: 0, views: 0, shares: 0 }
+      },
+      reference: {
+        enabled: false
+      }
+    })
+  ];
+
+  const views = deriveNoteRecordViews(noteRecords);
+
+  assert.deepEqual(
+    views.successSamples.map((item) => item.id),
+    ["qualified-reference", "plain-reference"]
+  );
+  assert.deepEqual(
+    views.qualifiedReferenceSamples.map((item) => item.id),
+    ["qualified-reference"]
+  );
+  assert.deepEqual(
+    views.noteLifecycle.map((item) => item.id),
+    ["qualified-reference", "lifecycle-only"]
+  );
+});
+
+test("note records only read the configured path and do not infer a sibling legacy directory", async (t) => {
+  const noteRecordsDir = await fs.mkdtemp(path.join(os.tmpdir(), "note-records-configured-"));
+  const legacyDir = await fs.mkdtemp(path.join(os.tmpdir(), "note-records-legacy-"));
+  const originals = {
+    successSamples: paths.successSamples,
+    noteLifecycle: paths.noteLifecycle,
+    noteRecords: paths.noteRecords
+  };
+
+  paths.successSamples = path.join(legacyDir, "success-samples.json");
+  paths.noteLifecycle = path.join(legacyDir, "note-lifecycle.json");
+  paths.noteRecords = path.join(noteRecordsDir, "note-records.json");
+
+  await Promise.all([
+    fs.writeFile(paths.successSamples, "[]\n", "utf8"),
+    fs.writeFile(paths.noteLifecycle, "[]\n", "utf8"),
+    fs.writeFile(
+      path.join(legacyDir, "note-records.json"),
+      `${JSON.stringify([{ id: "legacy-only", note: { title: "旧目录统一记录", body: "不会再被读取" } }], null, 2)}\n`,
+      "utf8"
+    )
+  ]);
+
+  t.after(async () => {
+    Object.assign(paths, originals);
+    await Promise.all([
+      fs.rm(noteRecordsDir, { recursive: true, force: true }),
+      fs.rm(legacyDir, { recursive: true, force: true })
+    ]);
+  });
+
+  const records = await loadNoteRecords();
+
+  assert.deepEqual(records, []);
 });

@@ -163,7 +163,7 @@ test("admin style profile routes expose current profile and persist manual edits
   assert.equal(listedAgain.body.profile.current.manualOverrides.tone, "更像朋友提醒");
 });
 
-test("admin data returns the latest refreshed style profile instead of stale stored snapshot", async (t) => {
+test("admin data returns the stored style profile snapshot without triggering auto refresh", async (t) => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "style-profile-admin-data-"));
   const originals = {
     styleProfile: paths.styleProfile,
@@ -251,7 +251,7 @@ test("admin data returns the latest refreshed style profile instead of stale sto
   const listed = await invokeRoute("GET", "/api/admin/data");
   assert.equal(listed.status, 200);
   assert.equal(listed.body.styleProfile.current.topic, "旧画像");
-  assert.deepEqual(listed.body.styleProfile.current.sourceSampleIds, ["note-reference-a", "note-reference-b"]);
+  assert.deepEqual(listed.body.styleProfile.current.sourceSampleIds, ["note-legacy"]);
 });
 
 test("admin style profile refresh clears stale source sample ids when the reference pool becomes empty", async (t) => {

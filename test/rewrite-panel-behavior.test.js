@@ -69,6 +69,25 @@ test("analysis panel shows false-positive downgrade signals when they affect rul
   assert.match(renderAnalysisSource, /已按参考样本降为观察/);
 });
 
+test("analysis panel explains when long-term memory calibration adjusts the final verdict", async () => {
+  const [source, styles] = await Promise.all([
+    fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8"),
+    fs.readFile(path.join(process.cwd(), "web/styles.css"), "utf8")
+  ]);
+  const start = source.indexOf("function renderAnalysis(");
+  const end = source.indexOf("function renderRewriteResult(", start);
+  const renderAnalysisSource = source.slice(start, end);
+
+  assert.match(renderAnalysisSource, /memoryCalibration/);
+  assert.match(renderAnalysisSource, /长期记忆校准/);
+  assert.match(renderAnalysisSource, /基础合并结论/);
+  assert.match(renderAnalysisSource, /安全放宽|风险上调/);
+  assert.match(renderAnalysisSource, /model-scope-banner-memory-safe/);
+  assert.match(renderAnalysisSource, /model-scope-banner-memory-risk/);
+  assert.match(styles, /\.model-scope-banner-memory-safe/);
+  assert.match(styles, /\.model-scope-banner-memory-risk/);
+});
+
 test("main workbench exposes per-action model selectors and sends current selections with model requests", async () => {
   const [indexHtml, appJs] = await Promise.all([
     fs.readFile(path.join(process.cwd(), "web/index.html"), "utf8"),
@@ -132,7 +151,7 @@ test("generation workbench is folded into the main workbench as an optional bran
   assert.match(indexHtml, /id="generation-workbench-form"/);
   assert.match(indexHtml, /id="generation-result"/);
   assert.match(indexHtml, /id="generation-action-hint"/);
-  assert.match(appJs, /function revealGenerationWorkbenchPane\(/);
+  assert.doesNotMatch(appJs, /function revealGenerationWorkbenchPane\(/);
   assert.match(appJs, /byId\("generation-workbench-form"\)\.addEventListener\("submit"/);
 });
 

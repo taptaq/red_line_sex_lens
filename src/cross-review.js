@@ -28,9 +28,9 @@ const providerConfigs = [
   {
     provider: "qwen",
     label: "通义千问",
-    envKey: "DASHSCOPE_API_KEY",
-    endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
-    model: process.env.QWEN_CROSS_REVIEW_MODEL || "qwen-plus"
+    envKey: "DMXAPI_API_KEY",
+    endpoint: "https://www.dmxapi.cn/v1/chat/completions",
+    model: process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus"
   },
   {
     provider: "minimax",

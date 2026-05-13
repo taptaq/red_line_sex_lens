@@ -23,7 +23,7 @@ function getGlmDmxapiModel() {
 }
 
 function getQwenDmxapiModel() {
-  return String(process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus").trim();
+  return String(process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus-2026-02-15").trim();
 }
 
 function getMiniMaxDmxapiModel() {
@@ -47,11 +47,11 @@ function getCrossReviewGlmModel() {
 }
 
 function getSemanticQwenModel() {
-  return String(process.env.QWEN_SEMANTIC_MODEL || process.env.QWEN_CROSS_REVIEW_MODEL || "qwen-plus").trim();
+  return String(process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus").trim();
 }
 
 function getCrossReviewQwenModel() {
-  return String(process.env.QWEN_CROSS_REVIEW_MODEL || "qwen-plus").trim();
+  return String(process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus").trim();
 }
 
 function getSemanticDeepSeekModel() {
@@ -71,7 +71,7 @@ function getRewriteKimiModel() {
 }
 
 function getRewriteQwenModel() {
-  return String(process.env.QWEN_FEEDBACK_MODEL || "qwen-plus").trim();
+  return String(process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus").trim();
 }
 
 function getRewriteDeepSeekModel() {
@@ -83,11 +83,19 @@ function getRewriteProviderPreference() {
   return provider === "kimi" ? "kimi" : "glm";
 }
 
-function buildProviderOption(value, label, primaryModel, fallbackModel = "") {
+function buildProviderOption(value, label, primaryModel, fallbackModel = "", options = {}) {
+  const primarySourceLabel = String(options.primarySourceLabel || "").trim();
+  const fallbackSourceLabel = String(options.fallbackSourceLabel || "").trim();
+  const formatModelText = (sourceLabel, model) => (sourceLabel ? `${sourceLabel} ${model}` : model);
+
   const modelText =
     primaryModel && fallbackModel && primaryModel !== fallbackModel
-      ? `DMXAPI ${primaryModel} / 官方 ${fallbackModel}`
-      : primaryModel || fallbackModel || "未配置模型";
+      ? `${formatModelText(primarySourceLabel, primaryModel)} / ${formatModelText(fallbackSourceLabel, fallbackModel)}`
+      : primaryModel
+        ? formatModelText(primarySourceLabel, primaryModel)
+        : fallbackModel
+          ? formatModelText(fallbackSourceLabel, fallbackModel)
+          : "未配置模型";
 
   return {
     value,
@@ -115,9 +123,17 @@ export function buildModelSelectionOptionsPayload() {
       provider: "",
       label: "默认自动 / 依次尝试当前语义复判模型"
     },
-    buildProviderOption("glm", providerDisplayLabel("glm"), getGlmDmxapiModel(), getSemanticGlmModel()),
-    buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getSemanticQwenModel()),
-    buildProviderOption("minimax", providerDisplayLabel("minimax"), getMiniMaxDmxapiModel()),
+    buildProviderOption("glm", providerDisplayLabel("glm"), getGlmDmxapiModel(), getSemanticGlmModel(), {
+      primarySourceLabel: "DMXAPI",
+      fallbackSourceLabel: "官方"
+    }),
+    buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getSemanticQwenModel(), {
+      primarySourceLabel: "DMXAPI",
+      fallbackSourceLabel: "官方"
+    }),
+    buildProviderOption("minimax", providerDisplayLabel("minimax"), getMiniMaxDmxapiModel(), "", {
+      primarySourceLabel: "DMXAPI"
+    }),
     buildProviderOption("deepseek", providerDisplayLabel("deepseek"), "", getSemanticDeepSeekModel())
   );
 
@@ -127,10 +143,18 @@ export function buildModelSelectionOptionsPayload() {
       provider: "",
       label: `默认自动 / 当前优先 ${providerDisplayLabel(getRewriteProviderPreference())}`
     },
-    buildProviderOption("glm", providerDisplayLabel("glm"), getGlmDmxapiModel(), getRewriteGlmModel()),
+    buildProviderOption("glm", providerDisplayLabel("glm"), getGlmDmxapiModel(), getRewriteGlmModel(), {
+      primarySourceLabel: "DMXAPI",
+      fallbackSourceLabel: "官方"
+    }),
     buildProviderOption("kimi", providerDisplayLabel("kimi"), "", getRewriteKimiModel()),
-    buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getRewriteQwenModel()),
-    buildProviderOption("minimax", providerDisplayLabel("minimax"), getMiniMaxDmxapiModel()),
+    buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getRewriteQwenModel(), {
+      primarySourceLabel: "DMXAPI",
+      fallbackSourceLabel: "官方"
+    }),
+    buildProviderOption("minimax", providerDisplayLabel("minimax"), getMiniMaxDmxapiModel(), "", {
+      primarySourceLabel: "DMXAPI"
+    }),
     buildProviderOption("deepseek", providerDisplayLabel("deepseek"), "", getRewriteDeepSeekModel())
   );
 
@@ -140,10 +164,18 @@ export function buildModelSelectionOptionsPayload() {
       provider: "",
       label: `默认自动 / 当前优先 ${providerDisplayLabel(getRewriteProviderPreference())}`
     },
-    buildProviderOption("glm", providerDisplayLabel("glm"), getGlmDmxapiModel(), getRewriteGlmModel()),
+    buildProviderOption("glm", providerDisplayLabel("glm"), getGlmDmxapiModel(), getRewriteGlmModel(), {
+      primarySourceLabel: "DMXAPI",
+      fallbackSourceLabel: "官方"
+    }),
     buildProviderOption("kimi", providerDisplayLabel("kimi"), "", getRewriteKimiModel()),
-    buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getRewriteQwenModel()),
-    buildProviderOption("minimax", providerDisplayLabel("minimax"), getMiniMaxDmxapiModel()),
+    buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getRewriteQwenModel(), {
+      primarySourceLabel: "DMXAPI",
+      fallbackSourceLabel: "官方"
+    }),
+    buildProviderOption("minimax", providerDisplayLabel("minimax"), getMiniMaxDmxapiModel(), "", {
+      primarySourceLabel: "DMXAPI"
+    }),
     buildProviderOption("deepseek", providerDisplayLabel("deepseek"), "", getRewriteDeepSeekModel())
   );
 
@@ -153,10 +185,18 @@ export function buildModelSelectionOptionsPayload() {
       provider: "",
       label: "默认模型组 / 并行调用全部交叉复判模型"
     },
-    buildProviderOption("glm", providerDisplayLabel("glm"), getGlmDmxapiModel(), getCrossReviewGlmModel()),
+    buildProviderOption("glm", providerDisplayLabel("glm"), getGlmDmxapiModel(), getCrossReviewGlmModel(), {
+      primarySourceLabel: "DMXAPI",
+      fallbackSourceLabel: "官方"
+    }),
     buildProviderOption("kimi", providerDisplayLabel("kimi"), "", getRewriteKimiModel()),
-    buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getCrossReviewQwenModel()),
-    buildProviderOption("minimax", providerDisplayLabel("minimax"), getMiniMaxDmxapiModel()),
+    buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getCrossReviewQwenModel(), {
+      primarySourceLabel: "DMXAPI",
+      fallbackSourceLabel: "官方"
+    }),
+    buildProviderOption("minimax", providerDisplayLabel("minimax"), getMiniMaxDmxapiModel(), "", {
+      primarySourceLabel: "DMXAPI"
+    }),
     buildProviderOption("deepseek", providerDisplayLabel("deepseek"), "", getCrossReviewDeepSeekModel())
   );
 
@@ -166,6 +206,23 @@ export function buildModelSelectionOptionsPayload() {
     generation,
     crossReview
   };
+}
+
+export function getSemanticComparisonSelections(preferredSelections = []) {
+  const allowedPreferredSelections = new Set(
+    (Array.isArray(preferredSelections) ? preferredSelections : [preferredSelections])
+      .map((item) => String(item || "").trim().toLowerCase())
+      .filter(Boolean)
+  );
+  const semanticOptions = buildModelSelectionOptionsPayload().semantic.filter(
+    (item) => String(item?.value || "").trim().toLowerCase() !== defaultSemanticSelection
+  );
+
+  if (!allowedPreferredSelections.size) {
+    return semanticOptions;
+  }
+
+  return semanticOptions.filter((item) => allowedPreferredSelections.has(String(item?.value || "").trim().toLowerCase()));
 }
 
 export function buildFeedbackModelSelectionOptionsPayload() {
@@ -185,7 +242,10 @@ export function buildFeedbackModelSelectionOptionsPayload() {
         label: "默认自动 / 顺序尝试候选补充模型"
       },
       buildProviderOption("glm", providerDisplayLabel("glm"), getGlmTextModelCandidates()[0] || getRewriteGlmModel()),
-      buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getRewriteQwenModel()),
+      buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getRewriteQwenModel(), {
+        primarySourceLabel: "DMXAPI",
+        fallbackSourceLabel: "官方"
+      }),
       buildProviderOption("deepseek", providerDisplayLabel("deepseek"), "", getRewriteDeepSeekModel()),
       ...standaloneDmxapiTextModels.map(buildStandaloneDmxapiModelOption)
     ]

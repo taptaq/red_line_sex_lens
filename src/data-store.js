@@ -395,17 +395,32 @@ function noteRecordToLifecycleRecord(record = {}) {
   });
 }
 
-function resolveNoteRecordsPath() {
-  const configuredPath = paths.noteRecords;
-  const configuredDir = path.dirname(configuredPath);
-  const legacyDirs = [path.dirname(paths.successSamples), path.dirname(paths.noteLifecycle)];
-  const customDir = legacyDirs.find((dir) => dir && dir !== configuredDir);
+export function deriveNoteRecordViews(items = []) {
+  const noteRecords = Array.isArray(items) ? items : [];
+  const successSamples = [];
+  const qualifiedReferenceSamples = [];
+  const noteLifecycle = [];
 
-  if (customDir && legacyDirs.every((dir) => dir === configuredDir || dir === customDir)) {
-    return path.join(customDir, "note-records.json");
+  for (const item of noteRecords) {
+    if (normalizeNoteRecordReference(item).enabled) {
+      const sample = noteRecordToSuccessSample(item);
+      successSamples.push(sample);
+
+      if (isQualifiedReferenceRecord(item)) {
+        qualifiedReferenceSamples.push(sample);
+      }
+    }
+
+    if (hasLifecycleCompat(item)) {
+      noteLifecycle.push(noteRecordToLifecycleRecord(item));
+    }
   }
 
-  return configuredPath;
+  return {
+    successSamples,
+    qualifiedReferenceSamples,
+    noteLifecycle
+  };
 }
 
 export async function loadLexicon() {
@@ -448,18 +463,9 @@ export async function saveReviewQueue(items) {
 
 export async function loadNoteRecords() {
   const configuredPath = paths.noteRecords;
-  const defaultNoteRecordsPath = path.join(dataDir, "note-records.json");
-  const configuredPathIsCustom = path.resolve(configuredPath) !== path.resolve(defaultNoteRecordsPath);
 
-  if (configuredPathIsCustom && (await fileExists(configuredPath))) {
+  if (await fileExists(configuredPath)) {
     const items = await readJson(configuredPath, []);
-    return collapseNoteRecordsByCompatibility(dedupeNoteRecords(Array.isArray(items) ? items : []));
-  }
-
-  const noteRecordsPath = resolveNoteRecordsPath();
-
-  if (await fileExists(noteRecordsPath)) {
-    const items = await readJson(noteRecordsPath, []);
     return collapseNoteRecordsByCompatibility(dedupeNoteRecords(Array.isArray(items) ? items : []));
   }
 
@@ -492,29 +498,23 @@ export async function loadNoteRecords() {
 
 export async function saveNoteRecords(items) {
   const normalized = collapseNoteRecordsByCompatibility(dedupeNoteRecords(Array.isArray(items) ? items : []));
-  await writeJson(resolveNoteRecordsPath(), normalized);
+  await writeJson(paths.noteRecords, normalized);
   return normalized;
 }
 
 export async function loadSuccessSamples() {
   const items = await loadNoteRecords();
-  return items
-    .filter((item) => normalizeNoteRecordReference(item).enabled)
-    .map((item) => noteRecordToSuccessSample(item));
+  return deriveNoteRecordViews(items).successSamples;
 }
 
 export async function loadQualifiedReferenceSamples() {
   const items = await loadNoteRecords();
-  return items
-    .filter((item) => isQualifiedReferenceRecord(item))
-    .map((item) => noteRecordToSuccessSample(item));
+  return deriveNoteRecordViews(items).qualifiedReferenceSamples;
 }
 
 export async function loadNoteLifecycle() {
   const items = await loadNoteRecords();
-  return items
-    .filter((item) => hasLifecycleCompat(item))
-    .map((item) => noteRecordToLifecycleRecord(item));
+  return deriveNoteRecordViews(items).noteLifecycle;
 }
 
 export function replaceNoteRecordCompatibilityView(current = [], incoming = [], kind = "success") {

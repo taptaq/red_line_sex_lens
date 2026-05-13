@@ -8,16 +8,15 @@ import { buildXhsHumanizerSystemRules, buildXhsHumanizerUserRequirements } from 
 
 const glmEndpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
 const defaultKimiEndpoint = "https://api.moonshot.cn/v1/chat/completions";
-const defaultQwenEndpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
 const defaultDmxapiEndpoint = "https://www.dmxapi.cn/v1/chat/completions";
 const defaultVisionModel = process.env.GLM_VISION_MODEL || "glm-4.6v";
 const defaultTextModel = process.env.GLM_TEXT_MODEL || "glm-4.6v";
 const defaultKimiTextModel = "kimi-k2.5";
 const defaultFeedbackModel = process.env.GLM_FEEDBACK_MODEL || defaultTextModel || "glm-4.6v";
-const defaultQwenFeedbackModel = process.env.QWEN_FEEDBACK_MODEL || "qwen-plus";
+const defaultQwenFeedbackModel = process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus-2026-02-15";
 const defaultMiniMaxDmxapiModel = process.env.MINIMAX_DMXAPI_MODEL || "MiniMax-M2.5";
 const defaultGlmDmxapiModel = process.env.GLM_DMXAPI_MODEL || "glm-5.1";
-const defaultQwenDmxapiModel = process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus";
+const defaultQwenDmxapiModel = process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus-2026-02-15";
 const defaultDeepSeekFeedbackModel = process.env.DEEPSEEK_FEEDBACK_MODEL || "deepseek-v4-flash";
 const humanizerPassEnabled = process.env.HUMANIZER_PASS_ENABLED !== "false";
 const feedbackModelCandidates = [defaultFeedbackModel, "glm-4.6-flashX"].filter(
@@ -35,9 +34,10 @@ const feedbackProviderConfigs = [
   {
     provider: "qwen",
     label: "通义千问",
-    envKey: "DASHSCOPE_API_KEY",
-    endpoint: defaultQwenEndpoint,
-    models: [defaultQwenFeedbackModel]
+    envKey: "DMXAPI_API_KEY",
+    endpoint: defaultDmxapiEndpoint,
+    models: [defaultQwenFeedbackModel],
+    routeMode: "dmxapi_only"
   },
   {
     provider: "deepseek",
@@ -78,7 +78,7 @@ function getDefaultKimiTextModel() {
 }
 
 function getDefaultQwenDmxapiModel() {
-  return String(process.env.QWEN_DMXAPI_MODEL || defaultQwenDmxapiModel || "qwen3.5-plus").trim();
+  return String(process.env.QWEN_DMXAPI_MODEL || defaultQwenDmxapiModel || "qwen3.5-plus-2026-02-15").trim();
 }
 
 function getDefaultMiniMaxDmxapiModel() {
@@ -124,9 +124,10 @@ export function getRewriteProviderConfig(modelSelection = "auto") {
     return {
       provider: "qwen",
       label: "通义千问",
-      envKey: "DASHSCOPE_API_KEY",
-      endpoint: defaultQwenEndpoint,
-      models: uniqueNonEmpty([defaultQwenFeedbackModel])
+      envKey: "DMXAPI_API_KEY",
+      endpoint: defaultDmxapiEndpoint,
+      models: uniqueNonEmpty([defaultQwenFeedbackModel]),
+      routeMode: "dmxapi_only"
     };
   }
 
@@ -1115,11 +1116,12 @@ const routedTextProviderConfigs = {
   qwen: {
     provider: "qwen",
     label: "通义千问",
-    officialEndpoint: defaultQwenEndpoint,
-    officialEnvKey: "DASHSCOPE_API_KEY",
-    getOfficialModel: (model) => String(model || process.env.QWEN_FEEDBACK_MODEL || "qwen-plus").trim(),
+    officialEndpoint: "",
+    officialEnvKey: "",
+    getOfficialModel: () => "",
     getDmxapiModel: () => getDefaultQwenDmxapiModel(),
-    dmxapiLabel: "通义千问 DMXAPI"
+    dmxapiLabel: "通义千问 DMXAPI",
+    supportsOfficial: false
   },
   minimax: {
     provider: "minimax",

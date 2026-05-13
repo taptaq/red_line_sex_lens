@@ -1,14 +1,14 @@
 import {
+  deriveNoteRecordViews,
   loadCustomLexicon,
   loadFeedbackLog,
   loadFalsePositiveLog,
   loadInnerSpaceTerms,
-  loadNoteLifecycle,
+  loadNoteRecords,
   loadQualifiedReferenceSamples,
   loadReviewQueue,
   loadSeedLexicon,
   loadStyleProfile,
-  loadSuccessSamples,
   loadWhitelist,
   saveCustomLexicon,
   saveFeedbackLog,
@@ -190,18 +190,17 @@ function enrichReviewQueueItem(item, histories = {}) {
 }
 
 export async function loadAdminData() {
-  const [seedLexicon, customLexicon, feedbackLog, reviewQueue, falsePositiveLog, successSamples, noteLifecycle, innerSpaceTerms, styleProfile, qualifiedReferenceSamples] = await Promise.all([
+  const [seedLexicon, customLexicon, feedbackLog, reviewQueue, falsePositiveLog, noteRecords, innerSpaceTerms, styleProfile] = await Promise.all([
     loadSeedLexicon(),
     loadCustomLexicon(),
     loadFeedbackLog(),
     loadReviewQueue(),
     loadFalsePositiveLog(),
-    loadSuccessSamples(),
-    loadNoteLifecycle(),
+    loadNoteRecords(),
     loadInnerSpaceTerms(),
-    loadStyleProfile(),
-    loadQualifiedReferenceSamples()
+    loadStyleProfile()
   ]);
+  const { successSamples, noteLifecycle, qualifiedReferenceSamples } = deriveNoteRecordViews(noteRecords);
 
   return {
     seedLexicon: seedLexicon.map((item) => ({

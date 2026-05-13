@@ -4,6 +4,11 @@ import {
   buildFalsePositiveEntryMarkup
 } from "./false-positive-view.js";
 import { buildRewriteBodyMarkup } from "./rewrite-result-view.js";
+import {
+  buildSampleLibraryCalibrationPrediction,
+  resolveSampleLibraryCalibrationPrefillSource
+} from "./sample-library-calibration.js";
+import { deriveSampleLibraryReferenceApplication } from "./sample-library-reference-application.js";
 
 function byId(id) {
   return document.getElementById(id);
@@ -185,13 +190,6 @@ function inferLexiconLevel(level, riskLevel) {
   return "l2";
 }
 
-function reviewStatusLabel(status) {
-  if (status === "pending_review") return "待复核";
-  if (status === "approved") return "已采纳";
-  if (status === "rejected") return "已驳回";
-  return String(status || "").trim() || "待复核";
-}
-
 function consensusLabel(consensus) {
   if (consensus === "unanimous") return "结论一致";
   if (consensus === "majority") return "多数一致";
@@ -247,6 +245,7 @@ function predictionMatchedLabel(value) {
 
 function lifecycleSourceLabel(source) {
   if (source === "false_positive_reflow") return "误报回流";
+  if (source === "analysis-compare") return "模型对比检测";
   if (source === "generation_final") return "最终推荐稿";
   if (source === "generation_candidate") return "生成候选稿";
   if (source === "generation") return "生成稿";
@@ -271,10 +270,6 @@ function isAdminDataInitialLoading() {
 
 function isAdminDataRefreshing() {
   return appState.adminDataLoading?.phase === "refresh";
-}
-
-function isSummaryInitialLoading() {
-  return appState.summaryLoading?.phase === "initial";
 }
 
 function isSummaryRefreshing() {
@@ -310,10 +305,7 @@ function syncAdminDataLoadingUI() {
     "review-queue",
     "feedback-priority-list",
     "feedback-log-secondary-list",
-    "false-positive-log-list",
-    "inner-space-terms-list",
-    "custom-lexicon-list",
-    "seed-lexicon-list"
+    "false-positive-log-list"
   ];
 
   loadingTargets.forEach((id) => {
@@ -475,7 +467,7 @@ function buildRuleChangePreviewMarkup(preview = null) {
     <div class="rule-preview-card rule-preview-${escapeHtml(preview.riskLevel || "none")}">
       <div class="rule-preview-head">
         <span>${escapeHtml(rulePreviewRiskLabel(preview.riskLevel))}</span>
-        <strong>${escapeHtml(preview.changeType === "whitelist" ? "白名单生效预演" : "规则入库预演")}</strong>
+        <strong>${escapeHtml(preview.changeType === "whitelist" ? "白名单生效预演" : "违规词库生效预演")}</strong>
       </div>
       <p>${escapeHtml(preview.summary || "暂无预演摘要")}</p>
       <div class="meta-row">
@@ -537,30 +529,6 @@ function focusSampleLibraryRecordFromPools(recordId = "", step = "base") {
   openSampleLibraryRecord(recordId, step);
 }
 
-function revealFeedbackCenterPane() {
-  revealSampleLibraryReflowPane();
-}
-
-function revealFeedbackCenterDetails() {
-  revealSampleLibraryReflowPane();
-  byId("feedback-priority-list")?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-function revealRulesMaintenancePane(targetId = "custom-lexicon-pane") {
-  ensureSupportWorkspaceOpen();
-  revealSampleLibraryPane();
-  ensureSampleLibraryAdvancedPanelOpen();
-  ensureRulesMaintenanceOpen();
-  window.setTimeout(() => {
-    byId(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, 0);
-}
-
-function revealGenerationWorkbenchPane() {
-  activateTab("main-workbench", "generation-workbench-pane");
-  byId("generation-workbench-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
 function ensureSupportWorkspaceOpen() {
   const panel = byId("support-workspace-panel");
 
@@ -596,6 +564,7 @@ function ensureFeedbackAdvancedPanelOpen() {
 const appState = {
   latestAnalyzePayload: null,
   latestAnalysis: null,
+  latestAnalyzeCompareResult: null,
   latestRewrite: null,
   latestGeneration: null,
   latestAnalysisFalsePositiveSource: null,
@@ -685,6 +654,7 @@ let analyzeTagOptions = [...presetAnalyzeTags];
 const analyzeTagOptionsApi = "/api/analyze-tag-options";
 const collectionTypesApi = "/api/collection-types";
 const modelOptionsApi = "/api/model-options";
+const analyzeCompareApi = "/api/analyze/compare";
 const sampleLibraryApi = "/api/sample-library";
 const sampleLibraryMarkdownImportParseApi = "/api/sample-library/markdown-import/parse";
 const sampleLibraryMarkdownImportCommitApi = "/api/sample-library/markdown-import/commit";
@@ -729,7 +699,8 @@ function renderSampleLibraryModal({
   body = "",
   saveLabel = "保存",
   cancelLabel = "取消",
-  hideSaveButton = false
+  hideSaveButton = false,
+  hideCancelButton = false
 } = {}) {
   const titleNode = byId("sample-library-modal-title");
   const subtitleNode = byId("sample-library-modal-subtitle");
@@ -767,6 +738,7 @@ function renderSampleLibraryModal({
   }
 
   if (cancelButton) {
+    cancelButton.hidden = hideCancelButton;
     cancelButton.textContent = cancelLabel;
   }
 
@@ -812,6 +784,7 @@ function closeSampleLibraryModal() {
   }
 
   if (cancelButton) {
+    cancelButton.hidden = false;
     cancelButton.textContent = "取消";
   }
 
@@ -2162,59 +2135,64 @@ function shouldRecommendCrossReview({ analysis = null, rewrite = null } = {}) {
   return false;
 }
 
-function buildSampleLibraryCalibrationPredictionFromCurrentState() {
-  const rewrite = normalizeRewritePayload(appState.latestRewrite);
-  const hasRewrite = hasMeaningfulNoteDraft(rewrite);
-  const analysis = appState.latestAnalysis || null;
-  const verdict = String(analysis?.finalVerdict || analysis?.verdict || "").trim() || "pass";
-  const score = Number(analysis?.score || 0);
-  const semanticSummary = String(analysis?.semanticReview?.review?.summary || "").trim();
-  const selectedModels = getSelectedModelSelections();
+function getActiveSampleLibraryCalibrationPrefillRecord() {
+  const modalState = appState.sampleLibraryModal || {};
+  const recordId =
+    modalState.kind === "record-list-inline-editor"
+      ? String(modalState.selectedRecordId || "")
+      : String(modalState.recordId || "");
 
-  let predictedStatus = "published_passed";
-  let predictedRiskLevel = "low";
-  let predictedPerformanceTier = "medium";
-  let confidence = 72;
-
-  if (verdict === "hard_block") {
-    predictedStatus = "violation";
-    predictedRiskLevel = "high";
-    predictedPerformanceTier = "low";
-    confidence = Math.max(82, Math.min(98, Math.round(score || 88)));
-  } else if (verdict === "manual_review") {
-    predictedStatus = "limited";
-    predictedRiskLevel = "medium";
-    predictedPerformanceTier = "low";
-    confidence = Math.max(60, Math.min(86, Math.round(score || 68)));
-  } else if (verdict === "observe") {
-    predictedStatus = "published_passed";
-    predictedRiskLevel = "low";
-    predictedPerformanceTier = "medium";
-    confidence = Math.max(58, Math.min(82, 72 - Math.round((score || 0) / 4)));
-  } else if (score >= 60) {
-    predictedStatus = "limited";
-    predictedRiskLevel = "medium";
-    predictedPerformanceTier = "low";
-    confidence = 66;
+  if (!recordId) {
+    return null;
   }
 
-  const reasonParts = [
-    `当前检测结论：${verdictLabel(verdict)}`,
-    Number.isFinite(score) ? `规则分 ${Math.round(score)}` : "",
-    semanticSummary,
-    hasRewrite && rewrite.rewriteNotes ? `改写说明：${rewrite.rewriteNotes}` : "",
-    hasRewrite && rewrite.safetyNotes ? `安全提示：${rewrite.safetyNotes}` : ""
-  ].filter(Boolean);
+  return appState.sampleLibraryRecords.find((item) => String(item?.id || "") === recordId) || null;
+}
 
-  return {
-    predictedStatus,
-    predictedRiskLevel,
-    predictedPerformanceTier,
-    confidence,
-    reason: reasonParts.join("；"),
-    model: hasRewrite ? rewrite.model || selectedModels.rewrite : selectedModels.semantic,
-    createdAt: new Date().toISOString().slice(0, 10)
-  };
+function getSampleLibraryCalibrationPredictionPrefillSource() {
+  return resolveSampleLibraryCalibrationPrefillSource({
+    latestAnalyzePayload: appState.latestAnalyzePayload || null,
+    latestAnalysis: appState.latestAnalysis || null,
+    latestRewrite: appState.latestRewrite || null,
+    record: getActiveSampleLibraryCalibrationPrefillRecord()
+  });
+}
+
+function getSampleLibraryReferenceApplicationState({ recordOverride = null, calibrationOverride = null } = {}) {
+  const modalState = appState.sampleLibraryModal || {};
+  const baseRecord = recordOverride || getActiveSampleLibraryCalibrationPrefillRecord();
+
+  if (!baseRecord) {
+    return {
+      canApply: false,
+      requirementMessage: "当前没有可应用的样本记录。",
+      buttonLabel: "应用为参考样本",
+      helperText: ""
+    };
+  }
+
+  if (modalState.kind === "record-list-inline-editor") {
+    const draft = calibrationOverride ? null : readSampleLibraryRecordInlineEditorDraftFromModal();
+    const effectiveDraft = draft || modalState.draft || buildSampleLibraryRecordInlineEditorDraft(baseRecord);
+    return deriveSampleLibraryReferenceApplication({
+      record: {
+        ...baseRecord,
+        reference: effectiveDraft.reference,
+        publish: effectiveDraft.publish,
+        calibration: effectiveDraft.calibration
+      },
+      calibration: calibrationOverride || effectiveDraft.calibration
+    });
+  }
+
+  return deriveSampleLibraryReferenceApplication({
+    record: baseRecord,
+    calibration: calibrationOverride || getSampleRecordCalibration(baseRecord)
+  });
+}
+
+function getSampleLibraryCalibrationPredictionPrefillSourceSummary() {
+  return getSampleLibraryCalibrationPredictionPrefillSource().summary;
 }
 
 function deriveSampleLibraryActualPerformanceTier(publish = {}) {
@@ -2379,9 +2357,11 @@ function syncAnalyzeActions() {
   const requirementMessage = getAnalyzeActionRequirementMessage();
   const enabled = !requirementMessage;
   const analyzeButton = byId("analyze-button");
+  const compareButton = byId("analyze-compare-button");
   const rewriteButton = byId("rewrite-button");
 
   setGatedButtonState(analyzeButton, enabled, requirementMessage);
+  setGatedButtonState(compareButton, enabled, requirementMessage);
   setGatedButtonState(rewriteButton, enabled, requirementMessage);
   setActionGateHint("analyze-action-hint", requirementMessage);
   syncCrossReviewActions();
@@ -2451,6 +2431,53 @@ function renderSummary(summary = {}) {
       `
     )
     .join("");
+}
+
+function formatAnalysisScore(value) {
+  const number = Number(value);
+
+  if (!Number.isFinite(number) || number <= 0) {
+    return "";
+  }
+
+  return Number.isInteger(number) ? String(number) : number.toFixed(2);
+}
+
+function describeMemoryCalibration(memoryCalibration = {}) {
+  const calibration = memoryCalibration && typeof memoryCalibration === "object" ? memoryCalibration : {};
+
+  if (!calibration.applied) {
+    return null;
+  }
+
+  const fromVerdict = verdictLabel(calibration.fromVerdict || "pass");
+  const toVerdict = verdictLabel(calibration.toVerdict || calibration.fromVerdict || "pass");
+  const direction = String(calibration.direction || "").trim();
+  const reasons = (Array.isArray(calibration.reasons) ? calibration.reasons : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  const categories = uniqueStrings(calibration.categories || []);
+  const scoreParts = [
+    formatAnalysisScore(calibration.riskScore) ? `风险记忆分 ${formatAnalysisScore(calibration.riskScore)}` : "",
+    formatAnalysisScore(calibration.safeScore) ? `安全记忆分 ${formatAnalysisScore(calibration.safeScore)}` : ""
+  ].filter(Boolean);
+  const isSafetySoften = direction === "safety_soften";
+
+  return {
+    label: isSafetySoften ? "安全放宽" : "风险上调",
+    toneClass: isSafetySoften ? "model-scope-banner-memory-safe" : "model-scope-banner-memory-risk",
+    title:
+      isSafetySoften
+        ? `基础合并结论：${fromVerdict}，长期记忆校准后调整为 ${toVerdict}`
+        : `基础合并结论：${fromVerdict}，长期记忆校准后提升为 ${toVerdict}`,
+    detail: [
+      ...reasons,
+      categories.length ? `相关记忆类别：${categories.join("、")}` : "",
+      scoreParts.join("；")
+    ]
+      .filter(Boolean)
+      .join("；")
+  };
 }
 
 function renderAnalysis(result, falsePositiveSource = null) {
@@ -2567,6 +2594,28 @@ function renderAnalysis(result, falsePositiveSource = null) {
       </div>
     `
     : "";
+  const memoryCalibrationKicker = "长期记忆校准";
+  const memoryCalibrationLead = "基础合并结论";
+  const memoryCalibrationSafeLabel = "安全放宽";
+  const memoryCalibrationRiskLabel = "风险上调";
+  const memoryCalibrationSafeToneClass = "model-scope-banner-memory-safe";
+  const memoryCalibrationRiskToneClass = "model-scope-banner-memory-risk";
+  const memoryCalibrationSummary = describeMemoryCalibration(result.memoryCalibration);
+  const memoryCalibrationMarkup = memoryCalibrationSummary
+    ? `
+      <div class="model-scope-banner model-scope-banner-review ${escapeHtml(memoryCalibrationSummary.toneClass || "")}">
+        <span class="model-scope-kicker">${memoryCalibrationKicker}</span>
+        <span class="memory-calibration-label">${escapeHtml(
+          memoryCalibrationSummary.label ||
+            (memoryCalibrationSummary.toneClass === memoryCalibrationSafeToneClass
+              ? memoryCalibrationSafeLabel
+              : memoryCalibrationRiskLabel)
+        )}</span>
+        <strong>${escapeHtml(memoryCalibrationSummary.title)}</strong>
+        <p>${escapeHtml(memoryCalibrationSummary.detail || `${memoryCalibrationLead}已结合长期记忆校准。`)}</p>
+      </div>
+    `
+    : "";
 
   byId("analysis-result").innerHTML = `
     <div class="verdict verdict-${result.finalVerdict || result.verdict}">
@@ -2578,6 +2627,7 @@ function renderAnalysis(result, falsePositiveSource = null) {
       semantic ? verdictLabel(semantic.verdict) : "未启用/未返回"
     )}</p>
     <p class="helper-text">规则检测模型：${ruleModelLabel}</p>
+    ${memoryCalibrationMarkup}
     ${referenceSampleMarkup}
     <div class="columns">
       <div>
@@ -2946,6 +2996,304 @@ function buildCrossReviewMarkup(review, { embedded = false } = {}) {
   `;
 }
 
+function buildAnalyzeCompareSummaryMarkup(result = {}) {
+  const summary = result?.summary && typeof result.summary === "object" ? result.summary : {};
+  const ruleAnalysis = result?.ruleAnalysis && typeof result.ruleAnalysis === "object" ? result.ruleAnalysis : {};
+  const finalVerdictLabels = (Array.isArray(summary.finalVerdicts) ? summary.finalVerdicts : [])
+    .filter(Boolean)
+    .map((item) => verdictLabel(item))
+    .join("、");
+  const disagreementCount = Math.max(0, Number(summary.disagreementCount || 0));
+  const disagreementHeadline = disagreementCount > 0 ? "有分歧" : "无分歧";
+  const disagreementMeta = disagreementCount > 0
+    ? `存在不同最终结论：${finalVerdictLabels || "请查看各模型详情"}`
+    : `最终结论一致：${finalVerdictLabels || "当前没有最终结论"}`;
+  const semanticVerdictLabels = (Array.isArray(summary.semanticVerdicts) ? summary.semanticVerdicts : [])
+    .filter(Boolean)
+    .map((item) => verdictLabel(item))
+    .join("、");
+  const semanticVerdictCount = Array.isArray(summary.semanticVerdicts) ? summary.semanticVerdicts.filter(Boolean).length : 0;
+  const semanticDistributionMeta = [
+    semanticVerdictLabels || "暂无语义结论",
+    formatDate(summary.comparedAt || "")
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return `
+    <section class="sample-library-modal-section">
+      <div class="sample-library-modal-section-head">
+        <strong>对比总览</strong>
+        <p>同一份规则检测只跑一次，下面横向对比不同模型的语义复判和合并后的最终结论。</p>
+      </div>
+      <div class="analyze-compare-summary-grid">
+        <article class="analyze-compare-summary-card">
+          <span>规则基底</span>
+          <strong>${escapeHtml(verdictLabel(ruleAnalysis.verdict || "pass"))}</strong>
+          <p>${escapeHtml(ruleAnalysis.modelTrace?.label || "本地规则引擎 / 规则词库 + 组合规则")}</p>
+        </article>
+        <article class="analyze-compare-summary-card">
+          <span>已对比模型</span>
+          <strong>${escapeHtml(String(summary.totalModels || 0))}</strong>
+          <p>${escapeHtml(`成功返回 ${summary.completedModels || 0} 个`)}</p>
+        </article>
+        <article class="analyze-compare-summary-card">
+          <span>结论分歧</span>
+          <strong>${escapeHtml(disagreementHeadline)}</strong>
+          <p>${escapeHtml(disagreementMeta)}</p>
+        </article>
+        <article class="analyze-compare-summary-card">
+          <span>语义结论分布</span>
+          <strong>${escapeHtml(semanticVerdictCount ? `${semanticVerdictCount} 种语义结果` : "暂无语义结论")}</strong>
+          <p>${escapeHtml(semanticDistributionMeta)}</p>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function getDefaultAnalyzeCompareBasisSelection(result = {}) {
+  const comparisons = Array.isArray(result?.comparisons) ? result.comparisons : [];
+  const defaultItem =
+    comparisons.find((entry) => entry?.semanticReview?.status === "ok" && entry?.mergedAnalysis && typeof entry.mergedAnalysis === "object") ||
+    comparisons.find((entry) => entry?.mergedAnalysis && typeof entry.mergedAnalysis === "object") ||
+    comparisons[0] ||
+    null;
+
+  return String(defaultItem?.selection || "").trim();
+}
+
+function getAnalyzeCompareSelectionContext(selection = "") {
+  const result = appState.latestAnalyzeCompareResult && typeof appState.latestAnalyzeCompareResult === "object"
+    ? appState.latestAnalyzeCompareResult
+    : appState.sampleLibraryModal?.result && typeof appState.sampleLibraryModal.result === "object"
+      ? appState.sampleLibraryModal.result
+      : null;
+  const comparisons = Array.isArray(result?.comparisons) ? result.comparisons : [];
+  const modalBasisSelection =
+    appState.sampleLibraryModal?.kind === "analysis-compare"
+      ? String(appState.sampleLibraryModal.compareBasisSelection || "").trim()
+      : "";
+  const normalizedSelection = String(selection || modalBasisSelection || "").trim();
+  const explicitItem = normalizedSelection
+    ? comparisons.find((entry) => String(entry?.selection || "") === normalizedSelection)
+    : null;
+  const item =
+    explicitItem ||
+    comparisons.find((entry) => entry?.semanticReview?.status === "ok" && entry?.mergedAnalysis && typeof entry.mergedAnalysis === "object") ||
+    comparisons.find((entry) => entry?.mergedAnalysis && typeof entry.mergedAnalysis === "object") ||
+    comparisons[0] ||
+    null;
+
+  return {
+    result,
+    item: item || null,
+    mergedAnalysis: item?.mergedAnalysis && typeof item.mergedAnalysis === "object" ? item.mergedAnalysis : null
+  };
+}
+
+function buildAnalyzeCompareBasisOptionLabel(item = {}) {
+  const label = item?.label || item?.selection || "未命名模型";
+  const mergedAnalysis = item?.mergedAnalysis && typeof item.mergedAnalysis === "object" ? item.mergedAnalysis : {};
+  const semanticReview = item?.semanticReview && typeof item.semanticReview === "object" ? item.semanticReview : {};
+  const verdict = verdictLabel(mergedAnalysis.finalVerdict || mergedAnalysis.verdict || "pass");
+  const status = semanticReview.status === "ok" ? "已完成" : semanticReview.status === "skipped" ? "已跳过" : "未返回";
+
+  return `${label} · ${verdict} · ${status}`;
+}
+
+function buildAnalyzeCompareContentActionsMarkup(result = {}) {
+  const comparisons = Array.isArray(result?.comparisons) ? result.comparisons : [];
+  const compareContext = getAnalyzeCompareSelectionContext("");
+  const mergedAnalysis = compareContext.mergedAnalysis || {};
+  const basisLabel = compareContext.item?.label || compareContext.item?.selection || "";
+  const basisText = basisLabel ? `当前内容级保存基于 ${basisLabel} 的合并结论。` : "当前内容级保存将回退到这次检测的基础规则结论。";
+  const basisVerdict = mergedAnalysis.finalVerdict || mergedAnalysis.verdict || result?.ruleAnalysis?.verdict || "pass";
+  const compareFalsePositiveNotes = [
+    "来自全部模型对比检测",
+    "记录的是当前整条内容，不会重复给每个模型单独落一份内容样本",
+    basisLabel ? `当前保存基准：${basisLabel}` : "",
+    `综合结论：${verdictLabel(basisVerdict)}`
+  ]
+    .filter(Boolean)
+    .join("；");
+  const basisOptionsMarkup = comparisons.length
+    ? comparisons
+        .map((item) => {
+          const optionValue = String(item?.selection || "").trim();
+          const selected = optionValue && optionValue === String(compareContext.item?.selection || "").trim();
+
+          return `
+            <option value="${escapeHtml(optionValue)}" ${selected ? "selected" : ""}>
+              ${escapeHtml(buildAnalyzeCompareBasisOptionLabel(item))}
+            </option>
+          `;
+        })
+        .join("")
+    : `<option value="">当前没有可切换的模型结果</option>`;
+
+  return `
+    <section class="sample-library-modal-section">
+      <div class="sample-library-modal-section-head">
+        <strong>内容级操作</strong>
+        <p>${escapeHtml(`${basisText} 误报样本、生命周期记录和平台结果回填都只保留一份，避免在各模型卡片里重复沉淀。`)}</p>
+      </div>
+      <div class="analyze-compare-content-actions">
+        <label class="analyze-compare-basis-control">
+          <span>保存基准</span>
+          <select name="analyzeCompareBasisSelection" ${comparisons.length ? "" : "disabled"}>
+            ${basisOptionsMarkup}
+          </select>
+        </label>
+        <div class="analyze-compare-basis-row">
+          <span class="analyze-compare-basis-pill">
+            ${escapeHtml(`当前保存基准：${basisLabel || "基础规则结论"}`)}
+          </span>
+          <span class="meta-pill">${escapeHtml(`当前结论：${verdictLabel(basisVerdict)}`)}</span>
+        </div>
+        <div class="item-actions">
+          <button
+            type="button"
+            class="button button-small"
+            data-action="open-analyze-compare-false-positive"
+            data-selection="${escapeHtml(compareContext.item?.selection || "")}"
+            data-model-label="${escapeHtml(basisLabel)}"
+            data-analysis-verdict="${escapeHtml(basisVerdict)}"
+            data-analysis-score="${escapeHtml(String(mergedAnalysis.score ?? result?.ruleAnalysis?.score ?? 0))}"
+            data-user-notes="${escapeHtml(compareFalsePositiveNotes)}"
+            data-source-label="${escapeHtml(basisLabel ? `这次全部模型对比检测（当前保存基准：${basisLabel}）` : "这次全部模型对比检测")}"
+          >
+            记录这条内容为误报样本
+          </button>
+          <button
+            type="button"
+            class="button button-ghost button-small"
+            data-action="save-analyze-compare-lifecycle"
+            data-selection="${escapeHtml(compareContext.item?.selection || "")}"
+          >
+            保存这条内容为生命周期记录
+          </button>
+        </div>
+        ${buildPlatformOutcomeActions("analysis-compare", { candidateId: compareContext.item?.selection || "" })}
+      </div>
+    </section>
+  `;
+}
+
+function buildAnalyzeCompareCardMarkup(item = {}) {
+  const semanticReview = item?.semanticReview && typeof item.semanticReview === "object" ? item.semanticReview : {};
+  const mergedAnalysis = item?.mergedAnalysis && typeof item.mergedAnalysis === "object" ? item.mergedAnalysis : {};
+  const semantic = semanticReview.status === "ok" ? semanticReview.review || null : null;
+  const attemptedRoutes = Array.isArray(semanticReview.providersTried) ? semanticReview.providersTried : [];
+  const attemptedRouteLabels = attemptedRoutes
+    .map((attempt) => [attempt.routeLabel || "", providerLabel(attempt.provider), attempt.model || ""].filter(Boolean).join(" / "))
+    .filter(Boolean);
+  const statusLabel =
+    semanticReview.status === "ok" ? "已完成" : semanticReview.status === "skipped" ? "已跳过" : "未返回";
+  const statusClass = semanticReview.status === "ok" ? "is-ok" : semanticReview.status === "skipped" ? "is-muted" : "is-warn";
+  const reasonsMarkup = semantic?.reasons?.length
+    ? semantic.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")
+    : `<li>${escapeHtml(semanticReview.message || "当前没有返回语义原因。")}</li>`;
+  const signalsMarkup = semantic?.implicitSignals?.length
+    ? semantic.implicitSignals.map((signal) => `<li>${escapeHtml(signal)}</li>`).join("")
+    : "<li>未返回明显隐含信号</li>";
+  const summaryText = semantic?.summary || semanticReview.message || "当前没有返回语义摘要。";
+  const suggestionText = semantic?.suggestion || "暂无补充建议";
+  const finalVerdict = mergedAnalysis.finalVerdict || mergedAnalysis.verdict || "pass";
+  const semanticVerdict = semantic?.verdict ? verdictLabel(semantic.verdict) : "未启用/未返回";
+  const memoryCalibrationSummary = describeMemoryCalibration(mergedAnalysis.memoryCalibration);
+  const memoryCalibrationMarkup = memoryCalibrationSummary
+    ? `
+        <section class="analyze-compare-block">
+          <span>长期记忆校准</span>
+          <p class="memory-calibration-label">${escapeHtml(memoryCalibrationSummary.label || "长期记忆校准")}</p>
+          <p>${escapeHtml(memoryCalibrationSummary.title)}</p>
+          <p>${escapeHtml(memoryCalibrationSummary.detail || "当前最终结论已结合长期记忆校准。")}</p>
+        </section>
+      `
+    : "";
+
+  return `
+    <article class="analyze-compare-card">
+      <div class="analyze-compare-card-head">
+        <div>
+          <strong>${escapeHtml(item.label || item.selection || "未命名模型")}</strong>
+          <p>${escapeHtml(attemptedRouteLabels.join("；") || item.selection || "当前未记录调用链路")}</p>
+        </div>
+        <span class="analyze-compare-status ${escapeHtml(statusClass)}">${escapeHtml(statusLabel)}</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-pill">${escapeHtml(`最终：${verdictLabel(finalVerdict)}`)}</span>
+        <span class="meta-pill">${escapeHtml(`语义：${semanticVerdict}`)}</span>
+        <span class="meta-pill">${escapeHtml(`耗时 ${Math.max(0, Number(item.durationMs || 0))}ms`)}</span>
+      </div>
+      <div class="analyze-compare-card-grid">
+        <section class="analyze-compare-block">
+          <span>语义摘要</span>
+          <p>${escapeHtml(summaryText)}</p>
+        </section>
+        <section class="analyze-compare-block">
+          <span>改写建议</span>
+          <p>${escapeHtml(suggestionText)}</p>
+        </section>
+        <section class="analyze-compare-block">
+          <span>语义原因</span>
+          <ul>${reasonsMarkup}</ul>
+        </section>
+        <section class="analyze-compare-block">
+          <span>隐含信号</span>
+          <ul>${signalsMarkup}</ul>
+        </section>
+        ${memoryCalibrationMarkup}
+      </div>
+    </article>
+  `;
+}
+
+function buildAnalyzeCompareModalMarkup(result = {}) {
+  const comparisons = Array.isArray(result?.comparisons) ? result.comparisons : [];
+  const errorMessage = String(result?.errorMessage || "").trim();
+  const cardsMarkup = comparisons.length
+    ? comparisons.map((item) => buildAnalyzeCompareCardMarkup(item)).join("")
+    : `<div class="result-card muted">${escapeHtml(errorMessage || "当前没有可展示的模型对比结果。")}</div>`;
+
+  return `
+    <div class="sample-library-modal-stack analyze-compare-stack">
+      ${buildAnalyzeCompareSummaryMarkup(result)}
+      ${buildAnalyzeCompareContentActionsMarkup(result)}
+      <section class="sample-library-modal-section">
+        <div class="sample-library-modal-section-head">
+          <strong>模型详情</strong>
+          <p>默认先看每个模型的最终结论和语义摘要；只有需要时再继续看具体原因和隐含信号。</p>
+        </div>
+        <div class="analyze-compare-card-grid">${cardsMarkup}</div>
+      </section>
+    </div>
+  `;
+}
+
+function renderAnalyzeCompareModal(result = {}) {
+  const totalModels = Array.isArray(result?.comparisons) ? result.comparisons.length : 0;
+
+  renderSampleLibraryModal({
+    title: "全部模型对比检测",
+    subtitle: `当前基于同一份规则检测，横向对比 ${totalModels} 个模型的语义复判与最终结论。`,
+    body: buildAnalyzeCompareModalMarkup(result),
+    cancelLabel: "关闭",
+    hideSaveButton: true,
+    hideCancelButton: true
+  });
+}
+
+function openAnalyzeCompareModal(result = {}) {
+  appState.sampleLibraryModal = {
+    kind: "analysis-compare",
+    result,
+    compareBasisSelection: getDefaultAnalyzeCompareBasisSelection(result)
+  };
+  renderAnalyzeCompareModal(result);
+}
+
 function renderCrossReviewResult(result) {
   byId("cross-review-result").innerHTML = buildCrossReviewMarkup(result?.review);
 }
@@ -2988,7 +3336,7 @@ function renderQueue(items) {
                   ? `当前不建议直接入库：${escapeHtml(item.recommendedLexiconDraft.blockedReason || "更像平台原因标签")}`
                   : item.recommendedLexiconDraft?.targetScope === "whitelist"
                     ? `建议加入宽松白名单：${escapeHtml(item.recommendedLexiconDraft.phrase || item.phrase || "")}`
-                    : `建议入库：${escapeHtml(matchLabel(item.recommendedLexiconDraft?.match || "exact"))} /
+                    : `建议加入违规词库：${escapeHtml(matchLabel(item.recommendedLexiconDraft?.match || "exact"))} /
                 ${escapeHtml(lexiconLevelLabel(inferLexiconLevel(item.recommendedLexiconDraft?.lexiconLevel, item.recommendedLexiconDraft?.riskLevel || item.suggestedRiskLevel)))} /
                 ${escapeHtml(item.recommendedLexiconDraft?.category || item.suggestedCategory || "待人工判断")} /
                 ${escapeHtml(verdictLabel(item.recommendedLexiconDraft?.riskLevel || item.suggestedRiskLevel || "manual_review"))}`
@@ -3025,7 +3373,7 @@ function renderQueue(items) {
                   data-id="${escapeHtml(item.id)}"
                   ${item.recommendedLexiconDraft?.blocked ? "disabled" : ""}
                 >
-                  ${item.recommendedLexiconDraft?.targetScope === "whitelist" ? "加入白名单" : "按建议入库"}
+                  ${item.recommendedLexiconDraft?.targetScope === "whitelist" ? "加入白名单" : "加入违规词库"}
                 </button>
                 <button
                   type="button"
@@ -3137,21 +3485,6 @@ function buildLexiconListMarkup(items = [], scope = "custom") {
         })
         .join("")
     : '<div class="result-card muted">当前没有条目</div>';
-}
-
-function renderLexiconList(containerId, items, scope) {
-  const node = byId(containerId);
-
-  if (!node) {
-    return;
-  }
-
-  if (isAdminDataInitialLoading()) {
-    node.innerHTML = buildAdminDataLoadingBlockMarkup("加载中...", { count: 2, isRefreshing: false });
-    return;
-  }
-
-  node.innerHTML = buildLexiconListMarkup(items, scope);
 }
 
 function renderFeedbackLog(items) {
@@ -3827,10 +4160,6 @@ function getSamplePoolWhyHelperText(record = {}) {
   return "";
 }
 
-function hasCalibration(record = {}) {
-  return hasCalibrationPrediction(record) || hasCalibrationRetro(record);
-}
-
 function collectionTypeLabel(value = "") {
   return String(value || "").trim() || "未分类合集";
 }
@@ -3954,21 +4283,6 @@ function filterSampleLibraryRecords(items = []) {
       return true;
     })
   );
-}
-
-function getSelectedSampleLibraryRecord() {
-  const filteredItems = filterSampleLibraryRecords(appState.sampleLibraryRecords);
-
-  if (!filteredItems.length) {
-    appState.selectedSampleLibraryRecordId = "";
-    return null;
-  }
-
-  const selectedRecord =
-    filteredItems.find((item) => String(item?.id || "") === appState.selectedSampleLibraryRecordId) || filteredItems[0];
-
-  appState.selectedSampleLibraryRecordId = String(selectedRecord?.id || "");
-  return selectedRecord;
 }
 
 function getSampleLibraryRecordStepLabel(record = {}) {
@@ -4144,13 +4458,6 @@ function renderSampleLibraryRecordListModal() {
     cancelLabel: "关闭",
     hideSaveButton: true
   });
-}
-
-function openSampleLibraryRecordListModal() {
-  appState.sampleLibraryModal = {
-    kind: "record-list"
-  };
-  renderSampleLibraryRecordListModal();
 }
 
 function focusSampleLibraryRecordFromModal(recordId = "", step = "base") {
@@ -4462,6 +4769,17 @@ function syncSampleLibraryRecordInlineEditorFilterResults() {
 function buildSampleLibraryRecordInlineEditorModalMarkup({ sidebarItems = [], selectedRecord = null, modalState = {} } = {}) {
   const draft = modalState?.draft || buildSampleLibraryRecordInlineEditorDraft(selectedRecord || {});
   const comparisonMatched = draft?.calibration?.retro?.predictionMatched === true;
+  const referenceAction = selectedRecord
+    ? getSampleLibraryReferenceApplicationState({
+        recordOverride: {
+          ...selectedRecord,
+          reference: draft.reference,
+          publish: draft.publish,
+          calibration: draft.calibration
+        },
+        calibrationOverride: draft.calibration
+      })
+    : null;
 
   return `
     <div class="sample-library-record-inline-editor-layout">
@@ -4504,7 +4822,8 @@ function buildSampleLibraryRecordInlineEditorModalMarkup({ sidebarItems = [], se
                   prediction: draft.calibration.prediction,
                   retro: draft.calibration.retro,
                   comparisonStatusLabel: predictionMatchedLabel(comparisonMatched),
-                  missReasonSuggestion: draft.calibration.retro.missReason
+                  missReasonSuggestion: draft.calibration.retro.missReason,
+                  referenceAction
                 })}
               </div>
             `
@@ -4894,36 +5213,6 @@ function renderSampleLibraryCalibrationReviewQueue(items = []) {
         })
         .join("")
     : '<div class="result-card muted">当前没有待处理的批量复盘项。</div>';
-}
-
-function buildSampleLibraryDetailSummaryCardMarkup({
-  title = "",
-  summary = "",
-  pills = [],
-  pillsClassName = "meta-row",
-  pillClassName = "meta-pill",
-  actionMarkup = "",
-  hintId = ""
-} = {}) {
-  const pillMarkup = Array.isArray(pills) && pills.length
-    ? `<div class="${escapeHtml(pillsClassName)}">${pills
-        .map((item) => `<span class="${escapeHtml(pillClassName)}">${escapeHtml(item)}</span>`)
-        .join("")}</div>`
-    : "";
-
-  return `
-    <article class="sample-library-detail-summary-card">
-      <div>
-        <strong>${escapeHtml(title)}</strong>
-        <p>${escapeHtml(summary)}</p>
-      </div>
-      ${pillMarkup}
-      <div class="item-actions">
-        ${actionMarkup}
-      </div>
-      ${hintId ? `<p class="helper-text action-gate-hint" id="${escapeHtml(hintId)}" aria-live="polite"></p>` : ""}
-    </article>
-  `;
 }
 
 function buildSampleLibraryModalTagPickerMarkup(tags = []) {
@@ -5605,7 +5894,8 @@ function openFeedbackFalsePositiveModal({
   analysisVerdict = "",
   analysisScore = 0,
   noteId = "",
-  createdAt = ""
+  createdAt = "",
+  sourceLabel = "这条反馈"
 } = {}) {
   appState.sampleLibraryModal = {
     kind: "feedback-false-positive",
@@ -5616,12 +5906,13 @@ function openFeedbackFalsePositiveModal({
     analysisVerdict,
     analysisScore,
     noteId,
-    createdAt
+    createdAt,
+    sourceLabel
   };
 
   renderSampleLibraryModal({
     title: "确认误报案例",
-    subtitle: "确认后会把这条反馈转入误报待确认列表。",
+    subtitle: `确认后会把${String(sourceLabel || "这条内容")}转入误报待确认列表。`,
     body: buildFeedbackFalsePositiveModalMarkup(appState.sampleLibraryModal),
     saveLabel: "确认记录为误报"
   });
@@ -5661,13 +5952,15 @@ async function saveFeedbackFalsePositiveModal() {
   });
 
   renderFalsePositiveLog(response.items || []);
-  await apiJson("/api/admin/feedback", {
-    method: "DELETE",
-    body: JSON.stringify({
-      noteId: modalState.noteId,
-      createdAt: modalState.createdAt
-    })
-  });
+  if (String(modalState?.noteId || "").trim() || String(modalState?.createdAt || "").trim()) {
+    await apiJson("/api/admin/feedback", {
+      method: "DELETE",
+      body: JSON.stringify({
+        noteId: modalState.noteId,
+        createdAt: modalState.createdAt
+      })
+    });
+  }
   await refreshAll();
   ensureSupportWorkspaceOpen();
   revealSampleLibraryReflowPane();
@@ -5756,8 +6049,11 @@ function buildSampleLibraryCalibrationEditorSectionsMarkup({
   prediction = {},
   retro = {},
   comparisonStatusLabel = "待复盘",
-  missReasonSuggestion = ""
+  missReasonSuggestion = "",
+  referenceAction = null
 } = {}) {
+  const prefillSourceSummary = getSampleLibraryCalibrationPredictionPrefillSourceSummary();
+
   return `
       ${buildSampleLibraryModalSectionMarkup({
         title: "发布前预判",
@@ -5821,6 +6117,8 @@ function buildSampleLibraryCalibrationEditorSectionsMarkup({
             从当前检测预填预判
           </button>
         </div>
+        <p class="helper-text">${escapeHtml(prefillSourceSummary)}</p>
+        <p class="helper-text" data-role="sample-library-calibration-prefill-message" aria-live="polite"></p>
       `
       })}
       ${buildSampleLibraryModalSectionMarkup({
@@ -5848,8 +6146,23 @@ function buildSampleLibraryCalibrationEditorSectionsMarkup({
         </label>
         <label class="sample-library-checkbox">
           <input type="checkbox" name="shouldBecomeReference"${retro.shouldBecomeReference ? " checked" : ""} />
-          <span>建议进入参考样本</span>
+          <span>应转参考样本</span>
         </label>
+        <div class="item-actions">
+          <button
+            type="button"
+            class="button button-ghost button-small"
+            data-action="apply-sample-library-reference-from-retro"
+          >
+            ${escapeHtml(referenceAction?.buttonLabel || "应用为参考样本")}
+          </button>
+        </div>
+        <p class="helper-text" data-role="sample-library-reference-application-status">${escapeHtml(
+          referenceAction?.statusSummary || "当前参考状态：未启用"
+        )}</p>
+        <p class="helper-text">${escapeHtml(
+          referenceAction?.helperText || "这里只是复盘建议，只有点击“应用为参考样本”后才会真正写入参考属性。"
+        )}</p>
         <label>
           <span>偏差原因</span>
           <input name="missReason" value="${escapeHtml(retro.missReason || "")}" placeholder="例如：标题命中，但正文留存不足" />
@@ -5903,6 +6216,13 @@ function buildSampleLibraryCalibrationModalMarkup(record) {
       : recommendation.shouldBecomeReference,
     ruleImprovementCandidate: calibration.retro.ruleImprovementCandidate || recommendation.ruleImprovementCandidate
   };
+  const referenceAction = getSampleLibraryReferenceApplicationState({
+    recordOverride: record,
+    calibrationOverride: {
+      prediction: calibration.prediction,
+      retro: effectiveRetro
+    }
+  });
 
   return `
     <div class="sample-library-modal-stack compact-form">
@@ -5910,7 +6230,8 @@ function buildSampleLibraryCalibrationModalMarkup(record) {
         prediction: calibration.prediction,
         retro: effectiveRetro,
         comparisonStatusLabel: predictionMatchedLabel(comparison.matched),
-        missReasonSuggestion: comparison.missReasonSuggestion
+        missReasonSuggestion: comparison.missReasonSuggestion,
+        referenceAction
       })}
     </div>
   `;
@@ -6070,26 +6391,6 @@ async function refreshSampleLibraryWorkspace() {
   return appState.sampleLibraryRecords;
 }
 
-function formatRate(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? `${Math.round(number * 100)}%` : "0%";
-}
-
-function sceneLabel(scene) {
-  const labels = {
-    semantic_review: "语义复判",
-    cross_review: "交叉复判",
-    generation: "生成",
-    rewrite: "改写",
-    rewrite_patch: "改写修补",
-    rewrite_humanizer: "人味化",
-    feedback_suggestion: "反馈建议",
-    feedback_screenshot: "截图识别"
-  };
-
-  return labels[scene] || scene || "未知场景";
-}
-
 function renderGenerationResult(result = {}) {
   const cards = (result.scoredCandidates || [])
     .map(
@@ -6154,91 +6455,6 @@ function renderGenerationResult(result = {}) {
   syncLifecycleResultActions();
 }
 
-function renderReviewQueueAdmin(items) {
-  byId("review-queue-admin-list").innerHTML = items.length
-    ? items
-        .map(
-          (item) => `
-            <article class="admin-item">
-              <strong>${escapeHtml(item.phrase)}</strong>
-              <div class="meta-row">
-                <span class="meta-pill">${escapeHtml(item.priorityLabel || "中优先")}</span>
-                <span class="meta-pill">命中 ${escapeHtml(String(item.hitCount || 1))} 次</span>
-                <span class="meta-pill">${escapeHtml(matchLabel(item.match || "exact"))}</span>
-                <span class="meta-pill">${escapeHtml(item.suggestedCategory || "待人工判断")}</span>
-                <span class="meta-pill">${escapeHtml(verdictLabel(item.suggestedRiskLevel || "manual_review"))}</span>
-                <span class="meta-pill">${escapeHtml(reviewStatusLabel(item.status || "pending_review"))}</span>
-                ${item.candidateType === "whitelist" ? '<span class="meta-pill">宽松白名单</span>' : ""}
-              </div>
-              <p>${escapeHtml(item.platformReason || "待补充平台原因")}</p>
-              <p>优先级分数：${escapeHtml(String(item.priorityScore || 0))}</p>
-              ${
-                item.match === "regex" && item.pattern
-                  ? `<p>语境规则：<code>${escapeHtml(item.pattern)}</code></p>`
-                  : ""
-              }
-              <p>来源内容：${escapeHtml(compactText(item.sourceNoteExcerpt || item.sourceNoteId, 96) || "未标记")}</p>
-              <p>${
-                item.recommendedLexiconDraft?.blocked
-                  ? `当前不建议直接入库：${escapeHtml(item.recommendedLexiconDraft.blockedReason || "更像平台原因标签")}`
-                  : item.recommendedLexiconDraft?.targetScope === "whitelist"
-                    ? `建议加入宽松白名单：${escapeHtml(item.recommendedLexiconDraft.phrase || item.phrase || "")}`
-                    : `建议入库：${escapeHtml(matchLabel(item.recommendedLexiconDraft?.match || "exact"))} /
-                ${escapeHtml(lexiconLevelLabel(inferLexiconLevel(item.recommendedLexiconDraft?.lexiconLevel, item.recommendedLexiconDraft?.riskLevel || item.suggestedRiskLevel)))} /
-                ${escapeHtml(item.recommendedLexiconDraft?.category || item.suggestedCategory || "待人工判断")} /
-                ${escapeHtml(verdictLabel(item.recommendedLexiconDraft?.riskLevel || item.suggestedRiskLevel || "manual_review"))}`
-              }</p>
-              <p>建议原因：${escapeHtml(item.recommendedLexiconDraft?.xhsReason || "暂无建议原因")}</p>
-              ${buildRuleChangePreviewMarkup(item.ruleChangePreview)}
-              <div class="item-actions">
-                <button
-                  type="button"
-                  class="button button-small"
-                  data-action="prefill-custom-draft"
-                  data-match="${escapeHtml(item.recommendedLexiconDraft?.match || "exact")}"
-                  data-source="${escapeHtml(
-                    item.recommendedLexiconDraft?.term || item.recommendedLexiconDraft?.pattern || item.phrase || ""
-                  )}"
-                  data-category="${escapeHtml(item.recommendedLexiconDraft?.category || item.suggestedCategory || "")}"
-                  data-risk-level="${escapeHtml(
-                    item.recommendedLexiconDraft?.riskLevel || item.suggestedRiskLevel || "manual_review"
-                  )}"
-                  data-lexicon-level="${escapeHtml(
-                    inferLexiconLevel(
-                      item.recommendedLexiconDraft?.lexiconLevel,
-                      item.recommendedLexiconDraft?.riskLevel || item.suggestedRiskLevel || "manual_review"
-                    )
-                  )}"
-                  data-xhs-reason="${escapeHtml(item.recommendedLexiconDraft?.xhsReason || item.platformReason || "")}"
-                  ${item.recommendedLexiconDraft?.blocked || item.recommendedLexiconDraft?.targetScope === "whitelist" ? "disabled" : ""}
-                >
-                  填入表单
-                </button>
-                <button
-                  type="button"
-                  class="button button-alt button-small"
-                  data-action="promote-review"
-                  data-id="${escapeHtml(item.id)}"
-                  ${item.recommendedLexiconDraft?.blocked ? "disabled" : ""}
-                >
-                  ${item.recommendedLexiconDraft?.targetScope === "whitelist" ? "加入白名单" : "按建议入库"}
-                </button>
-                <button
-                  type="button"
-                  class="button button-danger button-small"
-                  data-action="delete-review"
-                  data-id="${escapeHtml(item.id)}"
-                >
-                  删除
-                </button>
-              </div>
-            </article>
-          `
-        )
-        .join("")
-    : '<div class="result-card muted">当前没有待维护的复核项</div>';
-}
-
 function buildInnerSpaceTermsListMarkup(items = []) {
   return Array.isArray(items) && items.length
     ? items
@@ -6280,25 +6496,7 @@ function buildInnerSpaceTermsListMarkup(items = []) {
     : '<div class="result-card muted">当前没有术语项</div>';
 }
 
-function renderInnerSpaceTermsList(items = []) {
-  const node = byId("inner-space-terms-list");
-
-  if (!node) {
-    return;
-  }
-
-  if (isAdminDataInitialLoading()) {
-    node.innerHTML = buildAdminDataLoadingBlockMarkup("加载中...", { count: 2, isRefreshing: false });
-    return;
-  }
-
-  node.innerHTML = buildInnerSpaceTermsListMarkup(items);
-}
-
 function renderAdminData(data) {
-  renderLexiconList("seed-lexicon-list", data.seedLexicon, "seed");
-  renderLexiconList("custom-lexicon-list", data.customLexicon, "custom");
-  renderInnerSpaceTermsList(data.innerSpaceTerms || []);
   renderFeedbackLog(data.feedbackLog);
   renderFalsePositiveLog(data.falsePositiveLog || []);
 }
@@ -7733,16 +7931,10 @@ async function handleSummaryAction(action) {
   }
 }
 
-function getRecommendedGenerationCandidate() {
-  const candidates = appState.latestGeneration?.scoredCandidates || [];
-  const recommendedId = String(appState.latestGeneration?.recommendedCandidateId || "");
-
-  return candidates.find((item) => String(item.id || "") === recommendedId) || candidates[0] || null;
-}
-
 async function saveLifecycleFromCurrent(source = "analysis", candidateId = "", candidateIndex = "") {
+  const isAnalyzeCompare = source === "analysis-compare";
   const payload = {
-    source,
+    source: isAnalyzeCompare ? "analysis" : source,
     note: appState.latestAnalyzePayload || {},
     snapshots: {
       analysis: appState.latestAnalysis || null,
@@ -7751,6 +7943,15 @@ async function saveLifecycleFromCurrent(source = "analysis", candidateId = "", c
       crossReview: null
     }
   };
+
+  if (isAnalyzeCompare) {
+    const compareContext = getAnalyzeCompareSelectionContext(candidateId || candidateIndex);
+    const compareAnalysis = compareContext.mergedAnalysis;
+
+    payload.source = "analysis";
+    payload.name = `模型对比检测 / ${compareContext.item?.label || compareContext.item?.selection || "未命名模型"}`;
+    payload.snapshots.analysis = compareAnalysis || payload.snapshots.analysis;
+  }
 
   if (source === "rewrite") {
     const rewrite = normalizeRewritePayload(appState.latestRewrite);
@@ -7875,10 +8076,6 @@ byId("feedback-form").addEventListener("input", syncFeedbackActions);
 byId("feedback-form").addEventListener("change", syncFeedbackActions);
 byId("generation-workbench-form").addEventListener("input", syncGenerationActions);
 byId("generation-workbench-form").addEventListener("change", syncGenerationActions);
-byId("custom-lexicon-form").addEventListener("input", syncLexiconFormActions);
-byId("custom-lexicon-form").addEventListener("change", syncLexiconFormActions);
-byId("seed-lexicon-form").addEventListener("input", syncLexiconFormActions);
-byId("seed-lexicon-form").addEventListener("change", syncLexiconFormActions);
 function buildLexiconEntry(form) {
   const source = String(form.get("source") || "").trim();
   const match = String(form.get("match") || "exact");
@@ -8082,19 +8279,7 @@ function syncSampleLibraryReferenceSectionState(root = byId("sample-library-refe
 }
 
 function getSampleLibraryCalibrationPredictionPrefillRequirementMessage() {
-  const hasAnalyze = hasMeaningfulNoteDraft(appState.latestAnalyzePayload || {});
-  const rewrite = normalizeRewritePayload(appState.latestRewrite);
-  const hasRewrite = hasMeaningfulNoteDraft(rewrite);
-
-  if (!hasAnalyze && !hasRewrite) {
-    return "请先完成一次有效检测或改写，再预填预判。";
-  }
-
-  if (!appState.latestAnalysis) {
-    return "请先生成当前检测结论，再预填预判。";
-  }
-
-  return "";
+  return getSampleLibraryCalibrationPredictionPrefillSource().requirementMessage;
 }
 
 function setSampleLibraryCalibrationPredictionFields(section, prediction = {}) {
@@ -8123,7 +8308,27 @@ function setSampleLibraryCalibrationPredictionFields(section, prediction = {}) {
     }
   });
 
+  if (appState.sampleLibraryModal?.kind === "record-list-inline-editor") {
+    appState.sampleLibraryModal = {
+      ...appState.sampleLibraryModal,
+      draft: readSampleLibraryRecordInlineEditorDraftFromModal()
+    };
+    syncSampleLibraryRecordInlineEditorFilterResults();
+  }
+
   syncSampleLibraryDetailActions();
+}
+
+function setSampleLibraryCalibrationPrefillMessage(message = "") {
+  const normalizedMessage = String(message || "").trim();
+  const contentNode = byId("sample-library-modal-content");
+  const inlineMessageNode = contentNode?.querySelector?.('[data-role="sample-library-calibration-prefill-message"]');
+
+  if (inlineMessageNode) {
+    inlineMessageNode.textContent = normalizedMessage;
+  }
+
+  setSampleLibraryModalMessage(normalizedMessage);
 }
 
 async function patchSampleLibraryRecordAndRefresh(payload, { recordId = "", nextStep = "base" } = {}) {
@@ -8197,6 +8402,98 @@ async function saveSampleLibraryDetailCalibrationModal(recordId) {
     },
     { recordId, nextStep: "calibration" }
   );
+}
+
+function syncRecordInlineEditorAfterReferenceApplication(updatedRecord = null, calibrationPayload = null) {
+  const modalState = appState.sampleLibraryModal || {};
+
+  if (modalState.kind !== "record-list-inline-editor" || !updatedRecord) {
+    return;
+  }
+
+  const currentDraft = readSampleLibraryRecordInlineEditorDraftFromModal();
+  const persistedDraft = buildSampleLibraryRecordInlineEditorDraft(updatedRecord);
+  const nextCalibration = calibrationPayload || persistedDraft.calibration;
+  const nextReference = persistedDraft.reference;
+
+  appState.sampleLibraryModal = {
+    ...modalState,
+    selectedRecordId: String(updatedRecord.id || modalState.selectedRecordId || ""),
+    draft: {
+      ...currentDraft,
+      reference: nextReference,
+      calibration: nextCalibration
+    },
+    initialSnapshot: {
+      ...(modalState.initialSnapshot || {}),
+      reference: structuredClone(nextReference),
+      calibration: structuredClone(nextCalibration)
+    }
+  };
+  renderSampleLibraryRecordInlineEditorModal();
+}
+
+function renderCalibrationModalAfterReferenceApplication(updatedRecord = null) {
+  const modalState = appState.sampleLibraryModal || {};
+
+  if (modalState.kind !== "calibration" || !updatedRecord) {
+    return;
+  }
+
+  appState.sampleLibraryModal = {
+    ...modalState,
+    recordId: String(updatedRecord.id || modalState.recordId || "")
+  };
+  renderSampleLibraryModal(buildSampleLibraryDetailModalConfig("calibration", updatedRecord));
+}
+
+async function applySampleLibraryReferenceFromRetro() {
+  const modalState = appState.sampleLibraryModal || {};
+  const record = getActiveSampleLibraryCalibrationPrefillRecord();
+
+  if (!record) {
+    throw new Error("当前没有可应用的样本记录。");
+  }
+
+  const calibrationPayload =
+    modalState.kind === "record-list-inline-editor" || modalState.kind === "calibration"
+      ? readSampleLibraryModalCalibrationPayload()
+      : getSampleRecordCalibration(record);
+  const applyState = getSampleLibraryReferenceApplicationState({
+    recordOverride:
+      modalState.kind === "record-list-inline-editor"
+        ? {
+            ...record,
+            reference: readSampleLibraryRecordInlineEditorDraftFromModal().reference,
+            publish: readSampleLibraryRecordInlineEditorDraftFromModal().publish,
+            calibration: readSampleLibraryRecordInlineEditorDraftFromModal().calibration
+          }
+        : record,
+    calibrationOverride: calibrationPayload
+  });
+
+  if (!applyState.canApply) {
+    throw new Error(applyState.requirementMessage || "当前还不能应用为参考样本。");
+  }
+
+  const response = await patchSampleLibraryRecordAndRefresh(
+    {
+      id: String(record.id || ""),
+      reference: applyState.reference,
+      calibration: calibrationPayload
+    },
+    { recordId: String(record.id || ""), nextStep: "calibration" }
+  );
+
+  if (modalState.kind === "record-list-inline-editor") {
+    syncRecordInlineEditorAfterReferenceApplication(response.item || null, calibrationPayload);
+  } else if (modalState.kind === "calibration") {
+    renderCalibrationModalAfterReferenceApplication(response.item || null);
+  }
+
+  setSampleLibraryModalMessage(applyState.successMessage || "已应用为参考样本。");
+  syncSampleLibraryDetailActions();
+  return response;
 }
 
 async function savePlatformOutcomeModal() {
@@ -8325,27 +8622,41 @@ async function saveSampleLibraryDetailModal() {
   }
 }
 
-function getSampleLibraryDetailLifecycleRequirementMessage() {
-  return "";
-}
-
-function getSampleLibraryDetailCalibrationRequirementMessage() {
-  return "";
-}
-
 function syncSampleLibraryDetailActions() {
+  const modalState = appState.sampleLibraryModal || {};
   const calibrationPrefillMessage = getSampleLibraryCalibrationPredictionPrefillRequirementMessage();
   const baseButton = byId("sample-library-base-section")?.querySelector('[data-action="open-sample-library-base-modal"]');
   const referenceButton = byId("sample-library-reference-section")?.querySelector('[data-action="open-sample-library-reference-modal"]');
   const lifecycleButton = byId("sample-library-lifecycle-section")?.querySelector('[data-action="open-sample-library-lifecycle-modal"]');
   const calibrationPrefillButton =
-    byId("sample-library-calibration-section")?.querySelector('[data-action="prefill-sample-library-calibration-prediction"]') || null;
+    byId("sample-library-modal-content")?.querySelector(
+      '[data-action="prefill-sample-library-modal-calibration-prediction"]'
+    ) || null;
+  const applyReferenceButton =
+    byId("sample-library-modal-content")?.querySelector('[data-action="apply-sample-library-reference-from-retro"]') || null;
+  const applyReferenceStatus =
+    byId("sample-library-modal-content")?.querySelector('[data-role="sample-library-reference-application-status"]') || null;
   const calibrationButton = byId("sample-library-calibration-section")?.querySelector('[data-action="open-sample-library-calibration-modal"]');
+  const applyReferenceState =
+    modalState.kind === "calibration" || modalState.kind === "record-list-inline-editor"
+      ? getSampleLibraryReferenceApplicationState()
+      : {
+          canApply: false,
+          requirementMessage: "",
+          buttonLabel: "应用为参考样本"
+        };
 
   setGatedButtonState(baseButton, true, "");
   setGatedButtonState(referenceButton, true, "");
   setGatedButtonState(lifecycleButton, true, "");
   setGatedButtonState(calibrationPrefillButton, !calibrationPrefillMessage, calibrationPrefillMessage);
+  if (applyReferenceButton) {
+    applyReferenceButton.textContent = applyReferenceState.buttonLabel || "应用为参考样本";
+  }
+  if (applyReferenceStatus) {
+    applyReferenceStatus.textContent = applyReferenceState.statusSummary || "当前参考状态：未启用";
+  }
+  setGatedButtonState(applyReferenceButton, applyReferenceState.canApply, applyReferenceState.requirementMessage);
   setGatedButtonState(calibrationButton, true, "");
   setActionGateHint("sample-library-base-action-hint", "");
   setActionGateHint("sample-library-reference-action-hint", "");
@@ -8354,6 +8665,24 @@ function syncSampleLibraryDetailActions() {
 }
 
 function getLifecycleSaveRequirementMessage(source = "analysis", candidateId = "", candidateIndex = "") {
+  if (source === "analysis-compare") {
+    if (!hasMeaningfulNoteDraft(appState.latestAnalyzePayload || {})) {
+      return "请先完成一次带内容的全部模型对比检测。";
+    }
+
+    if (!String(appState.latestAnalyzePayload?.collectionType || "").trim()) {
+      return "请先选择合集类型后再保存对比检测结果。";
+    }
+
+    const compareContext = getAnalyzeCompareSelectionContext(candidateId || candidateIndex);
+
+    if (!compareContext.item || !compareContext.mergedAnalysis) {
+      return "当前模型对比结果已失效，请重新运行全部模型对比检测。";
+    }
+
+    return "";
+  }
+
   if (source === "analysis") {
     if (!hasMeaningfulNoteDraft(appState.latestAnalyzePayload || {})) {
       return "请先完成一次带内容的检测。";
@@ -8422,43 +8751,6 @@ function syncLifecycleResultActions() {
   setActionGateHint("analysis-lifecycle-action-hint", analysisMessage);
   setActionGateHint("rewrite-lifecycle-action-hint", rewriteMessage);
   setActionGateHint("generation-lifecycle-action-hint", generationMessage);
-}
-
-function getLexiconRequirementMessage(formId) {
-  const form = byId(formId);
-
-  if (!form) {
-    return "";
-  }
-
-  const source = String(form.elements.source?.value || "").trim();
-  const category = String(form.elements.category?.value || "").trim();
-
-  if (!source && !category) {
-    return "请先填写词 / 模式和分类。";
-  }
-
-  if (!source) {
-    return "请先填写词 / 模式。";
-  }
-
-  if (!category) {
-    return "请先填写分类。";
-  }
-
-  return "";
-}
-
-function syncLexiconFormActions() {
-  const customMessage = getLexiconRequirementMessage("custom-lexicon-form");
-  const seedMessage = getLexiconRequirementMessage("seed-lexicon-form");
-  const customButton = byId("custom-lexicon-form")?.querySelector('button[type="submit"]');
-  const seedButton = byId("seed-lexicon-form")?.querySelector('button[type="submit"]');
-
-  setGatedButtonState(customButton, !customMessage, customMessage);
-  setGatedButtonState(seedButton, !seedMessage, seedMessage);
-  setActionGateHint("custom-lexicon-action-hint", customMessage);
-  setActionGateHint("seed-lexicon-action-hint", seedMessage);
 }
 
 function openResultPanel(id) {
@@ -8543,6 +8835,51 @@ byId("analyze-form").addEventListener("submit", async (event) => {
     setButtonBusy(analyzeButton, false);
     syncAnalyzeActions();
     syncSampleLibraryPrefillActions();
+  }
+});
+
+byId("analyze-compare-button").addEventListener("click", async () => {
+  const compareButton = byId("analyze-compare-button");
+  const requirementMessage = getAnalyzeActionRequirementMessage();
+
+  if (requirementMessage) {
+    syncAnalyzeActions();
+    return;
+  }
+
+  setButtonBusy(compareButton, true, "对比中...");
+
+  try {
+    const result = await apiJson(analyzeCompareApi, {
+      method: "POST",
+      body: JSON.stringify({
+        ...getAnalyzePayload(),
+        modelSelection: getSelectedModelSelections()
+      })
+    });
+
+    appState.latestAnalyzePayload = getAnalyzePayload();
+    appState.latestAnalyzeCompareResult = result;
+    openAnalyzeCompareModal(result);
+  } catch (error) {
+    appState.latestAnalyzePayload = getAnalyzePayload();
+    appState.latestAnalyzeCompareResult = null;
+    openAnalyzeCompareModal({
+      errorMessage: error?.message || "模型对比检测失败",
+      comparisons: [],
+      ruleAnalysis: {},
+      summary: {
+        totalModels: 0,
+        completedModels: 0,
+        disagreementCount: 0,
+        finalVerdicts: [],
+        semanticVerdicts: [],
+        comparedAt: new Date().toISOString()
+      }
+    });
+  } finally {
+    setButtonBusy(compareButton, false);
+    syncAnalyzeActions();
   }
 });
 
@@ -8832,91 +9169,6 @@ byId("feedback-form").addEventListener("submit", async (event) => {
   } finally {
     setButtonBusy(submitButton, false);
     syncFeedbackActions();
-  }
-});
-
-async function handleLexiconSubmit(event, scope, resultId, busyText) {
-  event.preventDefault();
-  const formElement = event.currentTarget;
-  const submitButton = formElement.querySelector('button[type="submit"]');
-  const form = new FormData(formElement);
-  const requirementMessage = getLexiconRequirementMessage(formElement.id);
-
-  if (requirementMessage) {
-    syncLexiconFormActions();
-    return;
-  }
-
-  setButtonBusy(submitButton, true, busyText);
-
-  try {
-    await apiJson("/api/admin/lexicon", {
-      method: "POST",
-      body: JSON.stringify({
-        scope,
-        entry: buildLexiconEntry(form)
-      })
-    });
-
-    byId(resultId).innerHTML = '<div class="result-card-shell">操作成功，列表已更新。</div>';
-    formElement.reset();
-    await refreshAll();
-  } catch (error) {
-    byId(resultId).innerHTML = `
-      <div class="result-card-shell muted">${escapeHtml(error.message || "保存失败")}</div>
-    `;
-  } finally {
-    setButtonBusy(submitButton, false);
-    syncLexiconFormActions();
-  }
-}
-
-byId("seed-lexicon-form").addEventListener("submit", (event) =>
-  handleLexiconSubmit(event, "seed", "seed-lexicon-result", "保存中...")
-);
-
-byId("custom-lexicon-form").addEventListener("submit", (event) =>
-  handleLexiconSubmit(event, "custom", "custom-lexicon-result", "保存中...")
-);
-
-byId("inner-space-terms-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const submitButton = form.querySelector('button[type="submit"]');
-  setButtonBusy(submitButton, true, "保存中...");
-
-  try {
-    const formData = new FormData(form);
-    await apiJson(innerSpaceTermsApi, {
-      method: "POST",
-      body: JSON.stringify({
-        entry: {
-          term: formData.get("term"),
-          aliases: splitCSV(formData.get("aliases")),
-          category: formData.get("category"),
-          collectionTypes: splitCSV(formData.get("collectionTypes")),
-          literal: formData.get("literal"),
-          metaphor: formData.get("metaphor"),
-          preferredUsage: formData.get("preferredUsage"),
-          avoidUsage: formData.get("avoidUsage"),
-          example: formData.get("example"),
-          priority: formData.get("priority")
-        }
-      })
-    });
-    form.reset();
-    const priorityInput = form.querySelector('[name="priority"]');
-    if (priorityInput) {
-      priorityInput.value = "80";
-    }
-    byId("inner-space-terms-result").innerHTML = '<div class="result-card-shell">术语已保存，后续改写和生成会优先参考它。</div>';
-    await refreshAll();
-  } catch (error) {
-    byId("inner-space-terms-result").innerHTML = `
-      <div class="result-card-shell muted">${escapeHtml(error.message || "保存术语失败")}</div>
-    `;
-  } finally {
-    setButtonBusy(submitButton, false);
   }
 });
 
@@ -9332,6 +9584,18 @@ byId("sample-library-modal-content")?.addEventListener("change", (event) => {
       : "";
   const modalState = appState.sampleLibraryModal;
 
+  if (fieldName === "analyzeCompareBasisSelection" && modalState?.kind === "analysis-compare") {
+    const nextSelection = event.target instanceof HTMLSelectElement ? String(event.target.value || "").trim() : "";
+    const nextResult =
+      modalState.result && typeof modalState.result === "object" ? modalState.result : appState.latestAnalyzeCompareResult || {};
+    appState.sampleLibraryModal = {
+      ...modalState,
+      compareBasisSelection: nextSelection || getDefaultAnalyzeCompareBasisSelection(nextResult)
+    };
+    renderAnalyzeCompareModal(nextResult);
+    return;
+  }
+
   if (fieldName === "recordTitleFilter" && modalState?.kind === "record-list-inline-editor") {
     appState.sampleLibraryModal = {
       ...modalState,
@@ -9375,6 +9639,10 @@ byId("sample-library-modal-content")?.addEventListener("change", (event) => {
     const requirementMessage = getSampleLibraryDetailReferenceRequirementMessage();
     setGatedButtonState(byId("sample-library-modal-save"), !requirementMessage, requirementMessage);
   }
+
+  if (modalState?.kind === "calibration" || modalState?.kind === "record-list-inline-editor") {
+    syncSampleLibraryDetailActions();
+  }
 });
 
 byId("sample-library-modal-content")?.addEventListener("input", (event) => {
@@ -9398,6 +9666,7 @@ byId("sample-library-modal-content")?.addEventListener("input", (event) => {
       ...modalState,
       draft: readSampleLibraryRecordInlineEditorDraftFromModal()
     };
+    syncSampleLibraryDetailActions();
     return;
   }
 
@@ -9415,6 +9684,11 @@ byId("sample-library-modal-content")?.addEventListener("input", (event) => {
   if (modalState?.kind === "reference") {
     const requirementMessage = getSampleLibraryDetailReferenceRequirementMessage();
     setGatedButtonState(byId("sample-library-modal-save"), !requirementMessage, requirementMessage);
+    return;
+  }
+
+  if (modalState?.kind === "calibration") {
+    syncSampleLibraryDetailActions();
   }
 });
 
@@ -9903,16 +10177,35 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action === "prefill-sample-library-modal-calibration-prediction") {
-    const requirementMessage = getSampleLibraryCalibrationPredictionPrefillRequirementMessage();
+    const prefillSource = getSampleLibraryCalibrationPredictionPrefillSource();
+    const requirementMessage = prefillSource.requirementMessage;
 
     if (requirementMessage) {
-      setSampleLibraryModalMessage(requirementMessage);
+      setSampleLibraryCalibrationPrefillMessage(requirementMessage);
       return;
     }
 
-    const prediction = buildSampleLibraryCalibrationPredictionFromCurrentState();
+    const prediction = buildSampleLibraryCalibrationPrediction(prefillSource, getSelectedModelSelections());
     setSampleLibraryCalibrationPredictionFields(byId("sample-library-modal-content"), prediction);
-    setSampleLibraryModalMessage("已根据当前检测结果预填预判字段。");
+    setSampleLibraryCalibrationPrefillMessage(prefillSource.successMessage || "已预填预判字段。");
+    return;
+  }
+
+  if (action === "apply-sample-library-reference-from-retro") {
+    const applyState = getSampleLibraryReferenceApplicationState();
+
+    if (!applyState.canApply) {
+      setSampleLibraryModalMessage(applyState.requirementMessage || "当前还不能应用为参考样本。");
+      return;
+    }
+
+    setButtonBusy(button, true, "应用中...");
+
+    try {
+      await applySampleLibraryReferenceFromRetro();
+    } finally {
+      setButtonBusy(button, false);
+    }
     return;
   }
 
@@ -9921,7 +10214,11 @@ document.addEventListener("click", async (event) => {
     const requirementMessage = getLifecycleSaveRequirementMessage(source, button.dataset.candidateId, button.dataset.candidateIndex);
 
     if (requirementMessage) {
-      syncLifecycleResultActions();
+      if (source === "analysis-compare") {
+        setSampleLibraryModalMessage(requirementMessage);
+      } else {
+        syncLifecycleResultActions();
+      }
       return;
     }
 
@@ -9958,8 +10255,56 @@ document.addEventListener("click", async (event) => {
       analysisVerdict: button.dataset.analysisVerdict || "",
       analysisScore: Number(button.dataset.analysisScore || 0),
       noteId: button.dataset.noteId || "",
-      createdAt: button.dataset.createdAt || ""
+      createdAt: button.dataset.createdAt || "",
+      sourceLabel: "这条反馈"
     });
+    return;
+  }
+
+  if (action === "open-analyze-compare-false-positive") {
+    const compareContext = getAnalyzeCompareSelectionContext(button.dataset.selection || "");
+    const payload = appState.latestAnalyzePayload || {};
+    const mergedAnalysis = compareContext.mergedAnalysis || {};
+
+    openFeedbackFalsePositiveModal({
+      title: payload.title || "",
+      body: payload.body || "",
+      tags: Array.isArray(payload.tags) ? payload.tags : [],
+      userNotes: button.dataset.userNotes || "",
+      analysisVerdict: button.dataset.analysisVerdict || mergedAnalysis.finalVerdict || mergedAnalysis.verdict || "",
+      analysisScore: Number(button.dataset.analysisScore || mergedAnalysis.score || 0),
+      sourceLabel:
+        button.dataset.sourceLabel ||
+        (button.dataset.modelLabel || compareContext.item?.label || compareContext.item?.selection
+          ? `这次全部模型对比检测（当前保存基准：${button.dataset.modelLabel || compareContext.item?.label || compareContext.item?.selection || "未命名模型"}）`
+          : "这次全部模型对比检测")
+    });
+    return;
+  }
+
+  if (action === "save-analyze-compare-lifecycle") {
+    const requirementMessage = getLifecycleSaveRequirementMessage("analysis-compare", button.dataset.selection || "");
+
+    if (requirementMessage) {
+      setSampleLibraryModalMessage(requirementMessage);
+      return;
+    }
+
+    setButtonBusy(button, true, "保存中...");
+
+    try {
+      await saveLifecycleFromCurrent("analysis-compare", button.dataset.selection || "");
+      await refreshAll();
+      const savedContext = getAnalyzeCompareSelectionContext(button.dataset.selection || "");
+      const basisLabel = savedContext.item?.label || savedContext.item?.selection || "";
+      setSampleLibraryModalMessage(
+        basisLabel
+          ? `已按 ${basisLabel} 的合并结论保存当前内容为生命周期记录。`
+          : "已保存当前模型对比结果为生命周期记录。"
+      );
+    } finally {
+      setButtonBusy(button, false);
+    }
     return;
   }
 
@@ -10094,13 +10439,13 @@ document.addEventListener("click", async (event) => {
     }
 
     await refreshAll();
-  } catch (error) {
-    const target =
-      button.closest(".admin-item") || byId("feedback-result") || byId("custom-lexicon-result");
-    target.insertAdjacentHTML(
-      "beforeend",
-      `<p class="helper-text">${escapeHtml(error.message || "操作失败")}</p>`
-    );
+    } catch (error) {
+      const target =
+        button.closest(".admin-item") || byId("feedback-result") || byId("lexicon-workspace-result");
+      target.insertAdjacentHTML(
+        "beforeend",
+        `<p class="helper-text">${escapeHtml(error.message || "操作失败")}</p>`
+      );
   } finally {
     setButtonBusy(button, false);
   }
@@ -10127,4 +10472,3 @@ syncSampleLibraryImportActions();
 syncSampleLibraryPrefillActions();
 syncSampleLibraryDetailActions();
 syncLifecycleResultActions();
-syncLexiconFormActions();

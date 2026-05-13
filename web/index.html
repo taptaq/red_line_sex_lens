@@ -115,6 +115,7 @@
                         </select>
                         <p class="helper-text">按当前语义复判模型选择执行，不再根据历史调用表现自动推荐。</p>
                         <button type="submit" class="button button-ghost" id="analyze-button" disabled>运行检测</button>
+                        <button type="button" class="button button-ghost" id="analyze-compare-button" disabled>全部模型对比检测</button>
                       </div>
                     </div>
                     <div class="model-action-card">
@@ -369,7 +370,7 @@
                   <p class="eyebrow">人工复核</p>
                   <h2>候选词 / 语境人工复核队列</h2>
                 </div>
-                <p class="section-note">直接在这里完成填表、按建议入库或删除，不再来回滚动切换。</p>
+                <p class="section-note">直接在这里完成填表、加入白名单、加入违规词库或删除，不再来回滚动切换。</p>
               </div>
               <div id="review-queue" class="queue"></div>
             </article>
@@ -580,175 +581,6 @@
                           </div>
                         </article>
                       </section>
-                      <div class="legacy-lexicon-workspace" hidden aria-hidden="true">
-                      <section id="inner-space-terms-pane">
-                        <div class="tab-panel-head">
-                          <strong>内太空术语表</strong>
-                          <span>维护改写和生成会优先参考的蜜语表达，不参与规则判罚。</span>
-                        </div>
-                        <div class="admin-panel-block">
-                          <div class="admin-panel-body">
-                            <form id="inner-space-terms-form" class="stack compact-form">
-                              <label>
-                                <span>术语</span>
-                                <input type="text" name="term" placeholder="例如：小飞船" required />
-                              </label>
-                              <label>
-                                <span>别名</span>
-                                <input type="text" name="aliases" placeholder="例如：装备, 快乐飞船" />
-                              </label>
-                              <label>
-                                <span>分类</span>
-                                <select name="category">
-                                  <option value="equipment">装备篇</option>
-                                  <option value="actions">操作篇</option>
-                                  <option value="states">状态篇</option>
-                                  <option value="map">地形篇</option>
-                                  <option value="protocol">协议篇</option>
-                                </select>
-                              </label>
-                              <label>
-                                <span>适用合集</span>
-                                <input type="text" name="collectionTypes" placeholder="例如：亲密关系, 两性科普" />
-                              </label>
-                              <label>
-                                <span>原意</span>
-                                <input type="text" name="literal" placeholder="例如：震动棒、跳蛋等情趣玩具" />
-                              </label>
-                              <label>
-                                <span>隐喻逻辑</span>
-                                <input type="text" name="metaphor" placeholder="例如：载你去快乐星球的交通工具" />
-                              </label>
-                              <label>
-                                <span>推荐用法</span>
-                                <input type="text" name="preferredUsage" placeholder="例如：适合轻松分享语境，不要写得太生硬" />
-                              </label>
-                              <label>
-                                <span>避免用法</span>
-                                <input type="text" name="avoidUsage" placeholder="例如：不要和未成年人、交易暗示并列" />
-                              </label>
-                              <label class="field-wide">
-                                <span>示例句</span>
-                                <textarea name="example" rows="3" placeholder="例如：今晚不想社交，只想驾驶我的快乐飞船去月球散步。"></textarea>
-                              </label>
-                              <label>
-                                <span>优先级</span>
-                                <input type="number" name="priority" min="0" max="100" value="80" />
-                              </label>
-                              <button type="submit" class="button button-alt">新增术语</button>
-                            </form>
-                          </div>
-                          <div id="inner-space-terms-result" class="result-card muted">等待操作</div>
-                          <div id="inner-space-terms-list" class="admin-list"></div>
-                        </div>
-                      </section>
-
-                      <section id="custom-lexicon-pane">
-                        <div class="tab-panel-head">
-                          <strong>自定义词库</strong>
-                          <span>从复核队列填入草稿后，可以在这里微调再保存。</span>
-                        </div>
-                        <div class="admin-panel-block">
-                          <div class="admin-panel-body">
-                            <form id="custom-lexicon-form" class="stack compact-form">
-                              <label>
-                                <span>匹配类型</span>
-                                <select name="match">
-                                  <option value="exact">精确词</option>
-                                  <option value="regex">正则</option>
-                                </select>
-                              </label>
-                              <label>
-                                <span>词 / 模式</span>
-                                <input type="text" name="source" placeholder="例如：小窗我" required />
-                              </label>
-                              <label>
-                                <span>分类</span>
-                                <input type="text" name="category" placeholder="例如：导流与私域" required />
-                              </label>
-                              <label>
-                                <span>风险等级</span>
-                                <select name="riskLevel">
-                                  <option value="manual_review">人工复核</option>
-                                  <option value="hard_block">高风险拦截</option>
-                                  <option value="observe">观察通过</option>
-                                </select>
-                              </label>
-                              <label>
-                                <span>词库级别</span>
-                                <select name="lexiconLevel">
-                                  <option value="l1">一级词库</option>
-                                  <option value="l2" selected>二级词库</option>
-                                  <option value="l3">三级词库</option>
-                                </select>
-                              </label>
-                              <label>
-                                <span>平台原因</span>
-                                <input type="text" name="xhsReason" placeholder="例如：账号专属高风险短语" />
-                              </label>
-                              <p class="helper-text">一级更偏核心拦截，二级更偏重点复核，三级更偏观察沉淀。</p>
-                              <button type="submit" class="button button-alt">新增自定义词</button>
-                              <p class="helper-text action-gate-hint" id="custom-lexicon-action-hint" aria-live="polite"></p>
-                            </form>
-                          </div>
-                          <div id="custom-lexicon-result" class="result-card muted">等待操作</div>
-                          <div id="custom-lexicon-list" class="admin-list"></div>
-                        </div>
-                      </section>
-
-                      <section id="seed-lexicon-pane">
-                        <div class="tab-panel-head">
-                          <strong>种子词库</strong>
-                          <span>管理全局基础规则，适合较稳定的高频风险表达。</span>
-                        </div>
-                        <div class="admin-panel-block">
-                          <div class="admin-panel-body">
-                            <form id="seed-lexicon-form" class="stack compact-form">
-                              <label>
-                                <span>匹配类型</span>
-                                <select name="match">
-                                  <option value="exact">精确词</option>
-                                  <option value="regex">正则</option>
-                                </select>
-                              </label>
-                              <label>
-                                <span>词 / 模式</span>
-                                <input type="text" name="source" placeholder="例如：私信我 或 (vx|微.?信)" required />
-                              </label>
-                              <label>
-                                <span>分类</span>
-                                <input type="text" name="category" placeholder="例如：导流与私域" required />
-                              </label>
-                              <label>
-                                <span>风险等级</span>
-                                <select name="riskLevel">
-                                  <option value="hard_block">高风险拦截</option>
-                                  <option value="manual_review">人工复核</option>
-                                  <option value="observe">观察通过</option>
-                                </select>
-                              </label>
-                              <label>
-                                <span>词库级别</span>
-                                <select name="lexiconLevel">
-                                  <option value="l1" selected>一级词库</option>
-                                  <option value="l2">二级词库</option>
-                                  <option value="l3">三级词库</option>
-                                </select>
-                              </label>
-                              <label>
-                                <span>平台原因</span>
-                                <input type="text" name="xhsReason" placeholder="例如：交易导流/站外引流" />
-                              </label>
-                              <p class="helper-text">建议把高频稳定高风险规则放一级，把需要继续观察的规则放二级或三级。</p>
-                              <button type="submit" class="button">新增种子词</button>
-                              <p class="helper-text action-gate-hint" id="seed-lexicon-action-hint" aria-live="polite"></p>
-                            </form>
-                          </div>
-                          <div id="seed-lexicon-result" class="result-card muted">等待操作</div>
-                          <div id="seed-lexicon-list" class="admin-list"></div>
-                        </div>
-                      </section>
-                      </div>
                     </div>
                     </details>
                   </div>
