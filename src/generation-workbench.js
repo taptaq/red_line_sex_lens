@@ -16,9 +16,124 @@ const verdictPenalty = {
   manual_review: 38,
   hard_block: 90
 };
+const genericGeneratedTags = new Set(["日常", "好物", "分享", "记录", "生活", "推荐", "合集"]);
 
 function uniqueStrings(items = []) {
   return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
+function normalizeGeneratedTagValue(value = "") {
+  return String(value || "")
+    .trim()
+    .replace(/^[#＃\s]+/g, "")
+    .replace(/[，。、,.;；:：!！?？]+$/g, "")
+    .trim();
+}
+
+function simplifyGeneratedTag(value = "") {
+  return normalizeGeneratedTagValue(value).replace(/\s+/g, "").toLowerCase();
+}
+
+function isMeaningfulGeneratedTag(value = "") {
+  return simplifyGeneratedTag(value).length >= 2;
+}
+
+function isGenericGeneratedTag(value = "") {
+  return genericGeneratedTags.has(normalizeGeneratedTagValue(value));
+}
+
+function isPrefixExpandedDuplicateTag(existingTag = "", nextTag = "") {
+  const existing = simplifyGeneratedTag(existingTag);
+  const next = simplifyGeneratedTag(nextTag);
+
+  if (!existing || !next || existing === next) {
+    return false;
+  }
+
+  return existing.startsWith(next) || next.startsWith(existing);
+}
+
+function sanitizeGeneratedTags(tags = []) {
+  const normalized = uniqueStrings(ensureArray(tags).map((tag) => normalizeGeneratedTagValue(tag)).filter(isMeaningfulGeneratedTag));
+  const meaningfulTags = normalized.filter((tag) => !isGenericGeneratedTag(tag));
+  const shouldDropGenericTags = meaningfulTags.length >= 3;
+  const cleaned = [];
+
+  for (const tag of normalized) {
+    if (shouldDropGenericTags && isGenericGeneratedTag(tag)) {
+      continue;
+    }
+
+    let shouldSkip = false;
+
+    for (let index = 0; index < cleaned.length; index += 1) {
+      const current = cleaned[index];
+
+      if (!isPrefixExpandedDuplicateTag(current, tag)) {
+        continue;
+      }
+
+      const currentSimple = simplifyGeneratedTag(current);
+      const nextSimple = simplifyGeneratedTag(tag);
+
+      if (nextSimple.startsWith(currentSimple) && nextSimple.length > currentSimple.length) {
+        cleaned[index] = tag;
+      }
+
+      shouldSkip = true;
+      break;
+    }
+
+    if (!shouldSkip) {
+      cleaned.push(tag);
+    }
+  }
+
+  return cleaned.slice(0, 6);
+}
+
+function parseTagReferenceInput(value = "") {
+  return uniqueStrings(
+    String(value || "")
+      .split(/[\n，,、]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  );
+}
+
+function collectReferenceSampleTopTags(samples = [], limit = 8) {
+  const counts = new Map();
+
+  for (const sample of Array.isArray(samples) ? samples : []) {
+    const weight = Math.max(1, Number(sample?.sampleWeight) || 1);
+
+    for (const tag of ensureArray(sample?.tags)) {
+      const normalized = String(tag || "").trim();
+
+      if (!normalized) {
+        continue;
+      }
+
+      counts.set(normalized, (counts.get(normalized) || 0) + weight);
+    }
+  }
+
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .map(([tag]) => tag)
+    .slice(0, limit);
+}
+
+function buildGenerationTagGuidance({ brief = {}, styleProfile = null, referenceSamples = [] } = {}) {
+  const userTagReferences = parseTagReferenceInput(brief.tagReferences);
+  const profileTags = uniqueStrings(styleProfile?.preferredTags || []);
+  const referenceTags = collectReferenceSampleTopTags(referenceSamples);
+
+  return {
+    userTagReferences,
+    profileTags,
+    referenceTags
+  };
 }
 
 function stringifyReferenceSamples(samples = []) {
@@ -103,6 +218,7 @@ export function buildGenerationMessages({
       : "短文档：正文控制在 600-950 字，表达紧凑但不能干瘪，同样要自然分段，每段 2-4 句。";
   const terminologyPrompt = formatInnerSpaceTermsPrompt(innerSpaceTerms);
   const sharedMemoryPrompt = stringifySharedMemoryContext(memoryContext);
+  const tagGuidance = buildGenerationTagGuidance({ brief, styleProfile, referenceSamples });
   return [
     {
       role: "system",
@@ -128,6 +244,7 @@ export function buildGenerationMessages({
         `卖点：${brief.sellingPoints || ""}`,
         `目标人群：${brief.audience || ""}`,
         `注意事项：${brief.constraints || ""}`,
+        `标签参考项：${tagGuidance.userTagReferences.join(", ")}`,
         `原始标题：${draft.title || ""}`,
         `原始正文：${draft.body || ""}`,
         `原始封面：${draft.coverText || ""}`,
@@ -135,9 +252,11 @@ export function buildGenerationMessages({
         "",
         "当前生效风格画像：",
         JSON.stringify(styleProfile || {}, null, 2),
+        tagGuidance.profileTags.length ? `风格画像偏好标签：${tagGuidance.profileTags.join("、")}` : "",
         "",
         "可参考成功样本：",
         stringifyReferenceSamples(referenceSamples),
+        tagGuidance.referenceTags.length ? `参考样本高频标签：${tagGuidance.referenceTags.join("、")}` : "",
         "",
         sharedMemoryPrompt ? "共享记忆提示：" : "",
         sharedMemoryPrompt,
@@ -152,6 +271,16 @@ export function buildGenerationMessages({
         "5. 维持内太空主题氛围；涉及敏感表达时，优先用自然的内太空黑话替代。",
         "6. 不要写成教程化敏感步骤，不要出现明显导流、露骨挑逗或夸大承诺。",
         `7. ${lengthInstruction}`,
+        "8. 标签由你自动生成 3-6 个，优先参考用户提供的标签参考项、风格画像偏好标签和参考样本高频标签。",
+        "9. 可以结合小红书常见的热门标签、细分标签表达方式，但不要硬蹭无关热词，也不要机械照抄参考标签。",
+        "10. 避免只给过于空泛的大词标签，比如泛泛的情绪词、成长词、关系词；优先输出和当前主题强相关的表达。",
+        "11. 至少包含 1 个更具体的场景标签，可以从人群、问题、场景、情绪、阶段或需求切入，让标签更细分可检索。",
+        "12. 不要 3-6 个标签全部都是泛热门词，热门标签最多点到为止，剩余标签要体现内容的具体语境。",
+        "13. 避免输出语义非常接近的重复标签；如果已经有“亲密关系”这一类宽标签，就不要再连续给出多个几乎同义的宽泛标签。",
+        "14. 标签之间要有分工，尽量覆盖主题、人群、场景、问题或需求中的不同维度，而不是换个说法重复同一层意思。",
+        "15. 标签结构上优先采用“1 个相对宽一点的主标签 + 2-4 个更细分的标签”的组合，让标签既能概括主题，也能承接具体检索场景。",
+        "16. 不要把 3-6 个名额都分配给同一层级的大词，除非用户明确要求，否则宽标签尽量控制在 1 个以内。",
+        "17. 细分标签优先从具体场景、人群阶段、痛点问题、情绪状态或需求目标里提炼，提升标签的信息量和区分度。",
         "",
         "输出格式：",
         "{",
@@ -174,7 +303,7 @@ export function normalizeGenerationCandidate(candidate = {}, index = 0) {
     title: String(candidate.title || "").trim(),
     body: String(candidate.body || candidate.content || "").trim(),
     coverText: String(candidate.coverText || "").trim(),
-    tags: uniqueStrings(ensureArray(candidate.tags)),
+    tags: sanitizeGeneratedTags(candidate.tags),
     generationNotes: String(candidate.generationNotes || candidate.rewriteNotes || "").trim(),
     safetyNotes: String(candidate.safetyNotes || "").trim(),
     referencedSampleIds: uniqueStrings(candidate.referencedSampleIds)

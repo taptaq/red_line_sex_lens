@@ -157,8 +157,8 @@ test("generation references only keep qualified manual reference samples", () =>
       {
         id: "manual-high-views-only",
         tier: "performed",
-        title: "只有高浏览参考样本",
-        body: "只有高浏览参考正文",
+        title: "高浏览直达参考样本",
+        body: "高浏览直达参考正文",
         source: "manual",
         metrics: { likes: 1, favorites: 0, comments: 0, views: 12800 }
       }
@@ -194,7 +194,7 @@ test("generation references only keep qualified manual reference samples", () =>
   assert.equal(references.some((item) => item.title === "低数据参考样本"), false);
   assert.equal(references.some((item) => item.title === "高质量参考样本"), true);
   assert.equal(references.some((item) => item.title === "高浏览补足参考样本"), true);
-  assert.equal(references.some((item) => item.title === "只有高浏览参考样本"), false);
+  assert.equal(references.some((item) => item.title === "高浏览直达参考样本"), true);
   assert.equal(references[0].title, "高质量参考样本");
   assert.equal(references[0].source, "manual");
   assert.equal(references.some((item) => item.title === "最终推荐稿样本"), false);

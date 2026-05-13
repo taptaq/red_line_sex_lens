@@ -1322,6 +1322,15 @@ test("frontend labels review-queue promotion actions as whitelist or violation l
   assert.doesNotMatch(appJs, /按建议入库/);
 });
 
+test("frontend generation workbench exposes tag references and submits them with the brief", async () => {
+  const { indexHtml, appJs } = await readFrontendFiles();
+
+  assert.match(indexHtml, /name="tagReferences"/);
+  assert.match(indexHtml, /标签参考项/);
+  assert.match(indexHtml, /只当作提示词参考/);
+  assert.match(appJs, /tagReferences: String\(form\.get\("tagReferences"\) \|\| ""\)\.trim\(\)/);
+});
+
 test("frontend exposes a calibrated-history replay action in system calibration", async () => {
   const { indexHtml, appJs } = await readFrontendFiles();
 

@@ -1009,6 +1009,12 @@ async function handleRequest(request, response) {
     const styleProfile = getActiveStyleProfile(profileState);
     const referenceSamples = buildGenerationReferenceSamples({ successSamples: qualifiedReferenceSamples }).slice(0, 12);
     const innerSpaceTerms = filterInnerSpaceTerms(innerSpaceTermsRaw, { collectionType });
+    const generationTagReferences = uniqueStrings(
+      String(brief.tagReferences || "")
+        .split(/[\n，,、]/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+    );
     const memoryContext = await (async () => {
       try {
         const memoryRetrievalService = await getMemoryRetrievalService();
@@ -1016,7 +1022,10 @@ async function handleRequest(request, response) {
           topic: brief.topic,
           collectionType,
           constraints: brief.constraints,
-          tags: Array.isArray(payload?.draft?.tags) ? payload.draft.tags : []
+          tags: [
+            ...generationTagReferences,
+            ...(Array.isArray(payload?.draft?.tags) ? payload.draft.tags : [])
+          ]
         });
       } catch {
         return buildEmptySharedMemoryContext("generation");

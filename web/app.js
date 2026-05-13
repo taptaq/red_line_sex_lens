@@ -7754,7 +7754,8 @@ function getGenerationPayload() {
       topic: String(form.get("topic") || "").trim(),
       sellingPoints: String(form.get("sellingPoints") || "").trim(),
       audience: String(form.get("audience") || "").trim(),
-      constraints: String(form.get("constraints") || "").trim()
+      constraints: String(form.get("constraints") || "").trim(),
+      tagReferences: String(form.get("tagReferences") || "").trim()
     },
     draft: {
       title: String(form.get("draftTitle") || "").trim(),

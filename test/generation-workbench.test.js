@@ -15,17 +15,18 @@ test("buildGenerationMessages includes mode, style profile, success samples, and
       sellingPoints: "温和、科普、可执行",
       lengthMode: "short",
       audience: "刚进入关系的人",
-      constraints: "不要营销感"
+      constraints: "不要营销感",
+      tagReferences: "亲密关系, 关系沟通, 情侣日常"
     },
     styleProfile: {
       status: "active",
       tone: "温和克制",
       titleStyle: "标题清晰",
       bodyStructure: "短段落",
-      preferredTags: ["亲密关系"]
+      preferredTags: ["亲密关系", "关系沟通"]
     },
     referenceSamples: [
-      { title: "成功标题", body: "成功正文", tier: "featured", tags: ["亲密关系"] }
+      { title: "成功标题", body: "成功正文", tier: "featured", tags: ["亲密关系", "情侣日常"] }
     ],
     innerSpaceTerms: [
       {
@@ -53,6 +54,21 @@ test("buildGenerationMessages includes mode, style profile, success samples, and
   assert.match(combined, /不要输出一大段长文不分段/);
   assert.match(combined, /短文档/);
   assert.match(combined, /600-950 字/);
+  assert.match(combined, /标签参考项：亲密关系, 关系沟通, 情侣日常/);
+  assert.match(combined, /风格画像偏好标签：亲密关系、关系沟通/);
+  assert.match(combined, /参考样本高频标签：亲密关系、情侣日常/);
+  assert.match(combined, /标签由你自动生成/);
+  assert.match(combined, /热门标签/);
+  assert.match(combined, /细分标签/);
+  assert.match(combined, /避免只给过于空泛的大词标签/);
+  assert.match(combined, /至少包含 1 个更具体的场景标签/);
+  assert.match(combined, /不要 3-6 个标签全部都是泛热门词/);
+  assert.match(combined, /避免输出语义非常接近的重复标签/);
+  assert.match(combined, /如果已经有“亲密关系”/);
+  assert.match(combined, /不要再连续给出多个几乎同义的宽泛标签/);
+  assert.match(combined, /优先采用“1 个相对宽一点的主标签 \+ 2-4 个更细分的标签”/);
+  assert.match(combined, /不要把 3-6 个名额都分配给同一层级的大词/);
+  assert.match(combined, /细分标签优先从具体场景、人群阶段、痛点问题、情绪状态或需求目标里提炼/);
 });
 
 test("buildGenerationMessages packs shared memory guidance without leaking raw violation text", () => {
@@ -130,4 +146,25 @@ test("normalizeGenerationCandidate fills missing fields without crashing", () =>
   assert.equal(candidate.variant, "natural");
   assert.equal(candidate.body, "");
   assert.deepEqual(candidate.tags, []);
+});
+
+test("normalizeGenerationCandidate lightly cleans generated tags", () => {
+  const candidate = normalizeGenerationCandidate(
+    {
+      title: "标题",
+      tags: [
+        "#亲密关系",
+        "亲密关系",
+        "亲密关系沟通",
+        "关系沟通",
+        "日常",
+        "好物",
+        "刚确认关系",
+        " "
+      ]
+    },
+    0
+  );
+
+  assert.deepEqual(candidate.tags, ["亲密关系沟通", "关系沟通", "刚确认关系"]);
 });
