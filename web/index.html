@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>本地合规检测系统</title>
-    <link rel="stylesheet" href="/styles.css?v=20260428-v2" />
+    <link rel="stylesheet" href="/styles.css?v=20260515-v3" />
   </head>
   <body>
     <div class="ambient ambient-a"></div>
@@ -224,26 +224,22 @@
                       <option value="draft_optimize">草稿优化</option>
                     </select>
                   </label>
-                  <label>
-                    <span>主题</span>
-                    <input name="topic" placeholder="例如：亲密关系沟通" />
-                  </label>
                   <label class="field-wide">
-                    <span>卖点 / 重点</span>
-                    <textarea name="sellingPoints" rows="2" placeholder="例如：温和、科普、可执行"></textarea>
-                  </label>
-                  <label>
-                    <span>目标人群</span>
-                    <input name="audience" placeholder="例如：刚进入关系的人" />
-                  </label>
-                  <label>
-                    <span>注意事项</span>
-                    <input name="constraints" placeholder="例如：不要营销感，不要过度承诺" />
-                  </label>
-                  <label class="field-wide">
-                    <span>标签参考项</span>
-                    <input name="tagReferences" placeholder="例如：关系沟通、情侣日常、悦己成长" />
-                    <small class="helper-text">只当作提示词参考，最终标签仍由模型自动生成。</small>
+                    <span>一句话需求</span>
+                    <textarea
+                      name="briefing"
+                      rows="3"
+                      placeholder="例如：写一篇给新手女生看的轻松科普，回答经期能不能用玩具，语气自然一点，不要营销感"
+                    ></textarea>
+                    <small class="helper-text">把主题、重点、人群和注意事项合在这里描述就够了。</small>
+                    <div class="generation-briefing-improve-row">
+                      <div class="item-actions">
+                        <button type="button" class="button button-ghost button-small" id="generation-briefing-improve">
+                          AI润色优化
+                        </button>
+                      </div>
+                      <div id="generation-briefing-improve-result" class="helper-text" aria-live="polite"></div>
+                    </div>
                   </label>
                   <details id="generation-advanced-panel" class="admin-accordion field-wide">
                     <summary>高级偏好</summary>
@@ -255,17 +251,35 @@
                           <option value="long">长文（&gt;1000字）</option>
                         </select>
                       </label>
+                      <label class="field-wide">
+                        <span>参考标题</span>
+                        <input name="referenceTitle" placeholder="例如：来月经了，还能进行内太空吗？" />
+                        <small class="helper-text">可选；给模型一个你想靠近的标题方向或表达参考。</small>
+                      </label>
+                      <label class="field-wide">
+                        <span>标签提示词</span>
+                        <input name="tagReferences" placeholder="例如：关系沟通、情侣日常、悦己成长" />
+                        <small class="helper-text">只当作提示词参考，最终标签仍由模型自动生成。</small>
+                      </label>
                       <p class="helper-text">默认短文；长文会保持更完整展开，但依然要求自然分段、避免一大段堆字。</p>
                     </div>
                   </details>
-                  <label>
-                    <span>草稿标题</span>
-                    <input name="draftTitle" placeholder="已有草稿标题，可选" />
-                  </label>
-                  <label class="field-wide">
-                    <span>草稿正文</span>
-                    <textarea name="draftBody" rows="5" placeholder="已有草稿正文，可选"></textarea>
-                  </label>
+                  <div id="generation-draft-block" class="field-wide stack" data-generation-mode-visible="draft_optimize" hidden>
+                    <div class="tab-panel-head">
+                      <strong>草稿区</strong>
+                      <span>只在草稿优化模式下使用；至少填写标题或正文其中一项。</span>
+                    </div>
+                    <div class="form-grid">
+                      <label>
+                        <span>草稿标题</span>
+                        <input name="draftTitle" placeholder="已有草稿标题，可选" disabled />
+                      </label>
+                      <label class="field-wide">
+                        <span>草稿正文</span>
+                        <textarea name="draftBody" rows="5" placeholder="已有草稿正文，可选" disabled></textarea>
+                      </label>
+                    </div>
+                  </div>
                   <button type="submit" class="button field-wide">生成候选稿</button>
                   <p class="helper-text action-gate-hint field-wide" id="generation-action-hint" aria-live="polite"></p>
                 </form>

@@ -65,7 +65,7 @@ test("rewrite provider switches to kimi when REWRITE_PROVIDER is kimi", () => {
   }
 });
 
-test("rewrite provider defaults kimi text model to kimi-k2.5 when env is not set", () => {
+test("rewrite provider defaults kimi text model to kimi-k2.6 when env is not set", () => {
   const previousProvider = process.env.REWRITE_PROVIDER;
   const previousKimiModel = process.env.KIMI_TEXT_MODEL;
 
@@ -75,7 +75,7 @@ test("rewrite provider defaults kimi text model to kimi-k2.5 when env is not set
   const config = getRewriteProviderConfig();
 
   assert.equal(config.provider, "kimi");
-  assert.deepEqual(config.models, ["kimi-k2.5"]);
+  assert.deepEqual(config.models, ["kimi-k2.6"]);
 
   if (previousProvider === undefined) {
     delete process.env.REWRITE_PROVIDER;

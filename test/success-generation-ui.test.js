@@ -138,10 +138,19 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.doesNotMatch(indexHtml, /id="analyze-collection-type-add"/);
   assert.doesNotMatch(indexHtml, /id="generation-collection-type-add"/);
   assert.doesNotMatch(indexHtml, /id="sample-library-collection-type-add"/);
+  assert.match(indexHtml, /name="briefing"/);
+  assert.match(indexHtml, /一句话需求/);
+  assert.match(indexHtml, /id="generation-draft-block"/);
+  assert.match(indexHtml, /data-generation-mode-visible="draft_optimize"/);
+  assert.doesNotMatch(indexHtml, /name="topic"/);
+  assert.doesNotMatch(indexHtml, /name="sellingPoints"/);
+  assert.doesNotMatch(indexHtml, /name="audience"/);
+  assert.doesNotMatch(indexHtml, /name="constraints"/);
   assert.match(indexHtml, /id="generation-advanced-panel"/);
   assert.match(indexHtml, /高级偏好/);
   assert.match(indexHtml, /生成模型/);
   assert.match(indexHtml, /name="lengthMode"/);
+  assert.match(indexHtml, /name="tagReferences"/);
   assert.match(indexHtml, /短文（默认，&lt;1000字）/);
   assert.match(indexHtml, /长文（&gt;1000字）/);
   assert.match(indexHtml, /内容工作台/);
@@ -1184,6 +1193,9 @@ test("frontend gates secondary sample-library and lifecycle-save actions with in
     "function getSampleLibraryCalibrationPredictionPrefillRequirementMessage("
   );
   const syncDetailActionsFunction = appJs.match(/function\s+syncSampleLibraryDetailActions\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const generationStart = appJs.indexOf("function renderGenerationResult(");
+  const generationEnd = appJs.indexOf("function buildLexiconEntry(", generationStart);
+  const generationSource = appJs.slice(generationStart, generationEnd);
 
   assert.match(appJs, /function\s+getSampleLibraryDetailBaseRequirementMessage\s*\(/);
   assert.match(appJs, /function\s+getSampleLibraryDetailReferenceRequirementMessage\s*\(/);
@@ -1199,7 +1211,6 @@ test("frontend gates secondary sample-library and lifecycle-save actions with in
   assert.match(appJs, /sample-library-calibration-action-hint/);
   assert.match(appJs, /id="analysis-lifecycle-action-hint"/);
   assert.match(appJs, /id="rewrite-lifecycle-action-hint"/);
-  assert.match(appJs, /id="generation-lifecycle-action-hint"/);
 
   assert.match(appJs, /setActionGateHint\("sample-library-base-action-hint",\s*""\)/);
   assert.match(appJs, /setActionGateHint\("sample-library-reference-action-hint",\s*""\)/);
@@ -1208,11 +1219,10 @@ test("frontend gates secondary sample-library and lifecycle-save actions with in
   assert.match(syncDetailActionsFunction, /prefill-sample-library-modal-calibration-prediction/);
   assert.doesNotMatch(syncDetailActionsFunction, /prefill-sample-library-calibration-prediction/);
   assert.match(appJs, /function\s+getSampleLibraryCalibrationPredictionPrefillSourceSummary\s*\(/);
-  assert.match(appJs, /当前预填来源/);
-  assert.match(appJs, /当前改写结果（同时参考当前检测结论）|当前检测结果/);
+  assert.match(appJs, /setSampleLibraryCalibrationPrefillMessage/);
+  assert.match(appJs, /已根据当前检测结果填充内容。/);
   assert.match(appJs, /setActionGateHint\("analysis-lifecycle-action-hint",\s*analysisMessage\)/);
   assert.match(appJs, /setActionGateHint\("rewrite-lifecycle-action-hint",\s*rewriteMessage\)/);
-  assert.match(appJs, /setActionGateHint\("generation-lifecycle-action-hint",\s*generationMessage\)/);
 
   assert.doesNotMatch(appJs, /byId\("sample-library-detail"\)\?\.addEventListener\("input",\s*syncSampleLibraryDetailActions\)/);
   assert.doesNotMatch(appJs, /byId\("sample-library-detail"\)\?\.addEventListener\("change",\s*syncSampleLibraryDetailActions\)/);
@@ -1220,7 +1230,7 @@ test("frontend gates secondary sample-library and lifecycle-save actions with in
   assert.match(appJs, /openSampleLibraryRecordInlineEditorModal\(sampleLibraryRecord\.dataset\.sampleLibraryRecordId \|\| ""\)/);
   assert.match(appJs, /renderAnalysis\(result[\s\S]*analysis-lifecycle-action-hint/);
   assert.match(appJs, /renderRewriteResult\(result\)[\s\S]*rewrite-lifecycle-action-hint/);
-  assert.match(appJs, /renderGenerationResult\(result = \{\}\)[\s\S]*generation-lifecycle-action-hint/);
+  assert.doesNotMatch(generationSource, /generation-lifecycle-action-hint/);
   assert.match(appJs, /function\s+syncSampleLibraryReferenceSectionState\s*\(/);
   assert.match(appJs, /tierSelect\.value[\s\S]*enabledCheckbox\.checked = true/);
   assert.match(appJs, /source === "checkbox" && enabledCheckbox\.checked !== true[\s\S]*tierSelect\.value = ""/);
@@ -1279,6 +1289,20 @@ test("frontend suggests reference promotion and rule-improvement candidates from
   assert.match(appJs, /需要复盘表现预估/);
 });
 
+test("frontend explains the recommended retro review timing around T+7 only", async () => {
+  const { appJs, styles } = await readFrontendFiles();
+
+  assert.match(appJs, /function\s+buildSampleLibraryRetroTimingHint\s*\(/);
+  assert.match(appJs, /建议至少等到 T\+7 再做发布后复盘/);
+  assert.match(appJs, /当前适合做终局复盘和参考样本确认/);
+  assert.match(appJs, /sample-library-retro-timing-hint/);
+  assert.match(appJs, /sample-library-retro-timing-hint--pending/);
+  assert.match(appJs, /sample-library-retro-timing-hint--final-review/);
+  assert.match(styles, /\.sample-library-retro-timing-hint/);
+  assert.match(styles, /\.sample-library-retro-timing-hint--pending/);
+  assert.match(styles, /\.sample-library-retro-timing-hint--final-review/);
+});
+
 test("frontend surfaces calibration visibility directly in the sample-library list", async () => {
   const { indexHtml, appJs, styles } = await readFrontendFiles();
 
@@ -1301,6 +1325,7 @@ test("frontend exposes a calibration review queue with quick jumps back to sampl
   assert.match(indexHtml, /批量复盘队列/);
   assert.match(appJs, /function\s+getSampleLibraryCalibrationReviewQueueItems\s*\(/);
   assert.match(appJs, /function\s+renderSampleLibraryCalibrationReviewQueue\s*\(/);
+  assert.match(appJs, /T\+7 终局复盘提醒/);
   assert.match(appJs, /data-action="open-sample-library-record"/);
   assert.match(appJs, /data-action="open-sample-library-calibration"/);
   assert.match(appJs, /if \(action === "open-sample-library-record"\)/);
@@ -1322,13 +1347,118 @@ test("frontend labels review-queue promotion actions as whitelist or violation l
   assert.doesNotMatch(appJs, /按建议入库/);
 });
 
-test("frontend generation workbench exposes tag references and submits them with the brief", async () => {
-  const { indexHtml, appJs } = await readFrontendFiles();
+test("frontend also surfaces T+7 retro reminders in the manual review queue area", async () => {
+  const { appJs, styles } = await readFrontendFiles();
 
+  assert.match(appJs, /function\s+getManualReviewRetroReminderQueueItems\s*\(/);
+  assert.match(appJs, /2026-05-11/);
+  assert.match(appJs, /const retroReminderItems = getManualReviewRetroReminderQueueItems\(/);
+  assert.match(appJs, /T\+7 终局复盘提醒/);
+  assert.match(appJs, /data-action="open-sample-library-calibration"/);
+  assert.match(appJs, /进入发布后复盘/);
+  assert.match(
+    styles,
+    /\.workspace-support\s*\{[\s\S]*?grid-template-columns:\s*minmax\(420px,\s*0\.96fr\)\s+minmax\(520px,\s*1\.12fr\);[\s\S]*?align-items:\s*stretch;[\s\S]*?\}/
+  );
+  assert.match(
+    styles,
+    /\.queue-panel\s*\{[\s\S]*?min-height:\s*980px;[\s\S]*?height:\s*100%;[\s\S]*?display:\s*flex;[\s\S]*?flex-direction:\s*column;[\s\S]*?\}/
+  );
+  assert.match(
+    styles,
+    /\.queue-panel \.queue\s*\{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?min-height:\s*0;[\s\S]*?height:\s*100%;[\s\S]*?overflow:\s*auto;[\s\S]*?\}/
+  );
+  assert.match(
+    styles,
+    /@media \(max-width:\s*900px\)\s*\{[\s\S]*?\.queue-panel \.queue\s*\{[\s\S]*?min-height:\s*0;[\s\S]*?max-height:\s*70vh;[\s\S]*?\}/
+  );
+  assert.match(
+    styles,
+    /@media \(max-width:\s*1240px\)\s*\{[\s\S]*?\.workspace-main,\s*\.workspace-support\s*\{[\s\S]*?grid-template-columns:\s*1fr;[\s\S]*?\}[\s\S]*?\.panel-sticky\s*\{[\s\S]*?position:\s*static;[\s\S]*?\}[\s\S]*?\}/
+  );
+});
+
+test("frontend generation workbench consolidates strategy inputs into one brief field and keeps draft fields mode-gated", async () => {
+  const { indexHtml, appJs, styles } = await readFrontendFiles();
+
+  assert.match(indexHtml, /name="briefing"/);
+  assert.match(indexHtml, /一句话需求/);
+  assert.match(indexHtml, /id="generation-briefing-improve"/);
+  assert.match(indexHtml, /AI润色优化/);
+  assert.match(indexHtml, /class="generation-briefing-improve-row"/);
+  assert.match(
+    indexHtml,
+    /class="generation-briefing-improve-row"[\s\S]*id="generation-briefing-improve"[\s\S]*id="generation-briefing-improve-result"[\s\S]*<\/div>/
+  );
+  assert.match(indexHtml, /id="generation-briefing-improve-result"/);
+  assert.match(indexHtml, /name="referenceTitle"/);
+  assert.match(indexHtml, /参考标题/);
   assert.match(indexHtml, /name="tagReferences"/);
-  assert.match(indexHtml, /标签参考项/);
+  assert.match(indexHtml, /name="tagReferences"/);
+  assert.match(indexHtml, /标签提示词/);
   assert.match(indexHtml, /只当作提示词参考/);
-  assert.match(appJs, /tagReferences: String\(form\.get\("tagReferences"\) \|\| ""\)\.trim\(\)/);
+  assert.match(indexHtml, /id="generation-draft-block"/);
+  assert.match(indexHtml, /data-generation-mode-visible="draft_optimize"/);
+  assert.match(appJs, /briefing: String\(form\.get\("briefing"\) \|\| ""\)\.trim\(\)/);
+  assert.match(appJs, /referenceTitle: String\(form\.get\("referenceTitle"\) \|\| ""\)\.trim\(\)/);
+  assert.match(appJs, /draft: \{/);
+  assert.match(appJs, /title: String\(form\.get\("draftTitle"\) \|\| ""\)\.trim\(\)/);
+  assert.match(appJs, /body: String\(form\.get\("draftBody"\) \|\| ""\)\.trim\(\)/);
+  assert.match(appJs, /function syncGenerationModeFields\s*\(/);
+  assert.match(appJs, /async function improveGenerationBriefingFromCurrentInput\s*\(/);
+  assert.match(appJs, /\/api\/generate-note-briefing/);
+  assert.match(appJs, /generation-briefing-improve-result/);
+  assert.match(appJs, /data-generation-mode-visible/);
+  assert.match(appJs, /payload\.brief\?\.briefing/);
+  assert.match(styles, /\.generation-briefing-improve-row\s*\{/);
+  assert.match(styles, /\.generation-briefing-improve-row\s*\{[\s\S]*display:\s*flex;/);
+  assert.match(styles, /\.generation-briefing-improve-row\s*\{[\s\S]*flex-wrap:\s*wrap;/);
+  assert.match(styles, /\.generation-briefing-improve-row\s+\.helper-text\s*\{/);
+});
+
+test("frontend generation result now focuses on a single final draft card instead of three candidate comparisons", async () => {
+  const { appJs, styles } = await readFrontendFiles();
+  const generationStart = appJs.indexOf("function renderGenerationResult(");
+  const generationEnd = appJs.indexOf("function buildLexiconEntry(", generationStart);
+  const generationSource = appJs.slice(generationStart, generationEnd);
+
+  assert.match(appJs, /const recommended = \(result\.scoredCandidates \|\| \[\]\)\.find/);
+  assert.match(appJs, /const displayItem = recommended \|\| \(result\.scoredCandidates \|\| \[\]\)\[0\] \|\| null/);
+  assert.match(appJs, /function\s+buildGenerationBlockerReasonsMarkup\s*\(/);
+  assert.match(appJs, /function\s+buildGenerationRepairSummary\s*\(/);
+  assert.match(appJs, /<span>当前卡点<\/span>/);
+  assert.match(appJs, /const blockerReasonsMarkup = buildGenerationBlockerReasonsMarkup\(displayItem\);/);
+  assert.match(appJs, /const repairSummary = buildGenerationRepairSummary\(repair\);/);
+  assert.match(appJs, /<span class="model-scope-kicker">最终稿<\/span>/);
+  assert.match(appJs, /function\s+generationVariantLabel\s*\(/);
+  assert.match(appJs, /if \(variant === "final"\) return "最终稿";/);
+  assert.match(appJs, /<span class="meta-pill">\$\{escapeHtml\(variantLabel\)\}<\/span>/);
+  assert.doesNotMatch(appJs, /<span class="meta-pill">final<\/span>/);
+  assert.doesNotMatch(appJs, /<div class="generation-candidate-grid">/);
+  assert.match(generationSource, /data-action="copy-generation-publish"/);
+  assert.match(generationSource, /generation-publish-copy-hint/);
+  assert.match(generationSource, /repairSummary\.title/);
+  assert.match(generationSource, /repairSummary\.description/);
+  assert.doesNotMatch(generationSource, /data-action="save-lifecycle-generation"/);
+  assert.doesNotMatch(generationSource, /buildPlatformOutcomeActions\("generation"/);
+  assert.match(styles, /\.generation-blocker-box\s*\{/);
+  assert.match(styles, /\.generation-blocker-box ul\s*\{/);
+  assert.match(
+    styles,
+    /\.generation-candidate-card\.is-recommended \.rewrite-body-reader\s*\{[\s\S]*max-height:\s*none;[\s\S]*overflow:\s*visible;/
+  );
+});
+
+test("frontend localizes generation and lifecycle fallback labels instead of exposing raw enums", async () => {
+  const { appJs } = await readFrontendFiles();
+
+  assert.match(appJs, /if \(variant === "final"\) return "最终稿";/);
+  assert.match(appJs, /if \(!normalized\) return "生成稿";/);
+  assert.match(appJs, /if \(\s*normalized === "manual"\s*\) return "手动记录";/);
+  assert.match(appJs, /"生成稿" : normalized;/);
+  assert.match(appJs, /"手动记录" : normalized;/);
+  assert.match(appJs, /const generatedName = finalDraft\?\.title \|\| generationVariantLabel\(finalDraft\?\.variant\) \|\| "未命名";/);
+  assert.match(appJs, /payload\.name = `\$\{isRecommended \? "最终推荐稿" : "生成候选稿"\} \/ \$\{generatedName\}`;/);
 });
 
 test("frontend exposes a calibrated-history replay action in system calibration", async () => {
@@ -1376,7 +1506,7 @@ test("frontend exposes an inner-space terminology workspace for rewrite and gene
   assert.match(appJs, /delete-inner-space-term/);
 });
 
-test("frontend exposes platform outcome shortcuts from analysis rewrite and generation results", async () => {
+test("frontend exposes platform outcome shortcuts from analysis and rewrite results", async () => {
   const { appJs } = await readFrontendFiles();
   const analysisStart = appJs.indexOf("function renderAnalysis(");
   const rewriteStart = appJs.indexOf("function renderRewriteResult(", analysisStart);
@@ -1384,7 +1514,6 @@ test("frontend exposes platform outcome shortcuts from analysis rewrite and gene
   const generationEnd = appJs.indexOf("function buildLexiconEntry(", generationStart);
   const analysisSource = appJs.slice(analysisStart, rewriteStart);
   const rewriteSource = appJs.slice(rewriteStart, appJs.indexOf("function buildCrossReviewMarkup(", rewriteStart));
-  const generationSource = appJs.slice(generationStart, generationEnd);
 
   assert.match(appJs, /function\s+buildPlatformOutcomeActions\s*\(/);
   assert.match(appJs, /function\s+buildPlatformOutcomeModalMarkup\s*\(/);
@@ -1393,7 +1522,7 @@ test("frontend exposes platform outcome shortcuts from analysis rewrite and gene
   assert.match(appJs, /function\s+savePlatformOutcomeFromCurrent\s*\(/);
   assert.match(analysisSource, /buildPlatformOutcomeActions\("analysis"\)/);
   assert.match(rewriteSource, /buildPlatformOutcomeActions\("rewrite"\)/);
-  assert.match(generationSource, /buildPlatformOutcomeActions\("generation"/);
+  assert.doesNotMatch(appJs, /buildPlatformOutcomeActions\("generation"/);
   assert.match(appJs, /data-action="save-platform-outcome"/);
   assert.match(appJs, /平台通过/);
   assert.match(appJs, /平台违规/);

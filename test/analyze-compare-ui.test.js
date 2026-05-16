@@ -101,3 +101,14 @@ test("analyze compare shared actions reuse the existing false-positive modal and
   assert.match(appJs, /if \(action === "save-analyze-compare-lifecycle"\)/);
   assert.match(appJs, /saveLifecycleFromCurrent\("analysis-compare"/);
 });
+
+test("analyze compare labels prefer readable model names over raw selection fallbacks", async () => {
+  const { appJs } = await readFrontendFiles();
+
+  assert.match(appJs, /function\s+analyzeCompareModelLabel\s*\(/);
+  assert.match(appJs, /const label = analyzeCompareModelLabel\(item\) \|\| "未命名模型";/);
+  assert.match(appJs, /const basisLabel = analyzeCompareModelLabel\(compareContext\.item\);/);
+  assert.match(appJs, /const compareLabel = analyzeCompareModelLabel\(compareContext\.item\) \|\| "未命名模型";/);
+  assert.match(appJs, /payload\.name = `模型对比检测 \/ \$\{compareLabel\}`;/);
+  assert.doesNotMatch(appJs, /payload\.name = `模型对比检测 \/ \$\{compareContext\.item\?\.label \|\| compareContext\.item\?\.selection \|\| "未命名模型"\}`;/);
+});

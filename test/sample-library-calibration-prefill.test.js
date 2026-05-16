@@ -40,7 +40,7 @@ test("prefill source falls back to the saved record analysis snapshot when curre
 
   const prediction = buildSampleLibraryCalibrationPrediction(source, {
     semantic: "glm-5.1",
-    rewrite: "kimi-k2.5"
+    rewrite: "kimi-k2.6"
   });
 
   assert.equal(prediction.predictedStatus, "limited");

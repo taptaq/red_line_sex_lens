@@ -67,7 +67,7 @@ function getRewriteGlmModel() {
 }
 
 function getRewriteKimiModel() {
-  return String(process.env.KIMI_TEXT_MODEL || "kimi-k2.5").trim();
+  return String(process.env.KIMI_TEXT_MODEL || "kimi-k2.6").trim();
 }
 
 function getRewriteQwenModel() {

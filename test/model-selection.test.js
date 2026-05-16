@@ -147,14 +147,11 @@ test("buildModelSelectionOptionsPayload reflects DMXAPI defaults while keeping K
       const semanticMiniMaxOption = payload.semantic.find((item) => item.value === "minimax");
 
       assert.match(String(semanticGlmOption?.label || ""), /DMXAPI glm-5\.1/);
-      assert.doesNotMatch(String(semanticGlmOption?.label || ""), /glm-5\.1/);
       assert.match(String(semanticQwenOption?.label || ""), /DMXAPI qwen3\.5-plus/);
-      assert.doesNotMatch(String(semanticQwenOption?.label || ""), /qwen3\.5-plus/);
-      assert.match(String(rewriteKimiOption?.label || ""), /kimi-k2\.5/);
+      assert.match(String(rewriteKimiOption?.label || ""), /kimi-k2\.6/);
       assert.doesNotMatch(String(rewriteKimiOption?.label || ""), /DMXAPI/);
-      assert.doesNotMatch(String(rewriteKimiOption?.label || ""), /kimi-k2\.6/);
+      assert.doesNotMatch(String(rewriteKimiOption?.label || ""), /kimi-k2\.5/);
       assert.match(String(rewriteQwenOption?.label || ""), /DMXAPI qwen3\.5-plus/);
-      assert.doesNotMatch(String(rewriteQwenOption?.label || ""), /qwen3\.5-plus/);
       assert.match(String(semanticMiniMaxOption?.label || ""), /MiniMax-M2\.5/);
       assert.doesNotMatch(String(semanticMiniMaxOption?.label || ""), /MiniMax-M2\.7/);
     }

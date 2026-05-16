@@ -284,7 +284,7 @@ Kimi 官方接口也支持兼容配置：
 ```bash
 export KIMI_API_KEY="你的 Kimi 密钥"
 export KIMI_BASE_URL="https://api.moonshot.cn/v1/chat/completions"
-export KIMI_TEXT_MODEL="moonshot-v1-8k"
+export KIMI_TEXT_MODEL="kimi-k2.6"
 ```
 
 如果你本地使用 `MOONSHOT_API_KEY`，系统会自动兼容映射到 `KIMI_API_KEY`。

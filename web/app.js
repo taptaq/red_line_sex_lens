@@ -55,6 +55,8 @@ const REFERENCE_METRIC_THRESHOLD = {
   supportViews: 1000
 };
 
+const SAMPLE_LIBRARY_RETRO_REMINDER_START_DATE = "2026-05-11";
+
 function formatReferenceThresholdRule(parts = [], { joiner = "、", lastJoiner = " 或" } = {}) {
   const normalized = Array.isArray(parts) ? parts.filter(Boolean) : [];
 
@@ -239,11 +241,73 @@ function performanceTierLabel(tier) {
   return "未判断";
 }
 
+function generationVariantLabel(variant) {
+  const normalized = String(variant || "").trim();
+
+  if (!normalized) return "生成稿";
+  if (variant === "final") return "最终稿";
+  if (variant === "safe") return "稳妥版";
+  if (variant === "natural") return "自然版";
+  if (variant === "expressive") return "表达版";
+  return /[A-Za-z_-]/.test(normalized) ? "生成稿" : normalized;
+}
+
+function normalizePublishHashtag(value = "") {
+  return String(value || "")
+    .trim()
+    .replace(/^#+/g, "")
+    .trim();
+}
+
+function buildGenerationPublishCopyText(finalDraft = {}) {
+  const body = String(finalDraft?.body || "").trim();
+  const tags = uniqueStrings(["科普", ...(Array.isArray(finalDraft?.tags) ? finalDraft.tags : [])].map(normalizePublishHashtag).filter(Boolean));
+  const tagLine = tags.map((tag) => `#${tag}`).join(" ");
+
+  return [body, tagLine].filter(Boolean).join("\n\n");
+}
+
+async function writeTextToClipboard(text = "") {
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "readonly");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
+}
+
+function findGenerationResultCandidate(candidateId = "", candidateIndex = "") {
+  const items = Array.isArray(appState.latestGeneration?.scoredCandidates) ? appState.latestGeneration.scoredCandidates : [];
+  const normalizedCandidateId = String(candidateId || "").trim();
+
+  if (normalizedCandidateId) {
+    const matched = items.find((item) => String(item?.id || "").trim() === normalizedCandidateId);
+
+    if (matched) {
+      return matched;
+    }
+  }
+
+  const index = Number(candidateIndex);
+  return Number.isInteger(index) && index >= 0 ? items[index] || null : null;
+}
+
 function predictionMatchedLabel(value) {
   return value === true ? "预判命中" : "待复盘";
 }
 
 function lifecycleSourceLabel(source) {
+  const normalized = String(source || "").trim();
+
+  if (!normalized) return "手动记录";
   if (source === "false_positive_reflow") return "误报回流";
   if (source === "analysis-compare") return "模型对比检测";
   if (source === "generation_final") return "最终推荐稿";
@@ -251,7 +315,8 @@ function lifecycleSourceLabel(source) {
   if (source === "generation") return "生成稿";
   if (source === "rewrite") return "改写稿";
   if (source === "analysis") return "检测记录";
-  return String(source || "").trim() || "manual";
+  if (normalized === "manual") return "手动记录";
+  return /[A-Za-z_-]/.test(normalized) ? "手动记录" : normalized;
 }
 
 function compactText(value, maxLength = 80) {
@@ -262,6 +327,24 @@ function compactText(value, maxLength = 80) {
   }
 
   return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+function buildGenerationBlockerReasonsMarkup(item = {}) {
+  const verdict = String(item?.analysis?.finalVerdict || item?.analysis?.verdict || "").trim();
+  const blockerReasons = Array.isArray(item?.blockerReasons) ? item.blockerReasons.filter(Boolean) : [];
+
+  if (!["manual_review", "hard_block"].includes(verdict) || !blockerReasons.length) {
+    return "";
+  }
+
+  return `
+    <div class="generation-blocker-box">
+      <span>当前卡点</span>
+      <ul>
+        ${blockerReasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}
+      </ul>
+    </div>
+  `;
 }
 
 function isAdminDataInitialLoading() {
@@ -2030,6 +2113,70 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? "未知时间" : date.toLocaleString("zh-CN");
 }
 
+function parseDateOnlyValue(value = "") {
+  const normalized = String(value || "").trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? new Date(`${normalized}T00:00:00`) : new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getDaysSinceDate(value = "", now = new Date()) {
+  const sourceDate = parseDateOnlyValue(value);
+  const nowDate = now instanceof Date ? now : new Date(now);
+
+  if (!sourceDate || Number.isNaN(nowDate.getTime())) {
+    return null;
+  }
+
+  const sourceDay = new Date(sourceDate.getFullYear(), sourceDate.getMonth(), sourceDate.getDate());
+  const currentDay = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate());
+  return Math.max(0, Math.floor((currentDay.getTime() - sourceDay.getTime()) / 86400000));
+}
+
+function buildSampleLibraryRetroTimingHint({ publish = {} } = {}) {
+  const publishStatus = String(publish?.status || "not_published").trim() || "not_published";
+  const publishedAt = String(publish?.publishedAt || "").trim();
+  const daysSincePublish = getDaysSinceDate(publishedAt);
+
+  if (publishStatus === "not_published") {
+    return {
+      text: "建议先同步发布结果；建议至少等到 T+7 再做发布后复盘。",
+      state: "pending"
+    };
+  }
+
+  if (!publishedAt || daysSincePublish === null) {
+    return {
+      text: "建议补充发布时间；建议至少等到 T+7 再做发布后复盘。",
+      state: "pending"
+    };
+  }
+
+  if (daysSincePublish < 7) {
+    return {
+      text: `已发布 ${daysSincePublish} 天，建议先持续观察；建议至少等到 T+7 再做发布后复盘。`,
+      state: "pending"
+    };
+  }
+
+  return {
+    text: `已发布 ${daysSincePublish} 天，当前适合做终局复盘和参考样本确认。`,
+    state: "final-review"
+  };
+}
+
+function getSampleLibraryRetroTimingHintClassName(state = "pending") {
+  if (state === "final-review") {
+    return "sample-library-retro-timing-hint sample-library-retro-timing-hint--final-review";
+  }
+
+  return "sample-library-retro-timing-hint sample-library-retro-timing-hint--pending";
+}
+
 function buildStyleProfileGenerationLabel(meta = {}) {
   const method = String(meta?.method || "").trim();
   const provider = String(meta?.provider || "").trim();
@@ -3092,8 +3239,41 @@ function getAnalyzeCompareSelectionContext(selection = "") {
   };
 }
 
+function analyzeCompareModelLabel(item = {}) {
+  if (!item || typeof item !== "object") {
+    return "";
+  }
+
+  const explicitLabel = String(item?.label || "").trim();
+
+  if (explicitLabel) {
+    return explicitLabel;
+  }
+
+  const semanticReview = item?.semanticReview && typeof item.semanticReview === "object" ? item.semanticReview : {};
+  const attempts = Array.isArray(semanticReview.providersTried) ? semanticReview.providersTried : [];
+  const primaryAttempt = attempts.find((attempt) => attempt && (attempt.routeLabel || attempt.provider || attempt.model)) || null;
+  const routeLabel = String(primaryAttempt?.routeLabel || semanticReview?.routeLabel || item?.routeLabel || "").trim();
+  const provider = String(primaryAttempt?.provider || semanticReview?.provider || item?.provider || item?.selection || "").trim();
+  const model = String(primaryAttempt?.model || semanticReview?.model || item?.model || "").trim();
+  const composedLabel = [routeLabel, providerLabel(provider), model].filter(Boolean).join(" / ");
+
+  if (composedLabel) {
+    return composedLabel;
+  }
+
+  const selectionLabel = String(item?.selection || "").trim();
+
+  if (!selectionLabel) {
+    return "";
+  }
+
+  const providerText = providerLabel(selectionLabel);
+  return providerText && providerText !== selectionLabel ? providerText : selectionLabel;
+}
+
 function buildAnalyzeCompareBasisOptionLabel(item = {}) {
-  const label = item?.label || item?.selection || "未命名模型";
+  const label = analyzeCompareModelLabel(item) || "未命名模型";
   const mergedAnalysis = item?.mergedAnalysis && typeof item.mergedAnalysis === "object" ? item.mergedAnalysis : {};
   const semanticReview = item?.semanticReview && typeof item.semanticReview === "object" ? item.semanticReview : {};
   const verdict = verdictLabel(mergedAnalysis.finalVerdict || mergedAnalysis.verdict || "pass");
@@ -3106,7 +3286,7 @@ function buildAnalyzeCompareContentActionsMarkup(result = {}) {
   const comparisons = Array.isArray(result?.comparisons) ? result.comparisons : [];
   const compareContext = getAnalyzeCompareSelectionContext("");
   const mergedAnalysis = compareContext.mergedAnalysis || {};
-  const basisLabel = compareContext.item?.label || compareContext.item?.selection || "";
+  const basisLabel = analyzeCompareModelLabel(compareContext.item);
   const basisText = basisLabel ? `当前内容级保存基于 ${basisLabel} 的合并结论。` : "当前内容级保存将回退到这次检测的基础规则结论。";
   const basisVerdict = mergedAnalysis.finalVerdict || mergedAnalysis.verdict || result?.ruleAnalysis?.verdict || "pass";
   const compareFalsePositiveNotes = [
@@ -3183,6 +3363,7 @@ function buildAnalyzeCompareContentActionsMarkup(result = {}) {
 function buildAnalyzeCompareCardMarkup(item = {}) {
   const semanticReview = item?.semanticReview && typeof item.semanticReview === "object" ? item.semanticReview : {};
   const mergedAnalysis = item?.mergedAnalysis && typeof item.mergedAnalysis === "object" ? item.mergedAnalysis : {};
+  const modelLabel = analyzeCompareModelLabel(item) || "未命名模型";
   const semantic = semanticReview.status === "ok" ? semanticReview.review || null : null;
   const attemptedRoutes = Array.isArray(semanticReview.providersTried) ? semanticReview.providersTried : [];
   const attemptedRouteLabels = attemptedRoutes
@@ -3217,7 +3398,7 @@ function buildAnalyzeCompareCardMarkup(item = {}) {
     <article class="analyze-compare-card">
       <div class="analyze-compare-card-head">
         <div>
-          <strong>${escapeHtml(item.label || item.selection || "未命名模型")}</strong>
+          <strong>${escapeHtml(modelLabel)}</strong>
           <p>${escapeHtml(attemptedRouteLabels.join("；") || item.selection || "当前未记录调用链路")}</p>
         </div>
         <span class="analyze-compare-status ${escapeHtml(statusClass)}">${escapeHtml(statusLabel)}</span>
@@ -3298,6 +3479,29 @@ function renderCrossReviewResult(result) {
   byId("cross-review-result").innerHTML = buildCrossReviewMarkup(result?.review);
 }
 
+function getManualReviewRetroReminderQueueItems(records = []) {
+  return (Array.isArray(records) ? records : [])
+    .filter((record) => isDueForSampleLibraryFinalRetroReview(record))
+    .sort((left, right) =>
+      String(right?.updatedAt || right?.createdAt || "").localeCompare(String(left?.updatedAt || left?.createdAt || ""))
+    )
+    .map((record) => {
+      const publish = getSampleRecordPublish(record);
+      const title = getSampleRecordTitle(record) || "未命名样本记录";
+      const summary = compactText(getSampleRecordBody(record) || getSampleRecordCoverText(record), 88) || "未填写正文";
+
+      return {
+        id: String(record?.id || ""),
+        title,
+        summary,
+        publishStatus: publish.status || "not_published",
+        publishedAt: publish.publishedAt || "",
+        collectionType: getSampleRecordCollectionType(record),
+        reason: "T+7 终局复盘提醒"
+      };
+    });
+}
+
 function renderQueue(items) {
   const node = byId("review-queue");
 
@@ -3310,8 +3514,37 @@ function renderQueue(items) {
     return;
   }
 
-  node.innerHTML = items.length
-    ? items
+  const retroReminderItems = getManualReviewRetroReminderQueueItems(appState.sampleLibraryRecords || []);
+  const reviewItems = Array.isArray(items) ? items : [];
+
+  node.innerHTML = retroReminderItems.length || reviewItems.length
+    ? `${retroReminderItems
+        .map(
+          (item) => `
+            <article class="queue-item">
+              <strong>${escapeHtml(item.title)}</strong>
+              <div class="meta-row">
+                <span class="meta-pill">${escapeHtml(item.reason)}</span>
+                <span class="meta-pill">${escapeHtml(publishStatusLabel(item.publishStatus))}</span>
+                <span class="meta-pill">${escapeHtml(collectionTypeLabel(item.collectionType))}</span>
+                ${item.publishedAt ? `<span class="meta-pill">发布时间 ${escapeHtml(formatDate(item.publishedAt))}</span>` : ""}
+              </div>
+              <p>${escapeHtml(item.summary)}</p>
+              <p>已到 T+7，可直接进入发布后复盘，确认实际表现、偏差原因，以及是否继续保留为参考样本。</p>
+              <div class="item-actions">
+                <button
+                  type="button"
+                  class="button button-small"
+                  data-action="open-sample-library-calibration"
+                  data-id="${escapeHtml(item.id)}"
+                >
+                  进入发布后复盘
+                </button>
+              </div>
+            </article>
+          `
+        )
+        .join("")}${reviewItems
         .map(
           (item) => `
             <article class="queue-item">
@@ -3387,7 +3620,7 @@ function renderQueue(items) {
             </article>
           `
         )
-        .join("")
+        .join("")}`
     : '<div class="result-card muted">当前没有待复核候选词</div>';
 }
 
@@ -3885,6 +4118,25 @@ function hasCalibrationRetro(record = {}) {
       retro.ruleImprovementCandidate ||
       retro.notes ||
       retro.reviewedAt
+  );
+}
+
+function isDueForSampleLibraryFinalRetroReview(record = {}) {
+  const publish = getSampleRecordPublish(record);
+  const calibration = getSampleRecordCalibration(record);
+  const daysSincePublish = getDaysSinceDate(publish.publishedAt);
+  const publishedAtDate = parseDateOnlyValue(publish.publishedAt);
+  const reminderStartDate = parseDateOnlyValue(SAMPLE_LIBRARY_RETRO_REMINDER_START_DATE);
+
+  return (
+    hasTrackedLifecycle(record) &&
+    publish.status !== "not_published" &&
+    publishedAtDate &&
+    reminderStartDate &&
+    publishedAtDate.getTime() >= reminderStartDate.getTime() &&
+    daysSincePublish !== null &&
+    daysSincePublish >= 7 &&
+    !calibration.retro.reviewedAt
   );
 }
 
@@ -5119,12 +5371,11 @@ function getSampleLibraryCalibrationReviewQueueItems(items = []) {
       const publish = getSampleRecordPublish(item);
       const calibration = getSampleRecordCalibration(item);
       const calibrationState = getSampleLibraryCalibrationListState(item);
-      const trackedLifecycle = hasTrackedLifecycle(item);
-      const needsRetro = trackedLifecycle && publish.status !== "not_published" && !hasCalibrationRetro(item);
+      const dueFinalRetroReview = isDueForSampleLibraryFinalRetroReview(item);
       const highConfidenceMismatch =
         calibrationState.key === "calibration_mismatch" && Number(calibration.prediction.confidence || 0) >= 70;
 
-      if (!needsRetro && !highConfidenceMismatch) {
+      if (!dueFinalRetroReview && !highConfidenceMismatch) {
         return null;
       }
 
@@ -5133,13 +5384,14 @@ function getSampleLibraryCalibrationReviewQueueItems(items = []) {
         publish,
         calibration,
         calibrationState,
-        queueReason: needsRetro ? "已发布待复盘" : "高置信偏差"
+        queueReason: dueFinalRetroReview ? "T+7 终局复盘提醒" : "高置信偏差",
+        queuePriority: dueFinalRetroReview ? 2 : 1
       };
     })
     .filter(Boolean)
     .sort((left, right) => {
-      const leftScore = left.queueReason === "高置信偏差" ? 1 : 0;
-      const rightScore = right.queueReason === "高置信偏差" ? 1 : 0;
+      const leftScore = Number(left.queuePriority || 0);
+      const rightScore = Number(right.queuePriority || 0);
 
       if (leftScore !== rightScore) {
         return rightScore - leftScore;
@@ -6050,7 +6302,8 @@ function buildSampleLibraryCalibrationEditorSectionsMarkup({
   retro = {},
   comparisonStatusLabel = "待复盘",
   missReasonSuggestion = "",
-  referenceAction = null
+  referenceAction = null,
+  retroTimingHint = null
 } = {}) {
   const prefillSourceSummary = getSampleLibraryCalibrationPredictionPrefillSourceSummary();
 
@@ -6125,6 +6378,9 @@ function buildSampleLibraryCalibrationEditorSectionsMarkup({
         title: "发布后复盘",
         description: "把真实结果和偏差原因转成后续可用的判断经验。",
         body: `
+        <p class="helper-text ${escapeHtml(
+          getSampleLibraryRetroTimingHintClassName(retroTimingHint?.state || "pending")
+        )}">${escapeHtml(retroTimingHint?.text || "建议至少等到 T+7 再做发布后复盘。")}</p>
         <div class="lifecycle-primary-grid">
           <label>
             <span>实际表现</span>
@@ -6223,6 +6479,7 @@ function buildSampleLibraryCalibrationModalMarkup(record) {
       retro: effectiveRetro
     }
   });
+  const retroTimingHint = buildSampleLibraryRetroTimingHint({ publish });
 
   return `
     <div class="sample-library-modal-stack compact-form">
@@ -6231,7 +6488,8 @@ function buildSampleLibraryCalibrationModalMarkup(record) {
         retro: effectiveRetro,
         comparisonStatusLabel: predictionMatchedLabel(comparison.matched),
         missReasonSuggestion: comparison.missReasonSuggestion,
-        referenceAction
+        referenceAction,
+        retroTimingHint
       })}
     </div>
   `;
@@ -6392,67 +6650,91 @@ async function refreshSampleLibraryWorkspace() {
 }
 
 function renderGenerationResult(result = {}) {
-  const cards = (result.scoredCandidates || [])
-    .map(
-      (item, index) => {
-        const finalDraft = item.finalDraft || item;
-        const repair = item.repair || {};
-        const repairMarkup = repair.attempted
-          ? `
-            <div class="generation-repair-banner${repair.applied ? "" : " is-muted"}">
-              <span>${repair.applied ? "已自动修复一次" : "已尝试自动修复"}</span>
-              <p>${escapeHtml(
-                repair.applied
-                  ? repair.rewrite?.rewriteNotes || repair.reason || "已根据风险点完成一次自动修复。"
-                  : repair.error || repair.reason || "本候选已尝试自动修复，但仍需人工确认。"
-              )}</p>
-            </div>
-          `
-          : "";
-
-        return `
-        <article class="generation-candidate-card${item.id === result.recommendedCandidateId ? " is-recommended" : ""}">
-          <div class="meta-row">
-            <span class="meta-pill">${escapeHtml(item.variant || "candidate")}</span>
-            ${repair.attempted ? `<span class="meta-pill">${escapeHtml(repair.applied ? "修复后评分" : "修复未完成")}</span>` : ""}
-            <span class="meta-pill">综合分 ${escapeHtml(String(item.scores?.total ?? 0))}</span>
-            <span class="meta-pill">风格分 ${escapeHtml(String(item.style?.score ?? 0))}</span>
-            <span class="meta-pill">${escapeHtml(verdictLabel(item.analysis?.finalVerdict || item.analysis?.verdict || "pass"))}</span>
-          </div>
-          <strong>${escapeHtml(finalDraft.title || "未生成标题")}</strong>
-          <p>${escapeHtml(finalDraft.coverText || "未生成封面文案")}</p>
-          <div class="rewrite-body-reader">${escapeHtml(finalDraft.body || "未生成正文")}</div>
-          <p class="helper-text">标签：${escapeHtml(joinCSV(finalDraft.tags) || "未生成")}</p>
-          ${repairMarkup}
-          <p class="helper-text">${escapeHtml(finalDraft.generationNotes || item.generationNotes || "暂无生成说明")}</p>
-          <p class="helper-text">${escapeHtml(finalDraft.safetyNotes || item.safetyNotes || "暂无安全注意点")}</p>
-          <div class="item-actions">
-            <button
-              type="button"
-              class="button button-small"
-              data-action="save-lifecycle-generation"
-              data-candidate-id="${escapeHtml(item.id || "")}"
-              data-candidate-index="${escapeHtml(String(index))}"
-            >
-              ${item.id === result.recommendedCandidateId ? "最终推荐稿进入生命周期" : "保存候选稿生命周期"}
-            </button>
-          </div>
-          ${buildPlatformOutcomeActions("generation", { candidateId: item.id || "", candidateIndex: index })}
-        </article>
-      `;
-      }
-    )
-    .join("");
+  const recommended = (result.scoredCandidates || []).find(
+    (item) => String(item?.id || "") === String(result.recommendedCandidateId || "")
+  );
+  const displayItem = recommended || (result.scoredCandidates || [])[0] || null;
+  const displayIndex = displayItem ? Math.max(0, (result.scoredCandidates || []).indexOf(displayItem)) : 0;
+  const finalDraft = displayItem?.finalDraft || displayItem || {};
+  const variantLabel = generationVariantLabel(finalDraft.variant || displayItem?.variant || "final");
+  const repair = displayItem?.repair || {};
+  const blockerReasonsMarkup = buildGenerationBlockerReasonsMarkup(displayItem);
+  const repairSummary = buildGenerationRepairSummary(repair);
+  const repairMarkup = repair.attempted
+    ? `
+      <div class="generation-repair-banner${repair.applied ? "" : " is-muted"}">
+        <span>${escapeHtml(repairSummary.title)}</span>
+        <p>${escapeHtml(repairSummary.description)}</p>
+      </div>
+    `
+    : "";
+  const cardMarkup = displayItem
+    ? `
+      <article class="generation-candidate-card is-recommended">
+        <div class="meta-row">
+          <span class="meta-pill">${escapeHtml(variantLabel)}</span>
+          ${repair.attempted ? `<span class="meta-pill">${escapeHtml(repair.applied ? "修复后评分" : "修复未完成")}</span>` : ""}
+          <span class="meta-pill">综合分 ${escapeHtml(String(displayItem.scores?.total ?? 0))}</span>
+          <span class="meta-pill">风格分 ${escapeHtml(String(displayItem.style?.score ?? 0))}</span>
+          <span class="meta-pill">${escapeHtml(verdictLabel(displayItem.analysis?.finalVerdict || displayItem.analysis?.verdict || "pass"))}</span>
+        </div>
+        <strong>${escapeHtml(finalDraft.title || "未生成标题")}</strong>
+        <p>${escapeHtml(finalDraft.coverText || "未生成封面文案")}</p>
+        <div class="rewrite-body-reader">${escapeHtml(finalDraft.body || "未生成正文")}</div>
+        <p class="helper-text">标签：${escapeHtml(joinCSV(finalDraft.tags) || "未生成")}</p>
+        ${repairMarkup}
+        ${blockerReasonsMarkup}
+        <p class="helper-text">${escapeHtml(finalDraft.generationNotes || displayItem.generationNotes || "暂无生成说明")}</p>
+        <p class="helper-text">${escapeHtml(finalDraft.safetyNotes || displayItem.safetyNotes || "暂无安全注意点")}</p>
+        <div class="item-actions">
+          <button
+            type="button"
+            class="button button-small button-secondary"
+            data-action="copy-generation-publish"
+            data-candidate-id="${escapeHtml(String(displayItem.id || ""))}"
+            data-candidate-index="${escapeHtml(String(displayIndex))}"
+          >
+            复制发布稿
+          </button>
+        </div>
+        <p class="helper-text">复制发布稿会带上正文、#科普 和标签，便于直接粘贴发布。</p>
+        <p class="helper-text action-gate-hint" id="generation-publish-copy-hint" aria-live="polite"></p>
+      </article>
+    `
+    : '<div class="muted">没有生成结果</div>';
 
   byId("generation-result").innerHTML = `
     <div class="model-scope-banner">
-      <span class="model-scope-kicker">推荐结果</span>
+      <span class="model-scope-kicker">最终稿</span>
       <strong>${escapeHtml(result.recommendationReason || "暂无推荐")}</strong>
     </div>
-    <div class="generation-candidate-grid">${cards || '<div class="muted">没有候选稿</div>'}</div>
-    <p class="helper-text action-gate-hint" id="generation-lifecycle-action-hint" aria-live="polite"></p>
+    ${cardMarkup}
   `;
   syncLifecycleResultActions();
+}
+
+function buildGenerationRepairSummary(repair = {}) {
+  const attempts = Math.max(0, Number(repair?.attempts) || 0);
+  const invalidDraftCount = Math.max(0, Number(repair?.invalidDraftCount) || 0);
+  const invalidDraftLabel = invalidDraftCount > 0 ? `，跳过 ${invalidDraftCount} 次无效结果` : "";
+
+  if (repair?.applied) {
+    return {
+      title: `已自动修复 ${Math.max(1, attempts)} 轮${invalidDraftLabel}`,
+      description:
+        String(repair?.rewrite?.rewriteNotes || "").trim() ||
+        String(repair?.reason || "").trim() ||
+        `已根据风险点完成 ${Math.max(1, attempts)} 轮自动修复。`
+    };
+  }
+
+  return {
+    title: attempts > 0 ? `已尝试自动修复 ${attempts} 轮${invalidDraftLabel}` : "已尝试自动修复",
+    description:
+      String(repair?.error || "").trim() ||
+      String(repair?.reason || "").trim() ||
+      "本稿已尝试自动修复，但仍需人工确认。"
+  };
 }
 
 function buildInnerSpaceTermsListMarkup(items = []) {
@@ -7751,10 +8033,12 @@ function getGenerationPayload() {
     brief: {
       collectionType: String(form.get("collectionType") || "").trim(),
       lengthMode: String(form.get("lengthMode") || "short").trim() || "short",
-      topic: String(form.get("topic") || "").trim(),
-      sellingPoints: String(form.get("sellingPoints") || "").trim(),
-      audience: String(form.get("audience") || "").trim(),
-      constraints: String(form.get("constraints") || "").trim(),
+      briefing: String(form.get("briefing") || "").trim(),
+      referenceTitle: String(form.get("referenceTitle") || "").trim(),
+      topic: "",
+      sellingPoints: "",
+      audience: "",
+      constraints: "",
       tagReferences: String(form.get("tagReferences") || "").trim()
     },
     draft: {
@@ -7763,6 +8047,31 @@ function getGenerationPayload() {
     },
     modelSelection: getSelectedModelSelections()
   };
+}
+
+function syncGenerationModeFields() {
+  const form = byId("generation-workbench-form");
+  const mode = String(form?.querySelector('[name="mode"]')?.value || "from_scratch").trim();
+
+  form?.querySelectorAll?.("[data-generation-mode-visible]")?.forEach((block) => {
+    const visibleMode = String(block.getAttribute("data-generation-mode-visible") || "").trim();
+    const isVisible = !visibleMode || visibleMode === mode;
+
+    block.hidden = !isVisible;
+    block.querySelectorAll("input, textarea, select").forEach((field) => {
+      field.disabled = !isVisible;
+    });
+  });
+}
+
+function getGenerationBriefingImproveRequirementMessage() {
+  const payload = getGenerationPayload();
+
+  if (!String(payload.brief?.briefing || "").trim()) {
+    return "请先填写一句话需求。";
+  }
+
+  return "";
 }
 
 function initializeAnalyzeTagPicker() {
@@ -7948,9 +8257,10 @@ async function saveLifecycleFromCurrent(source = "analysis", candidateId = "", c
   if (isAnalyzeCompare) {
     const compareContext = getAnalyzeCompareSelectionContext(candidateId || candidateIndex);
     const compareAnalysis = compareContext.mergedAnalysis;
+    const compareLabel = analyzeCompareModelLabel(compareContext.item) || "未命名模型";
 
     payload.source = "analysis";
-    payload.name = `模型对比检测 / ${compareContext.item?.label || compareContext.item?.selection || "未命名模型"}`;
+    payload.name = `模型对比检测 / ${compareLabel}`;
     payload.snapshots.analysis = compareAnalysis || payload.snapshots.analysis;
   }
 
@@ -7973,8 +8283,9 @@ async function saveLifecycleFromCurrent(source = "analysis", candidateId = "", c
       candidates[Number(candidateIndex)];
     const finalDraft = candidate?.finalDraft || candidate;
     const isRecommended = String(candidate?.id || "") === String(appState.latestGeneration?.recommendedCandidateId || "");
+    const generatedName = finalDraft?.title || generationVariantLabel(finalDraft?.variant) || "未命名";
     payload.source = isRecommended ? "generation_final" : "generation_candidate";
-    payload.name = `${isRecommended ? "最终推荐稿" : "生成候选稿"} / ${finalDraft?.title || finalDraft?.variant || "未命名"}`;
+    payload.name = `${isRecommended ? "最终推荐稿" : "生成候选稿"} / ${generatedName}`;
     payload.note = {
       title: finalDraft?.title,
       body: finalDraft?.body,
@@ -8077,6 +8388,8 @@ byId("feedback-form").addEventListener("input", syncFeedbackActions);
 byId("feedback-form").addEventListener("change", syncFeedbackActions);
 byId("generation-workbench-form").addEventListener("input", syncGenerationActions);
 byId("generation-workbench-form").addEventListener("change", syncGenerationActions);
+byId("generation-workbench-form").addEventListener("change", syncGenerationModeFields);
+byId("generation-briefing-improve").addEventListener("click", improveGenerationBriefingFromCurrentInput);
 function buildLexiconEntry(form) {
   const source = String(form.get("source") || "").trim();
   const match = String(form.get("match") || "exact");
@@ -8169,8 +8482,8 @@ function getGenerationRequirementMessage() {
     return "";
   }
 
-  if (!String(payload.brief?.topic || "").trim() && !String(payload.brief?.sellingPoints || "").trim()) {
-    return "请至少填写主题或卖点 / 重点。";
+  if (!String(payload.brief?.briefing || "").trim()) {
+    return "请先填写一句话需求。";
   }
 
   return "";
@@ -8179,8 +8492,11 @@ function getGenerationRequirementMessage() {
 function syncGenerationActions() {
   const requirementMessage = getGenerationRequirementMessage();
   const submitButton = byId("generation-workbench-form")?.querySelector('button[type="submit"]');
+  const improveButton = byId("generation-briefing-improve");
+  const improveRequirementMessage = getGenerationBriefingImproveRequirementMessage();
 
   setGatedButtonState(submitButton, !requirementMessage, requirementMessage);
+  setGatedButtonState(improveButton, !improveRequirementMessage, improveRequirementMessage);
   setActionGateHint("generation-action-hint", requirementMessage);
 }
 
@@ -8969,6 +9285,55 @@ byId("cross-review-button").addEventListener("click", async () => {
     syncAnalyzeActions();
   }
 });
+
+async function improveGenerationBriefingFromCurrentInput() {
+  const button = byId("generation-briefing-improve");
+  const resultNode = byId("generation-briefing-improve-result");
+  const requirementMessage = getGenerationBriefingImproveRequirementMessage();
+
+  if (requirementMessage) {
+    if (resultNode) {
+      resultNode.textContent = requirementMessage;
+    }
+    syncGenerationActions();
+    return;
+  }
+
+  setButtonBusy(button, true, "润色中...");
+
+  if (resultNode) {
+    resultNode.textContent = "正在扩展一句话需求...";
+  }
+
+  try {
+    const payload = getGenerationPayload();
+    const result = await apiJson("/api/generate-note-briefing", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    const briefingField = byId("generation-workbench-form")?.querySelector('[name="briefing"]');
+    const improvedBriefing = String(result?.briefing || "").trim();
+
+    if (briefingField && improvedBriefing) {
+      briefingField.value = improvedBriefing;
+      briefingField.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    if (resultNode) {
+      const notes = Array.isArray(result?.notes) ? result.notes.filter(Boolean) : [];
+      resultNode.textContent = notes.length
+        ? `本次补足：${notes.join("；")}`
+        : "已完成 AI 润色优化。";
+    }
+  } catch (error) {
+    if (resultNode) {
+      resultNode.textContent = error.message || "AI 润色优化失败";
+    }
+  } finally {
+    setButtonBusy(button, false);
+    syncGenerationActions();
+  }
+}
 
 byId("generation-workbench-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -10266,6 +10631,7 @@ document.addEventListener("click", async (event) => {
     const compareContext = getAnalyzeCompareSelectionContext(button.dataset.selection || "");
     const payload = appState.latestAnalyzePayload || {};
     const mergedAnalysis = compareContext.mergedAnalysis || {};
+    const compareLabel = button.dataset.modelLabel || analyzeCompareModelLabel(compareContext.item);
 
     openFeedbackFalsePositiveModal({
       title: payload.title || "",
@@ -10276,8 +10642,8 @@ document.addEventListener("click", async (event) => {
       analysisScore: Number(button.dataset.analysisScore || mergedAnalysis.score || 0),
       sourceLabel:
         button.dataset.sourceLabel ||
-        (button.dataset.modelLabel || compareContext.item?.label || compareContext.item?.selection
-          ? `这次全部模型对比检测（当前保存基准：${button.dataset.modelLabel || compareContext.item?.label || compareContext.item?.selection || "未命名模型"}）`
+        (compareLabel
+          ? `这次全部模型对比检测（当前保存基准：${compareLabel}）`
           : "这次全部模型对比检测")
     });
     return;
@@ -10297,7 +10663,7 @@ document.addEventListener("click", async (event) => {
       await saveLifecycleFromCurrent("analysis-compare", button.dataset.selection || "");
       await refreshAll();
       const savedContext = getAnalyzeCompareSelectionContext(button.dataset.selection || "");
-      const basisLabel = savedContext.item?.label || savedContext.item?.selection || "";
+      const basisLabel = analyzeCompareModelLabel(savedContext.item);
       setSampleLibraryModalMessage(
         basisLabel
           ? `已按 ${basisLabel} 的合并结论保存当前内容为生命周期记录。`
@@ -10439,6 +10805,27 @@ document.addEventListener("click", async (event) => {
       await saveLifecycleFromCurrent("generation", button.dataset.candidateId, button.dataset.candidateIndex);
     }
 
+    if (action === "copy-generation-publish") {
+      const resultItem = findGenerationResultCandidate(button.dataset.candidateId, button.dataset.candidateIndex);
+      const finalDraft = resultItem?.finalDraft || resultItem || {};
+      const copyText = buildGenerationPublishCopyText(finalDraft);
+      const hintNode = byId("generation-publish-copy-hint");
+
+      if (!copyText) {
+        if (hintNode) {
+          hintNode.textContent = "当前还没有可复制的发布稿内容。";
+        }
+        return;
+      }
+
+      await writeTextToClipboard(copyText);
+
+      if (hintNode) {
+        hintNode.textContent = "已复制发布稿：正文、#科普 和标签都带上了。";
+      }
+      return;
+    }
+
     await refreshAll();
     } catch (error) {
       const target =
@@ -10467,6 +10854,7 @@ loadCollectionTypeOptions().catch(() => {});
 
 syncAnalyzeActions();
 syncFeedbackActions();
+syncGenerationModeFields();
 syncGenerationActions();
 syncSampleLibraryCreateActions();
 syncSampleLibraryImportActions();

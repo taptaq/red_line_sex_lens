@@ -204,7 +204,7 @@ test("callRoutedTextProviderJson uses DMXAPI GLM first when available", async ()
       const originalFetch = globalThis.fetch;
       globalThis.fetch = async (url, options = {}) => {
         const body = JSON.parse(String(options.body || "{}"));
-        calls.push({ url: String(url), model: body.model, stream: body.stream, top_p: body.top_p });
+        calls.push({ url: String(url), model: body.model, stream: body.stream, top_p: body.top_p, temperature: body.temperature });
 
         return createJsonResponse(200, {
           model: "glm-5.1",
@@ -238,6 +238,7 @@ test("callRoutedTextProviderJson uses DMXAPI GLM first when available", async ()
             url: "https://www.dmxapi.cn/v1/chat/completions",
             model: "glm-5.1",
             stream: false,
+            temperature: 0.2,
             top_p: undefined
           }
         ]);
@@ -404,17 +405,17 @@ test("callRoutedTextProviderJson sends Kimi directly to the official Moonshot en
       DMXAPI_API_KEY: "dmxapi-test",
       KIMI_API_KEY: "kimi-test",
       KIMI_BASE_URL: "https://api.moonshot.cn/v1/chat/completions",
-      KIMI_TEXT_MODEL: "kimi-k2.5"
+      KIMI_TEXT_MODEL: "kimi-k2.6"
     },
     async () => {
       const calls = [];
       const originalFetch = globalThis.fetch;
       globalThis.fetch = async (url, options = {}) => {
         const body = JSON.parse(String(options.body || "{}"));
-        calls.push({ url: String(url), model: body.model, stream: body.stream, top_p: body.top_p });
+        calls.push({ url: String(url), model: body.model, temperature: body.temperature, stream: body.stream, top_p: body.top_p });
 
         return createJsonResponse(200, {
-          model: "kimi-k2.5",
+          model: "kimi-k2.6",
           choices: [
             {
               message: {
@@ -432,17 +433,18 @@ test("callRoutedTextProviderJson sends Kimi directly to the official Moonshot en
         const { callRoutedTextProviderJson } = await importFresh("../src/glm.js");
         const result = await callRoutedTextProviderJson({
           provider: "kimi",
-          model: "kimi-k2.5",
+          model: "kimi-k2.6",
           messages: [{ role: "user", content: "hello" }],
           timeoutMs: 1000
         });
 
-        assert.equal(result.model, "kimi-k2.5");
+        assert.equal(result.model, "kimi-k2.6");
         assert.equal(result.route, "official");
         assert.equal(result.routeLabel, "官方");
         assert.equal(calls.length, 1);
         assert.equal(calls[0].url, "https://api.moonshot.cn/v1/chat/completions");
-        assert.equal(calls[0].model, "kimi-k2.5");
+        assert.equal(calls[0].model, "kimi-k2.6");
+        assert.equal(calls[0].temperature, 1);
         assert.equal(calls[0].stream, undefined);
         assert.equal(calls[0].top_p, undefined);
       } finally {
@@ -460,7 +462,7 @@ test("runSemanticReview keeps Qwen on DMXAPI only after permission failure", asy
       DEEPSEEK_API_KEY: "",
       QWEN_DMXAPI_MODEL: "qwen3.5-plus"
     },
-    async () => {qwen3.5-plus-2026-02-15
+    async () => {
       const calls = [];
       const originalFetch = globalThis.fetch;
       globalThis.fetch = async (url, options = {}) => {
@@ -512,7 +514,7 @@ test("runSemanticReview uses DMXAPI GLM first and records route metadata", async
       DEEPSEEK_API_KEY: "",
       DMXAPI_API_KEY: "dmxapi-test",
       GLM_SEMANTIC_MODEL: "glm-4.6v",
-      GLM_DMXAPI_MODEL: "glm-5qwen3.5-plus-2026-02-15
+      GLM_DMXAPI_MODEL: "glm-5.1"
     },
     async () => {
       const calls = [];
@@ -650,7 +652,6 @@ test("runSemanticReview can return MiniMax as a standalone provider", async () =
             ]
           });
         }
-qwen3.5-plus-2026-02-15
         return createJsonResponse(500, { error: { message: "unexpected model" } });
       };
 
@@ -835,7 +836,7 @@ test("suggestFeedbackCandidates keeps Qwen on DMXAPI only for 400 errors", async
         ]);
       } finally {
         globalThis.fetch = originalFetch;
-      }qwen3.5-plus-2026-02-15
+      }
     }
   );
 });

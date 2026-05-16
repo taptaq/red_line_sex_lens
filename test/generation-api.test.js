@@ -97,6 +97,30 @@ test("generation endpoint always uses the current active style profile", async (
   });
 });
 
+test("generation briefing improve endpoint expands the current one-line request", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const result = await invokeRoute("POST", "/api/generate-note-briefing", {
+      mode: "from_scratch",
+      collectionType: "科普",
+      brief: {
+        briefing: "写经期能不能用玩具，轻松一点"
+      },
+      mockImprovedBriefing: {
+        briefing: "写一篇给新手女生看的轻松科普，重点回答经期能不能用玩具、什么情况下要先暂停，语气自然，不要营销感。",
+        notes: ["补足了目标人群", "补足了语气要求"]
+      }
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.equal(
+      result.briefing,
+      "写一篇给新手女生看的轻松科普，重点回答经期能不能用玩具、什么情况下要先暂停，语气自然，不要营销感。"
+    );
+    assert.deepEqual(result.notes, ["补足了目标人群", "补足了语气要求"]);
+  });
+});
+
 test("generation selection normalization keeps generation separate and allows value-only fallback to rewrite", () => {
   const explicitGeneration = normalizeModelSelectionState({
     rewrite: "glm",
@@ -124,7 +148,8 @@ test("generation prompt context includes collection type", () => {
 
   assert.match(messages[1].content, /合集类型：科普/);
   assert.match(messages[1].content, /长文档/);
-  assert.match(messages[1].content, /1100-1600 字/);
+  assert.match(messages[1].content, /1100-1600 个中文字符/);
+  assert.match(messages[1].content, /按中文字符数理解/);
 });
 
 test("generation references only keep qualified manual reference samples", () => {

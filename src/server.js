@@ -55,7 +55,12 @@ import {
   normalizeModelSelectionState
 } from "./model-selection.js";
 import { runCrossModelReview } from "./cross-review.js";
-import { generateNoteCandidates, repairGenerationCandidate, scoreGenerationCandidates } from "./generation-workbench.js";
+import {
+  generateNoteCandidates,
+  improveGenerationBriefing,
+  repairGenerationCandidate,
+  scoreGenerationCandidates
+} from "./generation-workbench.js";
 import { recognizeFeedbackScreenshot, rewritePostForCompliance, suggestFeedbackCandidates } from "./glm.js";
 import { mergeRuleAndSemanticAnalysis, runSemanticReview, runSemanticReviewComparison } from "./semantic-review.js";
 import { filterInnerSpaceTerms } from "./inner-space-terms.js";
@@ -1059,6 +1064,32 @@ async function handleRequest(request, response) {
       memoryContext,
       ...generation,
       ...scored
+    });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/generate-note-briefing") {
+    const payload = await readBody(request);
+    const modelSelection = normalizeModelSelectionState(payload?.modelSelection);
+    const generationModelSelection = modelSelection.generation || modelSelection.rewrite;
+    const brief = payload?.brief && typeof payload?.brief === "object" ? payload.brief : {};
+    const draft = payload?.draft && typeof payload?.draft === "object" ? payload.draft : {};
+    const improved = await improveGenerationBriefing({
+      mode: payload?.mode,
+      brief,
+      draft,
+      modelSelection: generationModelSelection,
+      improveJson: payload?.mockImprovedBriefing
+        ? async () => ({
+            ...(payload.mockImprovedBriefing || {}),
+            provider: "mock",
+            model: "mock-briefing"
+          })
+        : undefined
+    });
+
+    return sendJson(response, 200, {
+      ok: true,
+      ...improved
     });
   }
 

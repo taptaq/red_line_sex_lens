@@ -11,7 +11,7 @@ const defaultKimiEndpoint = "https://api.moonshot.cn/v1/chat/completions";
 const defaultDmxapiEndpoint = "https://www.dmxapi.cn/v1/chat/completions";
 const defaultVisionModel = process.env.GLM_VISION_MODEL || "glm-4.6v";
 const defaultTextModel = process.env.GLM_TEXT_MODEL || "glm-4.6v";
-const defaultKimiTextModel = "kimi-k2.5";
+const defaultKimiTextModel = "kimi-k2.6";
 const defaultFeedbackModel = process.env.GLM_FEEDBACK_MODEL || defaultTextModel || "glm-4.6v";
 const defaultQwenFeedbackModel = process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus-2026-02-15";
 const defaultMiniMaxDmxapiModel = process.env.MINIMAX_DMXAPI_MODEL || "MiniMax-M2.5";
@@ -74,7 +74,7 @@ function getKimiEndpoint() {
 }
 
 function getDefaultKimiTextModel() {
-  return String(process.env.KIMI_TEXT_MODEL || defaultKimiTextModel || "kimi-k2.5").trim();
+  return String(process.env.KIMI_TEXT_MODEL || defaultKimiTextModel || "kimi-k2.6").trim();
 }
 
 function getDefaultQwenDmxapiModel() {
@@ -450,6 +450,55 @@ function escapeControlCharsInsideStrings(text) {
   return result;
 }
 
+function escapeLikelyUnescapedQuotesInsideStrings(text) {
+  const source = String(text || "");
+  let inString = false;
+  let escaped = false;
+  let result = "";
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+
+    if (!inString) {
+      if (char === '"') {
+        inString = true;
+      }
+
+      result += char;
+      continue;
+    }
+
+    if (escaped) {
+      result += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      result += char;
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      const nextSignificant = source.slice(index + 1).match(/\S/)?.[0] || "";
+
+      if (!nextSignificant || [",", "}", "]", ":"].includes(nextSignificant)) {
+        result += char;
+        inString = false;
+        continue;
+      }
+
+      result += '\\"';
+      continue;
+    }
+
+    result += char;
+  }
+
+  return result;
+}
+
 function stripTrailingCommas(text) {
   return String(text || "").replace(/,\s*([}\]])/g, "$1");
 }
@@ -536,7 +585,18 @@ function tryParseJson(text) {
     }
   }
 
-  const repaired = stripTrailingCommas(escapeControlCharsInsideStrings(sanitized));
+  const quoteRepaired = escapeLikelyUnescapedQuotesInsideStrings(sanitized);
+
+  if (quoteRepaired && quoteRepaired !== sanitized) {
+    const reparsedQuotes = extractJsonBlock(quoteRepaired);
+
+    if (reparsedQuotes) {
+      return reparsedQuotes;
+    }
+  }
+
+  const repairedSource = quoteRepaired || sanitized;
+  const repaired = stripTrailingCommas(escapeControlCharsInsideStrings(repairedSource));
 
   if (repaired && repaired !== sanitized) {
     return extractJsonBlock(repaired);
@@ -1108,7 +1168,7 @@ const routedTextProviderConfigs = {
     label: "Kimi",
     officialEndpoint: getKimiEndpoint(),
     officialEnvKey: "KIMI_API_KEY",
-    getOfficialModel: (model) => String(model || process.env.KIMI_TEXT_MODEL || "kimi-k2.5").trim(),
+    getOfficialModel: (model) => String(model || process.env.KIMI_TEXT_MODEL || "kimi-k2.6").trim(),
     getDmxapiModel: () => "",
     dmxapiLabel: "Kimi 官方",
     supportsDmxapi: false
@@ -1194,6 +1254,16 @@ function buildRoutedRequestBodies({ model, temperature, maxTokens, messages, res
         baseRequestBody
       ]
     : [baseRequestBody];
+}
+
+function normalizeTemperatureForRoutedProvider({ provider = "", temperature = 0.2, useDmxapi = false }) {
+  const normalizedProvider = String(provider || "").trim().toLowerCase();
+
+  if (normalizedProvider === "kimi" && !useDmxapi) {
+    return 1;
+  }
+
+  return temperature;
 }
 
 function parseJsonChatResult({ data, candidate, fallbackParser, providerLabel }) {
@@ -1310,9 +1380,14 @@ async function attemptRoutedProviderRoute({
   useDmxapi,
   scene = "unknown"
 }) {
+  const effectiveTemperature = normalizeTemperatureForRoutedProvider({
+    provider,
+    temperature,
+    useDmxapi
+  });
   const requestBodies = buildRoutedRequestBodies({
     model,
-    temperature,
+    temperature: effectiveTemperature,
     maxTokens,
     messages,
     responseFormat,
