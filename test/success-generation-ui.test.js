@@ -1436,16 +1436,25 @@ test("frontend generation result now focuses on a single final draft card instea
   assert.doesNotMatch(appJs, /<span class="meta-pill">final<\/span>/);
   assert.doesNotMatch(appJs, /<div class="generation-candidate-grid">/);
   assert.match(generationSource, /data-action="copy-generation-publish"/);
+  assert.match(generationSource, /封面图 Prompt/);
+  assert.match(generationSource, /data-action="copy-generation-cover-image-prompt"/);
   assert.match(generationSource, /generation-publish-copy-hint/);
+  assert.match(generationSource, /generation-cover-image-prompt-copy-hint/);
   assert.match(generationSource, /repairSummary\.title/);
   assert.match(generationSource, /repairSummary\.description/);
   assert.doesNotMatch(generationSource, /data-action="save-lifecycle-generation"/);
   assert.doesNotMatch(generationSource, /buildPlatformOutcomeActions\("generation"/);
+  assert.match(generationSource, /class="[^"]*\bgeneration-body-reader\b[^"]*"/);
+  assert.match(generationSource, /class="[^"]*\bgeneration-cover-image-prompt-reader\b[^"]*"/);
   assert.match(styles, /\.generation-blocker-box\s*\{/);
   assert.match(styles, /\.generation-blocker-box ul\s*\{/);
+  assert.match(appJs, /if \(action === "copy-generation-cover-image-prompt"\)/);
+  assert.match(styles, /\.generation-candidate-card\.is-recommended\s*\{[\s\S]*overflow:\s*visible;/);
+  assert.match(styles, /\.generation-body-reader\s*\{[\s\S]*max-height:\s*none;[\s\S]*overflow:\s*visible;/);
+  assert.match(styles, /\.generation-cover-image-prompt-reader\s*\{[\s\S]*max-height:\s*16rem;[\s\S]*overflow:\s*auto;/);
   assert.match(
     styles,
-    /\.generation-candidate-card\.is-recommended \.rewrite-body-reader\s*\{[\s\S]*max-height:\s*none;[\s\S]*overflow:\s*visible;/
+    /\.generation-body-reader\s*\{[\s\S]*white-space:\s*pre-wrap;[\s\S]*overflow-wrap:\s*anywhere;/
   );
 });
 

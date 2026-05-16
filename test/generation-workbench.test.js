@@ -6,7 +6,8 @@ import {
   buildGenerationMessages,
   improveGenerationBriefing,
   generateNoteCandidates,
-  normalizeGenerationCandidate
+  normalizeGenerationCandidate,
+  scoreGenerationCandidates
 } from "../src/generation-workbench.js";
 
 async function withEnv(overrides, run) {
@@ -121,7 +122,17 @@ test("buildGenerationMessages includes mode, style profile, success samples, and
   assert.match(combined, /封面文案和标题不要只是重复复述/);
   assert.match(combined, /要自然融入内太空相关元素，整体表达要符合账号主题/);
   assert.match(combined, /尽量把内太空元素落在标题、封面文案、正文开头三者中的至少两处/);
+  assert.match(combined, /封面图 prompt/iu);
+  assert.match(combined, /短文模式/);
+  assert.match(combined, /封面文案/);
+  assert.match(combined, /不露脸的萌系宇航员形象/);
+  assert.match(combined, /长文模式/);
+  assert.match(combined, /无任何文字/);
+  assert.match(combined, /去掉手臂的国旗标识/);
+  assert.match(combined, /3:4/);
+  assert.match(combined, /4:3/);
   assert.match(combined, /请生成 1 个最终候选稿/);
+  assert.match(combined, /coverImagePrompt/);
   assert.doesNotMatch(combined, /请生成 3 个候选/);
 });
 
@@ -254,8 +265,10 @@ test("generateNoteCandidates accepts a flat top-level candidate payload from the
   assert.equal(result.candidates.length, 1);
   assert.equal(result.candidates[0].variant, "final");
   assert.equal(result.candidates[0].title, "扁平标题");
-  assert.equal(result.candidates[0].body, `${"扁平正文".repeat(30)}\n\n🙂✨🫶`);
+  assert.match(result.candidates[0].body, /🙂\n\n✨\n\n🫶$/);
   assert.deepEqual(result.candidates[0].tags, ["沟通", "科普"]);
+  assert.match(result.candidates[0].coverImagePrompt, /封面文案/);
+  assert.match(result.candidates[0].coverImagePrompt, /不露脸的萌系宇航员/);
   assert.equal(result.candidates[0].generationNotes, "模型直接返回扁平结构");
   assert.equal(result.candidates[0].safetyNotes, "保持中性表达");
   assert.deepEqual(result.candidates[0].referencedSampleIds, ["sample-1"]);
@@ -558,7 +571,7 @@ test("generateNoteCandidates repairs lightly broken fenced JSON from DMXAPI text
 
         assert.equal(result.candidates.length, 1);
         assert.equal(result.candidates[0].title, '亲戚来访时,还能开启"内太空漫游"吗？🚀');
-        assert.equal(result.candidates[0].body, "家人们,最近后台好多新晋宇航员在悄悄问我一个问题:\n\n🙂✨🫶");
+        assert.match(result.candidates[0].body, /家人们,最近后台好多新晋宇航员在悄悄问我一个问题:🙂\n\n✨\n\n🫶/);
         assert.deepEqual(result.candidates[0].tags, ["亲密关系沟通", "边界感"]);
         assert.equal(result.modelTrace.provider, "dmxapi_text");
         assert.equal(result.modelTrace.model, "gpt-5.4");
@@ -573,7 +586,21 @@ test("normalizeGenerationCandidate fills missing fields without crashing", () =>
   const candidate = normalizeGenerationCandidate({ title: "标题" }, 1);
   assert.equal(candidate.variant, "natural");
   assert.equal(candidate.body, "");
+  assert.equal(candidate.coverImagePrompt, "");
   assert.deepEqual(candidate.tags, []);
+});
+
+test("normalizeGenerationCandidate keeps cover image prompt when provided", () => {
+  const candidate = normalizeGenerationCandidate(
+    {
+      title: "标题",
+      body: "第一段正文。第二段正文。第三段正文。",
+      coverImagePrompt: "基于正文生成的封面图 prompt"
+    },
+    0
+  );
+
+  assert.equal(candidate.coverImagePrompt, "基于正文生成的封面图 prompt");
 });
 
 test("normalizeGenerationCandidate ensures generated body carries at least three naturally separated emoji", () => {
@@ -631,4 +658,114 @@ test("normalizeGenerationCandidate lightly cleans generated tags", () => {
   );
 
   assert.deepEqual(candidate.tags, ["亲密关系沟通", "关系沟通", "刚确认关系"]);
+});
+
+test("generateNoteCandidates fills a short-mode fallback cover image prompt when model omits it", async () => {
+  const result = await generateNoteCandidates({
+    mode: "from_scratch",
+    brief: {
+      collectionType: "科普",
+      topic: "亲密关系沟通",
+      lengthMode: "short"
+    },
+    generateJson: async () => ({
+      candidate: {
+        variant: "final",
+        title: "亲密关系里最难讲出口的话",
+        body: "正文内容".repeat(220),
+        coverText: "先别急着委屈自己",
+        tags: ["亲密关系", "关系沟通"]
+      },
+      provider: "mock",
+      model: "mock-model"
+    })
+  });
+
+  assert.match(result.candidates[0].coverImagePrompt, /封面文案/);
+  assert.match(result.candidates[0].coverImagePrompt, /不露脸的萌系宇航员/);
+  assert.match(result.candidates[0].coverImagePrompt, /去掉手臂的国旗标识/);
+  assert.match(result.candidates[0].coverImagePrompt, /高反差/);
+  assert.match(result.candidates[0].coverImagePrompt, /吸睛/);
+  assert.match(result.candidates[0].coverImagePrompt, /3:4/);
+  assert.match(result.candidates[0].coverImagePrompt, /亲密关系里最难讲出口的话/);
+});
+
+test("generateNoteCandidates builds a long-mode fallback cover image prompt with no-text vertical-cover requirement", async () => {
+  const result = await generateNoteCandidates({
+    mode: "from_scratch",
+    brief: {
+      collectionType: "科普",
+      topic: "亲密关系沟通",
+      lengthMode: "long"
+    },
+    generateJson: async () => ({
+      candidate: {
+        variant: "final",
+        title: "为什么关系里越解释越容易吵起来",
+        body: "长文正文".repeat(320),
+        coverText: "先停一下再继续说",
+        tags: ["亲密关系", "关系沟通"]
+      },
+      provider: "mock",
+      model: "mock-model"
+    })
+  });
+
+  assert.match(result.candidates[0].coverImagePrompt, /无任何文字/);
+  assert.match(result.candidates[0].coverImagePrompt, /不露脸的萌系宇航员/);
+  assert.match(result.candidates[0].coverImagePrompt, /去掉手臂的国旗标识/);
+  assert.match(result.candidates[0].coverImagePrompt, /4:3/);
+  assert.doesNotMatch(result.candidates[0].coverImagePrompt, /封面文案/);
+});
+
+test("scoreGenerationCandidates preserves previous cover image prompt when repair payload omits it", async () => {
+  let analyzeCount = 0;
+  const candidate = normalizeGenerationCandidate(
+    {
+      id: "candidate-final-1",
+      variant: "final",
+      title: "原标题",
+      body: "正文内容".repeat(220),
+      coverText: "原封面",
+      coverImagePrompt: "旧的封面图 prompt",
+      tags: ["亲密关系", "关系沟通"]
+    },
+    0,
+    { lengthMode: "short" }
+  );
+
+  const result = await scoreGenerationCandidates({
+    candidates: [candidate],
+    brief: { lengthMode: "short" },
+    modelSelection: {},
+    analyzeCandidate: async () => {
+      analyzeCount += 1;
+      if (analyzeCount === 1) {
+        return { finalVerdict: "manual_review", verdict: "manual_review", score: 24, suggestions: ["需要继续收敛"] };
+      }
+
+      return { finalVerdict: "pass", verdict: "pass", score: 82, suggestions: [] };
+    },
+    semanticReviewCandidate: async ({ analysis }) => ({
+      status: "ok",
+      review: { reasons: [] },
+      verdict: analysis.finalVerdict || analysis.verdict
+    }),
+    crossReviewCandidate: async ({ analysis }) => ({
+      aggregate: {
+        recommendedVerdict: analysis.finalVerdict || analysis.verdict,
+        analysisVerdict: analysis.finalVerdict || analysis.verdict,
+        reasons: []
+      }
+    }),
+    repairCandidate: async () => ({
+      title: "修复后标题",
+      body: "修复后正文".repeat(220),
+      coverText: "修复后封面",
+      tags: ["亲密关系", "关系沟通"],
+      rewriteNotes: "只修正文和封面，不返回 cover image prompt"
+    })
+  });
+
+  assert.equal(result.scoredCandidates[0].finalDraft.coverImagePrompt, "旧的封面图 prompt");
 });

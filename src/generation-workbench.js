@@ -25,6 +25,8 @@ const invalidRepairTextContainsPattern =
   /抱歉[，,、 ]?.*(?:补充|提供)|还需要你补充|请(?:先)?补充|请(?:先)?提供|待补(?:充)?|占位/u;
 const invalidRepairTagPattern =
   /^(?:标签待补|待补标签|未生成(?:标签)?|暂无标签|补充标签|占位标签|标签)$/iu;
+const invalidCoverImagePromptPattern =
+  /^(?:未生成(?:封面图(?:\s*prompt)?|提示词)?|待补(?:充)?|暂无(?:内容|结果)?|无|空|n\/a|prompt)$/iu;
 
 function uniqueStrings(items = []) {
   return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
@@ -410,6 +412,61 @@ function isCoverTextTooSimilarToTitle({ title = "", coverText = "" } = {}) {
   return shorter.length >= 4 && longer.includes(shorter);
 }
 
+function isInvalidCoverImagePrompt(value = "") {
+  const normalized = String(value || "").trim();
+
+  if (!normalized) {
+    return true;
+  }
+
+  return invalidCoverImagePromptPattern.test(normalized) || normalized.length < 12;
+}
+
+function shortenCoverImageAnchor(value = "", limit = 72) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, limit);
+}
+
+function buildFallbackCoverImagePrompt({ brief = {}, candidate = {} } = {}) {
+  const lengthMode = String(brief?.lengthMode || "short").trim() === "long" ? "long" : "short";
+  const titleAnchor = shortenCoverImageAnchor(candidate?.title || "");
+  const bodyAnchor = shortenCoverImageAnchor(extractGenerationBodyPrimaryText(candidate?.body || ""), 110);
+  const coverCopy = shortenCoverImageAnchor(candidate?.coverText || candidate?.title || "", 32);
+  const astronautRule = "不露脸的萌系宇航员形象";
+  const textRule = lengthMode === "long" ? "无任何文字" : `封面文案：${coverCopy}`;
+  const ratioRule = lengthMode === "long" ? "画面比例 4:3" : "画面比例 3:4";
+  const promptParts = [
+    "小红书封面图",
+    titleAnchor ? `标题主题：${titleAnchor}` : "",
+    bodyAnchor ? `正文核心：${bodyAnchor}` : "",
+    textRule,
+    astronautRule,
+    "去掉手臂的国旗标识",
+    "高反差",
+    "吸睛",
+    ratioRule,
+    "主体清晰突出",
+    "背景简洁不杂乱",
+    "适合封面裁切"
+  ];
+
+  return promptParts.filter(Boolean).join("，");
+}
+
+function resolveGenerationCoverImagePrompt({ brief = {}, candidate = {} } = {}) {
+  const providedPrompt = String(
+    candidate?.coverImagePrompt || candidate?.cover_image_prompt || candidate?.coverPrompt || ""
+  ).trim();
+
+  if (!isInvalidCoverImagePrompt(providedPrompt)) {
+    return providedPrompt;
+  }
+
+  return buildFallbackCoverImagePrompt({ brief, candidate });
+}
+
 function parseTagReferenceInput(value = "") {
   return uniqueStrings(
     String(value || "")
@@ -545,6 +602,7 @@ export function buildGenerationMessages({
         "不要帮助规避平台审核，不要输出低俗擦边、导流、夸大承诺或教程化敏感内容。",
         "标题一定要吸睛，带一点高反差，但不能低俗、不能标题党过头。",
         "封面文案也要尽可能吸睛、高反差，但要比标题更短、更冲击，像一眼能扫到的封面钩子。",
+        "同时生成一条封面图 prompt，必须基于标题和正文提炼封面元素，输出可直接用于出图的完整描述。",
         "正文要像真人在说话，要有人味、自然感、大白话感，不要像说明书或模板稿。",
         "表达围绕内太空主题展开，敏感词尽量转成自然的内太空黑话表达，但不要为了隐晦而写得难懂。",
         "要自然融入内太空的相关元素，整体表达要符合账号主题。",
@@ -607,9 +665,15 @@ export function buildGenerationMessages({
         "18. 不要把 3-6 个名额都分配给同一层级的大词，除非用户明确要求，否则宽标签尽量控制在 1 个以内。",
         "19. 细分标签优先从具体场景、人群阶段、痛点问题、情绪状态或需求目标里提炼，提升标签的信息量和区分度。",
         "",
+        "封面图 prompt 规则：",
+        "1. 必须基于标题和正文提炼封面元素，不要只写空泛模板。",
+        "2. 短文模式：必须包含封面文案、不露脸的萌系宇航员形象、去掉手臂的国旗标识、高反差、吸睛，并明确画面比例 3:4。",
+        "3. 长文模式：必须包含无任何文字、不露脸的萌系宇航员形象、去掉手臂的国旗标识、高反差、吸睛，并明确画面比例 4:3。",
+        "4. 画面要主体清晰、背景简洁、适合封面裁切，符合小红书封面感。",
+        "",
         "输出格式：",
         "{",
-        '  "candidate": {"variant":"final","title":"标题","body":"正文","coverText":"封面文案","tags":["标签"],"generationNotes":"生成说明","safetyNotes":"安全注意点","referencedSampleIds":["sample-id"]}',
+        '  "candidate": {"variant":"final","title":"标题","body":"正文","coverText":"封面文案","coverImagePrompt":"封面图 prompt","tags":["标签"],"generationNotes":"生成说明","safetyNotes":"安全注意点","referencedSampleIds":["sample-id"]}',
         "}",
         "要求：不要照抄参考样本；直接给出你判断最适合发布的一版最终稿；正文必须完整，不要只给摘要。"
       ].join("\n")
@@ -670,6 +734,7 @@ export function normalizeGenerationCandidate(candidate = {}, index = 0, options 
     title: String(candidate.title || "").trim(),
     body: normalizeGenerationBody(candidate.body || candidate.content || "", options),
     coverText: String(candidate.coverText || "").trim(),
+    coverImagePrompt: String(candidate.coverImagePrompt || candidate.cover_image_prompt || candidate.coverPrompt || "").trim(),
     tags: sanitizeGeneratedTags(candidate.tags),
     generationNotes: String(candidate.generationNotes || candidate.rewriteNotes || "").trim(),
     safetyNotes: String(candidate.safetyNotes || "").trim(),
@@ -720,6 +785,11 @@ function mergeGenerationRepairDraft(previousDraft = {}, rewrite = {}, candidate 
   const nextTitle = pickRepairTextValue(rewrite?.title, previousDraft?.title, candidate?.title);
   const nextBody = pickRepairTextValue(rewrite?.body || rewrite?.content, previousDraft?.body, candidate?.body);
   const nextCoverText = pickRepairTextValue(rewrite?.coverText, previousDraft?.coverText, candidate?.coverText);
+  const nextCoverImagePrompt = pickRepairTextValue(
+    rewrite?.coverImagePrompt || rewrite?.cover_image_prompt || rewrite?.coverPrompt,
+    previousDraft?.coverImagePrompt,
+    candidate?.coverImagePrompt
+  );
   const nextTags = rewriteTags.length >= 2 || !previousTags.length ? rewriteTags : previousTags;
   const nextReferencedSampleIds = uniqueStrings(
     Array.isArray(rewrite?.referencedSampleIds) && rewrite.referencedSampleIds.length
@@ -734,6 +804,7 @@ function mergeGenerationRepairDraft(previousDraft = {}, rewrite = {}, candidate 
     title: nextTitle,
     body: nextBody,
     coverText: nextCoverText,
+    coverImagePrompt: nextCoverImagePrompt,
     tags: nextTags,
     referencedSampleIds: nextReferencedSampleIds,
     generationNotes:
@@ -853,6 +924,8 @@ function looksLikeGenerationCandidatePayload(payload = {}) {
     payload.body,
     payload.content,
     payload.coverText,
+    payload.coverImagePrompt,
+    payload.cover_image_prompt,
     payload.tags,
     payload.generationNotes,
     payload.rewriteNotes,
@@ -1048,6 +1121,13 @@ export async function generateNoteCandidates({
         normalizedCandidate.coverText = repairedCoverText;
       }
     } catch {}
+  }
+
+  if (normalizedCandidate) {
+    normalizedCandidate.coverImagePrompt = resolveGenerationCoverImagePrompt({
+      brief,
+      candidate: normalizedCandidate
+    });
   }
 
   const candidates = normalizedCandidate ? [normalizedCandidate] : [];

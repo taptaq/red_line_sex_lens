@@ -267,6 +267,10 @@ function buildGenerationPublishCopyText(finalDraft = {}) {
   return [body, tagLine].filter(Boolean).join("\n\n");
 }
 
+function buildGenerationCoverImagePromptCopyText(finalDraft = {}) {
+  return String(finalDraft?.coverImagePrompt || "").trim();
+}
+
 async function writeTextToClipboard(text = "") {
   if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
     await navigator.clipboard.writeText(text);
@@ -2303,6 +2307,13 @@ function getSampleLibraryCalibrationPredictionPrefillSource() {
     latestRewrite: appState.latestRewrite || null,
     record: getActiveSampleLibraryCalibrationPrefillRecord()
   });
+}
+
+function buildSampleLibraryCalibrationPredictionFromCurrentState() {
+  return buildSampleLibraryCalibrationPrediction(
+    getSampleLibraryCalibrationPredictionPrefillSource(),
+    getSelectedModelSelections()
+  );
 }
 
 function getSampleLibraryReferenceApplicationState({ recordOverride = null, calibrationOverride = null } = {}) {
@@ -6680,12 +6691,16 @@ function renderGenerationResult(result = {}) {
         </div>
         <strong>${escapeHtml(finalDraft.title || "未生成标题")}</strong>
         <p>${escapeHtml(finalDraft.coverText || "未生成封面文案")}</p>
-        <div class="rewrite-body-reader">${escapeHtml(finalDraft.body || "未生成正文")}</div>
+        <div class="rewrite-body-reader generation-body-reader">${escapeHtml(finalDraft.body || "未生成正文")}</div>
         <p class="helper-text">标签：${escapeHtml(joinCSV(finalDraft.tags) || "未生成")}</p>
         ${repairMarkup}
         ${blockerReasonsMarkup}
         <p class="helper-text">${escapeHtml(finalDraft.generationNotes || displayItem.generationNotes || "暂无生成说明")}</p>
         <p class="helper-text">${escapeHtml(finalDraft.safetyNotes || displayItem.safetyNotes || "暂无安全注意点")}</p>
+        <div class="generation-cover-image-prompt-block">
+          <p class="helper-text">封面图 Prompt</p>
+          <div class="rewrite-body-reader generation-cover-image-prompt-reader">${escapeHtml(finalDraft.coverImagePrompt || "未生成")}</div>
+        </div>
         <div class="item-actions">
           <button
             type="button"
@@ -6696,9 +6711,19 @@ function renderGenerationResult(result = {}) {
           >
             复制发布稿
           </button>
+          <button
+            type="button"
+            class="button button-small button-secondary"
+            data-action="copy-generation-cover-image-prompt"
+            data-candidate-id="${escapeHtml(String(displayItem.id || ""))}"
+            data-candidate-index="${escapeHtml(String(displayIndex))}"
+          >
+            复制封面图 Prompt
+          </button>
         </div>
         <p class="helper-text">复制发布稿会带上正文、#科普 和标签，便于直接粘贴发布。</p>
         <p class="helper-text action-gate-hint" id="generation-publish-copy-hint" aria-live="polite"></p>
+        <p class="helper-text action-gate-hint" id="generation-cover-image-prompt-copy-hint" aria-live="polite"></p>
       </article>
     `
     : '<div class="muted">没有生成结果</div>';
@@ -10542,20 +10567,20 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
-  if (action === "prefill-sample-library-modal-calibration-prediction") {
-    const prefillSource = getSampleLibraryCalibrationPredictionPrefillSource();
-    const requirementMessage = prefillSource.requirementMessage;
+    if (action === "prefill-sample-library-modal-calibration-prediction") {
+      const prefillSource = getSampleLibraryCalibrationPredictionPrefillSource();
+      const requirementMessage = prefillSource.requirementMessage;
 
     if (requirementMessage) {
-      setSampleLibraryCalibrationPrefillMessage(requirementMessage);
+        setSampleLibraryCalibrationPrefillMessage(requirementMessage);
+        return;
+      }
+
+      const prediction = buildSampleLibraryCalibrationPredictionFromCurrentState();
+      setSampleLibraryCalibrationPredictionFields(byId("sample-library-modal-content"), prediction);
+      setSampleLibraryCalibrationPrefillMessage(prefillSource.successMessage || "已预填预判字段。");
       return;
     }
-
-    const prediction = buildSampleLibraryCalibrationPrediction(prefillSource, getSelectedModelSelections());
-    setSampleLibraryCalibrationPredictionFields(byId("sample-library-modal-content"), prediction);
-    setSampleLibraryCalibrationPrefillMessage(prefillSource.successMessage || "已预填预判字段。");
-    return;
-  }
 
   if (action === "apply-sample-library-reference-from-retro") {
     const applyState = getSampleLibraryReferenceApplicationState();
@@ -10822,6 +10847,27 @@ document.addEventListener("click", async (event) => {
 
       if (hintNode) {
         hintNode.textContent = "已复制发布稿：正文、#科普 和标签都带上了。";
+      }
+      return;
+    }
+
+    if (action === "copy-generation-cover-image-prompt") {
+      const resultItem = findGenerationResultCandidate(button.dataset.candidateId, button.dataset.candidateIndex);
+      const finalDraft = resultItem?.finalDraft || resultItem || {};
+      const copyText = buildGenerationCoverImagePromptCopyText(finalDraft);
+      const hintNode = byId("generation-cover-image-prompt-copy-hint");
+
+      if (!copyText) {
+        if (hintNode) {
+          hintNode.textContent = "当前还没有可复制的封面图 Prompt。";
+        }
+        return;
+      }
+
+      await writeTextToClipboard(copyText);
+
+      if (hintNode) {
+        hintNode.textContent = "已复制封面图 Prompt，可直接去出图。";
       }
       return;
     }

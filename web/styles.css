@@ -3489,7 +3489,7 @@ body.modal-open {
 
 .generation-candidate-card.is-recommended {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   color: #fff5df;
   border-color: rgba(242, 208, 140, 0.26);
   background:
@@ -3526,8 +3526,18 @@ body.modal-open {
 .generation-candidate-card.is-recommended .rewrite-body-reader {
   background: rgba(255, 245, 223, 0.08);
   border: 1px solid rgba(255, 245, 223, 0.1);
+}
+
+.generation-body-reader {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   max-height: none;
   overflow: visible;
+}
+
+.generation-cover-image-prompt-reader {
+  max-height: 16rem;
+  overflow: auto;
 }
 
 .generation-repair-banner {
