@@ -828,7 +828,9 @@ export function buildGenerationReferenceMaterialSearchPrompt({ brief = {}, draft
 
 function getKimiReferenceSearchBaseUrl() {
   const raw = String(process.env.KIMI_BASE_URL || defaultKimiBaseUrl).trim() || defaultKimiBaseUrl;
-  return raw.replace(/\/+$/g, "");
+  return raw
+    .replace(/\/+$/g, "")
+    .replace(/\/chat\/completions$/i, "");
 }
 
 function getKimiReferenceSearchApiKey() {
@@ -973,6 +975,7 @@ async function runKimiReferenceSearchChat({
     }
   ];
   const attemptedRoutes = ["kimi-official-web-search"];
+  let sawToolCall = false;
 
   for (let attempt = 0; attempt < 6; attempt += 1) {
     const response = await fetchImpl(`${baseUrl}/chat/completions`, {
@@ -1004,6 +1007,7 @@ async function runKimiReferenceSearchChat({
     messages.push(assistantMessage);
 
     if (Array.isArray(assistantMessage.tool_calls) && assistantMessage.tool_calls.length) {
+      sawToolCall = true;
       for (const toolCall of assistantMessage.tool_calls) {
         messages.push(
           await executeKimiReferenceSearchFiber({
@@ -1016,6 +1020,10 @@ async function runKimiReferenceSearchChat({
       }
 
       continue;
+    }
+
+    if (!sawToolCall) {
+      throw new Error("Kimi 网页检索必须使用 web search 工具完成全网检索，不能直接返回模型自带参考。");
     }
 
     return {

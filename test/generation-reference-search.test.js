@@ -311,3 +311,210 @@ test("generateReferenceMaterials runs the Kimi web-search tool loop and preserve
     }
   }
 });
+
+test("generateReferenceMaterials normalizes a KIMI_BASE_URL ending in /chat/completions", async () => {
+  const originalApiKey = process.env.KIMI_API_KEY;
+  const originalBaseUrl = process.env.KIMI_BASE_URL;
+  const originalModel = process.env.KIMI_TEXT_MODEL;
+  process.env.KIMI_API_KEY = "test-kimi-key";
+  process.env.KIMI_BASE_URL = "https://kimi.test/v1/chat/completions";
+  process.env.KIMI_TEXT_MODEL = "kimi-test-model";
+
+  const responses = [
+    {
+      ok: true,
+      json: async () => ({
+        data: [{ type: "function", function: { name: "web_search" } }]
+      })
+    },
+    {
+      ok: true,
+      json: async () => ({
+        model: "kimi-test-model-live",
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [
+                {
+                  id: "tool-call-1",
+                  type: "function",
+                  function: {
+                    name: "web_search",
+                    arguments: "{\"query\":\"经期能不能用玩具\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      })
+    },
+    {
+      ok: true,
+      json: async () => ({
+        data: {
+          results: [{ title: "网页结果" }],
+          context: { encrypted_output: "cipher-text" }
+        }
+      })
+    },
+    {
+      ok: true,
+      json: async () => ({
+        model: "kimi-test-model-live",
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: JSON.stringify({
+                items: [
+                  {
+                    title: "官方网页参考",
+                    reason: "补足安全边界",
+                    referenceText: "经期使用前要结合身体状态、清洁和不适感判断。",
+                    sourceUrl: "https://example.com/kimi-reference"
+                  }
+                ],
+                message: "已完成全网检索"
+              })
+            }
+          }
+        ]
+      })
+    }
+  ];
+  const requests = [];
+  const fetchImpl = async (url, options = {}) => {
+    requests.push({
+      url,
+      method: options.method || "GET",
+      body: options.body ? JSON.parse(options.body) : null
+    });
+    const next = responses.shift();
+
+    if (!next) {
+      throw new Error(`Unexpected fetch call: ${url}`);
+    }
+
+    return next;
+  };
+
+  try {
+    const result = await generateReferenceMaterials({
+      brief: {
+        briefing: "写经期能不能用玩具，轻松一点"
+      },
+      generateJson: undefined,
+      fetchImpl
+    });
+
+    assert.equal(result.items.length, 1);
+    assert.equal(requests[0].url, "https://kimi.test/v1/formulas/moonshot%2Fweb-search%3Alatest/tools");
+    assert.equal(requests[1].url, "https://kimi.test/v1/chat/completions");
+    assert.equal(requests[2].url, "https://kimi.test/v1/formulas/moonshot%2Fweb-search%3Alatest/fibers");
+    assert.equal(requests[3].url, "https://kimi.test/v1/chat/completions");
+  } finally {
+    if (originalApiKey === undefined) {
+      delete process.env.KIMI_API_KEY;
+    } else {
+      process.env.KIMI_API_KEY = originalApiKey;
+    }
+
+    if (originalBaseUrl === undefined) {
+      delete process.env.KIMI_BASE_URL;
+    } else {
+      process.env.KIMI_BASE_URL = originalBaseUrl;
+    }
+
+    if (originalModel === undefined) {
+      delete process.env.KIMI_TEXT_MODEL;
+    } else {
+      process.env.KIMI_TEXT_MODEL = originalModel;
+    }
+  }
+});
+
+test("generateReferenceMaterials rejects Kimi final JSON when no web search tool call occurred", async () => {
+  const originalApiKey = process.env.KIMI_API_KEY;
+  const originalBaseUrl = process.env.KIMI_BASE_URL;
+  const originalModel = process.env.KIMI_TEXT_MODEL;
+  process.env.KIMI_API_KEY = "test-kimi-key";
+  process.env.KIMI_BASE_URL = "https://kimi.test/v1";
+  process.env.KIMI_TEXT_MODEL = "kimi-test-model";
+
+  const responses = [
+    {
+      ok: true,
+      json: async () => ({
+        data: [{ type: "function", function: { name: "web_search" } }]
+      })
+    },
+    {
+      ok: true,
+      json: async () => ({
+        model: "kimi-test-model-live",
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: JSON.stringify({
+                items: [
+                  {
+                    title: "模型自说自话的参考",
+                    reason: "没有检索也给了答案",
+                    referenceText: "这条结果不该被接受。",
+                    sourceUrl: "https://example.com/not-allowed"
+                  }
+                ]
+              })
+            }
+          }
+        ]
+      })
+    }
+  ];
+
+  const fetchImpl = async (url) => {
+    const next = responses.shift();
+
+    if (!next) {
+      throw new Error(`Unexpected fetch call: ${url}`);
+    }
+
+    return next;
+  };
+
+  try {
+    await assert.rejects(
+      () =>
+        generateReferenceMaterials({
+          brief: {
+            briefing: "写经期能不能用玩具，轻松一点"
+          },
+          generateJson: undefined,
+          fetchImpl
+        }),
+      /必须使用 web search 工具完成全网检索/
+    );
+  } finally {
+    if (originalApiKey === undefined) {
+      delete process.env.KIMI_API_KEY;
+    } else {
+      process.env.KIMI_API_KEY = originalApiKey;
+    }
+
+    if (originalBaseUrl === undefined) {
+      delete process.env.KIMI_BASE_URL;
+    } else {
+      process.env.KIMI_BASE_URL = originalBaseUrl;
+    }
+
+    if (originalModel === undefined) {
+      delete process.env.KIMI_TEXT_MODEL;
+    } else {
+      process.env.KIMI_TEXT_MODEL = originalModel;
+    }
+  }
+});
