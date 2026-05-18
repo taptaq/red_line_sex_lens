@@ -1,9 +1,9 @@
 const MAX_MERGED_TEXT_LENGTH = 12000;
-const MIXED_SOURCE_MERGED_TEXT_LIMIT = Math.floor(MAX_MERGED_TEXT_LENGTH / 2);
 const MAX_IMAGE_COUNT = 5;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_TEXT_FILE_BYTES = 512 * 1024;
 const MAX_TOTAL_BYTES = 12 * 1024 * 1024;
+const MERGED_TEXT_SECTION_SEPARATOR = "\n\n";
 
 function normalizeAssetList(value) {
   return Array.isArray(value) ? value.filter((item) => item && typeof item === "object") : [];
@@ -81,13 +81,25 @@ function balanceMergedTextSections({ materialText = "", uploadedText = "" } = {}
     return cleanedMaterialText;
   }
 
+  const separatorLength = MERGED_TEXT_SECTION_SEPARATOR.length;
+  const availableTextBudget = Math.max(0, MAX_MERGED_TEXT_LENGTH - separatorLength);
+  const materialLength = cleanedMaterialText.length;
+  const uploadedLength = cleanedUploadedText.length;
+  const shorterLength = Math.min(materialLength, uploadedLength);
+  const longerLength = Math.max(materialLength, uploadedLength);
+  const shorterBudget = Math.min(shorterLength, availableTextBudget);
+  const longerBudget = Math.min(longerLength, Math.max(0, availableTextBudget - shorterBudget));
+
+  const materialBudget = materialLength <= uploadedLength ? shorterBudget : longerBudget;
+  const uploadedBudget = uploadedLength <= materialLength ? shorterBudget : longerBudget;
+
   return cleanMergedText(
     [
-      cleanedMaterialText.slice(0, MIXED_SOURCE_MERGED_TEXT_LIMIT),
-      cleanedUploadedText.slice(0, MAX_MERGED_TEXT_LENGTH - MIXED_SOURCE_MERGED_TEXT_LIMIT)
+      cleanedMaterialText.slice(0, materialBudget),
+      cleanedUploadedText.slice(0, uploadedBudget)
     ]
       .filter(Boolean)
-      .join("\n\n")
+      .join(MERGED_TEXT_SECTION_SEPARATOR)
   );
 }
 

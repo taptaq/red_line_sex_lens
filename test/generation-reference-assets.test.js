@@ -73,6 +73,26 @@ test("summarizeGenerationReferenceAssets keeps uploaded text content when materi
   assert.match(result.mergedText, /上传文本结尾标记/);
 });
 
+test("summarizeGenerationReferenceAssets preserves a large uploaded section when materialText is short", async () => {
+  const uploadedText = `${"上".repeat(9000)}上传文本远端尾标`;
+  const result = await summarizeGenerationReferenceAssets({
+    referenceAssets: {
+      materialText: "短手写前缀",
+      images: [],
+      textFiles: [
+        {
+          name: "brief.txt",
+          contentBase64: Buffer.from(uploadedText, "utf8").toString("base64")
+        }
+      ]
+    }
+  });
+
+  assert.equal(result.mergedText.length <= 12000, true);
+  assert.match(result.mergedText, /短手写前缀/);
+  assert.match(result.mergedText, /上传文本远端尾标/);
+});
+
 test("summarizeGenerationReferenceAssets keeps successful image summaries and downgrades failures to warnings", async () => {
   const summarizeCalls = [];
   const result = await summarizeGenerationReferenceAssets({
