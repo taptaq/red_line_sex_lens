@@ -1,4 +1,5 @@
 const MAX_MERGED_TEXT_LENGTH = 12000;
+const MIXED_SOURCE_MERGED_TEXT_LIMIT = Math.floor(MAX_MERGED_TEXT_LENGTH / 2);
 const MAX_IMAGE_COUNT = 5;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_TEXT_FILE_BYTES = 512 * 1024;
@@ -68,6 +69,28 @@ function cleanMergedText(text) {
     .slice(0, MAX_MERGED_TEXT_LENGTH);
 }
 
+function balanceMergedTextSections({ materialText = "", uploadedText = "" } = {}) {
+  const cleanedMaterialText = cleanMergedText(materialText);
+  const cleanedUploadedText = cleanMergedText(uploadedText);
+
+  if (!cleanedMaterialText) {
+    return cleanedUploadedText;
+  }
+
+  if (!cleanedUploadedText) {
+    return cleanedMaterialText;
+  }
+
+  return cleanMergedText(
+    [
+      cleanedMaterialText.slice(0, MIXED_SOURCE_MERGED_TEXT_LIMIT),
+      cleanedUploadedText.slice(0, MAX_MERGED_TEXT_LENGTH - MIXED_SOURCE_MERGED_TEXT_LIMIT)
+    ]
+      .filter(Boolean)
+      .join("\n\n")
+  );
+}
+
 export async function summarizeGenerationReferenceAssets({
   referenceAssets = {},
   summarizeImage = async () => ({ summary: "" }),
@@ -81,7 +104,7 @@ export async function summarizeGenerationReferenceAssets({
   const acceptedImages = [];
   const textFileNames = [];
   const imageFileNames = [];
-  const mergedTextParts = materialText ? [materialText] : [];
+  const uploadedTextParts = [];
   const imageSummaries = [];
   let totalAcceptedBytes = 0;
 
@@ -135,7 +158,7 @@ export async function summarizeGenerationReferenceAssets({
       const decoded = decodeTextFileContent(file);
 
       if (decoded.trim()) {
-        mergedTextParts.push(decoded);
+        uploadedTextParts.push(decoded);
       }
     } catch (error) {
       warnings.push(`Text reference "${fileName}" could not be decoded: ${error instanceof Error ? error.message : "unknown error"}`);
@@ -164,7 +187,10 @@ export async function summarizeGenerationReferenceAssets({
 
   return {
     imageSummaries,
-    mergedText: cleanMergedText(mergedTextParts.join("\n\n")),
+    mergedText: balanceMergedTextSections({
+      materialText,
+      uploadedText: uploadedTextParts.join("\n\n")
+    }),
     textFileNames,
     imageFileNames,
     warnings

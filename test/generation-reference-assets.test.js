@@ -55,6 +55,24 @@ test("summarizeGenerationReferenceAssets merges direct materialText with uploade
   assert.deepEqual(result.warnings, []);
 });
 
+test("summarizeGenerationReferenceAssets keeps uploaded text content when materialText is very long", async () => {
+  const result = await summarizeGenerationReferenceAssets({
+    referenceAssets: {
+      materialText: "手写".repeat(7000),
+      images: [],
+      textFiles: [
+        {
+          name: "brief.txt",
+          contentBase64: Buffer.from("上传文本结尾标记", "utf8").toString("base64")
+        }
+      ]
+    }
+  });
+
+  assert.equal(result.mergedText.length <= 12000, true);
+  assert.match(result.mergedText, /上传文本结尾标记/);
+});
+
 test("summarizeGenerationReferenceAssets keeps successful image summaries and downgrades failures to warnings", async () => {
   const summarizeCalls = [];
   const result = await summarizeGenerationReferenceAssets({

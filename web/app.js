@@ -8481,7 +8481,6 @@ function getGenerationPayload({ referenceAssets, includeReferenceAssets = true }
       collectionType: String(form.get("collectionType") || "").trim(),
       lengthMode: String(form.get("lengthMode") || "short").trim() || "short",
       briefing: String(form.get("briefing") || "").trim(),
-      materialText: String(form.get("materialText") || "").trim(),
       referenceTitle: String(form.get("referenceTitle") || "").trim(),
       topic: "",
       sellingPoints: "",

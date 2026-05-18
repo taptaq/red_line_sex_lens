@@ -1650,6 +1650,55 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(styles, /\.generation-reference-result-card\b/);
 });
 
+test("getGenerationPayload only includes materialText inside referenceAssets for generation requests", async () => {
+  const { appJs } = await readFrontendFiles();
+  const payloadSource = extractSourceBetween(appJs, "function getGenerationPayload(", "async function handleGenerationReferenceImageSelection(");
+
+  class TestFormData {
+    constructor(form) {
+      this.form = form;
+    }
+
+    get(name) {
+      return this.form.values[name];
+    }
+  }
+
+  const formNode = {
+    values: {
+      mode: "from_scratch",
+      collectionType: "科普",
+      lengthMode: "short",
+      briefing: "一句话需求",
+      materialText: "手写素材",
+      referenceTitle: "参考标题",
+      tagReferences: "沟通",
+      draftTitle: "标题",
+      draftBody: "正文"
+    }
+  };
+
+  const getGenerationPayload = new Function(
+    "FormData",
+    "byId",
+    "getSelectedModelSelections",
+    "serializeGenerationReferenceAssets",
+    `${payloadSource}; return getGenerationPayload;`
+  )(
+    TestFormData,
+    () => formNode,
+    () => ({ generation: "auto" }),
+    () => ({ images: [], textFiles: [] })
+  );
+
+  const briefingPayload = getGenerationPayload({ includeReferenceAssets: false });
+  const generationPayload = getGenerationPayload({ referenceAssets: { images: [], textFiles: [] } });
+
+  assert.equal("materialText" in briefingPayload.brief, false);
+  assert.equal("referenceAssets" in briefingPayload, false);
+  assert.equal(generationPayload.referenceAssets.materialText, "手写素材");
+});
+
 test("generation result rendering includes temporary reference warning details when server skips assets", async () => {
   const { appJs } = await readFrontendFiles();
   const generationStart = appJs.indexOf("function generationVariantLabel(");
