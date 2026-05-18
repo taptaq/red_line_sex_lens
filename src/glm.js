@@ -1994,6 +1994,62 @@ export async function recognizeFeedbackScreenshot({ imageDataUrl, mimeType, file
   );
 }
 
+export async function summarizeGenerationReferenceImage({
+  imageDataUrl,
+  mimeType,
+  fileName = "",
+  modelSelection = "auto"
+}) {
+  const provider = String(modelSelection || "").trim().toLowerCase();
+  const providerLabelText = provider === "glm" || provider === "auto" || !provider ? "智谱 GLM" : "智谱 GLM";
+  const { parsed } = await callChatJson({
+    providerConfig: {
+      provider: "glm",
+      label: providerLabelText,
+      envKey: "GLM_API_KEY",
+      endpoint: glmEndpoint
+    },
+    model: defaultVisionModel,
+    temperature: 0.1,
+    maxTokens: 220,
+    missingKeyMessage: "参考图摘要缺少 GLM_API_KEY 环境变量。",
+    scene: "generation_reference_image",
+    messages: [
+      {
+        role: "system",
+        content:
+          "你是生成参考图视觉要点提取助手。你只能根据图片中真实可见的内容总结可用于生成的视觉线索。输出必须是 JSON。"
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "image_url",
+            image_url: {
+              url: ensureImageDataUrl(imageDataUrl, mimeType)
+            }
+          },
+          {
+            type: "text",
+            text: [
+              "这是给文生图或改写生成任务使用的参考图片。",
+              "请只返回 JSON 对象，不要附加解释。",
+              "字段格式：",
+              "{",
+              '  "summary": "一句到两句，提炼构图、主体、姿态、服饰、材质、光线、色调等真正有助于生成的视觉线索；看不清就保守描述"',
+              "}"
+            ].join("\n")
+          }
+        ]
+      }
+    ]
+  });
+
+  return {
+    summary: String(parsed?.summary || "").trim()
+  };
+}
+
 function normalizeRewriteResult(payload, fallbackModel) {
   const source = unwrapRewritePayload(payload);
   const tags = normalizeTagArray(
