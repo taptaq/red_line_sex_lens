@@ -29,7 +29,6 @@ const invalidCoverImagePromptPattern =
   /^(?:未生成(?:封面图(?:\s*prompt)?|提示词)?|待补(?:充)?|暂无(?:内容|结果)?|无|空|n\/a|prompt)$/iu;
 const defaultKimiBaseUrl = "https://api.moonshot.cn/v1";
 const kimiReferenceSearchToolUri = "moonshot/web-search:latest";
-const validReferenceMaterialUrlPattern = /^https?:\/\//i;
 
 function uniqueStrings(items = []) {
   return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
@@ -791,7 +790,7 @@ export function normalizeGenerationReferenceMaterialItems(items = []) {
         item.reason &&
         item.referenceText &&
         item.sourceUrl &&
-        validReferenceMaterialUrlPattern.test(item.sourceUrl)
+        isValidReferenceMaterialSourceUrl(item.sourceUrl)
     )
     .slice(0, 5);
 }
@@ -838,6 +837,15 @@ function getKimiReferenceSearchApiKey() {
 
 function getKimiReferenceSearchModel() {
   return String(process.env.KIMI_TEXT_MODEL || "kimi-k2.6").trim();
+}
+
+function isValidReferenceMaterialSourceUrl(value = "") {
+  try {
+    const url = new URL(String(value || "").trim());
+    return ["http:", "https:"].includes(url.protocol) && Boolean(url.hostname);
+  } catch {
+    return false;
+  }
 }
 
 function buildKimiReferenceSearchHeaders(apiKey) {
@@ -1377,7 +1385,8 @@ export async function generateReferenceMaterials({
   brief = {},
   draft = {},
   modelSelection = "auto",
-  generateJson = generateReferenceMaterialsJsonWithModel
+  generateJson = generateReferenceMaterialsJsonWithModel,
+  fetchImpl
 } = {}) {
   const prompt = buildGenerationReferenceMaterialSearchPrompt({
     brief,
@@ -1385,7 +1394,8 @@ export async function generateReferenceMaterials({
   });
   const payload = await generateJson({
     prompt,
-    modelSelection
+    modelSelection,
+    fetchImpl
   });
   const items = normalizeGenerationReferenceMaterialItems(payload?.items || payload?.references || []);
 

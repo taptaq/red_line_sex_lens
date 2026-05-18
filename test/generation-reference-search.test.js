@@ -104,6 +104,42 @@ test("normalizeGenerationReferenceMaterialItems drops incomplete and invalid can
   ]);
 });
 
+test("normalizeGenerationReferenceMaterialItems drops malformed absolute urls", () => {
+  const items = normalizeGenerationReferenceMaterialItems([
+    {
+      id: "empty-host",
+      title: "空 host",
+      reason: "格式不完整",
+      referenceText: "无效链接",
+      sourceUrl: "https://"
+    },
+    {
+      id: "space-host",
+      title: "空白 host",
+      reason: "格式不完整",
+      referenceText: "无效链接",
+      sourceUrl: "https:// "
+    },
+    {
+      id: "valid-item",
+      title: "有效链接",
+      reason: "格式完整",
+      referenceText: "应当保留",
+      sourceUrl: "https://example.com/ok"
+    }
+  ]);
+
+  assert.deepEqual(items, [
+    {
+      id: "valid-item",
+      title: "有效链接",
+      reason: "格式完整",
+      referenceText: "应当保留",
+      sourceUrl: "https://example.com/ok"
+    }
+  ]);
+});
+
 test("generateReferenceMaterials falls back to payload.references", async () => {
   const result = await generateReferenceMaterials({
     brief: {
@@ -143,4 +179,135 @@ test("normalizeGenerationReferenceMaterialItems caps returned items at 5", () =>
     items.map((item) => item.id),
     ["item-1", "item-2", "item-3", "item-4", "item-5"]
   );
+});
+
+test("generateReferenceMaterials runs the Kimi web-search tool loop and preserves metadata", async () => {
+  const originalApiKey = process.env.KIMI_API_KEY;
+  const originalBaseUrl = process.env.KIMI_BASE_URL;
+  const originalModel = process.env.KIMI_TEXT_MODEL;
+  process.env.KIMI_API_KEY = "test-kimi-key";
+  process.env.KIMI_BASE_URL = "https://kimi.test/v1";
+  process.env.KIMI_TEXT_MODEL = "kimi-test-model";
+
+  const responses = [
+    {
+      ok: true,
+      json: async () => ({
+        data: [{ type: "function", function: { name: "web_search" } }]
+      })
+    },
+    {
+      ok: true,
+      json: async () => ({
+        model: "kimi-test-model-live",
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [
+                {
+                  id: "tool-call-1",
+                  type: "function",
+                  function: {
+                    name: "web_search",
+                    arguments: "{\"query\":\"经期能不能用玩具\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      })
+    },
+    {
+      ok: true,
+      json: async () => ({
+        data: {
+          results: [{ title: "网页结果" }],
+          context: { encrypted_output: "cipher-text" }
+        }
+      })
+    },
+    {
+      ok: true,
+      json: async () => ({
+        model: "kimi-test-model-live",
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: JSON.stringify({
+                items: [
+                  {
+                    title: "官方网页参考",
+                    reason: "补足安全边界",
+                    referenceText: "经期使用前要结合身体状态、清洁和不适感判断。",
+                    sourceUrl: "https://example.com/kimi-reference"
+                  }
+                ],
+                message: "已完成全网检索"
+              })
+            }
+          }
+        ]
+      })
+    }
+  ];
+  const requests = [];
+  const fetchImpl = async (url, options = {}) => {
+    requests.push({
+      url,
+      method: options.method || "GET",
+      body: options.body ? JSON.parse(options.body) : null
+    });
+    const next = responses.shift();
+
+    if (!next) {
+      throw new Error(`Unexpected fetch call: ${url}`);
+    }
+
+    return next;
+  };
+
+  try {
+    const result = await generateReferenceMaterials({
+      brief: {
+        briefing: "写经期能不能用玩具，轻松一点"
+      },
+      generateJson: undefined,
+      fetchImpl
+    });
+
+    assert.equal(result.items.length, 1);
+    assert.equal(result.items[0].title, "官方网页参考");
+    assert.equal(result.message, "已完成全网检索");
+    assert.equal(result.provider, "kimi");
+    assert.equal(result.model, "kimi-test-model-live");
+    assert.equal(result.modelTrace.route, "official");
+    assert.equal(result.modelTrace.routeLabel, "Kimi web search");
+    assert.deepEqual(result.modelTrace.attemptedRoutes, ["kimi-official-web-search"]);
+    assert.equal(requests[0].url, "https://kimi.test/v1/formulas/moonshot%2Fweb-search%3Alatest/tools");
+    assert.equal(requests[1].url, "https://kimi.test/v1/chat/completions");
+    assert.equal(requests[2].url, "https://kimi.test/v1/formulas/moonshot%2Fweb-search%3Alatest/fibers");
+    assert.equal(requests[3].url, "https://kimi.test/v1/chat/completions");
+  } finally {
+    if (originalApiKey === undefined) {
+      delete process.env.KIMI_API_KEY;
+    } else {
+      process.env.KIMI_API_KEY = originalApiKey;
+    }
+
+    if (originalBaseUrl === undefined) {
+      delete process.env.KIMI_BASE_URL;
+    } else {
+      process.env.KIMI_BASE_URL = originalBaseUrl;
+    }
+
+    if (originalModel === undefined) {
+      delete process.env.KIMI_TEXT_MODEL;
+    } else {
+      process.env.KIMI_TEXT_MODEL = originalModel;
+    }
+  }
 });
