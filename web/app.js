@@ -701,6 +701,7 @@ const appState = {
     message: ""
   },
   generationReferenceAssetsPending: Promise.resolve(),
+  generationReferenceAssetsLocked: false,
   sampleLibraryCalibrationReplayResult: null,
   sampleLibraryModal: null,
   lexiconWorkspaceModal: {
@@ -6970,6 +6971,31 @@ async function awaitGenerationReferenceAssetsReady() {
   await appState.generationReferenceAssetsPending;
 }
 
+function serializeGenerationReferenceAssets() {
+  return {
+    images: appState.generationReferenceAssets.images.map((file) => ({
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      dataUrl: file.dataUrl
+    })),
+    textFiles: appState.generationReferenceAssets.textFiles.map((file) => ({
+      name: file.name,
+      contentBase64: file.contentBase64
+    }))
+  };
+}
+
+async function captureGenerationReferenceAssetsForRequest() {
+  appState.generationReferenceAssetsLocked = true;
+  await awaitGenerationReferenceAssetsReady();
+  return serializeGenerationReferenceAssets();
+}
+
+function releaseGenerationReferenceAssetsRequestLock() {
+  appState.generationReferenceAssetsLocked = false;
+}
+
 function resetGenerationReferenceAssets() {
   appState.generationReferenceAssets = {
     images: [],
@@ -8183,7 +8209,7 @@ function addAnalyzeTagOption(tag) {
   }
 }
 
-function getGenerationPayload() {
+function getGenerationPayload({ referenceAssets } = {}) {
   const form = new FormData(byId("generation-workbench-form"));
 
   return {
@@ -8205,24 +8231,21 @@ function getGenerationPayload() {
       body: String(form.get("draftBody") || "").trim()
     },
     modelSelection: getSelectedModelSelections(),
-    referenceAssets: {
-      images: appState.generationReferenceAssets.images.map((file) => ({
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        dataUrl: file.dataUrl
-      })),
-      textFiles: appState.generationReferenceAssets.textFiles.map((file) => ({
-        name: file.name,
-        contentBase64: file.contentBase64
-      }))
-    }
+    referenceAssets: referenceAssets || serializeGenerationReferenceAssets()
   };
 }
 
 async function handleGenerationReferenceImageSelection(event) {
   const input = event?.currentTarget;
   const selectedFiles = Array.from(input?.files || []);
+
+  if (appState.generationReferenceAssetsLocked) {
+    if (input) {
+      input.value = "";
+    }
+    return;
+  }
+
   const operation = () => readGenerationReferenceImageFiles(selectedFiles)
     .then(({ files: selectedImages, failedCount }) => {
       const currentImages = Array.isArray(appState.generationReferenceAssets?.images)
@@ -8266,6 +8289,14 @@ async function handleGenerationReferenceImageSelection(event) {
 async function handleGenerationReferenceTextSelection(event) {
   const input = event?.currentTarget;
   const selectedFiles = Array.from(input?.files || []);
+
+  if (appState.generationReferenceAssetsLocked) {
+    if (input) {
+      input.value = "";
+    }
+    return;
+  }
+
   const operation = () => readGenerationReferenceTextFiles(selectedFiles)
     .then(({ files: selectedTextFiles, failedCount }) => {
       appState.generationReferenceAssets = {
@@ -8297,6 +8328,10 @@ function removeGenerationReferenceAsset(kind, index) {
   const numericIndex = Number(index);
 
   if (!Number.isInteger(numericIndex) || numericIndex < 0) {
+    return;
+  }
+
+  if (appState.generationReferenceAssetsLocked) {
     return;
   }
 
@@ -9598,8 +9633,8 @@ async function improveGenerationBriefingFromCurrentInput() {
   }
 
   try {
-    await awaitGenerationReferenceAssetsReady();
-    const payload = getGenerationPayload();
+    const referenceAssets = await captureGenerationReferenceAssetsForRequest();
+    const payload = getGenerationPayload({ referenceAssets });
     const result = await apiJson("/api/generate-note-briefing", {
       method: "POST",
       body: JSON.stringify(payload)
@@ -9623,6 +9658,7 @@ async function improveGenerationBriefingFromCurrentInput() {
       resultNode.textContent = error.message || "AI 润色优化失败";
     }
   } finally {
+    releaseGenerationReferenceAssetsRequestLock();
     setButtonBusy(button, false);
     syncGenerationActions();
   }
@@ -9642,8 +9678,8 @@ byId("generation-workbench-form").addEventListener("submit", async (event) => {
   byId("generation-result").innerHTML = '<div class="result-card-shell muted">正在生成并评分候选稿...</div>';
 
   try {
-    await awaitGenerationReferenceAssetsReady();
-    const payload = getGenerationPayload();
+    const referenceAssets = await captureGenerationReferenceAssetsForRequest();
+    const payload = getGenerationPayload({ referenceAssets });
     const result = await apiJson("/api/generate-note", {
       method: "POST",
       body: JSON.stringify(payload)
@@ -9660,6 +9696,7 @@ byId("generation-workbench-form").addEventListener("submit", async (event) => {
       <div class="result-card-shell muted">${escapeHtml(error.message || "生成候选稿失败")}</div>
     `;
   } finally {
+    releaseGenerationReferenceAssetsRequestLock();
     setButtonBusy(submitButton, false);
   }
 });

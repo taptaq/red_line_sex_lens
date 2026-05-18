@@ -1598,10 +1598,14 @@ test("frontend exposes temporary generation reference asset uploads and payload 
 
   assert.match(appJs, /generationReferenceAssets:\s*\{\s*images:\s*\[\],\s*textFiles:\s*\[\],\s*message:\s*""\s*\}/);
   assert.match(appJs, /generationReferenceAssetsPending:\s*Promise\.resolve\(\)/);
+  assert.match(appJs, /generationReferenceAssetsLocked:\s*false/);
   assert.match(appJs, /async function readGenerationReferenceImageFiles\s*\(/);
   assert.match(appJs, /async function readGenerationReferenceTextFiles\s*\(/);
   assert.match(appJs, /Promise\.allSettled\(/);
   assert.match(appJs, /async function awaitGenerationReferenceAssetsReady\s*\(/);
+  assert.match(appJs, /function serializeGenerationReferenceAssets\s*\(/);
+  assert.match(appJs, /async function captureGenerationReferenceAssetsForRequest\s*\(/);
+  assert.match(appJs, /function releaseGenerationReferenceAssetsRequestLock\s*\(/);
   assert.match(appJs, /function resetGenerationReferenceAssets\s*\(/);
   assert.match(appJs, /function renderGenerationReferenceAssets\s*\(/);
   assert.match(appJs, /const selectedFiles = Array\.from\(input\?\.files \|\| \[\]\)/);
@@ -1609,10 +1613,9 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(appJs, /const operation = \(\) => readGenerationReferenceTextFiles/);
   assert.match(appJs, /appState\.generationReferenceAssetsPending = appState\.generationReferenceAssetsPending\.catch\(\(\) => \{\}\)\.then\(operation\)/);
   assert.match(appJs, /input\.value = ""/);
-  assert.match(appJs, /await awaitGenerationReferenceAssetsReady\(\);[\s\S]*const payload = getGenerationPayload\(\);[\s\S]*\/api\/generate-note-briefing/);
-  assert.match(appJs, /await awaitGenerationReferenceAssetsReady\(\);[\s\S]*const payload = getGenerationPayload\(\);[\s\S]*\/api\/generate-note[\s\S]*resetGenerationReferenceAssets\(\)/);
-  assert.match(appJs, /referenceAssets:\s*\{\s*images:\s*appState\.generationReferenceAssets\.images\.map\(/);
-  assert.match(appJs, /textFiles:\s*appState\.generationReferenceAssets\.textFiles\.map\(/);
+  assert.match(appJs, /const referenceAssets = await captureGenerationReferenceAssetsForRequest\(\);[\s\S]*const payload = getGenerationPayload\(\{ referenceAssets \}\);[\s\S]*\/api\/generate-note-briefing[\s\S]*releaseGenerationReferenceAssetsRequestLock\(\)/);
+  assert.match(appJs, /const referenceAssets = await captureGenerationReferenceAssetsForRequest\(\);[\s\S]*const payload = getGenerationPayload\(\{ referenceAssets \}\);[\s\S]*\/api\/generate-note[\s\S]*resetGenerationReferenceAssets\(\)[\s\S]*releaseGenerationReferenceAssetsRequestLock\(\)/);
+  assert.match(appJs, /referenceAssets:\s*referenceAssets \|\| serializeGenerationReferenceAssets\(\)/);
 
   assert.match(styles, /\.generation-reference-assets\b/);
   assert.match(styles, /\.generation-reference-files\b/);
@@ -1897,4 +1900,184 @@ return {
     "expected text selections to use queued file snapshots instead of the live input control"
   );
   assert.equal(input.value, "");
+});
+
+test("generation reference request capture freezes image assets against later mutation", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const generationHelpersSource = extractSourceBetween(
+    appJs,
+    "async function readGenerationReferenceImageFiles(",
+    "function syncGenerationModeFields()"
+  );
+
+  const appState = {
+    generationReferenceAssets: {
+      images: [{ name: "seed-image", type: "image/png", size: 1, dataUrl: "data:seed-image" }],
+      textFiles: [],
+      message: ""
+    },
+    generationReferenceAssetsPending: Promise.resolve(),
+    generationReferenceAssetsLocked: false
+  };
+  const deferred = new Map();
+  const helpers = new Function(
+    "appState",
+    "GENERATION_REFERENCE_IMAGE_LIMIT",
+    "fileToDataUrl",
+    "fileToBase64",
+    "renderGenerationReferenceAssets",
+    "escapeHtml",
+    "byId",
+    "awaitGenerationReferenceAssetsReady",
+    "getGenerationRequirementMessage",
+    "syncGenerationActions",
+    "setButtonBusy",
+    `${generationHelpersSource}
+return {
+  handleGenerationReferenceImageSelection,
+  removeGenerationReferenceAsset,
+  captureGenerationReferenceAssetsForRequest,
+  releaseGenerationReferenceAssetsRequestLock
+};`
+  )(
+    appState,
+    5,
+    async (file) =>
+      new Promise((resolve) => {
+        deferred.set(file.name, { resolve });
+      }),
+    async () => {
+      throw new Error("text files not used in this test");
+    },
+    () => {},
+    (value) => String(value || ""),
+    () => null,
+    async () => {
+      await appState.generationReferenceAssetsPending;
+    },
+    () => "",
+    () => {},
+    () => {}
+  );
+
+  const input = {
+    files: [{ name: "A1" }, { name: "A2" }],
+    value: "pending-images"
+  };
+  const selectionPromise = helpers.handleGenerationReferenceImageSelection({ currentTarget: input });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  const capturePromise = helpers.captureGenerationReferenceAssetsForRequest();
+  assert.equal(appState.generationReferenceAssetsLocked, true, "request capture should lock synchronously");
+
+  helpers.removeGenerationReferenceAsset("image", 0);
+  const lockedInput = {
+    files: [{ name: "B1" }],
+    value: "locked-images"
+  };
+  const lockedSelectionPromise = helpers.handleGenerationReferenceImageSelection({ currentTarget: lockedInput });
+
+  deferred.get("A1").resolve("data:A1");
+  deferred.get("A2").resolve("data:A2");
+  await selectionPromise;
+
+  const captured = await capturePromise;
+  await lockedSelectionPromise;
+
+  assert.deepEqual(captured.images.map((file) => file.name), ["seed-image", "A1", "A2"]);
+  assert.equal(appState.generationReferenceAssetsLocked, true);
+  assert.deepEqual(appState.generationReferenceAssets.images.map((file) => file.name), ["seed-image", "A1", "A2"]);
+  assert.equal(lockedInput.value, "");
+
+  helpers.releaseGenerationReferenceAssetsRequestLock();
+  assert.equal(appState.generationReferenceAssetsLocked, false);
+});
+
+test("generation reference request capture freezes text assets against later mutation", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const generationHelpersSource = extractSourceBetween(
+    appJs,
+    "async function readGenerationReferenceImageFiles(",
+    "function syncGenerationModeFields()"
+  );
+
+  const appState = {
+    generationReferenceAssets: {
+      images: [],
+      textFiles: [{ name: "seed-text", contentBase64: "base64:seed-text" }],
+      message: ""
+    },
+    generationReferenceAssetsPending: Promise.resolve(),
+    generationReferenceAssetsLocked: false
+  };
+  const deferred = new Map();
+  const helpers = new Function(
+    "appState",
+    "GENERATION_REFERENCE_IMAGE_LIMIT",
+    "fileToDataUrl",
+    "fileToBase64",
+    "renderGenerationReferenceAssets",
+    "escapeHtml",
+    "byId",
+    "awaitGenerationReferenceAssetsReady",
+    "getGenerationRequirementMessage",
+    "syncGenerationActions",
+    "setButtonBusy",
+    `${generationHelpersSource}
+return {
+  handleGenerationReferenceTextSelection,
+  captureGenerationReferenceAssetsForRequest,
+  releaseGenerationReferenceAssetsRequestLock
+};`
+  )(
+    appState,
+    5,
+    async () => {
+      throw new Error("images not used in this test");
+    },
+    async (file) =>
+      new Promise((resolve) => {
+        deferred.set(file.name, { resolve });
+      }),
+    () => {},
+    (value) => String(value || ""),
+    () => null,
+    async () => {
+      await appState.generationReferenceAssetsPending;
+    },
+    () => "",
+    () => {},
+    () => {}
+  );
+
+  const input = {
+    files: [{ name: "T1" }],
+    value: "pending-text"
+  };
+  const selectionPromise = helpers.handleGenerationReferenceTextSelection({ currentTarget: input });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  const capturePromise = helpers.captureGenerationReferenceAssetsForRequest();
+  assert.equal(appState.generationReferenceAssetsLocked, true, "text capture should lock synchronously");
+
+  const lockedInput = {
+    files: [{ name: "T2" }],
+    value: "locked-text"
+  };
+  const lockedSelectionPromise = helpers.handleGenerationReferenceTextSelection({ currentTarget: lockedInput });
+
+  deferred.get("T1").resolve("base64:T1");
+  await selectionPromise;
+
+  const captured = await capturePromise;
+  await lockedSelectionPromise;
+
+  assert.deepEqual(captured.textFiles.map((file) => file.name), ["seed-text", "T1"]);
+  assert.deepEqual(appState.generationReferenceAssets.textFiles.map((file) => file.name), ["seed-text", "T1"]);
+  assert.equal(lockedInput.value, "");
+
+  helpers.releaseGenerationReferenceAssetsRequestLock();
+  assert.equal(appState.generationReferenceAssetsLocked, false);
 });
