@@ -1599,6 +1599,9 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(appJs, /generationReferenceAssets:\s*\{\s*images:\s*\[\],\s*textFiles:\s*\[\],\s*message:\s*""\s*\}/);
   assert.match(appJs, /generationReferenceAssetsPending:\s*Promise\.resolve\(\)/);
   assert.match(appJs, /generationReferenceAssetsLocked:\s*false/);
+  assert.match(appJs, /const GENERATION_REFERENCE_IMAGE_MAX_FILE_BYTES = 4 \* 1024 \* 1024/);
+  assert.match(appJs, /const GENERATION_REFERENCE_TEXT_MAX_FILE_BYTES = 512 \* 1024/);
+  assert.match(appJs, /const GENERATION_REFERENCE_TOTAL_MAX_BYTES = 12 \* 1024 \* 1024/);
   assert.match(appJs, /async function readGenerationReferenceImageFiles\s*\(/);
   assert.match(appJs, /async function readGenerationReferenceTextFiles\s*\(/);
   assert.match(appJs, /Promise\.allSettled\(/);
@@ -1606,9 +1609,11 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(appJs, /function serializeGenerationReferenceAssets\s*\(/);
   assert.match(appJs, /async function captureGenerationReferenceAssetsForRequest\s*\(/);
   assert.match(appJs, /function releaseGenerationReferenceAssetsRequestLock\s*\(/);
+  assert.match(appJs, /function getGenerationReferenceAssetsTotalBytes\s*\(/);
   assert.match(appJs, /function resetGenerationReferenceAssets\s*\(/);
   assert.match(appJs, /function renderGenerationReferenceAssets\s*\(/);
   assert.match(appJs, /const selectedFiles = Array\.from\(input\?\.files \|\| \[\]\)/);
+  assert.match(appJs, /if \(input\) \{\s*input\.value = "";\s*\}\s*\n\s*if \(appState\.generationReferenceAssetsLocked\)/);
   assert.match(appJs, /const operation = \(\) => readGenerationReferenceImageFiles/);
   assert.match(appJs, /const operation = \(\) => readGenerationReferenceTextFiles/);
   assert.match(appJs, /appState\.generationReferenceAssetsPending = appState\.generationReferenceAssetsPending\.catch\(\(\) => \{\}\)\.then\(operation\)/);
@@ -1659,6 +1664,9 @@ test("generation reference image selections serialize deterministically under th
   const submitHandler = new Function(
     "appState",
     "GENERATION_REFERENCE_IMAGE_LIMIT",
+    "GENERATION_REFERENCE_IMAGE_MAX_FILE_BYTES",
+    "GENERATION_REFERENCE_TEXT_MAX_FILE_BYTES",
+    "GENERATION_REFERENCE_TOTAL_MAX_BYTES",
     "fileToDataUrl",
     "fileToBase64",
     "renderGenerationReferenceAssets",
@@ -1675,6 +1683,9 @@ return {
   )(
     appState,
     5,
+    4 * 1024 * 1024,
+    512 * 1024,
+    12 * 1024 * 1024,
     async (file) =>
       new Promise((resolve, reject) => {
         deferred.set(file.name, { resolve, reject });
@@ -1759,6 +1770,9 @@ test("generation reference image handler snapshots same-input reselection before
   const helpers = new Function(
     "appState",
     "GENERATION_REFERENCE_IMAGE_LIMIT",
+    "GENERATION_REFERENCE_IMAGE_MAX_FILE_BYTES",
+    "GENERATION_REFERENCE_TEXT_MAX_FILE_BYTES",
+    "GENERATION_REFERENCE_TOTAL_MAX_BYTES",
     "fileToDataUrl",
     "fileToBase64",
     "renderGenerationReferenceAssets",
@@ -1775,6 +1789,9 @@ return {
   )(
     appState,
     5,
+    4 * 1024 * 1024,
+    512 * 1024,
+    12 * 1024 * 1024,
     async (file) =>
       new Promise((resolve) => {
         deferred.set(file.name, { resolve });
@@ -1844,6 +1861,9 @@ test("generation reference text handler snapshots files before queued execution"
   const helpers = new Function(
     "appState",
     "GENERATION_REFERENCE_IMAGE_LIMIT",
+    "GENERATION_REFERENCE_IMAGE_MAX_FILE_BYTES",
+    "GENERATION_REFERENCE_TEXT_MAX_FILE_BYTES",
+    "GENERATION_REFERENCE_TOTAL_MAX_BYTES",
     "fileToDataUrl",
     "fileToBase64",
     "renderGenerationReferenceAssets",
@@ -1860,6 +1880,9 @@ return {
   )(
     appState,
     5,
+    4 * 1024 * 1024,
+    512 * 1024,
+    12 * 1024 * 1024,
     async () => {
       throw new Error("images not used in this test");
     },
@@ -1923,6 +1946,9 @@ test("generation reference request capture freezes image assets against later mu
   const helpers = new Function(
     "appState",
     "GENERATION_REFERENCE_IMAGE_LIMIT",
+    "GENERATION_REFERENCE_IMAGE_MAX_FILE_BYTES",
+    "GENERATION_REFERENCE_TEXT_MAX_FILE_BYTES",
+    "GENERATION_REFERENCE_TOTAL_MAX_BYTES",
     "fileToDataUrl",
     "fileToBase64",
     "renderGenerationReferenceAssets",
@@ -1942,6 +1968,9 @@ return {
   )(
     appState,
     5,
+    4 * 1024 * 1024,
+    512 * 1024,
+    12 * 1024 * 1024,
     async (file) =>
       new Promise((resolve) => {
         deferred.set(file.name, { resolve });
@@ -2015,6 +2044,9 @@ test("generation reference request capture freezes text assets against later mut
   const helpers = new Function(
     "appState",
     "GENERATION_REFERENCE_IMAGE_LIMIT",
+    "GENERATION_REFERENCE_IMAGE_MAX_FILE_BYTES",
+    "GENERATION_REFERENCE_TEXT_MAX_FILE_BYTES",
+    "GENERATION_REFERENCE_TOTAL_MAX_BYTES",
     "fileToDataUrl",
     "fileToBase64",
     "renderGenerationReferenceAssets",
@@ -2033,6 +2065,9 @@ return {
   )(
     appState,
     5,
+    4 * 1024 * 1024,
+    512 * 1024,
+    12 * 1024 * 1024,
     async () => {
       throw new Error("images not used in this test");
     },
@@ -2078,6 +2113,169 @@ return {
   assert.deepEqual(appState.generationReferenceAssets.textFiles.map((file) => file.name), ["seed-text", "T1"]);
   assert.equal(lockedInput.value, "");
 
+  helpers.releaseGenerationReferenceAssetsRequestLock();
+  assert.equal(appState.generationReferenceAssetsLocked, false);
+});
+
+test("generation reference image handler keeps successful files from a mixed batch and clears input immediately", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const generationHelpersSource = extractSourceBetween(
+    appJs,
+    "async function readGenerationReferenceImageFiles(",
+    "function syncGenerationModeFields()"
+  );
+
+  const appState = {
+    generationReferenceAssets: {
+      images: [],
+      textFiles: [],
+      message: ""
+    },
+    generationReferenceAssetsPending: Promise.resolve(),
+    generationReferenceAssetsLocked: false
+  };
+  const deferred = new Map();
+  const input = {
+    files: [{ name: "good-image", size: 1024 }, { name: "bad-image", size: 1024 }],
+    value: "selected-images"
+  };
+  const helpers = new Function(
+    "appState",
+    "GENERATION_REFERENCE_IMAGE_LIMIT",
+    "GENERATION_REFERENCE_IMAGE_MAX_FILE_BYTES",
+    "GENERATION_REFERENCE_TEXT_MAX_FILE_BYTES",
+    "GENERATION_REFERENCE_TOTAL_MAX_BYTES",
+    "fileToDataUrl",
+    "fileToBase64",
+    "renderGenerationReferenceAssets",
+    "escapeHtml",
+    "byId",
+    "awaitGenerationReferenceAssetsReady",
+    "getGenerationRequirementMessage",
+    "syncGenerationActions",
+    "setButtonBusy",
+    `${generationHelpersSource}
+return {
+  handleGenerationReferenceImageSelection
+};`
+  )(
+    appState,
+    5,
+    4 * 1024 * 1024,
+    512 * 1024,
+    12 * 1024 * 1024,
+    async (file) =>
+      new Promise((resolve, reject) => {
+        deferred.set(file.name, { resolve, reject });
+      }),
+    async () => {
+      throw new Error("text files not used in this test");
+    },
+    () => {},
+    (value) => String(value || ""),
+    () => null,
+    async () => {
+      await appState.generationReferenceAssetsPending;
+    },
+    () => "",
+    () => {},
+    () => {}
+  );
+
+  const selectionPromise = helpers.handleGenerationReferenceImageSelection({ currentTarget: input });
+  assert.equal(input.value, "", "expected image input to clear immediately after snapshotting");
+  await Promise.resolve();
+  await Promise.resolve();
+
+  deferred.get("good-image").resolve("data:good-image");
+  deferred.get("bad-image").reject(new Error("read failed"));
+  await selectionPromise;
+
+  assert.deepEqual(appState.generationReferenceAssets.images.map((file) => file.name), ["good-image"]);
+  assert.match(appState.generationReferenceAssets.message, /部分参考图片读取失败/);
+});
+
+test("generation reference text path stays stable after a zero-success batch and request capture sees no phantom files", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const generationHelpersSource = extractSourceBetween(
+    appJs,
+    "async function readGenerationReferenceImageFiles(",
+    "function syncGenerationModeFields()"
+  );
+
+  const appState = {
+    generationReferenceAssets: {
+      images: [],
+      textFiles: [],
+      message: ""
+    },
+    generationReferenceAssetsPending: Promise.resolve(),
+    generationReferenceAssetsLocked: false
+  };
+  const deferred = new Map();
+  const input = {
+    files: [{ name: "bad-text", size: 1024 }],
+    value: "selected-text"
+  };
+  const helpers = new Function(
+    "appState",
+    "GENERATION_REFERENCE_IMAGE_LIMIT",
+    "GENERATION_REFERENCE_IMAGE_MAX_FILE_BYTES",
+    "GENERATION_REFERENCE_TEXT_MAX_FILE_BYTES",
+    "GENERATION_REFERENCE_TOTAL_MAX_BYTES",
+    "fileToDataUrl",
+    "fileToBase64",
+    "renderGenerationReferenceAssets",
+    "escapeHtml",
+    "byId",
+    "awaitGenerationReferenceAssetsReady",
+    "getGenerationRequirementMessage",
+    "syncGenerationActions",
+    "setButtonBusy",
+    `${generationHelpersSource}
+return {
+  handleGenerationReferenceTextSelection,
+  captureGenerationReferenceAssetsForRequest,
+  releaseGenerationReferenceAssetsRequestLock
+};`
+  )(
+    appState,
+    5,
+    4 * 1024 * 1024,
+    512 * 1024,
+    12 * 1024 * 1024,
+    async () => {
+      throw new Error("images not used in this test");
+    },
+    async (file) =>
+      new Promise((resolve, reject) => {
+        deferred.set(file.name, { resolve, reject });
+      }),
+    () => {},
+    (value) => String(value || ""),
+    () => null,
+    async () => {
+      await appState.generationReferenceAssetsPending;
+    },
+    () => "",
+    () => {},
+    () => {}
+  );
+
+  const selectionPromise = helpers.handleGenerationReferenceTextSelection({ currentTarget: input });
+  assert.equal(input.value, "", "expected text input to clear immediately after snapshotting");
+  await Promise.resolve();
+  await Promise.resolve();
+
+  deferred.get("bad-text").reject(new Error("read failed"));
+  await selectionPromise;
+
+  assert.deepEqual(appState.generationReferenceAssets.textFiles, []);
+  assert.match(appState.generationReferenceAssets.message, /部分参考文本读取失败|参考文本读取失败/);
+
+  const captured = await helpers.captureGenerationReferenceAssetsForRequest();
+  assert.deepEqual(captured, { images: [], textFiles: [] });
+  assert.equal(appState.generationReferenceAssetsLocked, true);
   helpers.releaseGenerationReferenceAssetsRequestLock();
   assert.equal(appState.generationReferenceAssetsLocked, false);
 });
