@@ -1604,6 +1604,7 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(appJs, /async function awaitGenerationReferenceAssetsReady\s*\(/);
   assert.match(appJs, /function resetGenerationReferenceAssets\s*\(/);
   assert.match(appJs, /function renderGenerationReferenceAssets\s*\(/);
+  assert.match(appJs, /const selectedFiles = Array\.from\(input\?\.files \|\| \[\]\)/);
   assert.match(appJs, /const operation = \(\) => readGenerationReferenceImageFiles/);
   assert.match(appJs, /const operation = \(\) => readGenerationReferenceTextFiles/);
   assert.match(appJs, /appState\.generationReferenceAssetsPending = appState\.generationReferenceAssetsPending\.catch\(\(\) => \{\}\)\.then\(operation\)/);
@@ -1729,4 +1730,171 @@ return {
   );
   assert.equal(inputA.value, "");
   assert.equal(inputB.value, "");
+});
+
+test("generation reference image handler snapshots same-input reselection before queueing", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const generationHelpersSource = extractSourceBetween(
+    appJs,
+    "async function readGenerationReferenceImageFiles(",
+    "function syncGenerationModeFields()"
+  );
+
+  const appState = {
+    generationReferenceAssets: {
+      images: [],
+      textFiles: [],
+      message: ""
+    },
+    generationReferenceAssetsPending: Promise.resolve()
+  };
+  const deferred = new Map();
+  const input = {
+    files: [{ name: "A1" }, { name: "A2" }, { name: "A3" }],
+    value: "first-batch"
+  };
+  const helpers = new Function(
+    "appState",
+    "GENERATION_REFERENCE_IMAGE_LIMIT",
+    "fileToDataUrl",
+    "fileToBase64",
+    "renderGenerationReferenceAssets",
+    "escapeHtml",
+    "byId",
+    "awaitGenerationReferenceAssetsReady",
+    "getGenerationRequirementMessage",
+    "syncGenerationActions",
+    "setButtonBusy",
+    `${generationHelpersSource}
+return {
+  handleGenerationReferenceImageSelection
+};`
+  )(
+    appState,
+    5,
+    async (file) =>
+      new Promise((resolve) => {
+        deferred.set(file.name, { resolve });
+      }),
+    async () => {
+      throw new Error("text files not used in this test");
+    },
+    () => {},
+    (value) => String(value || ""),
+    () => null,
+    async () => {
+      await appState.generationReferenceAssetsPending;
+    },
+    () => "",
+    () => {},
+    () => {}
+  );
+
+  const firstPromise = helpers.handleGenerationReferenceImageSelection({ currentTarget: input });
+  input.files = [{ name: "B1" }, { name: "B2" }];
+  input.value = "second-batch";
+  const secondPromise = helpers.handleGenerationReferenceImageSelection({ currentTarget: input });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  deferred.get("A1").resolve("data:A1");
+  deferred.get("A2").resolve("data:A2");
+  deferred.get("A3").resolve("data:A3");
+  await firstPromise;
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(deferred.has("B1"), true, "expected queued second image batch to start from its snapshot after first batch");
+
+  deferred.get("B1").resolve("data:B1");
+  deferred.get("B2").resolve("data:B2");
+  await secondPromise;
+
+  assert.deepEqual(
+    appState.generationReferenceAssets.images.map((file) => file.name),
+    ["A1", "A2", "A3", "B1", "B2"],
+    "expected second batch on the same input to be preserved from the queued snapshot"
+  );
+  assert.equal(input.value, "");
+});
+
+test("generation reference text handler snapshots files before queued execution", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const generationHelpersSource = extractSourceBetween(
+    appJs,
+    "async function readGenerationReferenceImageFiles(",
+    "function syncGenerationModeFields()"
+  );
+
+  const appState = {
+    generationReferenceAssets: {
+      images: [],
+      textFiles: [],
+      message: ""
+    },
+    generationReferenceAssetsPending: Promise.resolve()
+  };
+  const deferred = new Map();
+  const input = {
+    files: [{ name: "T1" }],
+    value: "first-text"
+  };
+  const helpers = new Function(
+    "appState",
+    "GENERATION_REFERENCE_IMAGE_LIMIT",
+    "fileToDataUrl",
+    "fileToBase64",
+    "renderGenerationReferenceAssets",
+    "escapeHtml",
+    "byId",
+    "awaitGenerationReferenceAssetsReady",
+    "getGenerationRequirementMessage",
+    "syncGenerationActions",
+    "setButtonBusy",
+    `${generationHelpersSource}
+return {
+  handleGenerationReferenceTextSelection
+};`
+  )(
+    appState,
+    5,
+    async () => {
+      throw new Error("images not used in this test");
+    },
+    async (file) =>
+      new Promise((resolve) => {
+        deferred.set(file.name, { resolve });
+      }),
+    () => {},
+    (value) => String(value || ""),
+    () => null,
+    async () => {
+      await appState.generationReferenceAssetsPending;
+    },
+    () => "",
+    () => {},
+    () => {}
+  );
+
+  const firstPromise = helpers.handleGenerationReferenceTextSelection({ currentTarget: input });
+  input.files = [{ name: "T2" }];
+  input.value = "second-text";
+  const secondPromise = helpers.handleGenerationReferenceTextSelection({ currentTarget: input });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  deferred.get("T1").resolve("base64:T1");
+  await firstPromise;
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(deferred.has("T2"), true, "expected queued second text batch to start from its snapshot after first batch");
+
+  deferred.get("T2").resolve("base64:T2");
+  await secondPromise;
+
+  assert.deepEqual(
+    appState.generationReferenceAssets.textFiles.map((file) => file.name),
+    ["T1", "T2"],
+    "expected text selections to use queued file snapshots instead of the live input control"
+  );
+  assert.equal(input.value, "");
 });

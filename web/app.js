@@ -8222,7 +8222,8 @@ function getGenerationPayload() {
 
 async function handleGenerationReferenceImageSelection(event) {
   const input = event?.currentTarget;
-  const operation = () => readGenerationReferenceImageFiles(input?.files)
+  const selectedFiles = Array.from(input?.files || []);
+  const operation = () => readGenerationReferenceImageFiles(selectedFiles)
     .then(({ files: selectedImages, failedCount }) => {
       const currentImages = Array.isArray(appState.generationReferenceAssets?.images)
         ? appState.generationReferenceAssets.images
@@ -8264,7 +8265,8 @@ async function handleGenerationReferenceImageSelection(event) {
 
 async function handleGenerationReferenceTextSelection(event) {
   const input = event?.currentTarget;
-  const operation = () => readGenerationReferenceTextFiles(input?.files)
+  const selectedFiles = Array.from(input?.files || []);
+  const operation = () => readGenerationReferenceTextFiles(selectedFiles)
     .then(({ files: selectedTextFiles, failedCount }) => {
       appState.generationReferenceAssets = {
         ...appState.generationReferenceAssets,
