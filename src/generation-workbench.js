@@ -769,6 +769,53 @@ export function buildGenerationBriefingMessages({ mode = "from_scratch", brief =
   ];
 }
 
+function normalizeGenerationReferenceMaterialItem(item = {}, index = 0) {
+  return {
+    id: String(item.id || `reference-material-${index + 1}`).trim(),
+    title: String(item.title || "").trim(),
+    reason: String(item.reason || "").trim(),
+    referenceText: String(item.referenceText || item.reference_text || item.quote || "").trim(),
+    sourceUrl: String(item.sourceUrl || item.source_url || item.url || "").trim()
+  };
+}
+
+export function normalizeGenerationReferenceMaterialItems(items = []) {
+  return ensureArray(items)
+    .map((item, index) => normalizeGenerationReferenceMaterialItem(item, index))
+    .filter((item) => item.title || item.reason || item.referenceText || item.sourceUrl);
+}
+
+export function buildGenerationReferenceMaterialSearchPrompt({ brief = {}, draft = {} } = {}) {
+  return [
+    "你是小红书内容生成工作台里的参考素材检索助手。",
+    "你的任务是基于当前需求做全网检索，整理 3-5 条可用的网页参考候选。",
+    "候选必须来自公开网页信息，不要编造来源，不要输出无法追溯的网址。",
+    "",
+    `原始一句话需求：${brief.briefing || ""}`,
+    `合集类型：${brief.collectionType || ""}`,
+    `参考标题：${brief.referenceTitle || ""}`,
+    `主题：${brief.topic || ""}`,
+    `注意事项：${brief.constraints || ""}`,
+    `当前草稿标题：${draft.title || ""}`,
+    `当前草稿正文：${draft.body || ""}`,
+    "",
+    "检索要求：",
+    "1. 必须明确按全网检索思路寻找参考，不局限于单一站点。",
+    "2. 优先返回和当前需求最相关、最能补足事实背景、表达角度或安全边界的网页材料。",
+    "3. 每条候选都要说明为什么值得参考。",
+    "4. referenceText 使用简洁中文概括可参考的信息点，不要大段照抄原文。",
+    "5. sourceUrl 必须是可访问的原始网页链接。",
+    "",
+    "只返回 JSON。",
+    "输出格式：",
+    "{",
+    '  "items": [',
+    '    {"title":"参考标题","reason":"为什么值得参考","referenceText":"可引用/可借鉴的关键信息","sourceUrl":"https://..."}',
+    "  ]",
+    "}"
+  ].join("\n");
+}
+
 export function normalizeGenerationCandidate(candidate = {}, index = 0, options = {}) {
   const normalizedVariant = String(candidate.variant || "").trim();
   const variant = finalCandidateVariants.has(normalizedVariant) ? normalizedVariant : variants[index] || "safe";
@@ -1058,6 +1105,34 @@ async function improveBriefingJsonWithModel({ messages, modelSelection = "auto" 
   };
 }
 
+async function generateReferenceMaterialsJsonWithModel({
+  prompt,
+  modelSelection = "auto",
+  maxTokens = Number(process.env.GENERATION_REFERENCE_SEARCH_MAX_TOKENS || 1400)
+} = {}) {
+  const provider = getRewriteProviderSelection(modelSelection);
+  const model = getRewriteSelectionModel(modelSelection);
+  const result = await callRoutedTextProviderJson({
+    provider,
+    model,
+    temperature: 0.4,
+    maxTokens,
+    messages: [{ role: "user", content: prompt }],
+    missingKeyMessage: `生成工作台缺少 ${provider} 可用密钥。`,
+    scene: "generation",
+    fallbackParser: extractJsonBlock
+  });
+
+  return {
+    ...result.parsed,
+    provider,
+    model: result.model || model,
+    route: result.route,
+    routeLabel: result.routeLabel,
+    attemptedRoutes: result.attemptedRoutes || []
+  };
+}
+
 export async function improveGenerationBriefing({
   mode = "from_scratch",
   brief = {},
@@ -1081,6 +1156,37 @@ export async function improveGenerationBriefing({
       route: payload.route || "",
       routeLabel: payload.routeLabel || "",
       attemptedRoutes: payload.attemptedRoutes || []
+    }
+  };
+}
+
+export async function generateReferenceMaterials({
+  brief = {},
+  draft = {},
+  modelSelection = "auto",
+  generateJson = generateReferenceMaterialsJsonWithModel
+} = {}) {
+  const prompt = buildGenerationReferenceMaterialSearchPrompt({
+    brief,
+    draft
+  });
+  const payload = await generateJson({
+    prompt,
+    modelSelection
+  });
+  const items = normalizeGenerationReferenceMaterialItems(payload?.items || payload?.references || []);
+
+  return {
+    items,
+    message: String(payload?.message || "").trim(),
+    provider: payload?.provider || "",
+    model: payload?.model || "",
+    modelTrace: {
+      provider: payload?.provider || "",
+      model: payload?.model || "",
+      route: payload?.route || "",
+      routeLabel: payload?.routeLabel || "",
+      attemptedRoutes: payload?.attemptedRoutes || []
     }
   };
 }

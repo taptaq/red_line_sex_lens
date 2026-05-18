@@ -183,6 +183,32 @@ test("generation briefing improve endpoint expands the current one-line request"
   });
 });
 
+test("generation reference material endpoint returns normalized candidate cards", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const result = await invokeRoute("POST", "/api/generate-reference-materials", {
+      brief: {
+        briefing: "写经期能不能用玩具，轻松一点"
+      },
+      draft: {
+        title: "经期也想用？"
+      },
+      mockReferenceMaterials: [
+        {
+          title: "经期使用玩具前先看这几点",
+          reason: "能补足安全边界",
+          referenceText: "经期是否适合使用需要结合清洁、身体状态和不适感来判断。",
+          sourceUrl: "https://example.com/reference"
+        }
+      ]
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.equal(result.items.length, 1);
+    assert.equal(result.items[0].title, "经期使用玩具前先看这几点");
+  });
+});
+
 test("generation selection normalization keeps generation separate and allows value-only fallback to rewrite", () => {
   const explicitGeneration = normalizeModelSelectionState({
     rewrite: "glm",

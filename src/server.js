@@ -57,6 +57,7 @@ import {
 import { runCrossModelReview } from "./cross-review.js";
 import {
   generateNoteCandidates,
+  generateReferenceMaterials,
   improveGenerationBriefing,
   repairGenerationCandidate,
   scoreGenerationCandidates
@@ -1110,6 +1111,43 @@ async function handleRequest(request, response) {
     return sendJson(response, 200, {
       ok: true,
       ...improved
+    });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/generate-reference-materials") {
+    const payload = await readBody(request, { maxBytes: 256 * 1024 });
+    const modelSelection = normalizeModelSelectionState(payload?.modelSelection);
+    const generationModelSelection = modelSelection.generation || modelSelection.rewrite;
+    const brief = payload?.brief && typeof payload?.brief === "object" ? payload.brief : {};
+    const draft = payload?.draft && typeof payload?.draft === "object" ? payload.draft : {};
+
+    if (!String(brief?.briefing || "").trim()) {
+      const error = new Error("请先提供一句话需求。");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const result = await generateReferenceMaterials({
+      brief,
+      draft,
+      modelSelection: generationModelSelection,
+      generateJson: Array.isArray(payload?.mockReferenceMaterials)
+        ? async () => ({
+            items: payload.mockReferenceMaterials,
+            provider: "mock",
+            model: "mock-reference-materials"
+          })
+        : undefined
+    });
+
+    return sendJson(response, 200, {
+      ok: true,
+      items: result.items,
+      message: result.message,
+      modelTrace: result.modelTrace || {
+        provider: result.provider || "",
+        model: result.model || ""
+      }
     });
   }
 
