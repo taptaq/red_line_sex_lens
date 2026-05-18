@@ -1597,9 +1597,16 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(indexHtml, /id="generation-reference-assets-preview"/);
 
   assert.match(appJs, /generationReferenceAssets:\s*\{\s*images:\s*\[\],\s*textFiles:\s*\[\],\s*message:\s*""\s*\}/);
+  assert.match(appJs, /generationReferenceAssetsPending:\s*Promise\.resolve\(\)/);
   assert.match(appJs, /async function readGenerationReferenceImageFiles\s*\(/);
   assert.match(appJs, /async function readGenerationReferenceTextFiles\s*\(/);
+  assert.match(appJs, /Promise\.allSettled\(/);
+  assert.match(appJs, /async function awaitGenerationReferenceAssetsReady\s*\(/);
   assert.match(appJs, /function renderGenerationReferenceAssets\s*\(/);
+  assert.match(appJs, /appState\.generationReferenceAssetsPending = readPromise/);
+  assert.match(appJs, /input\.value = ""/);
+  assert.match(appJs, /await awaitGenerationReferenceAssetsReady\(\);[\s\S]*const payload = getGenerationPayload\(\);[\s\S]*\/api\/generate-note-briefing/);
+  assert.match(appJs, /await awaitGenerationReferenceAssetsReady\(\);[\s\S]*const payload = getGenerationPayload\(\);[\s\S]*\/api\/generate-note/);
   assert.match(appJs, /referenceAssets:\s*\{\s*images:\s*appState\.generationReferenceAssets\.images\.map\(/);
   assert.match(appJs, /textFiles:\s*appState\.generationReferenceAssets\.textFiles\.map\(/);
 

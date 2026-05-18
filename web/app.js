@@ -700,6 +700,7 @@ const appState = {
     textFiles: [],
     message: ""
   },
+  generationReferenceAssetsPending: Promise.resolve(),
   sampleLibraryCalibrationReplayResult: null,
   sampleLibraryModal: null,
   lexiconWorkspaceModal: {
@@ -6927,10 +6928,10 @@ async function readGenerationReferenceImageFiles(fileList) {
   const files = Array.from(fileList || []).filter(Boolean);
 
   if (!files.length) {
-    return [];
+    return { files: [], failedCount: 0 };
   }
 
-  return Promise.all(
+  const settled = await Promise.allSettled(
     files.map(async (file) => ({
       name: String(file?.name || "").trim() || "未命名图片",
       type: String(file?.type || "").trim() || "application/octet-stream",
@@ -6938,21 +6939,35 @@ async function readGenerationReferenceImageFiles(fileList) {
       dataUrl: await fileToDataUrl(file)
     }))
   );
+
+  return {
+    files: settled.filter((result) => result.status === "fulfilled").map((result) => result.value),
+    failedCount: settled.filter((result) => result.status === "rejected").length
+  };
 }
 
 async function readGenerationReferenceTextFiles(fileList) {
   const files = Array.from(fileList || []).filter(Boolean);
 
   if (!files.length) {
-    return [];
+    return { files: [], failedCount: 0 };
   }
 
-  return Promise.all(
+  const settled = await Promise.allSettled(
     files.map(async (file) => ({
       name: String(file?.name || "").trim() || "未命名文本",
       contentBase64: await fileToBase64(file)
     }))
   );
+
+  return {
+    files: settled.filter((result) => result.status === "fulfilled").map((result) => result.value),
+    failedCount: settled.filter((result) => result.status === "rejected").length
+  };
+}
+
+async function awaitGenerationReferenceAssetsReady() {
+  await appState.generationReferenceAssetsPending;
 }
 
 function renderGenerationReferenceAssets() {
@@ -8198,42 +8213,74 @@ function getGenerationPayload() {
 
 async function handleGenerationReferenceImageSelection(event) {
   const input = event?.currentTarget;
-  const selectedImages = await readGenerationReferenceImageFiles(input?.files);
-  const currentImages = Array.isArray(appState.generationReferenceAssets?.images)
-    ? appState.generationReferenceAssets.images
-    : [];
-  const remainingSlots = Math.max(0, GENERATION_REFERENCE_IMAGE_LIMIT - currentImages.length);
-  const acceptedImages = remainingSlots > 0 ? selectedImages.slice(0, remainingSlots) : [];
-  const message = selectedImages.length > acceptedImages.length ? "参考图片最多保留 5 张。" : "";
+  const readPromise = (async () => {
+    const { files: selectedImages, failedCount } = await readGenerationReferenceImageFiles(input?.files);
+    const currentImages = Array.isArray(appState.generationReferenceAssets?.images)
+      ? appState.generationReferenceAssets.images
+      : [];
+    const remainingSlots = Math.max(0, GENERATION_REFERENCE_IMAGE_LIMIT - currentImages.length);
+    const acceptedImages = remainingSlots > 0 ? selectedImages.slice(0, remainingSlots) : [];
+    let message = "";
 
-  appState.generationReferenceAssets = {
-    ...appState.generationReferenceAssets,
-    images: [...currentImages, ...acceptedImages],
-    message
-  };
+    if (selectedImages.length > acceptedImages.length) {
+      message = "参考图片最多保留 5 张。";
+    } else if (failedCount) {
+      message = "部分参考图片读取失败，已保留可用文件。";
+    }
 
-  if (input) {
-    input.value = "";
-  }
+    appState.generationReferenceAssets = {
+      ...appState.generationReferenceAssets,
+      images: [...currentImages, ...acceptedImages],
+      message
+    };
 
-  renderGenerationReferenceAssets();
+    renderGenerationReferenceAssets();
+  })()
+    .catch(() => {
+      appState.generationReferenceAssets = {
+        ...appState.generationReferenceAssets,
+        message: "参考图片读取失败，请重试。"
+      };
+      renderGenerationReferenceAssets();
+    })
+    .finally(() => {
+      if (input) {
+        input.value = "";
+      }
+    });
+
+  appState.generationReferenceAssetsPending = readPromise;
+  await readPromise;
 }
 
 async function handleGenerationReferenceTextSelection(event) {
   const input = event?.currentTarget;
-  const selectedTextFiles = await readGenerationReferenceTextFiles(input?.files);
+  const readPromise = (async () => {
+    const { files: selectedTextFiles, failedCount } = await readGenerationReferenceTextFiles(input?.files);
 
-  appState.generationReferenceAssets = {
-    ...appState.generationReferenceAssets,
-    textFiles: [...appState.generationReferenceAssets.textFiles, ...selectedTextFiles],
-    message: ""
-  };
+    appState.generationReferenceAssets = {
+      ...appState.generationReferenceAssets,
+      textFiles: [...appState.generationReferenceAssets.textFiles, ...selectedTextFiles],
+      message: failedCount ? "部分参考文本读取失败，已保留可用文件。" : ""
+    };
 
-  if (input) {
-    input.value = "";
-  }
+    renderGenerationReferenceAssets();
+  })()
+    .catch(() => {
+      appState.generationReferenceAssets = {
+        ...appState.generationReferenceAssets,
+        message: "参考文本读取失败，请重试。"
+      };
+      renderGenerationReferenceAssets();
+    })
+    .finally(() => {
+      if (input) {
+        input.value = "";
+      }
+    });
 
-  renderGenerationReferenceAssets();
+  appState.generationReferenceAssetsPending = readPromise;
+  await readPromise;
 }
 
 function removeGenerationReferenceAsset(kind, index) {
@@ -8603,22 +8650,10 @@ byId("generation-workbench-form").addEventListener("input", syncGenerationAction
 byId("generation-workbench-form").addEventListener("change", syncGenerationActions);
 byId("generation-workbench-form").addEventListener("change", syncGenerationModeFields);
 byId("generation-reference-image-input")?.addEventListener("change", (event) => {
-  handleGenerationReferenceImageSelection(event).catch(() => {
-    appState.generationReferenceAssets = {
-      ...appState.generationReferenceAssets,
-      message: "参考图片读取失败，请重试。"
-    };
-    renderGenerationReferenceAssets();
-  });
+  handleGenerationReferenceImageSelection(event).catch(() => {});
 });
 byId("generation-reference-text-input")?.addEventListener("change", (event) => {
-  handleGenerationReferenceTextSelection(event).catch(() => {
-    appState.generationReferenceAssets = {
-      ...appState.generationReferenceAssets,
-      message: "参考文本读取失败，请重试。"
-    };
-    renderGenerationReferenceAssets();
-  });
+  handleGenerationReferenceTextSelection(event).catch(() => {});
 });
 byId("generation-briefing-improve").addEventListener("click", improveGenerationBriefingFromCurrentInput);
 byId("generation-reference-assets-preview")?.addEventListener("click", (event) => {
@@ -9553,6 +9588,7 @@ async function improveGenerationBriefingFromCurrentInput() {
   }
 
   try {
+    await awaitGenerationReferenceAssetsReady();
     const payload = getGenerationPayload();
     const result = await apiJson("/api/generate-note-briefing", {
       method: "POST",
@@ -9596,6 +9632,7 @@ byId("generation-workbench-form").addEventListener("submit", async (event) => {
   byId("generation-result").innerHTML = '<div class="result-card-shell muted">正在生成并评分候选稿...</div>';
 
   try {
+    await awaitGenerationReferenceAssetsReady();
     const payload = getGenerationPayload();
     const result = await apiJson("/api/generate-note", {
       method: "POST",
