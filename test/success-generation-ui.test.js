@@ -1602,12 +1602,14 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(appJs, /async function readGenerationReferenceTextFiles\s*\(/);
   assert.match(appJs, /Promise\.allSettled\(/);
   assert.match(appJs, /async function awaitGenerationReferenceAssetsReady\s*\(/);
+  assert.match(appJs, /function resetGenerationReferenceAssets\s*\(/);
   assert.match(appJs, /function renderGenerationReferenceAssets\s*\(/);
-  assert.match(appJs, /const pendingChain = appState\.generationReferenceAssetsPending\.catch\(\(\) => \{\}\)/);
-  assert.match(appJs, /appState\.generationReferenceAssetsPending = pendingChain\.then\(\(\) => readPromise\)/);
+  assert.match(appJs, /const operation = \(\) => readGenerationReferenceImageFiles/);
+  assert.match(appJs, /const operation = \(\) => readGenerationReferenceTextFiles/);
+  assert.match(appJs, /appState\.generationReferenceAssetsPending = appState\.generationReferenceAssetsPending\.catch\(\(\) => \{\}\)\.then\(operation\)/);
   assert.match(appJs, /input\.value = ""/);
   assert.match(appJs, /await awaitGenerationReferenceAssetsReady\(\);[\s\S]*const payload = getGenerationPayload\(\);[\s\S]*\/api\/generate-note-briefing/);
-  assert.match(appJs, /await awaitGenerationReferenceAssetsReady\(\);[\s\S]*const payload = getGenerationPayload\(\);[\s\S]*\/api\/generate-note/);
+  assert.match(appJs, /await awaitGenerationReferenceAssetsReady\(\);[\s\S]*const payload = getGenerationPayload\(\);[\s\S]*\/api\/generate-note[\s\S]*resetGenerationReferenceAssets\(\)/);
   assert.match(appJs, /referenceAssets:\s*\{\s*images:\s*appState\.generationReferenceAssets\.images\.map\(/);
   assert.match(appJs, /textFiles:\s*appState\.generationReferenceAssets\.textFiles\.map\(/);
 
@@ -1615,4 +1617,116 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(styles, /\.generation-reference-files\b/);
   assert.match(styles, /\.generation-reference-chip-list\b/);
   assert.match(styles, /\.generation-reference-chip\b/);
+});
+
+test("generation reference image selections serialize deterministically under the 5-image cap", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const generationHelpersSource = extractSourceBetween(
+    appJs,
+    "async function readGenerationReferenceImageFiles(",
+    "function syncGenerationModeFields()"
+  );
+
+  const renders = [];
+  const appState = {
+    generationReferenceAssets: {
+      images: [],
+      textFiles: [],
+      message: ""
+    },
+    generationReferenceAssetsPending: Promise.resolve(),
+    latestGeneration: null
+  };
+  const deferred = new Map();
+  const inputA = { files: [{ name: "A1" }, { name: "A2" }, { name: "A3" }, { name: "A4" }], value: "batch-a" };
+  const inputB = { files: [{ name: "B1" }, { name: "B2" }, { name: "B3" }, { name: "B4" }], value: "batch-b" };
+  const nodes = {
+    "generation-result": { innerHTML: "" }
+  };
+  const generationFormNode = {
+    handler: null,
+    addEventListener(type, handler) {
+      if (type === "submit") {
+        this.handler = handler;
+      }
+    }
+  };
+  const submitState = { busy: [] };
+  const submitHandler = new Function(
+    "appState",
+    "GENERATION_REFERENCE_IMAGE_LIMIT",
+    "fileToDataUrl",
+    "fileToBase64",
+    "renderGenerationReferenceAssets",
+    "escapeHtml",
+    "byId",
+    "awaitGenerationReferenceAssetsReady",
+    "getGenerationRequirementMessage",
+    "syncGenerationActions",
+    "setButtonBusy",
+    `${generationHelpersSource}
+return {
+  handleGenerationReferenceImageSelection
+};`
+  )(
+    appState,
+    5,
+    async (file) =>
+      new Promise((resolve, reject) => {
+        deferred.set(file.name, { resolve, reject });
+      }),
+    async () => {
+      throw new Error("text files not used in this test");
+    },
+    () => {
+      renders.push(appState.generationReferenceAssets.images.map((file) => file.name));
+    },
+    (value) => String(value || ""),
+    (id) => {
+      if (id === "generation-workbench-form") {
+        return generationFormNode;
+      }
+
+      return nodes[id] || null;
+    },
+    async () => {
+      await appState.generationReferenceAssetsPending;
+    },
+    () => "",
+    () => {},
+    (button, isBusy, label) => {
+      submitState.busy.push({ button, isBusy, label });
+    }
+  );
+
+  const selectionAPromise = submitHandler.handleGenerationReferenceImageSelection({ currentTarget: inputA });
+  const selectionBPromise = submitHandler.handleGenerationReferenceImageSelection({ currentTarget: inputB });
+
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(deferred.has("B1"), false, "later selection reads should not start before earlier selection finishes");
+  assert.deepEqual(appState.generationReferenceAssets.images, [], "later selection should wait for earlier selection chain");
+
+  deferred.get("A1").resolve("data:A1");
+  deferred.get("A2").resolve("data:A2");
+  deferred.get("A3").resolve("data:A3");
+  deferred.get("A4").resolve("data:A4");
+
+  await selectionAPromise;
+  await Promise.resolve();
+  await Promise.resolve();
+
+  deferred.get("B1").resolve("data:B1");
+  deferred.get("B2").resolve("data:B2");
+  deferred.get("B3").resolve("data:B3");
+  deferred.get("B4").resolve("data:B4");
+  await selectionBPromise;
+
+  assert.deepEqual(
+    appState.generationReferenceAssets.images.map((file) => file.name),
+    ["A1", "A2", "A3", "A4", "B1"],
+    "expected first selection to consume cap slots before second selection appends remainder"
+  );
+  assert.equal(inputA.value, "");
+  assert.equal(inputB.value, "");
 });

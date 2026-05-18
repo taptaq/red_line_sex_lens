@@ -6970,6 +6970,15 @@ async function awaitGenerationReferenceAssetsReady() {
   await appState.generationReferenceAssetsPending;
 }
 
+function resetGenerationReferenceAssets() {
+  appState.generationReferenceAssets = {
+    images: [],
+    textFiles: [],
+    message: ""
+  };
+  renderGenerationReferenceAssets();
+}
+
 function renderGenerationReferenceAssets() {
   const container = byId("generation-reference-assets-preview");
 
@@ -8213,7 +8222,7 @@ function getGenerationPayload() {
 
 async function handleGenerationReferenceImageSelection(event) {
   const input = event?.currentTarget;
-  const readPromise = readGenerationReferenceImageFiles(input?.files)
+  const operation = () => readGenerationReferenceImageFiles(input?.files)
     .then(({ files: selectedImages, failedCount }) => {
       const currentImages = Array.isArray(appState.generationReferenceAssets?.images)
         ? appState.generationReferenceAssets.images
@@ -8249,14 +8258,13 @@ async function handleGenerationReferenceImageSelection(event) {
       }
     });
 
-  const pendingChain = appState.generationReferenceAssetsPending.catch(() => {});
-  appState.generationReferenceAssetsPending = pendingChain.then(() => readPromise);
+  appState.generationReferenceAssetsPending = appState.generationReferenceAssetsPending.catch(() => {}).then(operation);
   await appState.generationReferenceAssetsPending;
 }
 
 async function handleGenerationReferenceTextSelection(event) {
   const input = event?.currentTarget;
-  const readPromise = readGenerationReferenceTextFiles(input?.files)
+  const operation = () => readGenerationReferenceTextFiles(input?.files)
     .then(({ files: selectedTextFiles, failedCount }) => {
       appState.generationReferenceAssets = {
         ...appState.generationReferenceAssets,
@@ -8279,8 +8287,7 @@ async function handleGenerationReferenceTextSelection(event) {
       }
     });
 
-  const pendingChain = appState.generationReferenceAssetsPending.catch(() => {});
-  appState.generationReferenceAssetsPending = pendingChain.then(() => readPromise);
+  appState.generationReferenceAssetsPending = appState.generationReferenceAssetsPending.catch(() => {}).then(operation);
   await appState.generationReferenceAssetsPending;
 }
 
@@ -9645,6 +9652,7 @@ byId("generation-workbench-form").addEventListener("submit", async (event) => {
       collectionType: result.collectionType || payload.collectionType || ""
     };
     renderGenerationResult(result);
+    resetGenerationReferenceAssets();
   } catch (error) {
     byId("generation-result").innerHTML = `
       <div class="result-card-shell muted">${escapeHtml(error.message || "生成候选稿失败")}</div>
