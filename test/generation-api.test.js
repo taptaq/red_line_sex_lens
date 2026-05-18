@@ -97,6 +97,33 @@ test("generation endpoint always uses the current active style profile", async (
   });
 });
 
+test("generation endpoint normalizes temporary text references even when no images are provided", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const result = await invokeRoute("POST", "/api/generate-note", {
+      mode: "from_scratch",
+      collectionType: "科普",
+      brief: { topic: "沟通", constraints: "温和" },
+      referenceAssets: {
+        images: [],
+        textFiles: [
+          {
+            name: "notes.md",
+            contentBase64: Buffer.from("临时文本参考内容", "utf8").toString("base64")
+          }
+        ]
+      },
+      mockCandidates: [
+        { variant: "safe", title: "沟通标题", body: "完整正文".repeat(40), coverText: "封面", tags: ["沟通", "关系"] }
+      ]
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.equal(result.referenceAssets.mergedText, "临时文本参考内容");
+    assert.deepEqual(result.referenceAssets.imageSummaries, []);
+  });
+});
+
 test("generation briefing improve endpoint expands the current one-line request", async (t) => {
   await withTempGenerationData(t, async () => {
     const result = await invokeRoute("POST", "/api/generate-note-briefing", {

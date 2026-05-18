@@ -577,6 +577,41 @@ function stringifySharedMemoryContext(memoryContext = null) {
     .join("\n\n");
 }
 
+function stringifyTemporaryReferenceAssets(referenceAssets = null) {
+  if (!referenceAssets || typeof referenceAssets !== "object") {
+    return "";
+  }
+
+  const imageLines = ensureArray(referenceAssets.imageSummaries)
+    .map((item, index) => {
+      const name = String(item?.name || "").trim() || `image-${index + 1}`;
+      const summary = String(item?.summary || "").trim();
+
+      return summary ? `- ${name}：${summary}` : "";
+    })
+    .filter(Boolean);
+  const mergedText = String(referenceAssets.mergedText || "").trim();
+  const textFileNames = uniqueStrings(ensureArray(referenceAssets.textFileNames).map((item) => String(item || "").trim()).filter(Boolean));
+  const sections = [];
+
+  if (imageLines.length) {
+    sections.push(["临时参考图片：", ...imageLines].join("\n"));
+  }
+
+  if (mergedText) {
+    const textLabel = textFileNames.length ? `临时参考文本（来源：${textFileNames.join("、")}）：` : "临时参考文本：";
+    sections.push(
+      [
+        textLabel,
+        mergedText,
+        "使用方式：提炼其中有帮助的观点、结构、语气或信息点，但不要直接照抄文本素材原文。"
+      ].join("\n")
+    );
+  }
+
+  return sections.join("\n\n");
+}
+
 export function buildGenerationMessages({
   mode = "from_scratch",
   brief = {},
@@ -584,7 +619,8 @@ export function buildGenerationMessages({
   styleProfile = null,
   referenceSamples = [],
   innerSpaceTerms = [],
-  memoryContext = null
+  memoryContext = null,
+  referenceAssets = null
 } = {}) {
   const lengthMode = String(brief.lengthMode || "short").trim() === "long" ? "long" : "short";
   const lengthInstruction =
@@ -593,6 +629,7 @@ export function buildGenerationMessages({
       : "短文档：正文控制在 800-1000 个中文字符左右，按中文字符数理解，不是按英文单词、空格、emoji 或 markdown 符号凑长度；这里只算正文主体，不包含末尾额外附加的科普补充、补充说明或安全提醒小节；表达紧凑但不能干瘪，同样要自然分段，每段 2-4 句。";
   const terminologyPrompt = formatInnerSpaceTermsPrompt(innerSpaceTerms);
   const sharedMemoryPrompt = stringifySharedMemoryContext(memoryContext);
+  const temporaryReferencePrompt = stringifyTemporaryReferenceAssets(referenceAssets);
   const tagGuidance = buildGenerationTagGuidance({ brief, styleProfile, referenceSamples });
   return [
     {
@@ -639,6 +676,9 @@ export function buildGenerationMessages({
         stringifyReferenceSamples(referenceSamples),
         tagGuidance.referenceTags.length ? `参考样本高频标签：${tagGuidance.referenceTags.join("、")}` : "",
         "",
+        temporaryReferencePrompt ? "本次临时参考素材：" : "",
+        temporaryReferencePrompt,
+        temporaryReferencePrompt ? "" : "",
         sharedMemoryPrompt ? "共享记忆提示：" : "",
         sharedMemoryPrompt,
         sharedMemoryPrompt ? "" : "",
@@ -1048,6 +1088,7 @@ export async function generateNoteCandidates({
   referenceSamples = [],
   innerSpaceTerms = [],
   memoryContext = null,
+  referenceAssets = null,
   modelSelection = "auto",
   generateJson = generateJsonWithModel
 } = {}) {
@@ -1058,7 +1099,8 @@ export async function generateNoteCandidates({
     styleProfile,
     referenceSamples,
     innerSpaceTerms,
-    memoryContext
+    memoryContext,
+    referenceAssets
   });
   const payload = await generateJson({ messages, modelSelection });
   const rawCandidate = extractRawGenerationCandidate(payload);

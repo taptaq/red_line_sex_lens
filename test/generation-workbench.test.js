@@ -185,6 +185,47 @@ test("buildGenerationMessages packs shared memory guidance without leaking raw v
   assert.doesNotMatch(combined, /加我领完整清单/);
 });
 
+test("buildGenerationMessages injects temporary text and image references with non-copying guidance", () => {
+  const messages = buildGenerationMessages({
+    mode: "from_scratch",
+    brief: {
+      topic: "亲密关系沟通",
+      collectionType: "科普"
+    },
+    referenceAssets: {
+      imageSummaries: [{ name: "cover.png", summary: "高反差暖色封面" }],
+      mergedText: "notes.md\n这是一段临时文本参考。",
+      textFileNames: ["notes.md"]
+    }
+  });
+
+  const combined = messages.map((item) => item.content).join("\n");
+  assert.match(combined, /本次临时参考素材/);
+  assert.match(combined, /高反差暖色封面/);
+  assert.match(combined, /notes\.md/);
+  assert.match(combined, /不要直接照抄文本素材原文/);
+});
+
+test("buildGenerationMessages omits temporary image guidance when no image summaries exist", () => {
+  const messages = buildGenerationMessages({
+    mode: "from_scratch",
+    brief: {
+      topic: "亲密关系沟通",
+      collectionType: "科普"
+    },
+    referenceAssets: {
+      imageSummaries: [],
+      mergedText: "notes.md\n只有文本参考。",
+      textFileNames: ["notes.md"]
+    }
+  });
+
+  const combined = messages.map((item) => item.content).join("\n");
+  assert.match(combined, /本次临时参考素材/);
+  assert.match(combined, /notes\.md/);
+  assert.doesNotMatch(combined, /临时参考图片/);
+});
+
 test("improveGenerationBriefing expands a one-line request into a richer generation brief", async () => {
   const messages = buildGenerationBriefingMessages({
     mode: "from_scratch",

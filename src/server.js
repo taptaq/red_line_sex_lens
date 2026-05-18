@@ -61,7 +61,8 @@ import {
   repairGenerationCandidate,
   scoreGenerationCandidates
 } from "./generation-workbench.js";
-import { recognizeFeedbackScreenshot, rewritePostForCompliance, suggestFeedbackCandidates } from "./glm.js";
+import { recognizeFeedbackScreenshot, rewritePostForCompliance, suggestFeedbackCandidates, summarizeGenerationReferenceImage } from "./glm.js";
+import { summarizeGenerationReferenceAssets } from "./generation-reference-assets.js";
 import { mergeRuleAndSemanticAnalysis, runSemanticReview, runSemanticReviewComparison } from "./semantic-review.js";
 import { filterInnerSpaceTerms } from "./inner-space-terms.js";
 import {
@@ -1014,6 +1015,11 @@ async function handleRequest(request, response) {
     const styleProfile = getActiveStyleProfile(profileState);
     const referenceSamples = buildGenerationReferenceSamples({ successSamples: qualifiedReferenceSamples }).slice(0, 12);
     const innerSpaceTerms = filterInnerSpaceTerms(innerSpaceTermsRaw, { collectionType });
+    const referenceAssets = await summarizeGenerationReferenceAssets({
+      referenceAssets: payload?.referenceAssets,
+      summarizeImage: summarizeGenerationReferenceImage,
+      modelSelection: generationModelSelection
+    });
     const generationTagReferences = uniqueStrings(
       String(brief.tagReferences || "")
         .split(/[\n，,、]/)
@@ -1044,6 +1050,7 @@ async function handleRequest(request, response) {
       referenceSamples,
       innerSpaceTerms,
       memoryContext,
+      referenceAssets,
       modelSelection: generationModelSelection,
       generateJson: Array.isArray(payload?.mockCandidates)
         ? async () => ({ candidates: payload.mockCandidates, provider: "mock", model: "mock-generation" })
@@ -1062,6 +1069,7 @@ async function handleRequest(request, response) {
       ok: true,
       collectionType,
       memoryContext,
+      referenceAssets,
       ...generation,
       ...scored
     });
