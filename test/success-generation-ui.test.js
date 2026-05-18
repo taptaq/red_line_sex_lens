@@ -1595,8 +1595,16 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(indexHtml, /id="generation-reference-text-input"/);
   assert.match(indexHtml, /id="generation-reference-text-input"[\s\S]*accept="\.txt,\.md,\.markdown,text\/plain,text\/markdown"/);
   assert.match(indexHtml, /id="generation-reference-assets-preview"/);
+  assert.match(indexHtml, /name="materialText"/);
+  assert.match(indexHtml, /素材文本/);
+  assert.match(indexHtml, /id="generation-reference-search-button"/);
+  assert.match(indexHtml, /AI搜索参考资料/);
+  assert.match(indexHtml, /id="generation-reference-search-result"/);
+  assert.match(indexHtml, /id="generation-reference-search-modal"/);
+  assert.match(indexHtml, /id="generation-reference-search-modal-content"/);
 
   assert.match(appJs, /generationReferenceAssets:\s*\{\s*images:\s*\[\],\s*textFiles:\s*\[\],\s*message:\s*""\s*\}/);
+  assert.match(appJs, /generationReferenceSearch:\s*\{\s*open:\s*false,\s*loading:\s*false,\s*message:\s*"",\s*items:\s*\[\]\s*\}/);
   assert.match(appJs, /generationReferenceAssetsPending:\s*Promise\.resolve\(\)/);
   assert.match(appJs, /generationReferenceAssetsLocked:\s*false/);
   assert.match(appJs, /const GENERATION_REFERENCE_IMAGE_MAX_FILE_BYTES = 4 \* 1024 \* 1024/);
@@ -1612,6 +1620,9 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(appJs, /function getGenerationReferenceAssetsTotalBytes\s*\(/);
   assert.match(appJs, /function resetGenerationReferenceAssets\s*\(/);
   assert.match(appJs, /function renderGenerationReferenceAssets\s*\(/);
+  assert.match(appJs, /async function openGenerationReferenceSearchModal\s*\(/);
+  assert.match(appJs, /function renderGenerationReferenceSearchModal\s*\(/);
+  assert.match(appJs, /function appendGenerationMaterialText\s*\(/);
   assert.match(appJs, /const selectedFiles = Array\.from\(input\?\.files \|\| \[\]\)/);
   assert.match(appJs, /if \(input\) \{\s*input\.value = "";\s*\}\s*\n\s*if \(appState\.generationReferenceAssetsLocked\)/);
   assert.match(appJs, /const operation = \(\) => \{[\s\S]*collectAcceptedGenerationReferenceFiles\([\s\S]*readGenerationReferenceImageFiles/);
@@ -1620,6 +1631,8 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(appJs, /input\.value = ""/);
   assert.doesNotMatch(appJs, /const referenceAssets = await captureGenerationReferenceAssetsForRequest\(\);[\s\S]*const payload = getGenerationPayload\(\{ referenceAssets \}\);[\s\S]*\/api\/generate-note-briefing/);
   assert.match(appJs, /const payload = getGenerationPayload\(\{\s*includeReferenceAssets:\s*false\s*\}\);[\s\S]*\/api\/generate-note-briefing/);
+  assert.match(appJs, /\/api\/generate-reference-materials/);
+  assert.match(appJs, /data-action="apply-generation-reference-material"/);
   assert.match(appJs, /const referenceAssets = await captureGenerationReferenceAssetsForRequest\(\);[\s\S]*const payload = getGenerationPayload\(\{ referenceAssets \}\);[\s\S]*\/api\/generate-note[\s\S]*resetGenerationReferenceAssets\(\)[\s\S]*releaseGenerationReferenceAssetsRequestLock\(\)/);
   assert.match(appJs, /if \(includeReferenceAssets\) \{[\s\S]*payload\.referenceAssets = referenceAssets \|\| serializeGenerationReferenceAssets\(\)/);
 
@@ -1627,6 +1640,8 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(styles, /\.generation-reference-files\b/);
   assert.match(styles, /\.generation-reference-chip-list\b/);
   assert.match(styles, /\.generation-reference-chip\b/);
+  assert.match(styles, /\.generation-material-text-block\b/);
+  assert.match(styles, /\.generation-reference-search-modal\b/);
 });
 
 test("generation result rendering includes temporary reference warning details when server skips assets", async () => {

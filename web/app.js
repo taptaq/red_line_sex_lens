@@ -703,6 +703,12 @@ const appState = {
     textFiles: [],
     message: ""
   },
+  generationReferenceSearch: {
+    open: false,
+    loading: false,
+    message: "",
+    items: []
+  },
   generationReferenceAssetsPending: Promise.resolve(),
   generationReferenceAssetsLocked: false,
   sampleLibraryCalibrationReplayResult: null,
@@ -765,9 +771,10 @@ function syncBodyModalState() {
   const sampleLibraryModalOpen = byId("sample-library-modal")?.hidden === false;
   const lexiconWorkspaceModalOpen = byId("lexicon-workspace-modal")?.hidden === false;
   const sampleLibraryPoolsModalOpen = byId("sample-library-pools-modal")?.hidden === false;
+  const generationReferenceSearchModalOpen = byId("generation-reference-search-modal")?.hidden === false;
   document.body.classList.toggle(
     "modal-open",
-    sampleLibraryModalOpen || lexiconWorkspaceModalOpen || sampleLibraryPoolsModalOpen
+    sampleLibraryModalOpen || lexiconWorkspaceModalOpen || sampleLibraryPoolsModalOpen || generationReferenceSearchModalOpen
   );
 }
 
@@ -7150,6 +7157,166 @@ function renderGenerationReferenceAssets() {
   `;
 }
 
+function setGenerationReferenceSearchModalOpen(isOpen) {
+  const modal = byId("generation-reference-search-modal");
+
+  if (!modal) {
+    return;
+  }
+
+  modal.hidden = !isOpen;
+  syncBodyModalState();
+}
+
+function closeGenerationReferenceSearchModal() {
+  appState.generationReferenceSearch = {
+    ...appState.generationReferenceSearch,
+    open: false
+  };
+  setGenerationReferenceSearchModalOpen(false);
+}
+
+function appendGenerationMaterialText(nextText) {
+  const field = byId("generation-workbench-form")?.querySelector('[name="materialText"]');
+  const appended = String(nextText || "").trim();
+
+  if (!(field instanceof HTMLTextAreaElement) || !appended) {
+    return;
+  }
+
+  const currentValue = String(field.value || "").trim();
+  field.value = currentValue ? `${currentValue}\n\n${appended}` : appended;
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function renderGenerationReferenceSearchModal() {
+  const modal = byId("generation-reference-search-modal");
+  const contentNode = byId("generation-reference-search-modal-content");
+
+  if (!modal || !contentNode) {
+    return;
+  }
+
+  const state = appState.generationReferenceSearch || {};
+
+  if (!state.open) {
+    modal.hidden = true;
+    syncBodyModalState();
+    return;
+  }
+
+  const items = Array.isArray(state.items) ? state.items : [];
+
+  if (state.loading) {
+    contentNode.innerHTML = '<div class="result-card muted">正在搜索参考资料...</div>';
+  } else if (!items.length) {
+    contentNode.innerHTML = `<div class="result-card muted">${escapeHtml(state.message || "暂未找到可用的参考资料。")}</div>`;
+  } else {
+    contentNode.innerHTML = items
+      .map(
+        (item, index) => `
+          <article class="modal-card generation-reference-result-card">
+            <div class="sample-library-modal-section-head">
+              <div>
+                <strong>${escapeHtml(item?.title || `参考资料 ${index + 1}`)}</strong>
+                <p>${escapeHtml(item?.reason || "未提供推荐理由")}</p>
+              </div>
+            </div>
+            <div class="stack">
+              <label>
+                <span>参考文本</span>
+                <p>${escapeHtml(item?.referenceText || "未提供参考文本")}</p>
+              </label>
+              <label>
+                <span>来源链接</span>
+                <p>${
+                  item?.sourceUrl
+                    ? `<a href="${escapeHtml(item.sourceUrl)}" target="_blank" rel="noreferrer">${escapeHtml(item.sourceUrl)}</a>`
+                    : "未提供来源链接"
+                }</p>
+              </label>
+            </div>
+            <div class="item-actions">
+              <button
+                type="button"
+                class="button button-small"
+                data-action="apply-generation-reference-material"
+                data-index="${index}"
+              >
+                采用并回填
+              </button>
+            </div>
+          </article>
+        `
+      )
+      .join("");
+  }
+
+  setGenerationReferenceSearchModalOpen(true);
+}
+
+async function openGenerationReferenceSearchModal() {
+  const resultNode = byId("generation-reference-search-result");
+  const payload = getGenerationPayload({ includeReferenceAssets: false });
+  const briefing = String(payload.brief?.briefing || "").trim();
+
+  if (!briefing) {
+    if (resultNode) {
+      resultNode.textContent = "请先填写一句话需求。";
+    }
+    syncGenerationActions();
+    return;
+  }
+
+  appState.generationReferenceSearch = {
+    open: true,
+    loading: true,
+    message: "",
+    items: []
+  };
+  renderGenerationReferenceSearchModal();
+
+  if (resultNode) {
+    resultNode.textContent = "正在搜索参考资料...";
+  }
+
+  try {
+    const result = await apiJson("/api/generate-reference-materials", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    const items = Array.isArray(result?.items)
+      ? result.items
+      : Array.isArray(result?.materials)
+        ? result.materials
+        : [];
+
+    appState.generationReferenceSearch = {
+      open: true,
+      loading: false,
+      message: String(result?.message || "").trim(),
+      items
+    };
+
+    if (resultNode) {
+      resultNode.textContent = items.length ? "已生成候选参考资料。请选择需要回填的内容。" : "本次没有找到可回填的参考资料。";
+    }
+  } catch (error) {
+    appState.generationReferenceSearch = {
+      open: true,
+      loading: false,
+      message: error?.message || "参考资料搜索失败",
+      items: []
+    };
+
+    if (resultNode) {
+      resultNode.textContent = error?.message || "参考资料搜索失败";
+    }
+  }
+
+  renderGenerationReferenceSearchModal();
+}
+
 function setSampleLibraryImportBlockOpen(isOpen) {
   const button = byId("sample-library-import-button");
   const block = byId("sample-library-import-block");
@@ -8291,6 +8458,7 @@ function getGenerationPayload({ referenceAssets, includeReferenceAssets = true }
       collectionType: String(form.get("collectionType") || "").trim(),
       lengthMode: String(form.get("lengthMode") || "short").trim() || "short",
       briefing: String(form.get("briefing") || "").trim(),
+      materialText: String(form.get("materialText") || "").trim(),
       referenceTitle: String(form.get("referenceTitle") || "").trim(),
       topic: "",
       sellingPoints: "",
@@ -8798,6 +8966,9 @@ byId("generation-reference-text-input")?.addEventListener("change", (event) => {
   handleGenerationReferenceTextSelection(event).catch(() => {});
 });
 byId("generation-briefing-improve").addEventListener("click", improveGenerationBriefingFromCurrentInput);
+byId("generation-reference-search-button")?.addEventListener("click", () => {
+  openGenerationReferenceSearchModal().catch(() => {});
+});
 byId("generation-reference-assets-preview")?.addEventListener("click", (event) => {
   const button = event.target instanceof Element ? event.target.closest("[data-action]") : null;
 
@@ -10966,6 +11137,34 @@ document.addEventListener("click", async (event) => {
 
   if (action === "close-lexicon-workspace-modal") {
     closeLexiconWorkspaceModal();
+    return;
+  }
+
+  if (action === "close-generation-reference-search-modal") {
+    closeGenerationReferenceSearchModal();
+    return;
+  }
+
+  if (action === "apply-generation-reference-material") {
+    const items = Array.isArray(appState.generationReferenceSearch?.items) ? appState.generationReferenceSearch.items : [];
+    const item = items[Number(button.dataset.index)];
+
+    if (!item?.referenceText) {
+      const resultNode = byId("generation-reference-search-result");
+
+      if (resultNode) {
+        resultNode.textContent = "当前参考资料缺少可回填文本。";
+      }
+      return;
+    }
+
+    appendGenerationMaterialText(item.referenceText);
+    closeGenerationReferenceSearchModal();
+    const resultNode = byId("generation-reference-search-result");
+
+    if (resultNode) {
+      resultNode.textContent = "已回填到素材文本。";
+    }
     return;
   }
 

@@ -246,6 +246,27 @@
                       <strong>临时参考素材</strong>
                       <span>本次生成可附带参考图片和文本文档，不会写入长期样本池。</span>
                     </div>
+                    <label class="field-wide generation-material-text-block">
+                      <span>素材文本</span>
+                      <textarea
+                        name="materialText"
+                        rows="6"
+                        placeholder="可手动整理本次生成要参考的资料摘要、事实点、风格片段或引用段落"
+                      ></textarea>
+                      <small class="helper-text">这里只保存当前这一次生成使用的参考资料，不会写入长期样本池或下次自动复用。</small>
+                      <div class="generation-briefing-improve-row">
+                        <div class="item-actions">
+                          <button
+                            type="button"
+                            class="button button-ghost button-small"
+                            id="generation-reference-search-button"
+                          >
+                            AI搜索参考资料
+                          </button>
+                        </div>
+                        <div id="generation-reference-search-result" class="helper-text" aria-live="polite"></div>
+                      </div>
+                    </label>
                     <div class="generation-reference-files form-grid">
                       <label>
                         <span>参考图片</span>
@@ -774,6 +795,37 @@
         <div id="lexicon-workspace-result" class="helper-text lexicon-workspace-result" aria-live="polite"></div>
         <div id="lexicon-workspace-modal-content" class="lexicon-workspace-content">
           <div class="result-card muted">等待打开词库工作台</div>
+        </div>
+      </section>
+    </div>
+    <div id="generation-reference-search-modal" class="generation-reference-search-modal" hidden>
+      <button
+        type="button"
+        class="generation-reference-search-modal-overlay"
+        data-action="close-generation-reference-search-modal"
+        aria-label="关闭参考资料搜索弹窗"
+      ></button>
+      <section
+        class="generation-reference-search-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="generation-reference-search-modal-title"
+      >
+        <header class="generation-reference-search-modal-header">
+          <div>
+            <strong id="generation-reference-search-modal-title">AI搜索参考资料</strong>
+            <p>基于当前一句话需求生成候选参考资料，采用后会直接回填到素材文本。</p>
+          </div>
+          <button
+            type="button"
+            class="button button-ghost button-small"
+            data-action="close-generation-reference-search-modal"
+          >
+            关闭
+          </button>
+        </header>
+        <div id="generation-reference-search-modal-content" class="generation-reference-search-modal-content">
+          <div class="result-card muted">等待搜索参考资料</div>
         </div>
       </section>
     </div>
