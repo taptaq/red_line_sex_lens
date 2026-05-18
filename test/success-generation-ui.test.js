@@ -1602,6 +1602,7 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(indexHtml, /id="generation-reference-search-result"/);
   assert.match(indexHtml, /id="generation-reference-search-modal"/);
   assert.match(indexHtml, /id="generation-reference-search-modal-content"/);
+  assert.match(indexHtml, /data-action="close-generation-reference-search-modal"/);
 
   assert.match(appJs, /generationReferenceAssets:\s*\{\s*images:\s*\[\],\s*textFiles:\s*\[\],\s*message:\s*""\s*\}/);
   assert.match(appJs, /generationReferenceSearch:\s*\{\s*open:\s*false,\s*loading:\s*false,\s*message:\s*"",\s*items:\s*\[\]\s*\}/);
@@ -1642,6 +1643,8 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(styles, /\.generation-reference-chip\b/);
   assert.match(styles, /\.generation-material-text-block\b/);
   assert.match(styles, /\.generation-reference-search-modal\b/);
+  assert.match(styles, /\.generation-reference-search-modal\s+\.modal-card\b/);
+  assert.match(styles, /\.generation-reference-result-card\b/);
 });
 
 test("generation result rendering includes temporary reference warning details when server skips assets", async () => {
