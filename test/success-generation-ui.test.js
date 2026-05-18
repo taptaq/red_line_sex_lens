@@ -1605,4 +1605,6 @@ test("frontend exposes temporary generation reference asset uploads and payload 
 
   assert.match(styles, /\.generation-reference-assets\b/);
   assert.match(styles, /\.generation-reference-files\b/);
+  assert.match(styles, /\.generation-reference-chip-list\b/);
+  assert.match(styles, /\.generation-reference-chip\b/);
 });
