@@ -36,6 +36,25 @@ test("summarizeGenerationReferenceAssets merges text files and skips image summa
   assert.deepEqual(result.warnings, []);
 });
 
+test("summarizeGenerationReferenceAssets merges direct materialText with uploaded text files", async () => {
+  const result = await summarizeGenerationReferenceAssets({
+    referenceAssets: {
+      materialText: "手写参考要点",
+      images: [],
+      textFiles: [
+        {
+          name: "brief.txt",
+          contentBase64: Buffer.from("上传文本参考内容", "utf8").toString("base64")
+        }
+      ]
+    }
+  });
+
+  assert.match(result.mergedText, /手写参考要点/);
+  assert.match(result.mergedText, /上传文本参考内容/);
+  assert.deepEqual(result.warnings, []);
+});
+
 test("summarizeGenerationReferenceAssets keeps successful image summaries and downgrades failures to warnings", async () => {
   const summarizeCalls = [];
   const result = await summarizeGenerationReferenceAssets({

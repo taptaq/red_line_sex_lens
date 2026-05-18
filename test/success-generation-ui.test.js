@@ -1635,7 +1635,10 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(appJs, /\/api\/generate-reference-materials/);
   assert.match(appJs, /data-action="apply-generation-reference-material"/);
   assert.match(appJs, /const referenceAssets = await captureGenerationReferenceAssetsForRequest\(\);[\s\S]*const payload = getGenerationPayload\(\{ referenceAssets \}\);[\s\S]*\/api\/generate-note[\s\S]*resetGenerationReferenceAssets\(\)[\s\S]*releaseGenerationReferenceAssetsRequestLock\(\)/);
-  assert.match(appJs, /if \(includeReferenceAssets\) \{[\s\S]*payload\.referenceAssets = referenceAssets \|\| serializeGenerationReferenceAssets\(\)/);
+  assert.match(
+    appJs,
+    /if \(includeReferenceAssets\) \{[\s\S]*payload\.referenceAssets = \{[\s\S]*\.\.\.\(referenceAssets \|\| serializeGenerationReferenceAssets\(\)\)[\s\S]*materialText:\s*String\(form\.get\("materialText"\) \|\| ""\)\.trim\(\)/
+  );
 
   assert.match(styles, /\.generation-reference-assets\b/);
   assert.match(styles, /\.generation-reference-files\b/);

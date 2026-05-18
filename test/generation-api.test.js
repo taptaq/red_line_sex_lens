@@ -124,6 +124,34 @@ test("generation endpoint normalizes temporary text references even when no imag
   });
 });
 
+test("generation endpoint merges referenceAssets materialText into normalized mergedText", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const result = await invokeRoute("POST", "/api/generate-note", {
+      mode: "from_scratch",
+      collectionType: "科普",
+      brief: { topic: "沟通", constraints: "温和" },
+      referenceAssets: {
+        materialText: "手写补充说明",
+        images: [],
+        textFiles: [
+          {
+            name: "notes.md",
+            contentBase64: Buffer.from("临时文本参考内容", "utf8").toString("base64")
+          }
+        ]
+      },
+      mockCandidates: [
+        { variant: "safe", title: "沟通标题", body: "完整正文".repeat(40), coverText: "封面", tags: ["沟通", "关系"] }
+      ]
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.match(result.referenceAssets.mergedText, /手写补充说明/);
+    assert.match(result.referenceAssets.mergedText, /临时文本参考内容/);
+  });
+});
+
 test("generation endpoint skips over-limit temporary reference assets server-side and returns warnings", async (t) => {
   await withTempGenerationData(t, async () => {
     const result = await invokeRoute("POST", "/api/generate-note", {

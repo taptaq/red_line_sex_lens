@@ -8497,7 +8497,10 @@ function getGenerationPayload({ referenceAssets, includeReferenceAssets = true }
   };
 
   if (includeReferenceAssets) {
-    payload.referenceAssets = referenceAssets || serializeGenerationReferenceAssets();
+    payload.referenceAssets = {
+      ...(referenceAssets || serializeGenerationReferenceAssets()),
+      materialText: String(form.get("materialText") || "").trim()
+    };
   }
 
   return payload;

@@ -73,6 +73,7 @@ export async function summarizeGenerationReferenceAssets({
   summarizeImage = async () => ({ summary: "" }),
   modelSelection = "auto"
 } = {}) {
+  const materialText = String(referenceAssets?.materialText || "").trim();
   const textFiles = normalizeAssetList(referenceAssets?.textFiles);
   const images = normalizeAssetList(referenceAssets?.images);
   const warnings = [];
@@ -80,7 +81,7 @@ export async function summarizeGenerationReferenceAssets({
   const acceptedImages = [];
   const textFileNames = [];
   const imageFileNames = [];
-  const mergedTextParts = [];
+  const mergedTextParts = materialText ? [materialText] : [];
   const imageSummaries = [];
   let totalAcceptedBytes = 0;
 
