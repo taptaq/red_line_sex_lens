@@ -56,6 +56,7 @@ const REFERENCE_METRIC_THRESHOLD = {
 };
 
 const SAMPLE_LIBRARY_RETRO_REMINDER_START_DATE = "2026-05-11";
+const GENERATION_REFERENCE_IMAGE_LIMIT = 5;
 
 function formatReferenceThresholdRule(parts = [], { joiner = "、", lastJoiner = " 或" } = {}) {
   const normalized = Array.isArray(parts) ? parts.filter(Boolean) : [];
@@ -694,6 +695,11 @@ const appState = {
   },
   sampleLibraryImportDrafts: [],
   sampleLibraryImportMessage: "",
+  generationReferenceAssets: {
+    images: [],
+    textFiles: [],
+    message: ""
+  },
   sampleLibraryCalibrationReplayResult: null,
   sampleLibraryModal: null,
   lexiconWorkspaceModal: {
@@ -6917,6 +6923,110 @@ async function fileToBase64(file) {
   return btoa(binary);
 }
 
+async function readGenerationReferenceImageFiles(fileList) {
+  const files = Array.from(fileList || []).filter(Boolean);
+
+  if (!files.length) {
+    return [];
+  }
+
+  return Promise.all(
+    files.map(async (file) => ({
+      name: String(file?.name || "").trim() || "未命名图片",
+      type: String(file?.type || "").trim() || "application/octet-stream",
+      size: Number(file?.size ?? 0) || 0,
+      dataUrl: await fileToDataUrl(file)
+    }))
+  );
+}
+
+async function readGenerationReferenceTextFiles(fileList) {
+  const files = Array.from(fileList || []).filter(Boolean);
+
+  if (!files.length) {
+    return [];
+  }
+
+  return Promise.all(
+    files.map(async (file) => ({
+      name: String(file?.name || "").trim() || "未命名文本",
+      contentBase64: await fileToBase64(file)
+    }))
+  );
+}
+
+function renderGenerationReferenceAssets() {
+  const container = byId("generation-reference-assets-preview");
+
+  if (!container) {
+    return;
+  }
+
+  const { images = [], textFiles = [], message = "" } = appState.generationReferenceAssets || {};
+  const hasAssets = images.length || textFiles.length;
+
+  if (!hasAssets && !message) {
+    container.innerHTML = '<span class="helper-text">暂未添加临时参考素材。</span>';
+    return;
+  }
+
+  const imageMarkup = images.length
+    ? `
+        <div class="generation-reference-section">
+          <strong>参考图片</strong>
+          <div class="generation-reference-chip-list">
+            ${images
+              .map(
+                (file, index) => `
+                  <button
+                    type="button"
+                    class="generation-reference-chip"
+                    data-action="remove-generation-reference-image"
+                    data-index="${index}"
+                  >
+                    <span>${escapeHtml(file?.name || `参考图片 ${index + 1}`)}</span>
+                    <span aria-hidden="true">移除</span>
+                  </button>
+                `
+              )
+              .join("")}
+          </div>
+        </div>
+      `
+    : "";
+
+  const textMarkup = textFiles.length
+    ? `
+        <div class="generation-reference-section">
+          <strong>参考文本</strong>
+          <div class="generation-reference-chip-list">
+            ${textFiles
+              .map(
+                (file, index) => `
+                  <button
+                    type="button"
+                    class="generation-reference-chip"
+                    data-action="remove-generation-reference-text"
+                    data-index="${index}"
+                  >
+                    <span>${escapeHtml(file?.name || `参考文本 ${index + 1}`)}</span>
+                    <span aria-hidden="true">移除</span>
+                  </button>
+                `
+              )
+              .join("")}
+          </div>
+        </div>
+      `
+    : "";
+
+  container.innerHTML = `
+    ${message ? `<p class="helper-text">${escapeHtml(message)}</p>` : ""}
+    ${imageMarkup}
+    ${textMarkup}
+  `;
+}
+
 function setSampleLibraryImportBlockOpen(isOpen) {
   const button = byId("sample-library-import-button");
   const block = byId("sample-library-import-block");
@@ -8070,8 +8180,86 @@ function getGenerationPayload() {
       title: String(form.get("draftTitle") || "").trim(),
       body: String(form.get("draftBody") || "").trim()
     },
-    modelSelection: getSelectedModelSelections()
+    modelSelection: getSelectedModelSelections(),
+    referenceAssets: {
+      images: appState.generationReferenceAssets.images.map((file) => ({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        dataUrl: file.dataUrl
+      })),
+      textFiles: appState.generationReferenceAssets.textFiles.map((file) => ({
+        name: file.name,
+        contentBase64: file.contentBase64
+      }))
+    }
   };
+}
+
+async function handleGenerationReferenceImageSelection(event) {
+  const input = event?.currentTarget;
+  const selectedImages = await readGenerationReferenceImageFiles(input?.files);
+  const currentImages = Array.isArray(appState.generationReferenceAssets?.images)
+    ? appState.generationReferenceAssets.images
+    : [];
+  const remainingSlots = Math.max(0, GENERATION_REFERENCE_IMAGE_LIMIT - currentImages.length);
+  const acceptedImages = remainingSlots > 0 ? selectedImages.slice(0, remainingSlots) : [];
+  const message = selectedImages.length > acceptedImages.length ? "参考图片最多保留 5 张。" : "";
+
+  appState.generationReferenceAssets = {
+    ...appState.generationReferenceAssets,
+    images: [...currentImages, ...acceptedImages],
+    message
+  };
+
+  if (input) {
+    input.value = "";
+  }
+
+  renderGenerationReferenceAssets();
+}
+
+async function handleGenerationReferenceTextSelection(event) {
+  const input = event?.currentTarget;
+  const selectedTextFiles = await readGenerationReferenceTextFiles(input?.files);
+
+  appState.generationReferenceAssets = {
+    ...appState.generationReferenceAssets,
+    textFiles: [...appState.generationReferenceAssets.textFiles, ...selectedTextFiles],
+    message: ""
+  };
+
+  if (input) {
+    input.value = "";
+  }
+
+  renderGenerationReferenceAssets();
+}
+
+function removeGenerationReferenceAsset(kind, index) {
+  const numericIndex = Number(index);
+
+  if (!Number.isInteger(numericIndex) || numericIndex < 0) {
+    return;
+  }
+
+  if (kind === "image") {
+    appState.generationReferenceAssets = {
+      ...appState.generationReferenceAssets,
+      images: appState.generationReferenceAssets.images.filter((_, itemIndex) => itemIndex !== numericIndex),
+      message: ""
+    };
+  }
+
+  if (kind === "text") {
+    appState.generationReferenceAssets = {
+      ...appState.generationReferenceAssets,
+      textFiles: appState.generationReferenceAssets.textFiles.filter((_, itemIndex) => itemIndex !== numericIndex),
+      message: ""
+    };
+  }
+
+  renderGenerationReferenceAssets();
 }
 
 function syncGenerationModeFields() {
@@ -8414,7 +8602,41 @@ byId("feedback-form").addEventListener("change", syncFeedbackActions);
 byId("generation-workbench-form").addEventListener("input", syncGenerationActions);
 byId("generation-workbench-form").addEventListener("change", syncGenerationActions);
 byId("generation-workbench-form").addEventListener("change", syncGenerationModeFields);
+byId("generation-reference-image-input")?.addEventListener("change", (event) => {
+  handleGenerationReferenceImageSelection(event).catch(() => {
+    appState.generationReferenceAssets = {
+      ...appState.generationReferenceAssets,
+      message: "参考图片读取失败，请重试。"
+    };
+    renderGenerationReferenceAssets();
+  });
+});
+byId("generation-reference-text-input")?.addEventListener("change", (event) => {
+  handleGenerationReferenceTextSelection(event).catch(() => {
+    appState.generationReferenceAssets = {
+      ...appState.generationReferenceAssets,
+      message: "参考文本读取失败，请重试。"
+    };
+    renderGenerationReferenceAssets();
+  });
+});
 byId("generation-briefing-improve").addEventListener("click", improveGenerationBriefingFromCurrentInput);
+byId("generation-reference-assets-preview")?.addEventListener("click", (event) => {
+  const button = event.target instanceof Element ? event.target.closest("[data-action]") : null;
+
+  if (!button) {
+    return;
+  }
+
+  if (button.dataset.action === "remove-generation-reference-image") {
+    removeGenerationReferenceAsset("image", button.dataset.index);
+  }
+
+  if (button.dataset.action === "remove-generation-reference-text") {
+    removeGenerationReferenceAsset("text", button.dataset.index);
+  }
+});
+renderGenerationReferenceAssets();
 function buildLexiconEntry(form) {
   const source = String(form.get("source") || "").trim();
   const match = String(form.get("match") || "exact");

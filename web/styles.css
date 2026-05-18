@@ -1279,6 +1279,34 @@ li + li {
   overflow-wrap: anywhere;
 }
 
+.generation-reference-assets {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.generation-reference-files {
+  gap: 0.9rem;
+}
+
+.generation-reference-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.55rem;
+}
+
+.generation-reference-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(255, 248, 236, 0.9);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
 .button-small {
   padding: 0.55rem 0.95rem;
   font-size: 0.92rem;

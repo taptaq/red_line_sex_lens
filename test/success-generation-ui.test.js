@@ -1586,3 +1586,23 @@ test("frontend also gates prefill and lexicon submit actions that depend on prer
   assert.match(appJs, /byId\("lexicon-workspace-modal-content"\)\?\.addEventListener\("input"/);
   assert.match(appJs, /byId\("lexicon-workspace-modal-content"\)\?\.addEventListener\("change"/);
 });
+
+test("frontend exposes temporary generation reference asset uploads and payload wiring", async () => {
+  const { indexHtml, appJs, styles } = await readFrontendFiles();
+
+  assert.match(indexHtml, /id="generation-reference-image-input"/);
+  assert.match(indexHtml, /id="generation-reference-image-input"[\s\S]*accept="image\/\*"/);
+  assert.match(indexHtml, /id="generation-reference-text-input"/);
+  assert.match(indexHtml, /id="generation-reference-text-input"[\s\S]*accept="\.txt,\.md,\.markdown,text\/plain,text\/markdown"/);
+  assert.match(indexHtml, /id="generation-reference-assets-preview"/);
+
+  assert.match(appJs, /generationReferenceAssets:\s*\{\s*images:\s*\[\],\s*textFiles:\s*\[\],\s*message:\s*""\s*\}/);
+  assert.match(appJs, /async function readGenerationReferenceImageFiles\s*\(/);
+  assert.match(appJs, /async function readGenerationReferenceTextFiles\s*\(/);
+  assert.match(appJs, /function renderGenerationReferenceAssets\s*\(/);
+  assert.match(appJs, /referenceAssets:\s*\{\s*images:\s*appState\.generationReferenceAssets\.images\.map\(/);
+  assert.match(appJs, /textFiles:\s*appState\.generationReferenceAssets\.textFiles\.map\(/);
+
+  assert.match(styles, /\.generation-reference-assets\b/);
+  assert.match(styles, /\.generation-reference-files\b/);
+});
