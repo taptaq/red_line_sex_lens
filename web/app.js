@@ -766,6 +766,7 @@ const sampleLibraryCalibrationReplayApi = "/api/sample-library/calibration-repla
 const innerSpaceTermsApi = "/api/admin/inner-space-terms";
 const styleProfileAdminApi = "/api/admin/style-profile";
 const SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT = 3;
+let generationReferenceSearchRequestSequence = 0;
 
 function syncBodyModalState() {
   const sampleLibraryModalOpen = byId("sample-library-modal")?.hidden === false;
@@ -7184,8 +7185,20 @@ function appendGenerationMaterialText(nextText) {
     return;
   }
 
-  const currentValue = String(field.value || "").trim();
-  field.value = currentValue ? `${currentValue}\n\n${appended}` : appended;
+  const currentValue = String(field.value || "");
+  let separator = "";
+
+  if (currentValue) {
+    if (/\n\s*\n\s*$/.test(currentValue)) {
+      separator = "";
+    } else if (/\n\s*$/.test(currentValue)) {
+      separator = "\n";
+    } else {
+      separator = "\n\n";
+    }
+  }
+
+  field.value = `${currentValue}${separator}${appended}`;
   field.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
@@ -7259,6 +7272,7 @@ async function openGenerationReferenceSearchModal() {
   const resultNode = byId("generation-reference-search-result");
   const payload = getGenerationPayload({ includeReferenceAssets: false });
   const briefing = String(payload.brief?.briefing || "").trim();
+  const requestId = ++generationReferenceSearchRequestSequence;
 
   if (!briefing) {
     if (resultNode) {
@@ -7285,6 +7299,11 @@ async function openGenerationReferenceSearchModal() {
       method: "POST",
       body: JSON.stringify(payload)
     });
+
+    if (requestId !== generationReferenceSearchRequestSequence) {
+      return;
+    }
+
     const items = Array.isArray(result?.items)
       ? result.items
       : Array.isArray(result?.materials)
@@ -7292,7 +7311,7 @@ async function openGenerationReferenceSearchModal() {
         : [];
 
     appState.generationReferenceSearch = {
-      open: true,
+      ...appState.generationReferenceSearch,
       loading: false,
       message: String(result?.message || "").trim(),
       items
@@ -7302,8 +7321,12 @@ async function openGenerationReferenceSearchModal() {
       resultNode.textContent = items.length ? "已生成候选参考资料。请选择需要回填的内容。" : "本次没有找到可回填的参考资料。";
     }
   } catch (error) {
+    if (requestId !== generationReferenceSearchRequestSequence) {
+      return;
+    }
+
     appState.generationReferenceSearch = {
-      open: true,
+      ...appState.generationReferenceSearch,
       loading: false,
       message: error?.message || "参考资料搜索失败",
       items: []
@@ -10520,6 +10543,11 @@ document.addEventListener("keydown", (event) => {
 
   if (appState.sampleLibraryModal) {
     closeSampleLibraryModal();
+    return;
+  }
+
+  if (appState.generationReferenceSearch?.open) {
+    closeGenerationReferenceSearchModal();
     return;
   }
 

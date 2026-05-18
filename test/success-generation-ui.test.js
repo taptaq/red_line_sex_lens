@@ -2501,3 +2501,247 @@ return {
   assert.deepEqual(appState.generationReferenceAssets.textFiles.map((file) => file.name), ["ok-text"]);
   assert.match(appState.generationReferenceAssets.message, /512 KB/);
 });
+
+test("generation reference search keeps modal closed when request resolves after explicit close", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const modalHelpersSource = extractSourceBetween(
+    appJs,
+    "function setGenerationReferenceSearchModalOpen(",
+    "function setSampleLibraryImportBlockOpen("
+  );
+
+  const appState = {
+    generationReferenceSearch: {
+      open: false,
+      loading: false,
+      message: "",
+      items: []
+    }
+  };
+  const nodes = {
+    "generation-reference-search-modal": { hidden: true },
+    "generation-reference-search-modal-content": { innerHTML: "" },
+    "generation-reference-search-result": { textContent: "" }
+  };
+  const formNode = {
+    querySelector(selector) {
+      if (selector === '[name="materialText"]') {
+        return null;
+      }
+      return null;
+    }
+  };
+  const request = {};
+  request.promise = new Promise((resolve) => {
+    request.resolve = resolve;
+  });
+  const events = [];
+  const requestSequenceBox = { value: 0 };
+
+  const helpers = new Function(
+    "appState",
+    "requestSequenceBox",
+    "byId",
+    "syncBodyModalState",
+    "escapeHtml",
+    "Event",
+    "HTMLTextAreaElement",
+    "apiJson",
+    "getGenerationPayload",
+    "syncGenerationActions",
+    `let generationReferenceSearchRequestSequence = requestSequenceBox.value;
+${modalHelpersSource}
+return {
+  openGenerationReferenceSearchModal,
+  closeGenerationReferenceSearchModal,
+  getRequestSequence() {
+    return generationReferenceSearchRequestSequence;
+  }
+};`
+  )(
+    appState,
+    requestSequenceBox,
+    (id) => {
+      if (id === "generation-workbench-form") {
+        return formNode;
+      }
+      return nodes[id] || null;
+    },
+    () => {
+      events.push({ type: "syncBodyModalState", hidden: nodes["generation-reference-search-modal"].hidden });
+    },
+    (value) => String(value || ""),
+    class TestEvent {
+      constructor(type, init = {}) {
+        this.type = type;
+        this.bubbles = Boolean(init.bubbles);
+      }
+    },
+    class TestTextArea {},
+    async () => request.promise,
+    () => ({
+      brief: {
+        briefing: "需要一组参考资料"
+      }
+    }),
+    () => {
+      events.push({ type: "syncGenerationActions" });
+    }
+  );
+
+  const pending = helpers.openGenerationReferenceSearchModal();
+  helpers.closeGenerationReferenceSearchModal();
+  request.resolve({
+    items: [
+      {
+        title: "参考 1",
+        reason: "命中主题",
+        referenceText: "资料 A",
+        sourceUrl: "https://example.com/a"
+      }
+    ]
+  });
+  await pending;
+  requestSequenceBox.value = helpers.getRequestSequence();
+
+  assert.equal(appState.generationReferenceSearch.open, false);
+  assert.equal(nodes["generation-reference-search-modal"].hidden, true);
+  assert.deepEqual(appState.generationReferenceSearch.items.map((item) => item.title), ["参考 1"]);
+});
+
+test("appendGenerationMaterialText preserves existing trailing whitespace before appending", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const modalHelpersSource = extractSourceBetween(
+    appJs,
+    "function setGenerationReferenceSearchModalOpen(",
+    "function setSampleLibraryImportBlockOpen("
+  );
+
+  class TestTextArea {
+    constructor(value = "") {
+      this.value = value;
+      this.events = [];
+    }
+
+    dispatchEvent(event) {
+      this.events.push(event);
+      return true;
+    }
+  }
+
+  const materialField = new TestTextArea("已有素材  ");
+  const formNode = {
+    querySelector(selector) {
+      if (selector === '[name="materialText"]') {
+        return materialField;
+      }
+      return null;
+    }
+  };
+
+  const helpers = new Function(
+    "appState",
+    "byId",
+    "syncBodyModalState",
+    "escapeHtml",
+    "Event",
+    "HTMLTextAreaElement",
+    "apiJson",
+    "getGenerationPayload",
+    "syncGenerationActions",
+    `${modalHelpersSource}
+return {
+  appendGenerationMaterialText
+};`
+  )(
+    {},
+    (id) => (id === "generation-workbench-form" ? formNode : null),
+    () => {},
+    (value) => String(value || ""),
+    class TestEvent {
+      constructor(type, init = {}) {
+        this.type = type;
+        this.bubbles = Boolean(init.bubbles);
+      }
+    },
+    TestTextArea,
+    async () => ({}),
+    () => ({ brief: { briefing: "" } }),
+    () => {}
+  );
+
+  helpers.appendGenerationMaterialText("新资料");
+
+  assert.equal(materialField.value, "已有素材  \n\n新资料");
+  assert.equal(materialField.events.length, 1);
+  assert.equal(materialField.events[0].type, "input");
+});
+
+test("Escape closes generation reference search modal when open", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const keydownListeners = [...appJs.matchAll(/document\.addEventListener\("keydown", \(event\) => \{([\s\S]*?)\n\}\);/g)];
+  assert.ok(keydownListeners.length >= 2, "expected at least two keydown listeners");
+  const escapeHandlerBody = keydownListeners[1][1];
+
+  const listeners = {};
+  const appState = {
+    sampleLibraryModal: null,
+    sampleLibraryPoolsModal: { open: false },
+    generationReferenceSearch: {
+      open: true,
+      loading: false,
+      message: "",
+      items: []
+    }
+  };
+  const nodes = {
+    "generation-reference-search-modal": { hidden: false }
+  };
+  let closed = 0;
+
+  const documentStub = {
+    activeElement: null,
+    addEventListener(type, handler) {
+      listeners[type] = handler;
+    }
+  };
+
+  const escapeHandler = new Function(
+    "appState",
+    "requestCloseSampleLibraryRecordInlineEditorModal",
+    "closeSampleLibraryModal",
+    "closeSampleLibraryPoolsModal",
+    "closeGenerationReferenceSearchModal",
+    "getSampleLibraryImportCards",
+    "getSampleLibraryImportCardTagPicker",
+    "getSampleLibraryImportCardTagTrigger",
+    "setSampleLibraryImportCardTagDropdownOpen",
+    "HTMLElement",
+    "document",
+    "event",
+    `${escapeHandlerBody}`
+  );
+
+  escapeHandler(
+    appState,
+    () => {},
+    () => {},
+    () => {},
+    () => {
+      closed += 1;
+      appState.generationReferenceSearch.open = false;
+      nodes["generation-reference-search-modal"].hidden = true;
+    },
+    () => [],
+    () => null,
+    () => null,
+    () => {},
+    class TestElement {},
+    documentStub,
+    { key: "Escape" }
+  );
+
+  assert.equal(closed, 1);
+  assert.equal(appState.generationReferenceSearch.open, false);
+  assert.equal(nodes["generation-reference-search-modal"].hidden, true);
+});
