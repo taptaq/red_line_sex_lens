@@ -1603,7 +1603,8 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(appJs, /Promise\.allSettled\(/);
   assert.match(appJs, /async function awaitGenerationReferenceAssetsReady\s*\(/);
   assert.match(appJs, /function renderGenerationReferenceAssets\s*\(/);
-  assert.match(appJs, /appState\.generationReferenceAssetsPending = readPromise/);
+  assert.match(appJs, /const pendingChain = appState\.generationReferenceAssetsPending\.catch\(\(\) => \{\}\)/);
+  assert.match(appJs, /appState\.generationReferenceAssetsPending = pendingChain\.then\(\(\) => readPromise\)/);
   assert.match(appJs, /input\.value = ""/);
   assert.match(appJs, /await awaitGenerationReferenceAssetsReady\(\);[\s\S]*const payload = getGenerationPayload\(\);[\s\S]*\/api\/generate-note-briefing/);
   assert.match(appJs, /await awaitGenerationReferenceAssetsReady\(\);[\s\S]*const payload = getGenerationPayload\(\);[\s\S]*\/api\/generate-note/);

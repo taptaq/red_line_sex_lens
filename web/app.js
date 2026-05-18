@@ -8213,29 +8213,29 @@ function getGenerationPayload() {
 
 async function handleGenerationReferenceImageSelection(event) {
   const input = event?.currentTarget;
-  const readPromise = (async () => {
-    const { files: selectedImages, failedCount } = await readGenerationReferenceImageFiles(input?.files);
-    const currentImages = Array.isArray(appState.generationReferenceAssets?.images)
-      ? appState.generationReferenceAssets.images
-      : [];
-    const remainingSlots = Math.max(0, GENERATION_REFERENCE_IMAGE_LIMIT - currentImages.length);
-    const acceptedImages = remainingSlots > 0 ? selectedImages.slice(0, remainingSlots) : [];
-    let message = "";
+  const readPromise = readGenerationReferenceImageFiles(input?.files)
+    .then(({ files: selectedImages, failedCount }) => {
+      const currentImages = Array.isArray(appState.generationReferenceAssets?.images)
+        ? appState.generationReferenceAssets.images
+        : [];
+      const remainingSlots = Math.max(0, GENERATION_REFERENCE_IMAGE_LIMIT - currentImages.length);
+      const acceptedImages = remainingSlots > 0 ? selectedImages.slice(0, remainingSlots) : [];
+      let message = "";
 
-    if (selectedImages.length > acceptedImages.length) {
-      message = "参考图片最多保留 5 张。";
-    } else if (failedCount) {
-      message = "部分参考图片读取失败，已保留可用文件。";
-    }
+      if (selectedImages.length > acceptedImages.length) {
+        message = "参考图片最多保留 5 张。";
+      } else if (failedCount) {
+        message = "部分参考图片读取失败，已保留可用文件。";
+      }
 
-    appState.generationReferenceAssets = {
-      ...appState.generationReferenceAssets,
-      images: [...currentImages, ...acceptedImages],
-      message
-    };
+      appState.generationReferenceAssets = {
+        ...appState.generationReferenceAssets,
+        images: [...currentImages, ...acceptedImages],
+        message
+      };
 
-    renderGenerationReferenceAssets();
-  })()
+      renderGenerationReferenceAssets();
+    })
     .catch(() => {
       appState.generationReferenceAssets = {
         ...appState.generationReferenceAssets,
@@ -8249,23 +8249,23 @@ async function handleGenerationReferenceImageSelection(event) {
       }
     });
 
-  appState.generationReferenceAssetsPending = readPromise;
-  await readPromise;
+  const pendingChain = appState.generationReferenceAssetsPending.catch(() => {});
+  appState.generationReferenceAssetsPending = pendingChain.then(() => readPromise);
+  await appState.generationReferenceAssetsPending;
 }
 
 async function handleGenerationReferenceTextSelection(event) {
   const input = event?.currentTarget;
-  const readPromise = (async () => {
-    const { files: selectedTextFiles, failedCount } = await readGenerationReferenceTextFiles(input?.files);
+  const readPromise = readGenerationReferenceTextFiles(input?.files)
+    .then(({ files: selectedTextFiles, failedCount }) => {
+      appState.generationReferenceAssets = {
+        ...appState.generationReferenceAssets,
+        textFiles: [...appState.generationReferenceAssets.textFiles, ...selectedTextFiles],
+        message: failedCount ? "部分参考文本读取失败，已保留可用文件。" : ""
+      };
 
-    appState.generationReferenceAssets = {
-      ...appState.generationReferenceAssets,
-      textFiles: [...appState.generationReferenceAssets.textFiles, ...selectedTextFiles],
-      message: failedCount ? "部分参考文本读取失败，已保留可用文件。" : ""
-    };
-
-    renderGenerationReferenceAssets();
-  })()
+      renderGenerationReferenceAssets();
+    })
     .catch(() => {
       appState.generationReferenceAssets = {
         ...appState.generationReferenceAssets,
@@ -8279,8 +8279,9 @@ async function handleGenerationReferenceTextSelection(event) {
       }
     });
 
-  appState.generationReferenceAssetsPending = readPromise;
-  await readPromise;
+  const pendingChain = appState.generationReferenceAssetsPending.catch(() => {});
+  appState.generationReferenceAssetsPending = pendingChain.then(() => readPromise);
+  await appState.generationReferenceAssetsPending;
 }
 
 function removeGenerationReferenceAsset(kind, index) {
