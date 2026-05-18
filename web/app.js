@@ -8304,44 +8304,47 @@ async function handleGenerationReferenceImageSelection(event) {
     return;
   }
 
-  const operation = () => readGenerationReferenceImageFiles(selectedFiles)
-    .then(({ files: selectedImages, failedCount }) => {
+  const operation = () => {
       const currentImages = Array.isArray(appState.generationReferenceAssets?.images)
         ? appState.generationReferenceAssets.images
         : [];
       const currentTotalBytes = getGenerationReferenceAssetsTotalBytes();
-      const { acceptedFiles: sizeAcceptedImages, messages: limitMessages } = collectAcceptedGenerationReferenceFiles(selectedImages, {
+      const { acceptedFiles: sizeAcceptedSelectedFiles, messages: limitMessages } = collectAcceptedGenerationReferenceFiles(selectedFiles, {
         maxFileBytes: GENERATION_REFERENCE_IMAGE_MAX_FILE_BYTES,
         currentTotalBytes,
         oversizeMessage: "单张参考图片不能超过 4 MB。",
         totalMessage: "临时参考素材总大小最多 12 MB。"
       });
-      const remainingSlots = Math.max(0, GENERATION_REFERENCE_IMAGE_LIMIT - currentImages.length);
-      const acceptedImages = remainingSlots > 0 ? sizeAcceptedImages.slice(0, remainingSlots) : [];
-      const messageParts = [...limitMessages];
 
-      if (sizeAcceptedImages.length > acceptedImages.length) {
-        messageParts.unshift("参考图片最多保留 5 张。");
-      }
-      if (failedCount) {
-        messageParts.push("部分参考图片读取失败，已保留可用文件。");
-      }
+      return readGenerationReferenceImageFiles(sizeAcceptedSelectedFiles)
+        .then(({ files: selectedImages, failedCount }) => {
+          const remainingSlots = Math.max(0, GENERATION_REFERENCE_IMAGE_LIMIT - currentImages.length);
+          const acceptedImages = remainingSlots > 0 ? selectedImages.slice(0, remainingSlots) : [];
+          const messageParts = [...limitMessages];
 
-      appState.generationReferenceAssets = {
-        ...appState.generationReferenceAssets,
-        images: [...currentImages, ...acceptedImages],
-        message: messageParts.join(" ")
-      };
+          if (selectedImages.length > acceptedImages.length) {
+            messageParts.unshift("参考图片最多保留 5 张。");
+          }
+          if (failedCount) {
+            messageParts.push("部分参考图片读取失败，已保留可用文件。");
+          }
 
-      renderGenerationReferenceAssets();
-    })
-    .catch(() => {
-      appState.generationReferenceAssets = {
-        ...appState.generationReferenceAssets,
-        message: "参考图片读取失败，请重试。"
-      };
-      renderGenerationReferenceAssets();
-    });
+          appState.generationReferenceAssets = {
+            ...appState.generationReferenceAssets,
+            images: [...currentImages, ...acceptedImages],
+            message: messageParts.join(" ")
+          };
+
+          renderGenerationReferenceAssets();
+        })
+        .catch(() => {
+          appState.generationReferenceAssets = {
+            ...appState.generationReferenceAssets,
+            message: "参考图片读取失败，请重试。"
+          };
+          renderGenerationReferenceAssets();
+        });
+    };
 
   appState.generationReferenceAssetsPending = appState.generationReferenceAssetsPending.catch(() => {}).then(operation);
   await appState.generationReferenceAssetsPending;
@@ -8358,11 +8361,10 @@ async function handleGenerationReferenceTextSelection(event) {
     return;
   }
 
-  const operation = () => readGenerationReferenceTextFiles(selectedFiles)
-    .then(({ files: selectedTextFiles, failedCount }) => {
+  const operation = () => {
       const currentTotalBytes = getGenerationReferenceAssetsTotalBytes();
-      const { acceptedFiles: sizeAcceptedTextFiles, messages: limitMessages } = collectAcceptedGenerationReferenceFiles(
-        selectedTextFiles,
+      const { acceptedFiles: sizeAcceptedSelectedFiles, messages: limitMessages } = collectAcceptedGenerationReferenceFiles(
+        selectedFiles,
         {
           maxFileBytes: GENERATION_REFERENCE_TEXT_MAX_FILE_BYTES,
           currentTotalBytes,
@@ -8370,27 +8372,31 @@ async function handleGenerationReferenceTextSelection(event) {
           totalMessage: "临时参考素材总大小最多 12 MB。"
         }
       );
-      const messageParts = [...limitMessages];
 
-      if (failedCount) {
-        messageParts.push("部分参考文本读取失败，已保留可用文件。");
-      }
+      return readGenerationReferenceTextFiles(sizeAcceptedSelectedFiles)
+        .then(({ files: selectedTextFiles, failedCount }) => {
+          const messageParts = [...limitMessages];
 
-      appState.generationReferenceAssets = {
-        ...appState.generationReferenceAssets,
-        textFiles: [...appState.generationReferenceAssets.textFiles, ...sizeAcceptedTextFiles],
-        message: messageParts.join(" ")
-      };
+          if (failedCount) {
+            messageParts.push("部分参考文本读取失败，已保留可用文件。");
+          }
 
-      renderGenerationReferenceAssets();
-    })
-    .catch(() => {
-      appState.generationReferenceAssets = {
-        ...appState.generationReferenceAssets,
-        message: "参考文本读取失败，请重试。"
-      };
-      renderGenerationReferenceAssets();
-    });
+          appState.generationReferenceAssets = {
+            ...appState.generationReferenceAssets,
+            textFiles: [...appState.generationReferenceAssets.textFiles, ...selectedTextFiles],
+            message: messageParts.join(" ")
+          };
+
+          renderGenerationReferenceAssets();
+        })
+        .catch(() => {
+          appState.generationReferenceAssets = {
+            ...appState.generationReferenceAssets,
+            message: "参考文本读取失败，请重试。"
+          };
+          renderGenerationReferenceAssets();
+        });
+    };
 
   appState.generationReferenceAssetsPending = appState.generationReferenceAssetsPending.catch(() => {}).then(operation);
   await appState.generationReferenceAssetsPending;

@@ -1614,8 +1614,8 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(appJs, /function renderGenerationReferenceAssets\s*\(/);
   assert.match(appJs, /const selectedFiles = Array\.from\(input\?\.files \|\| \[\]\)/);
   assert.match(appJs, /if \(input\) \{\s*input\.value = "";\s*\}\s*\n\s*if \(appState\.generationReferenceAssetsLocked\)/);
-  assert.match(appJs, /const operation = \(\) => readGenerationReferenceImageFiles/);
-  assert.match(appJs, /const operation = \(\) => readGenerationReferenceTextFiles/);
+  assert.match(appJs, /const operation = \(\) => \{[\s\S]*collectAcceptedGenerationReferenceFiles\([\s\S]*readGenerationReferenceImageFiles/);
+  assert.match(appJs, /const operation = \(\) => \{[\s\S]*collectAcceptedGenerationReferenceFiles\([\s\S]*readGenerationReferenceTextFiles/);
   assert.match(appJs, /appState\.generationReferenceAssetsPending = appState\.generationReferenceAssetsPending\.catch\(\(\) => \{\}\)\.then\(operation\)/);
   assert.match(appJs, /input\.value = ""/);
   assert.match(appJs, /const referenceAssets = await captureGenerationReferenceAssetsForRequest\(\);[\s\S]*const payload = getGenerationPayload\(\{ referenceAssets \}\);[\s\S]*\/api\/generate-note-briefing[\s\S]*releaseGenerationReferenceAssetsRequestLock\(\)/);
@@ -2278,4 +2278,154 @@ return {
   assert.equal(appState.generationReferenceAssetsLocked, true);
   helpers.releaseGenerationReferenceAssetsRequestLock();
   assert.equal(appState.generationReferenceAssetsLocked, false);
+});
+
+test("generation reference image handler skips oversize files before invoking readers", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const generationHelpersSource = extractSourceBetween(
+    appJs,
+    "async function readGenerationReferenceImageFiles(",
+    "function syncGenerationModeFields()"
+  );
+
+  const appState = {
+    generationReferenceAssets: {
+      images: [],
+      textFiles: [],
+      message: ""
+    },
+    generationReferenceAssetsPending: Promise.resolve(),
+    generationReferenceAssetsLocked: false
+  };
+  const readerCalls = [];
+  const input = {
+    files: [
+      { name: "too-big-image", size: 5 * 1024 * 1024 },
+      { name: "ok-image", size: 1024 }
+    ],
+    value: "image-batch"
+  };
+  const helpers = new Function(
+    "appState",
+    "GENERATION_REFERENCE_IMAGE_LIMIT",
+    "GENERATION_REFERENCE_IMAGE_MAX_FILE_BYTES",
+    "GENERATION_REFERENCE_TEXT_MAX_FILE_BYTES",
+    "GENERATION_REFERENCE_TOTAL_MAX_BYTES",
+    "fileToDataUrl",
+    "fileToBase64",
+    "renderGenerationReferenceAssets",
+    "escapeHtml",
+    "byId",
+    "awaitGenerationReferenceAssetsReady",
+    "getGenerationRequirementMessage",
+    "syncGenerationActions",
+    "setButtonBusy",
+    `${generationHelpersSource}
+return {
+  handleGenerationReferenceImageSelection
+};`
+  )(
+    appState,
+    5,
+    4 * 1024 * 1024,
+    512 * 1024,
+    12 * 1024 * 1024,
+    async (file) => {
+      readerCalls.push(file.name);
+      return `data:${file.name}`;
+    },
+    async () => {
+      throw new Error("text files not used in this test");
+    },
+    () => {},
+    (value) => String(value || ""),
+    () => null,
+    async () => {
+      await appState.generationReferenceAssetsPending;
+    },
+    () => "",
+    () => {},
+    () => {}
+  );
+
+  await helpers.handleGenerationReferenceImageSelection({ currentTarget: input });
+
+  assert.deepEqual(readerCalls, ["ok-image"]);
+  assert.deepEqual(appState.generationReferenceAssets.images.map((file) => file.name), ["ok-image"]);
+  assert.match(appState.generationReferenceAssets.message, /4 MB/);
+});
+
+test("generation reference text handler skips oversize files before invoking readers", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const generationHelpersSource = extractSourceBetween(
+    appJs,
+    "async function readGenerationReferenceImageFiles(",
+    "function syncGenerationModeFields()"
+  );
+
+  const appState = {
+    generationReferenceAssets: {
+      images: [],
+      textFiles: [],
+      message: ""
+    },
+    generationReferenceAssetsPending: Promise.resolve(),
+    generationReferenceAssetsLocked: false
+  };
+  const readerCalls = [];
+  const input = {
+    files: [
+      { name: "too-big-text", size: 600 * 1024 },
+      { name: "ok-text", size: 1024 }
+    ],
+    value: "text-batch"
+  };
+  const helpers = new Function(
+    "appState",
+    "GENERATION_REFERENCE_IMAGE_LIMIT",
+    "GENERATION_REFERENCE_IMAGE_MAX_FILE_BYTES",
+    "GENERATION_REFERENCE_TEXT_MAX_FILE_BYTES",
+    "GENERATION_REFERENCE_TOTAL_MAX_BYTES",
+    "fileToDataUrl",
+    "fileToBase64",
+    "renderGenerationReferenceAssets",
+    "escapeHtml",
+    "byId",
+    "awaitGenerationReferenceAssetsReady",
+    "getGenerationRequirementMessage",
+    "syncGenerationActions",
+    "setButtonBusy",
+    `${generationHelpersSource}
+return {
+  handleGenerationReferenceTextSelection
+};`
+  )(
+    appState,
+    5,
+    4 * 1024 * 1024,
+    512 * 1024,
+    12 * 1024 * 1024,
+    async () => {
+      throw new Error("images not used in this test");
+    },
+    async (file) => {
+      readerCalls.push(file.name);
+      return `base64:${file.name}`;
+    },
+    () => {},
+    (value) => String(value || ""),
+    () => null,
+    async () => {
+      await appState.generationReferenceAssetsPending;
+    },
+    () => "",
+    () => {},
+    () => {}
+  );
+
+  await helpers.handleGenerationReferenceTextSelection({ currentTarget: input });
+
+  assert.deepEqual(readerCalls, ["ok-text"]);
+  assert.deepEqual(appState.generationReferenceAssets.textFiles.map((file) => file.name), ["ok-text"]);
+  assert.match(appState.generationReferenceAssets.message, /512 KB/);
 });
