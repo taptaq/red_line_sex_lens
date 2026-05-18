@@ -27,6 +27,9 @@ const invalidRepairTagPattern =
   /^(?:标签待补|待补标签|未生成(?:标签)?|暂无标签|补充标签|占位标签|标签)$/iu;
 const invalidCoverImagePromptPattern =
   /^(?:未生成(?:封面图(?:\s*prompt)?|提示词)?|待补(?:充)?|暂无(?:内容|结果)?|无|空|n\/a|prompt)$/iu;
+const defaultKimiBaseUrl = "https://api.moonshot.cn/v1";
+const kimiReferenceSearchToolUri = "moonshot/web-search:latest";
+const validReferenceMaterialUrlPattern = /^https?:\/\//i;
 
 function uniqueStrings(items = []) {
   return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
@@ -782,7 +785,15 @@ function normalizeGenerationReferenceMaterialItem(item = {}, index = 0) {
 export function normalizeGenerationReferenceMaterialItems(items = []) {
   return ensureArray(items)
     .map((item, index) => normalizeGenerationReferenceMaterialItem(item, index))
-    .filter((item) => item.title || item.reason || item.referenceText || item.sourceUrl);
+    .filter(
+      (item) =>
+        item.title &&
+        item.reason &&
+        item.referenceText &&
+        item.sourceUrl &&
+        validReferenceMaterialUrlPattern.test(item.sourceUrl)
+    )
+    .slice(0, 5);
 }
 
 export function buildGenerationReferenceMaterialSearchPrompt({ brief = {}, draft = {} } = {}) {
@@ -814,6 +825,201 @@ export function buildGenerationReferenceMaterialSearchPrompt({ brief = {}, draft
     "  ]",
     "}"
   ].join("\n");
+}
+
+function getKimiReferenceSearchBaseUrl() {
+  const raw = String(process.env.KIMI_BASE_URL || defaultKimiBaseUrl).trim() || defaultKimiBaseUrl;
+  return raw.replace(/\/+$/g, "");
+}
+
+function getKimiReferenceSearchApiKey() {
+  return String(process.env.KIMI_API_KEY || "").trim();
+}
+
+function getKimiReferenceSearchModel() {
+  return String(process.env.KIMI_TEXT_MODEL || "kimi-k2.6").trim();
+}
+
+function buildKimiReferenceSearchHeaders(apiKey) {
+  return {
+    Authorization: `Bearer ${apiKey}`,
+    "Content-Type": "application/json"
+  };
+}
+
+async function parseKimiJsonResponse(response, fallbackMessage) {
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const message =
+      String(data?.error?.message || data?.message || "").trim() ||
+      `${fallbackMessage}（HTTP ${response.status}）`;
+    const error = new Error(message);
+    error.statusCode = response.status;
+    throw error;
+  }
+
+  return data;
+}
+
+async function fetchKimiReferenceSearchTools({ apiKey, baseUrl, fetchImpl = fetch } = {}) {
+  const response = await fetchImpl(`${baseUrl}/formulas/${encodeURIComponent(kimiReferenceSearchToolUri)}/tools`, {
+    method: "GET",
+    headers: buildKimiReferenceSearchHeaders(apiKey)
+  });
+  const data = await parseKimiJsonResponse(response, "Kimi web search 工具加载失败。");
+  return Array.isArray(data?.data) ? data.data : Array.isArray(data?.tools) ? data.tools : [];
+}
+
+function extractKimiAssistantMessage(data = {}) {
+  const choices = Array.isArray(data?.choices) ? data.choices : [];
+  const message = choices[0]?.message;
+  return message && typeof message === "object" ? message : null;
+}
+
+function parseToolArguments(rawArguments = "") {
+  try {
+    return JSON.parse(String(rawArguments || "").trim() || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function normalizeKimiToolExecutionOutput(data = {}) {
+  return data?.data ?? data?.output ?? data?.result ?? data ?? {};
+}
+
+async function executeKimiReferenceSearchFiber({
+  apiKey,
+  baseUrl,
+  toolCall = {},
+  fetchImpl = fetch
+} = {}) {
+  const toolName = String(toolCall?.function?.name || toolCall?.name || "").trim();
+  const rawArguments = String(toolCall?.function?.arguments || toolCall?.arguments || "").trim();
+  const fiberId = String(toolCall?.id || toolCall?.tool_call_id || "").trim() || `tool-call-${Date.now()}`;
+  const response = await fetchImpl(`${baseUrl}/formulas/${encodeURIComponent(kimiReferenceSearchToolUri)}/fibers`, {
+    method: "POST",
+    headers: buildKimiReferenceSearchHeaders(apiKey),
+    body: JSON.stringify({
+      tool_name: toolName,
+      input: parseToolArguments(rawArguments),
+      context: {
+        tool_call_id: fiberId
+      }
+    })
+  });
+  const data = await parseKimiJsonResponse(response, "Kimi web search 执行失败。");
+
+  return {
+    role: "tool",
+    tool_call_id: fiberId,
+    name: toolName,
+    content: JSON.stringify(normalizeKimiToolExecutionOutput(data))
+  };
+}
+
+function extractAssistantTextContent(message = {}) {
+  if (typeof message?.content === "string") {
+    return message.content.trim();
+  }
+
+  if (Array.isArray(message?.content)) {
+    return message.content
+      .map((part) => {
+        if (typeof part === "string") {
+          return part;
+        }
+
+        if (part?.type === "output_text" || part?.type === "text") {
+          return String(part?.text || "").trim();
+        }
+
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+  }
+
+  return "";
+}
+
+async function runKimiReferenceSearchChat({
+  prompt,
+  apiKey,
+  baseUrl,
+  model,
+  maxTokens = Number(process.env.GENERATION_REFERENCE_SEARCH_MAX_TOKENS || 1400),
+  fetchImpl = fetch
+} = {}) {
+  const tools = await fetchKimiReferenceSearchTools({ apiKey, baseUrl, fetchImpl });
+  const messages = [
+    {
+      role: "system",
+      content: "你是网页参考资料检索助手。必须在可用时使用 web search 工具完成全网检索，并最终只返回 JSON。"
+    },
+    {
+      role: "user",
+      content: prompt
+    }
+  ];
+  const attemptedRoutes = ["kimi-official-web-search"];
+
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const response = await fetchImpl(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: buildKimiReferenceSearchHeaders(apiKey),
+      body: JSON.stringify({
+        model,
+        messages,
+        tools,
+        tool_choice: "auto",
+        temperature: 0.2,
+        max_tokens: maxTokens,
+        response_format: {
+          type: "json_object"
+        },
+        stream: false,
+        thinking: {
+          type: "disabled"
+        }
+      })
+    });
+    const data = await parseKimiJsonResponse(response, "Kimi 网页检索对话失败。");
+    const assistantMessage = extractKimiAssistantMessage(data);
+
+    if (!assistantMessage) {
+      throw new Error("Kimi 网页检索未返回有效响应。");
+    }
+
+    messages.push(assistantMessage);
+
+    if (Array.isArray(assistantMessage.tool_calls) && assistantMessage.tool_calls.length) {
+      for (const toolCall of assistantMessage.tool_calls) {
+        messages.push(
+          await executeKimiReferenceSearchFiber({
+            apiKey,
+            baseUrl,
+            toolCall,
+            fetchImpl
+          })
+        );
+      }
+
+      continue;
+    }
+
+    return {
+      text: extractAssistantTextContent(assistantMessage),
+      model: data?.model || model,
+      route: "official",
+      routeLabel: "Kimi web search",
+      attemptedRoutes
+    };
+  }
+
+  throw new Error("Kimi 网页检索轮次超限，未返回最终结果。");
 }
 
 export function normalizeGenerationCandidate(candidate = {}, index = 0, options = {}) {
@@ -1108,24 +1314,31 @@ async function improveBriefingJsonWithModel({ messages, modelSelection = "auto" 
 async function generateReferenceMaterialsJsonWithModel({
   prompt,
   modelSelection = "auto",
-  maxTokens = Number(process.env.GENERATION_REFERENCE_SEARCH_MAX_TOKENS || 1400)
+  maxTokens = Number(process.env.GENERATION_REFERENCE_SEARCH_MAX_TOKENS || 1400),
+  fetchImpl = fetch
 } = {}) {
-  const provider = getRewriteProviderSelection(modelSelection);
-  const model = getRewriteSelectionModel(modelSelection);
-  const result = await callRoutedTextProviderJson({
-    provider,
+  const apiKey = getKimiReferenceSearchApiKey();
+
+  if (!apiKey) {
+    const error = new Error("生成参考资料检索需要配置 KIMI_API_KEY。");
+    error.statusCode = 500;
+    throw error;
+  }
+
+  const model = getKimiReferenceSearchModel() || getRewriteSelectionModel(modelSelection);
+  const result = await runKimiReferenceSearchChat({
+    prompt,
+    apiKey,
+    baseUrl: getKimiReferenceSearchBaseUrl(),
     model,
-    temperature: 0.4,
     maxTokens,
-    messages: [{ role: "user", content: prompt }],
-    missingKeyMessage: `生成工作台缺少 ${provider} 可用密钥。`,
-    scene: "generation",
-    fallbackParser: extractJsonBlock
+    fetchImpl
   });
+  const parsed = extractJsonBlock(result.text) || {};
 
   return {
-    ...result.parsed,
-    provider,
+    ...parsed,
+    provider: "kimi",
     model: result.model || model,
     route: result.route,
     routeLabel: result.routeLabel,

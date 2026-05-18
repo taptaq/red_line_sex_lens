@@ -7,7 +7,7 @@ import path from "node:path";
 
 import { paths } from "../src/config.js";
 import { loadNoteLifecycle, loadSuccessSamples } from "../src/data-store.js";
-import { buildGenerationReferenceSamples, handleRequest } from "../src/server.js";
+import { buildGenerationReferenceSamples, safeHandleRequest } from "../src/server.js";
 import { buildGenerationMessages } from "../src/generation-workbench.js";
 import { normalizeModelSelectionState } from "../src/model-selection.js";
 
@@ -206,6 +206,20 @@ test("generation reference material endpoint returns normalized candidate cards"
     assert.equal(result.ok, true);
     assert.equal(result.items.length, 1);
     assert.equal(result.items[0].title, "经期使用玩具前先看这几点");
+  });
+});
+
+test("generation reference material endpoint returns 400 when briefing is missing", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const result = await invokeRoute("POST", "/api/generate-reference-materials", {
+      brief: {
+        briefing: "   "
+      }
+    });
+
+    assert.equal(result.status, 400);
+    assert.equal(result.ok, false);
+    assert.match(result.error, /一句话需求/);
   });
 });
 
@@ -448,7 +462,7 @@ async function invokeRoute(method, pathname, body = null) {
     request.emit("end");
   });
 
-  await handleRequest(request, response);
+  await safeHandleRequest(request, response);
   return {
     status: response.status,
     ...(response.body ? JSON.parse(response.body) : {})
