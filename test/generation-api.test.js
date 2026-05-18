@@ -124,6 +124,41 @@ test("generation endpoint normalizes temporary text references even when no imag
   });
 });
 
+test("generation endpoint skips over-limit temporary reference assets server-side and returns warnings", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const result = await invokeRoute("POST", "/api/generate-note", {
+      mode: "from_scratch",
+      collectionType: "科普",
+      brief: { topic: "沟通", constraints: "温和" },
+      referenceAssets: {
+        images: [
+          {
+            name: "too-big-image.png",
+            mimeType: "image/png",
+            dataUrl: `data:image/png;base64,${"A".repeat(6 * 1024 * 1024)}`
+          }
+        ],
+        textFiles: [
+          {
+            name: "too-big-text.txt",
+            contentBase64: "A".repeat(700 * 1024)
+          }
+        ]
+      },
+      mockCandidates: [
+        { variant: "safe", title: "沟通标题", body: "完整正文".repeat(40), coverText: "封面", tags: ["沟通", "关系"] }
+      ]
+    });
+
+    assert.equal(result.status, 200);
+    assert.deepEqual(result.referenceAssets.imageSummaries, []);
+    assert.equal(result.referenceAssets.mergedText, "");
+    assert.equal(result.referenceAssets.warnings.length, 2);
+    assert.match(result.referenceAssets.warnings[0], /too-big-image\.png|too-big-text\.txt/);
+    assert.match(result.referenceAssets.warnings[1], /too-big-image\.png|too-big-text\.txt/);
+  });
+});
+
 test("generation briefing improve endpoint expands the current one-line request", async (t) => {
   await withTempGenerationData(t, async () => {
     const result = await invokeRoute("POST", "/api/generate-note-briefing", {

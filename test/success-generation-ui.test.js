@@ -1618,14 +1618,68 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(appJs, /const operation = \(\) => \{[\s\S]*collectAcceptedGenerationReferenceFiles\([\s\S]*readGenerationReferenceTextFiles/);
   assert.match(appJs, /appState\.generationReferenceAssetsPending = appState\.generationReferenceAssetsPending\.catch\(\(\) => \{\}\)\.then\(operation\)/);
   assert.match(appJs, /input\.value = ""/);
-  assert.match(appJs, /const referenceAssets = await captureGenerationReferenceAssetsForRequest\(\);[\s\S]*const payload = getGenerationPayload\(\{ referenceAssets \}\);[\s\S]*\/api\/generate-note-briefing[\s\S]*releaseGenerationReferenceAssetsRequestLock\(\)/);
+  assert.doesNotMatch(appJs, /const referenceAssets = await captureGenerationReferenceAssetsForRequest\(\);[\s\S]*const payload = getGenerationPayload\(\{ referenceAssets \}\);[\s\S]*\/api\/generate-note-briefing/);
+  assert.match(appJs, /const payload = getGenerationPayload\(\{\s*includeReferenceAssets:\s*false\s*\}\);[\s\S]*\/api\/generate-note-briefing/);
   assert.match(appJs, /const referenceAssets = await captureGenerationReferenceAssetsForRequest\(\);[\s\S]*const payload = getGenerationPayload\(\{ referenceAssets \}\);[\s\S]*\/api\/generate-note[\s\S]*resetGenerationReferenceAssets\(\)[\s\S]*releaseGenerationReferenceAssetsRequestLock\(\)/);
-  assert.match(appJs, /referenceAssets:\s*referenceAssets \|\| serializeGenerationReferenceAssets\(\)/);
+  assert.match(appJs, /if \(includeReferenceAssets\) \{[\s\S]*payload\.referenceAssets = referenceAssets \|\| serializeGenerationReferenceAssets\(\)/);
 
   assert.match(styles, /\.generation-reference-assets\b/);
   assert.match(styles, /\.generation-reference-files\b/);
   assert.match(styles, /\.generation-reference-chip-list\b/);
   assert.match(styles, /\.generation-reference-chip\b/);
+});
+
+test("generation result rendering includes temporary reference warning details when server skips assets", async () => {
+  const { appJs } = await readFrontendFiles();
+  const generationStart = appJs.indexOf("function generationVariantLabel(");
+  const generationEnd = appJs.indexOf("function buildInnerSpaceTermsListMarkup(", generationStart);
+  const generationSource = appJs.slice(generationStart, generationEnd);
+  const nodes = {
+    "generation-result": { innerHTML: "" }
+  };
+
+  const renderGenerationResult = new Function(
+    "byId",
+    "escapeHtml",
+    "joinCSV",
+    "verdictLabel",
+    "syncLifecycleResultActions",
+    `${generationSource}; return renderGenerationResult;`
+  )(
+    (id) => nodes[id] || null,
+    (value) => String(value || ""),
+    (items = []) => (Array.isArray(items) ? items.join(", ") : String(items || "")),
+    () => "通过",
+    () => {}
+  );
+
+  renderGenerationResult({
+    recommendationReason: "推荐这版",
+    recommendedCandidateId: "candidate-1",
+    referenceAssets: {
+      warnings: ["图片 1 超过大小限制", "文本 1 已跳过"]
+    },
+    scoredCandidates: [
+      {
+        id: "candidate-1",
+        variant: "final",
+        title: "标题",
+        coverText: "封面",
+        body: "正文",
+        tags: ["科普"],
+        generationNotes: "说明",
+        safetyNotes: "安全提醒",
+        coverImagePrompt: "prompt",
+        scores: { total: 90 },
+        style: { score: 80 },
+        analysis: { finalVerdict: "pass" }
+      }
+    ]
+  });
+
+  assert.match(nodes["generation-result"].innerHTML, /部分临时参考素材已跳过或暂不可用/);
+  assert.match(nodes["generation-result"].innerHTML, /图片 1 超过大小限制/);
+  assert.match(nodes["generation-result"].innerHTML, /文本 1 已跳过/);
 });
 
 test("generation reference image selections serialize deterministically under the 5-image cap", async () => {

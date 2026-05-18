@@ -6682,11 +6682,25 @@ function renderGenerationResult(result = {}) {
   const repair = displayItem?.repair || {};
   const blockerReasonsMarkup = buildGenerationBlockerReasonsMarkup(displayItem);
   const repairSummary = buildGenerationRepairSummary(repair);
+  const referenceWarnings = Array.isArray(result.referenceAssets?.warnings)
+    ? result.referenceAssets.warnings.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
   const repairMarkup = repair.attempted
     ? `
       <div class="generation-repair-banner${repair.applied ? "" : " is-muted"}">
         <span>${escapeHtml(repairSummary.title)}</span>
         <p>${escapeHtml(repairSummary.description)}</p>
+      </div>
+    `
+    : "";
+  const referenceWarningsMarkup = referenceWarnings.length
+    ? `
+      <div class="generation-blocker-box">
+        <span>临时参考提醒</span>
+        <ul>
+          <li>部分临时参考素材已跳过或暂不可用，当前结果未使用这些内容。</li>
+          ${referenceWarnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+        </ul>
       </div>
     `
     : "";
@@ -6705,6 +6719,7 @@ function renderGenerationResult(result = {}) {
         <div class="rewrite-body-reader generation-body-reader">${escapeHtml(finalDraft.body || "未生成正文")}</div>
         <p class="helper-text">标签：${escapeHtml(joinCSV(finalDraft.tags) || "未生成")}</p>
         ${repairMarkup}
+        ${referenceWarningsMarkup}
         ${blockerReasonsMarkup}
         <p class="helper-text">${escapeHtml(finalDraft.generationNotes || displayItem.generationNotes || "暂无生成说明")}</p>
         <p class="helper-text">${escapeHtml(finalDraft.safetyNotes || displayItem.safetyNotes || "暂无安全注意点")}</p>
@@ -8267,10 +8282,9 @@ function addAnalyzeTagOption(tag) {
   }
 }
 
-function getGenerationPayload({ referenceAssets } = {}) {
+function getGenerationPayload({ referenceAssets, includeReferenceAssets = true } = {}) {
   const form = new FormData(byId("generation-workbench-form"));
-
-  return {
+  const payload = {
     mode: String(form.get("mode") || "from_scratch"),
     collectionType: String(form.get("collectionType") || "").trim(),
     brief: {
@@ -8288,9 +8302,14 @@ function getGenerationPayload({ referenceAssets } = {}) {
       title: String(form.get("draftTitle") || "").trim(),
       body: String(form.get("draftBody") || "").trim()
     },
-    modelSelection: getSelectedModelSelections(),
-    referenceAssets: referenceAssets || serializeGenerationReferenceAssets()
+    modelSelection: getSelectedModelSelections()
   };
+
+  if (includeReferenceAssets) {
+    payload.referenceAssets = referenceAssets || serializeGenerationReferenceAssets();
+  }
+
+  return payload;
 }
 
 async function handleGenerationReferenceImageSelection(event) {
@@ -9711,8 +9730,7 @@ async function improveGenerationBriefingFromCurrentInput() {
   }
 
   try {
-    const referenceAssets = await captureGenerationReferenceAssetsForRequest();
-    const payload = getGenerationPayload({ referenceAssets });
+    const payload = getGenerationPayload({ includeReferenceAssets: false });
     const result = await apiJson("/api/generate-note-briefing", {
       method: "POST",
       body: JSON.stringify(payload)
@@ -9736,7 +9754,6 @@ async function improveGenerationBriefingFromCurrentInput() {
       resultNode.textContent = error.message || "AI 润色优化失败";
     }
   } finally {
-    releaseGenerationReferenceAssetsRequestLock();
     setButtonBusy(button, false);
     syncGenerationActions();
   }

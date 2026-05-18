@@ -446,10 +446,22 @@ function sendFile(response, filePath, contentType) {
     });
 }
 
-function readBody(request) {
+function readBody(request, { maxBytes = 0 } = {}) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    request.on("data", (chunk) => chunks.push(chunk));
+    let totalBytes = 0;
+    request.on("data", (chunk) => {
+      totalBytes += chunk.length;
+
+      if (maxBytes > 0 && totalBytes > maxBytes) {
+        const error = new Error(`Request body too large (max ${maxBytes} bytes).`);
+        error.statusCode = 413;
+        reject(error);
+        return;
+      }
+
+      chunks.push(chunk);
+    });
     request.on("end", () => {
       try {
         const raw = Buffer.concat(chunks).toString("utf8");
@@ -998,7 +1010,7 @@ async function handleRequest(request, response) {
   }
 
   if (request.method === "POST" && url.pathname === "/api/generate-note") {
-    const payload = await readBody(request);
+    const payload = await readBody(request, { maxBytes: 20 * 1024 * 1024 });
     const modelSelection = normalizeModelSelectionState(payload?.modelSelection);
     const generationModelSelection = modelSelection.generation || modelSelection.rewrite;
     const collectionOptions = await loadAvailableCollectionTypes();

@@ -125,3 +125,102 @@ test("summarizeGenerationReferenceAssets falls back for blank and whitespace-onl
   assert.deepEqual(result.imageFileNames, ["image-1"]);
   assert.deepEqual(result.imageSummaries, [{ name: "image-1", summary: "usable framing" }]);
 });
+
+test("summarizeGenerationReferenceAssets skips over-limit assets with warnings before processing them", async () => {
+  const summarizeCalls = [];
+  const result = await summarizeGenerationReferenceAssets({
+    referenceAssets: {
+      images: [
+        {
+          name: "keep.png",
+          mimeType: "image/png",
+          dataUrl: `data:image/png;base64,${"A".repeat(1024)}`
+        },
+        {
+          name: "too-big.png",
+          mimeType: "image/png",
+          dataUrl: `data:image/png;base64,${"A".repeat(6 * 1024 * 1024)}`
+        },
+        ...Array.from({ length: 5 }, (_, index) => ({
+          name: `overflow-${index + 1}.png`,
+          mimeType: "image/png",
+          dataUrl: `data:image/png;base64,${"A".repeat(1024)}`
+        }))
+      ],
+      textFiles: [
+        {
+          name: "keep.txt",
+          contentBase64: Buffer.from("kept text", "utf8").toString("base64")
+        },
+        {
+          name: "too-big.txt",
+          contentBase64: "A".repeat(700 * 1024)
+        }
+      ]
+    },
+    summarizeImage: async ({ fileName }) => {
+      summarizeCalls.push(fileName);
+      return { summary: `${fileName} summary` };
+    }
+  });
+
+  assert.deepEqual(summarizeCalls, ["keep.png", "overflow-1.png", "overflow-2.png", "overflow-3.png", "overflow-4.png"]);
+  assert.deepEqual(result.imageFileNames, ["keep.png", "overflow-1.png", "overflow-2.png", "overflow-3.png", "overflow-4.png"]);
+  assert.deepEqual(result.textFileNames, ["keep.txt"]);
+  assert.deepEqual(
+    result.imageSummaries,
+    ["keep.png", "overflow-1.png", "overflow-2.png", "overflow-3.png", "overflow-4.png"].map((fileName) => ({
+      name: fileName,
+      summary: `${fileName} summary`
+    }))
+  );
+  assert.match(result.mergedText, /kept text/);
+  assert.equal(result.warnings.length >= 3, true);
+  assert.match(result.warnings.join("\n"), /too-big\.png/);
+  assert.match(result.warnings.join("\n"), /too-big\.txt/);
+  assert.match(result.warnings.join("\n"), /overflow-5\.png/);
+});
+
+test("summarizeGenerationReferenceAssets enforces the total raw-equivalent limit across accepted assets", async () => {
+  const fourMbBase64 = Buffer.alloc(4 * 1024 * 1024).toString("base64");
+  const result = await summarizeGenerationReferenceAssets({
+    referenceAssets: {
+      images: [
+        {
+          name: "first.png",
+          mimeType: "image/png",
+          dataUrl: `data:image/png;base64,${fourMbBase64}`
+        },
+        {
+          name: "second.png",
+          mimeType: "image/png",
+          dataUrl: `data:image/png;base64,${fourMbBase64}`
+        },
+        {
+          name: "third.png",
+          mimeType: "image/png",
+          dataUrl: `data:image/png;base64,${fourMbBase64}`
+        },
+        {
+          name: "fourth-over-total.png",
+          mimeType: "image/png",
+          dataUrl: `data:image/png;base64,${Buffer.from("overflow", "utf8").toString("base64")}`
+        }
+      ],
+      textFiles: []
+    },
+    summarizeImage: async ({ fileName }) => ({ summary: `${fileName} summary` })
+  });
+
+  assert.deepEqual(
+    result.imageSummaries,
+    [
+      { name: "first.png", summary: "first.png summary" },
+      { name: "second.png", summary: "second.png summary" },
+      { name: "third.png", summary: "third.png summary" }
+    ]
+  );
+  assert.deepEqual(result.imageFileNames, ["first.png", "second.png", "third.png"]);
+  assert.equal(result.warnings.length, 1);
+  assert.match(result.warnings[0], /fourth-over-total\.png/);
+});
