@@ -72,3 +72,56 @@ test("summarizeGenerationReferenceAssets keeps successful image summaries and do
   assert.equal(result.warnings.length, 1);
   assert.match(result.warnings[0], /pose-2\.jpg/);
 });
+
+test("summarizeGenerationReferenceAssets keeps valid decoded text and warns for one bad text file", async () => {
+  const result = await summarizeGenerationReferenceAssets({
+    referenceAssets: {
+      images: [],
+      textFiles: [
+        {
+          name: "good.txt",
+          contentBase64: " Rmlyc3QgdGV4dCBjaHVuay4 \n"
+        },
+        {
+          name: "bad.txt",
+          contentBase64: ""
+        },
+        {
+          name: "padded-later.txt",
+          contentBase64: "U2Vjb25kIHRleHQgY2h1bmsu"
+        }
+      ]
+    }
+  });
+
+  assert.match(result.mergedText, /First text chunk\./);
+  assert.match(result.mergedText, /Second text chunk\./);
+  assert.equal(result.warnings.length, 1);
+  assert.match(result.warnings[0], /bad\.txt/);
+  assert.match(result.warnings[0], /empty base64 content/);
+});
+
+test("summarizeGenerationReferenceAssets falls back for blank and whitespace-only file names", async () => {
+  const result = await summarizeGenerationReferenceAssets({
+    referenceAssets: {
+      textFiles: [
+        {
+          name: "   ",
+          contentBase64: Buffer.from("Named by fallback", "utf8").toString("base64")
+        }
+      ],
+      images: [
+        {
+          name: "",
+          mimeType: "image/png",
+          dataUrl: "data:image/png;base64,AAAA"
+        }
+      ]
+    },
+    summarizeImage: async () => ({ summary: "usable framing" })
+  });
+
+  assert.deepEqual(result.textFileNames, ["text-1"]);
+  assert.deepEqual(result.imageFileNames, ["image-1"]);
+  assert.deepEqual(result.imageSummaries, [{ name: "image-1", summary: "usable framing" }]);
+});

@@ -5,21 +5,23 @@ function normalizeAssetList(value) {
 }
 
 function normalizeFileName(value, fallback = "") {
-  return String(value || fallback).trim();
+  const normalized = String(value ?? "").trim();
+  return normalized || String(fallback || "").trim();
 }
 
 function validateBase64(input) {
-  const normalized = String(input || "").trim();
+  const normalized = String(input || "").replace(/\s+/g, "");
 
   if (!normalized) {
     throw new Error("empty base64 content");
   }
 
-  if (normalized.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(normalized)) {
+  if (/[^A-Za-z0-9+/=]/.test(normalized)) {
     throw new Error("invalid base64 content");
   }
 
-  return normalized;
+  const padLength = (4 - (normalized.length % 4)) % 4;
+  return `${normalized}${"=".repeat(padLength)}`;
 }
 
 function decodeTextFileContent(file) {
