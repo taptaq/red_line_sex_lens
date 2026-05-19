@@ -1590,6 +1590,9 @@ test("frontend also gates prefill and lexicon submit actions that depend on prer
 test("frontend exposes temporary generation reference asset uploads and payload wiring", async () => {
   const { indexHtml, appJs, styles } = await readFrontendFiles();
 
+  assert.match(indexHtml, /<details[^>]*class="[^"]*\badmin-accordion\b[^"]*\bgeneration-reference-assets\b[^"]*"/);
+  assert.match(indexHtml, /<details[^>]*class="[^"]*\badmin-accordion\b[^"]*\bgeneration-reference-assets\b[^"]*"[^>]*>/);
+  assert.match(indexHtml, /<summary>临时参考素材<\/summary>/);
   assert.match(indexHtml, /id="generation-reference-image-input"/);
   assert.match(indexHtml, /id="generation-reference-image-input"[\s\S]*accept="image\/\*"/);
   assert.match(indexHtml, /id="generation-reference-text-input"/);
@@ -1605,7 +1608,7 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(indexHtml, /data-action="close-generation-reference-search-modal"/);
 
   assert.match(appJs, /generationReferenceAssets:\s*\{\s*images:\s*\[\],\s*textFiles:\s*\[\],\s*message:\s*""\s*\}/);
-  assert.match(appJs, /generationReferenceSearch:\s*\{\s*open:\s*false,\s*loading:\s*false,\s*message:\s*"",\s*items:\s*\[\]\s*\}/);
+  assert.match(appJs, /generationReferenceSearch:\s*\{\s*open:\s*false,\s*loading:\s*false,\s*message:\s*"",\s*items:\s*\[\],\s*selectedIndices:\s*\[\]\s*\}/);
   assert.match(appJs, /generationReferenceAssetsPending:\s*Promise\.resolve\(\)/);
   assert.match(appJs, /generationReferenceAssetsLocked:\s*false/);
   assert.match(appJs, /const GENERATION_REFERENCE_IMAGE_MAX_FILE_BYTES = 4 \* 1024 \* 1024/);
@@ -1624,6 +1627,9 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(appJs, /async function openGenerationReferenceSearchModal\s*\(/);
   assert.match(appJs, /function renderGenerationReferenceSearchModal\s*\(/);
   assert.match(appJs, /function appendGenerationMaterialText\s*\(/);
+  assert.match(appJs, /function appendMultipleGenerationMaterialTexts\s*\(/);
+  assert.match(appJs, /function getGenerationReferenceSearchRequirementMessage\s*\(/);
+  assert.match(appJs, /function syncGenerationReferenceSearchAction\s*\(/);
   assert.match(appJs, /const selectedFiles = Array\.from\(input\?\.files \|\| \[\]\)/);
   assert.match(appJs, /if \(input\) \{\s*input\.value = "";\s*\}\s*\n\s*if \(appState\.generationReferenceAssetsLocked\)/);
   assert.match(appJs, /const operation = \(\) => \{[\s\S]*collectAcceptedGenerationReferenceFiles\([\s\S]*readGenerationReferenceImageFiles/);
@@ -1633,7 +1639,9 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.doesNotMatch(appJs, /const referenceAssets = await captureGenerationReferenceAssetsForRequest\(\);[\s\S]*const payload = getGenerationPayload\(\{ referenceAssets \}\);[\s\S]*\/api\/generate-note-briefing/);
   assert.match(appJs, /const payload = getGenerationPayload\(\{\s*includeReferenceAssets:\s*false\s*\}\);[\s\S]*\/api\/generate-note-briefing/);
   assert.match(appJs, /\/api\/generate-reference-materials/);
-  assert.match(appJs, /data-action="apply-generation-reference-material"/);
+  assert.match(appJs, /data-action="toggle-generation-reference-material"/);
+  assert.match(appJs, /data-action="apply-generation-reference-materials"/);
+  assert.match(appJs, /setGatedButtonState\(searchButton,\s*!requirementMessage,\s*requirementMessage\)/);
   assert.match(appJs, /const referenceAssets = await captureGenerationReferenceAssetsForRequest\(\);[\s\S]*const payload = getGenerationPayload\(\{ referenceAssets \}\);[\s\S]*\/api\/generate-note[\s\S]*resetGenerationReferenceAssets\(\)[\s\S]*releaseGenerationReferenceAssetsRequestLock\(\)/);
   assert.match(
     appJs,
@@ -1648,6 +1656,85 @@ test("frontend exposes temporary generation reference asset uploads and payload 
   assert.match(styles, /\.generation-reference-search-modal\b/);
   assert.match(styles, /\.generation-reference-search-modal\s+\.modal-card\b/);
   assert.match(styles, /\.generation-reference-result-card\b/);
+  assert.match(styles, /\.generation-reference-selection\b/);
+  assert.match(styles, /\.generation-reference-selection-indicator\b/);
+  assert.match(styles, /\.generation-reference-selection\s*\{[\s\S]*position:\s*relative/);
+  assert.match(styles, /\.generation-reference-selection input\s*\{[\s\S]*inset:\s*0/);
+});
+
+test("generation reference search button is gated until briefing has content", async () => {
+  const { appJs } = await readFrontendFiles();
+  const payloadSource = extractSourceBetween(appJs, "function getGenerationPayload(", "async function handleGenerationReferenceImageSelection(");
+  const gateSource = extractSourceBetween(appJs, "function getGenerationReferenceSearchRequirementMessage()", "function syncSampleLibraryCreateActions()");
+
+  const formNode = {
+    values: {
+      mode: "from_scratch",
+      collectionType: "科普",
+      lengthMode: "short",
+      briefing: "",
+      materialText: "",
+      referenceTitle: "",
+      tagReferences: "",
+      draftTitle: "",
+      draftBody: ""
+    },
+    querySelector(selector) {
+      if (selector === '[name="mode"]') {
+        return { value: this.values.mode };
+      }
+      return null;
+    }
+  };
+  const searchButton = { disabled: false, dataset: {}, title: "" };
+  const hints = [];
+
+  const helpers = new Function(
+    "byId",
+    "FormData",
+    "getSelectedModelSelections",
+    "serializeGenerationReferenceAssets",
+    "setGatedButtonState",
+    "setActionGateHint",
+    `${payloadSource}\n${gateSource}; return { getGenerationReferenceSearchRequirementMessage, syncGenerationReferenceSearchAction, getGenerationPayload };`
+  )(
+    (id) => {
+      if (id === "generation-workbench-form") {
+        return formNode;
+      }
+      if (id === "generation-reference-search-button") {
+        return searchButton;
+      }
+      return null;
+    },
+    class TestFormData {
+      constructor(form) {
+        this.form = form;
+      }
+      get(name) {
+        return this.form.values[name];
+      }
+    },
+    () => ({ generation: "auto" }),
+    () => ({ images: [], textFiles: [] }),
+    (button, enabled, hint = "") => {
+      button.disabled = !enabled;
+      button.title = hint;
+    },
+    (id, message) => {
+      hints.push({ id, message });
+    }
+  );
+
+  assert.equal(helpers.getGenerationReferenceSearchRequirementMessage(), "请先填写一句话需求。");
+  helpers.syncGenerationReferenceSearchAction();
+  assert.equal(searchButton.disabled, true);
+  assert.equal(searchButton.title, "请先填写一句话需求。");
+
+  formNode.values.briefing = "写一篇轻松科普";
+  assert.equal(helpers.getGenerationReferenceSearchRequirementMessage(), "");
+  helpers.syncGenerationReferenceSearchAction();
+  assert.equal(searchButton.disabled, false);
 });
 
 test("getGenerationPayload only includes materialText inside referenceAssets for generation requests", async () => {
@@ -2567,7 +2654,8 @@ test("generation reference search keeps modal closed when request resolves after
       open: false,
       loading: false,
       message: "",
-      items: []
+      items: [],
+      selectedIndices: []
     }
   };
   const nodes = {
@@ -2661,6 +2749,270 @@ return {
   assert.deepEqual(appState.generationReferenceSearch.items.map((item) => item.title), ["参考 1"]);
 });
 
+test("generation reference search empty results prefer a neutral empty-state message over backend message", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const modalHelpersSource = extractSourceBetween(
+    appJs,
+    "function setGenerationReferenceSearchModalOpen(",
+    "function setSampleLibraryImportBlockOpen("
+  );
+
+  const appState = {
+    generationReferenceSearch: {
+      open: false,
+      loading: false,
+      message: "",
+      items: [],
+      selectedIndices: []
+    }
+  };
+  const nodes = {
+    "generation-reference-search-modal": { hidden: true },
+    "generation-reference-search-modal-content": { innerHTML: "" },
+    "generation-reference-search-result": { textContent: "" }
+  };
+  const formNode = {
+    querySelector() {
+      return null;
+    }
+  };
+
+  const helpers = new Function(
+    "appState",
+    "byId",
+    "syncBodyModalState",
+    "escapeHtml",
+    "Event",
+    "HTMLTextAreaElement",
+    "apiJson",
+    "getGenerationPayload",
+    "syncGenerationActions",
+    `let generationReferenceSearchRequestSequence = 0;
+${modalHelpersSource}
+return {
+  openGenerationReferenceSearchModal
+};`
+  )(
+    appState,
+    (id) => {
+      if (id === "generation-workbench-form") {
+        return formNode;
+      }
+      return nodes[id] || null;
+    },
+    () => {},
+    (value) => String(value || ""),
+    class TestEvent {
+      constructor(type, init = {}) {
+        this.type = type;
+        this.bubbles = Boolean(init.bubbles);
+      }
+    },
+    class TestTextArea {},
+    async () => ({
+      items: [],
+      message: "已基于拆分后的检索意图整理参考资料候选。"
+    }),
+    () => ({
+      brief: {
+        briefing: "需要一组参考资料"
+      }
+    }),
+    () => {}
+  );
+
+  await helpers.openGenerationReferenceSearchModal();
+
+  assert.doesNotMatch(nodes["generation-reference-search-modal-content"].innerHTML, /已基于拆分后的检索意图整理参考资料候选/);
+  assert.match(nodes["generation-reference-search-modal-content"].innerHTML, /暂未找到可用的参考资料|暂无数据/);
+  assert.equal(nodes["generation-reference-search-result"].textContent, "本次没有找到可回填的参考资料。");
+});
+
+test("generation reference search supports selecting multiple items and applying them together", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const modalHelpersSource = extractSourceBetween(
+    appJs,
+    "function setGenerationReferenceSearchModalOpen(",
+    "function setSampleLibraryImportBlockOpen("
+  );
+  const actionHandlerSource = extractSourceBetween(
+    appJs,
+    '  if (action === "close-sample-library-modal") {',
+    '    if (action === "prefill-sample-library-modal-calibration-prediction") {'
+  );
+  const changeHandlerBody = [...appJs.matchAll(/document\.addEventListener\("change", \(event\) => \{([\s\S]*?)\n\}\);/g)][0][1];
+
+  class TestTextArea {
+    constructor(value = "") {
+      this.value = value;
+      this.events = [];
+    }
+
+    dispatchEvent(event) {
+      this.events.push(event);
+      return true;
+    }
+  }
+
+  class HtmlTextAreaElement extends TestTextArea {}
+
+  const materialField = new HtmlTextAreaElement("已有素材");
+  const resultNode = { textContent: "" };
+  const appState = {
+    generationReferenceSearch: {
+      open: true,
+      loading: false,
+      message: "",
+      items: [
+        {
+          title: "参考 1",
+          reason: "命中主题",
+          referenceText: "资料 A",
+          sourceUrl: "https://example.com/a"
+        },
+        {
+          title: "参考 2",
+          reason: "补充边界",
+          referenceText: "资料 B",
+          sourceUrl: "https://example.com/b"
+        }
+      ],
+      selectedIndices: []
+    }
+  };
+  const applyButtonNode = {
+    textContent: "回填已选 0 条",
+    disabled: true
+  };
+  const nodes = {
+    "generation-reference-search-modal": { hidden: false },
+    "generation-reference-search-modal-content": {
+      innerHTML: "",
+      querySelector(selector) {
+        return selector === '[data-action="apply-generation-reference-materials"]' ? applyButtonNode : null;
+      }
+    },
+    "generation-reference-search-result": resultNode
+  };
+  const formNode = {
+    querySelector(selector) {
+      if (selector === '[name="materialText"]') {
+        return materialField;
+      }
+      return null;
+    }
+  };
+
+  const helpers = new Function(
+    "appState",
+    "byId",
+    "syncBodyModalState",
+    "escapeHtml",
+    "Event",
+    "HTMLTextAreaElement",
+    `${modalHelpersSource}
+return {
+  renderGenerationReferenceSearchModal,
+  appendMultipleGenerationMaterialTexts,
+  closeGenerationReferenceSearchModal,
+  syncGenerationReferenceSearchSelectionState
+};`
+  )(
+    appState,
+    (id) => {
+      if (id === "generation-workbench-form") {
+        return formNode;
+      }
+      return nodes[id] || null;
+    },
+    () => {},
+    (value) => String(value || ""),
+    class TestEvent {
+      constructor(type, init = {}) {
+        this.type = type;
+        this.bubbles = Boolean(init.bubbles);
+      }
+    },
+    HtmlTextAreaElement
+  );
+
+  helpers.renderGenerationReferenceSearchModal();
+  assert.match(nodes["generation-reference-search-modal-content"].innerHTML, /data-action="toggle-generation-reference-material"/);
+  assert.match(nodes["generation-reference-search-modal-content"].innerHTML, /data-action="apply-generation-reference-materials"/);
+
+  const actionRunner = new Function(
+    "appState",
+    "button",
+    "action",
+    "byId",
+    "appendMultipleGenerationMaterialTexts",
+    "closeGenerationReferenceSearchModal",
+    "renderGenerationReferenceSearchModal",
+    `${actionHandlerSource}`
+  );
+  const changeRunner = new Function(
+    "appState",
+    "event",
+    "Element",
+    "syncGenerationReferenceSearchSelectionState",
+    `${changeHandlerBody}`
+  );
+  class TestElement {
+    constructor(index) {
+      this.dataset = { action: "toggle-generation-reference-material", index: String(index) };
+      this.checked = true;
+    }
+
+    closest(selector) {
+      return selector === '[data-action="toggle-generation-reference-material"]' ? this : null;
+    }
+  }
+
+  changeRunner(
+    appState,
+    {
+      target: new TestElement(0)
+    },
+    TestElement,
+    helpers.syncGenerationReferenceSearchSelectionState
+  );
+  changeRunner(
+    appState,
+    {
+      target: new TestElement(1)
+    },
+    TestElement,
+    helpers.syncGenerationReferenceSearchSelectionState
+  );
+
+  assert.deepEqual(appState.generationReferenceSearch.selectedIndices, [0, 1]);
+
+  actionRunner(
+    appState,
+    { dataset: { action: "apply-generation-reference-materials" } },
+    "apply-generation-reference-materials",
+    (id) => nodes[id] || null,
+    helpers.appendMultipleGenerationMaterialTexts,
+    helpers.closeGenerationReferenceSearchModal,
+    helpers.renderGenerationReferenceSearchModal
+  );
+
+  assert.equal(materialField.value, "已有素材\n\n资料 A\n\n资料 B");
+  assert.equal(resultNode.textContent, "已回填 2 条参考资料到素材文本。");
+  assert.equal(appState.generationReferenceSearch.open, false);
+});
+
+test("generation reference search selection updates count through checkbox change events", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+
+  assert.match(appJs, /document\.addEventListener\("change", \(event\) => \{/);
+  assert.match(appJs, /toggle-generation-reference-material/);
+  assert.match(appJs, /selectedIndices:\s*next/);
+  assert.match(appJs, /回填已选 \$\{selectedCount\} 条/);
+  assert.match(appJs, /function syncGenerationReferenceSearchSelectionState\s*\(/);
+  assert.doesNotMatch(appJs, /selectedIndices:\s*next[\s\S]*renderGenerationReferenceSearchModal\(\)/);
+});
+
 test("appendGenerationMaterialText preserves existing trailing whitespace before appending", async () => {
   const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
   const modalHelpersSource = extractSourceBetween(
@@ -2743,7 +3095,8 @@ test("Escape closes generation reference search modal when open", async () => {
       open: true,
       loading: false,
       message: "",
-      items: []
+      items: [],
+      selectedIndices: []
     }
   };
   const nodes = {

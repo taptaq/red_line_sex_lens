@@ -241,56 +241,60 @@
                       <div id="generation-briefing-improve-result" class="helper-text" aria-live="polite"></div>
                     </div>
                   </label>
-                  <div class="field-wide generation-reference-assets">
-                    <div class="tab-panel-head">
-                      <strong>临时参考素材</strong>
-                      <span>本次生成可附带参考图片和文本文档，不会写入长期样本池。</span>
-                    </div>
-                    <label class="field-wide generation-material-text-block">
-                      <span>素材文本</span>
-                      <textarea
-                        name="materialText"
-                        rows="6"
-                        placeholder="可手动整理本次生成要参考的资料摘要、事实点、风格片段或引用段落"
-                      ></textarea>
-                      <small class="helper-text">这里只保存当前这一次生成使用的参考资料，不会写入长期样本池或下次自动复用。</small>
-                      <div class="generation-briefing-improve-row">
-                        <div class="item-actions">
-                          <button
-                            type="button"
-                            class="button button-ghost button-small"
-                            id="generation-reference-search-button"
-                          >
-                            AI搜索参考资料
-                          </button>
-                        </div>
-                        <div id="generation-reference-search-result" class="helper-text" aria-live="polite"></div>
+                  <details class="admin-accordion field-wide generation-reference-assets">
+                    <summary>临时参考素材</summary>
+                    <div class="admin-accordion-body">
+                      <div class="tab-panel-head">
+                        <strong>临时参考素材</strong>
+                        <span>本次生成可附带参考图片和文本文档，不会写入长期样本池。</span>
                       </div>
-                    </label>
-                    <div class="generation-reference-files form-grid">
-                      <label>
-                        <span>参考图片</span>
-                        <input
-                          id="generation-reference-image-input"
-                          type="file"
-                          accept="image/*"
-                          multiple
-                        />
-                        <small class="helper-text">最多保留 5 张图片，用于给模型提供临时视觉参考。</small>
+                      <label class="field-wide generation-material-text-block">
+                        <span>素材文本</span>
+                        <textarea
+                          name="materialText"
+                          rows="6"
+                          placeholder="可手动整理本次生成要参考的资料摘要、事实点、风格片段或引用段落"
+                        ></textarea>
+                        <small class="helper-text">这里只保存当前这一次生成使用的参考资料，不会写入长期样本池或下次自动复用。</small>
+                        <div class="generation-briefing-improve-row">
+                          <div class="item-actions">
+                            <button
+                              type="button"
+                              class="button button-ghost button-small"
+                              id="generation-reference-search-button"
+                              disabled
+                            >
+                              AI搜索参考资料
+                            </button>
+                          </div>
+                          <div id="generation-reference-search-result" class="helper-text" aria-live="polite"></div>
+                        </div>
                       </label>
-                      <label>
-                        <span>参考文本</span>
-                        <input
-                          id="generation-reference-text-input"
-                          type="file"
-                          accept=".txt,.md,.markdown,text/plain,text/markdown"
-                          multiple
-                        />
-                        <small class="helper-text">支持 .txt / .md / .markdown，会随本次请求一起发送。</small>
-                      </label>
+                      <div class="generation-reference-files form-grid">
+                        <label>
+                          <span>参考图片</span>
+                          <input
+                            id="generation-reference-image-input"
+                            type="file"
+                            accept="image/*"
+                            multiple
+                          />
+                          <small class="helper-text">最多保留 5 张图片，用于给模型提供临时视觉参考。</small>
+                        </label>
+                        <label>
+                          <span>参考文本</span>
+                          <input
+                            id="generation-reference-text-input"
+                            type="file"
+                            accept=".txt,.md,.markdown,text/plain,text/markdown"
+                            multiple
+                          />
+                          <small class="helper-text">支持 .txt / .md / .markdown，会随本次请求一起发送。</small>
+                        </label>
+                      </div>
+                      <div id="generation-reference-assets-preview" class="helper-text" aria-live="polite"></div>
                     </div>
-                    <div id="generation-reference-assets-preview" class="helper-text" aria-live="polite"></div>
-                  </div>
+                  </details>
                   <details id="generation-advanced-panel" class="admin-accordion field-wide">
                     <summary>高级偏好</summary>
                     <div class="admin-accordion-body">

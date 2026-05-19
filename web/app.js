@@ -707,7 +707,8 @@ const appState = {
     open: false,
     loading: false,
     message: "",
-    items: []
+    items: [],
+    selectedIndices: []
   },
   generationReferenceAssetsPending: Promise.resolve(),
   generationReferenceAssetsLocked: false,
@@ -7202,6 +7203,34 @@ function appendGenerationMaterialText(nextText) {
   field.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+function appendMultipleGenerationMaterialTexts(texts = []) {
+  const normalized = [
+    ...new Set((Array.isArray(texts) ? texts : [texts]).map((item) => String(item || "").trim()).filter(Boolean))
+  ];
+
+  for (const text of normalized) {
+    appendGenerationMaterialText(text);
+  }
+}
+
+function syncGenerationReferenceSearchSelectionState() {
+  const contentNode = byId("generation-reference-search-modal-content");
+  const state = appState.generationReferenceSearch || {};
+  const selectedIndices = Array.isArray(state.selectedIndices) ? state.selectedIndices : [];
+  const selectedCount = selectedIndices.length;
+
+  if (!contentNode) {
+    return;
+  }
+
+  const applyButton = contentNode.querySelector('[data-action="apply-generation-reference-materials"]');
+
+  if (applyButton) {
+    applyButton.textContent = `回填已选 ${selectedCount} 条`;
+    applyButton.disabled = selectedCount === 0;
+  }
+}
+
 function renderGenerationReferenceSearchModal() {
   const modal = byId("generation-reference-search-modal");
   const contentNode = byId("generation-reference-search-modal-content");
@@ -7219,18 +7248,30 @@ function renderGenerationReferenceSearchModal() {
   }
 
   const items = Array.isArray(state.items) ? state.items : [];
+  const selectedIndices = Array.isArray(state.selectedIndices) ? state.selectedIndices : [];
+  const selectedCount = selectedIndices.length;
 
   if (state.loading) {
     contentNode.innerHTML = '<div class="result-card muted">正在搜索参考资料...</div>';
   } else if (!items.length) {
-    contentNode.innerHTML = `<div class="result-card muted">${escapeHtml(state.message || "暂未找到可用的参考资料。")}</div>`;
+    contentNode.innerHTML = '<div class="result-card muted">暂未找到可用的参考资料。</div>';
   } else {
-    contentNode.innerHTML = items
+    contentNode.innerHTML = `${items
       .map(
         (item, index) => `
           <article class="modal-card generation-reference-result-card">
             <div class="sample-library-modal-section-head">
               <div>
+                <label class="generation-reference-selection">
+                  <input
+                    type="checkbox"
+                    data-action="toggle-generation-reference-material"
+                    data-index="${index}"
+                    ${selectedIndices.includes(index) ? "checked" : ""}
+                  />
+                  <span class="generation-reference-selection-indicator" aria-hidden="true"></span>
+                  <span>选择这条参考资料</span>
+                </label>
                 <strong>${escapeHtml(item?.title || `参考资料 ${index + 1}`)}</strong>
                 <p>${escapeHtml(item?.reason || "未提供推荐理由")}</p>
               </div>
@@ -7249,20 +7290,20 @@ function renderGenerationReferenceSearchModal() {
                 }</p>
               </label>
             </div>
-            <div class="item-actions">
-              <button
-                type="button"
-                class="button button-small"
-                data-action="apply-generation-reference-material"
-                data-index="${index}"
-              >
-                采用并回填
-              </button>
-            </div>
           </article>
         `
       )
-      .join("");
+      .join("")}
+      <div class="item-actions">
+        <button
+          type="button"
+          class="button button-small"
+          data-action="apply-generation-reference-materials"
+          ${selectedCount ? "" : "disabled"}
+        >
+          回填已选 ${selectedCount} 条
+        </button>
+      </div>`;
   }
 
   setGenerationReferenceSearchModalOpen(true);
@@ -7286,7 +7327,8 @@ async function openGenerationReferenceSearchModal() {
     open: true,
     loading: true,
     message: "",
-    items: []
+    items: [],
+    selectedIndices: []
   };
   renderGenerationReferenceSearchModal();
 
@@ -7314,7 +7356,8 @@ async function openGenerationReferenceSearchModal() {
       ...appState.generationReferenceSearch,
       loading: false,
       message: String(result?.message || "").trim(),
-      items
+      items,
+      selectedIndices: []
     };
 
     if (resultNode) {
@@ -7329,7 +7372,8 @@ async function openGenerationReferenceSearchModal() {
       ...appState.generationReferenceSearch,
       loading: false,
       message: error?.message || "参考资料搜索失败",
-      items: []
+      items: [],
+      selectedIndices: []
     };
 
     if (resultNode) {
@@ -9109,6 +9153,37 @@ function getGenerationRequirementMessage() {
   return "";
 }
 
+function getGenerationReferenceSearchRequirementMessage() {
+  const payload = getGenerationPayload({ includeReferenceAssets: false });
+
+  if (!String(payload.brief?.briefing || "").trim()) {
+    return "请先填写一句话需求。";
+  }
+
+  return "";
+}
+
+function syncGenerationReferenceSearchAction() {
+  const searchButton = byId("generation-reference-search-button");
+  const resultNode = byId("generation-reference-search-result");
+  const requirementMessage = getGenerationReferenceSearchRequirementMessage();
+
+  setGatedButtonState(searchButton, !requirementMessage, requirementMessage);
+
+  if (!resultNode) {
+    return;
+  }
+
+  if (requirementMessage) {
+    resultNode.textContent = requirementMessage;
+    return;
+  }
+
+  if (resultNode.textContent === "请先填写一句话需求。") {
+    resultNode.textContent = "";
+  }
+}
+
 function syncGenerationActions() {
   const requirementMessage = getGenerationRequirementMessage();
   const submitButton = byId("generation-workbench-form")?.querySelector('button[type="submit"]');
@@ -9118,6 +9193,7 @@ function syncGenerationActions() {
   setGatedButtonState(submitButton, !requirementMessage, requirementMessage);
   setGatedButtonState(improveButton, !improveRequirementMessage, improveRequirementMessage);
   setActionGateHint("generation-action-hint", requirementMessage);
+  syncGenerationReferenceSearchAction();
 }
 
 function syncSampleLibraryCreateActions() {
@@ -11175,25 +11251,31 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
-  if (action === "apply-generation-reference-material") {
+  if (action === "apply-generation-reference-materials") {
     const items = Array.isArray(appState.generationReferenceSearch?.items) ? appState.generationReferenceSearch.items : [];
-    const item = items[Number(button.dataset.index)];
+    const selectedIndices = Array.isArray(appState.generationReferenceSearch?.selectedIndices)
+      ? appState.generationReferenceSearch.selectedIndices
+      : [];
+    const selectedTexts = selectedIndices
+      .map((index) => items[index])
+      .map((item) => String(item?.referenceText || "").trim())
+      .filter(Boolean);
 
-    if (!item?.referenceText) {
+    if (!selectedTexts.length) {
       const resultNode = byId("generation-reference-search-result");
 
       if (resultNode) {
-        resultNode.textContent = "当前参考资料缺少可回填文本。";
+        resultNode.textContent = "请先选择至少 1 条可回填的参考资料。";
       }
       return;
     }
 
-    appendGenerationMaterialText(item.referenceText);
+    appendMultipleGenerationMaterialTexts(selectedTexts);
     closeGenerationReferenceSearchModal();
     const resultNode = byId("generation-reference-search-result");
 
     if (resultNode) {
-      resultNode.textContent = "已回填到素材文本。";
+      resultNode.textContent = `已回填 ${selectedTexts.length} 条参考资料到素材文本。`;
     }
     return;
   }
@@ -11514,6 +11596,26 @@ document.addEventListener("click", async (event) => {
   } finally {
     setButtonBusy(button, false);
   }
+});
+
+document.addEventListener("change", (event) => {
+  const target = event.target instanceof Element ? event.target.closest('[data-action="toggle-generation-reference-material"]') : null;
+
+  if (!target) {
+    return;
+  }
+
+  const index = Number(target.dataset.index);
+  const current = Array.isArray(appState.generationReferenceSearch?.selectedIndices)
+    ? appState.generationReferenceSearch.selectedIndices
+    : [];
+  const next = target.checked ? [...new Set([...current, index])].sort((a, b) => a - b) : current.filter((item) => item !== index);
+
+  appState.generationReferenceSearch = {
+    ...appState.generationReferenceSearch,
+    selectedIndices: next
+  };
+  syncGenerationReferenceSearchSelectionState();
 });
 
 renderModelSelectionControls(defaultModelSelectionOptions);

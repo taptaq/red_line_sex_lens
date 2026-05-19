@@ -29,6 +29,7 @@ const invalidCoverImagePromptPattern =
   /^(?:未生成(?:封面图(?:\s*prompt)?|提示词)?|待补(?:充)?|暂无(?:内容|结果)?|无|空|n\/a|prompt)$/iu;
 const defaultKimiBaseUrl = "https://api.moonshot.cn/v1";
 const kimiReferenceSearchToolUri = "moonshot/web-search:latest";
+const dmxapiResponsesEndpoint = "https://www.dmxapi.cn/v1/responses";
 
 function uniqueStrings(items = []) {
   return [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))];
@@ -781,8 +782,16 @@ function normalizeGenerationReferenceMaterialItem(item = {}, index = 0) {
   };
 }
 
+function simplifyReferenceDedupText(value = "") {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[【】\[\]()（）《》"'“”‘’.,，。!！?？:：;；\-—_]/g, "")
+    .trim();
+}
+
 export function normalizeGenerationReferenceMaterialItems(items = []) {
-  return ensureArray(items)
+  const normalized = ensureArray(items)
     .map((item, index) => normalizeGenerationReferenceMaterialItem(item, index))
     .filter(
       (item) =>
@@ -791,14 +800,29 @@ export function normalizeGenerationReferenceMaterialItems(items = []) {
         item.referenceText &&
         item.sourceUrl &&
         isValidReferenceMaterialSourceUrl(item.sourceUrl)
-    )
-    .slice(0, 5);
+    );
+  const seen = new Set();
+
+  return normalized.filter((item) => {
+    const simplifiedTitle = simplifyReferenceDedupText(item.title);
+    const simplifiedReferenceText = simplifyReferenceDedupText(item.referenceText).slice(0, 80);
+    const key = simplifiedTitle && simplifiedReferenceText
+      ? `${simplifiedTitle}::${simplifiedReferenceText}`
+      : `${item.sourceUrl}::${item.title}`;
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  }).slice(0, 10);
 }
 
 export function buildGenerationReferenceMaterialSearchPrompt({ brief = {}, draft = {} } = {}) {
   return [
     "你是小红书内容生成工作台里的参考素材检索助手。",
-    "你的任务是基于当前需求做全网检索，整理 3-5 条可用的网页参考候选。",
+    "你的任务是基于当前需求做全网检索，整理 5-10 条可用的网页参考候选。",
     "候选必须来自公开网页信息，不要编造来源，不要输出无法追溯的网址。",
     "",
     `原始一句话需求：${brief.briefing || ""}`,
@@ -826,6 +850,38 @@ export function buildGenerationReferenceMaterialSearchPrompt({ brief = {}, draft
   ].join("\n");
 }
 
+function compactSearchClause(value = "") {
+  return String(value || "")
+    .replace(/[，,。；;：:、]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function uniqueSearchQueries(items = []) {
+  return [...new Set(ensureArray(items).map((item) => compactSearchClause(item)).filter(Boolean))];
+}
+
+export function buildGenerationReferenceSearchQueries({ brief = {}, draft = {} } = {}) {
+  const briefing = String(brief?.briefing || "").trim();
+  const title = String(draft?.title || "").trim();
+  const topic = String(brief?.topic || "").trim();
+  const constraints = String(brief?.constraints || "").trim();
+  const collectionType = String(brief?.collectionType || "").trim();
+  const subject = briefing || title || topic || "当前主题";
+  const contextSuffix = [collectionType, constraints].filter(Boolean).join(" ");
+
+  return uniqueSearchQueries([
+    [subject, "基础事实 判断 常见情况"].filter(Boolean).join(" "),
+    [subject, "情绪反应 心理反应 原因 科普"].filter(Boolean).join(" "),
+    [subject, "边界 提醒 注意事项 安全"].filter(Boolean).join(" "),
+    [subject, "常见误区 常见误解 误判"].filter(Boolean).join(" "),
+    [subject, "适合场景 不适合场景 暂停信号"].filter(Boolean).join(" "),
+    [subject, "专业解释 生理机制 心理机制"].filter(Boolean).join(" "),
+    [subject, "目标人群 常见困扰 安抚建议"].filter(Boolean).join(" "),
+    [topic || title || subject, contextSuffix].filter(Boolean).join(" ")
+  ]).slice(0, 8);
+}
+
 function getKimiReferenceSearchBaseUrl() {
   const raw = String(process.env.KIMI_BASE_URL || defaultKimiBaseUrl).trim() || defaultKimiBaseUrl;
   return raw
@@ -839,6 +895,10 @@ function getKimiReferenceSearchApiKey() {
 
 function getKimiReferenceSearchModel() {
   return String(process.env.KIMI_TEXT_MODEL || "kimi-k2.6").trim();
+}
+
+function getTencentSearchApiKey() {
+  return String(process.env.DMXAPI_API_KEY || "").trim();
 }
 
 function isValidReferenceMaterialSourceUrl(value = "") {
@@ -896,6 +956,18 @@ function parseToolArguments(rawArguments = "") {
 }
 
 function normalizeKimiToolExecutionOutput(data = {}) {
+  const encryptedOutput = String(data?.data?.context?.encrypted_output || "").trim();
+
+  if (encryptedOutput) {
+    return encryptedOutput;
+  }
+
+  const contextOutput = String(data?.data?.context?.output || "").trim();
+
+  if (contextOutput) {
+    return contextOutput;
+  }
+
   return data?.data ?? data?.output ?? data?.result ?? data ?? {};
 }
 
@@ -912,20 +984,18 @@ async function executeKimiReferenceSearchFiber({
     method: "POST",
     headers: buildKimiReferenceSearchHeaders(apiKey),
     body: JSON.stringify({
-      tool_name: toolName,
-      input: parseToolArguments(rawArguments),
-      context: {
-        tool_call_id: fiberId
-      }
+      name: toolName,
+      arguments: rawArguments || JSON.stringify(parseToolArguments(rawArguments))
     })
   });
   const data = await parseKimiJsonResponse(response, "Kimi web search 执行失败。");
+  const normalizedOutput = normalizeKimiToolExecutionOutput(data);
 
   return {
     role: "tool",
     tool_call_id: fiberId,
     name: toolName,
-    content: JSON.stringify(normalizeKimiToolExecutionOutput(data))
+    content: typeof normalizedOutput === "string" ? normalizedOutput : JSON.stringify(normalizedOutput)
   };
 }
 
@@ -976,6 +1046,7 @@ async function runKimiReferenceSearchChat({
   ];
   const attemptedRoutes = ["kimi-official-web-search"];
   let sawToolCall = false;
+  let noToolCallRetryCount = 0;
 
   for (let attempt = 0; attempt < 6; attempt += 1) {
     const response = await fetchImpl(`${baseUrl}/chat/completions`, {
@@ -986,11 +1057,7 @@ async function runKimiReferenceSearchChat({
         messages,
         tools,
         tool_choice: "auto",
-        temperature: 0.2,
         max_tokens: maxTokens,
-        response_format: {
-          type: "json_object"
-        },
         stream: false,
         thinking: {
           type: "disabled"
@@ -1023,7 +1090,18 @@ async function runKimiReferenceSearchChat({
     }
 
     if (!sawToolCall) {
-      throw new Error("Kimi 网页检索必须使用 web search 工具完成全网检索，不能直接返回模型自带参考。");
+      if (noToolCallRetryCount < 1) {
+        noToolCallRetryCount += 1;
+        messages.push({
+          role: "user",
+          content: "你上一轮没有调用 web search 工具。请先调用 web search 工具完成全网检索，再继续返回最终 JSON。"
+        });
+        continue;
+      }
+
+      const error = new Error("Kimi 网页检索未触发 web search 工具。");
+      error.code = "KIMI_WEB_SEARCH_TOOL_NOT_USED";
+      throw error;
     }
 
     return {
@@ -1036,6 +1114,73 @@ async function runKimiReferenceSearchChat({
   }
 
   throw new Error("Kimi 网页检索轮次超限，未返回最终结果。");
+}
+
+function normalizeTencentSearchPage(page = {}) {
+  if (typeof page !== "string") {
+    return page && typeof page === "object" ? page : {};
+  }
+
+  try {
+    const parsed = JSON.parse(page);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function normalizeTencentSearchPages(data = {}) {
+  return ensureArray(data?.Response?.Pages).map((page, index) => {
+    const normalizedPage = normalizeTencentSearchPage(page);
+
+    return {
+    id: `tencent-search-${index + 1}`,
+      title: String(normalizedPage?.title || "").trim(),
+      reason:
+        [String(normalizedPage?.site || "").trim(), String(normalizedPage?.date || "").trim()].filter(Boolean).join(" · ") || "联网搜索候选",
+      referenceText: String(normalizedPage?.passage || "").trim(),
+      sourceUrl: String(normalizedPage?.url || "").trim()
+    };
+  });
+}
+
+async function runTencentSearchFallback({ prompt, queries = [], fetchImpl = fetch } = {}) {
+  const apiKey = getTencentSearchApiKey();
+
+  if (!apiKey) {
+    const error = new Error("联网参考资料搜索失败，且未配置 DMXAPI_API_KEY 作为 Tencent-Search 兜底。");
+    error.statusCode = 500;
+    throw error;
+  }
+
+  const normalizedQueries = uniqueSearchQueries([...(Array.isArray(queries) ? queries : []), prompt]).slice(0, 8);
+  const items = [];
+
+  for (const query of normalizedQueries) {
+    const response = await fetchImpl(dmxapiResponsesEndpoint, {
+      method: "POST",
+      headers: {
+        Authorization: apiKey,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "Tencent-Search",
+        input: query
+      })
+    });
+    const data = await parseKimiJsonResponse(response, "Tencent-Search 联网搜索失败。");
+    items.push(...normalizeTencentSearchPages(data));
+  }
+
+  return {
+    items,
+    message: "已基于拆分后的检索意图整理参考资料候选。",
+    provider: "tencent-search",
+    model: "Tencent-Search",
+    route: "dmxapi",
+    routeLabel: "Tencent-Search fallback",
+    attemptedRoutes: ["dmxapi-tencent-search"]
+  };
 }
 
 export function normalizeGenerationCandidate(candidate = {}, index = 0, options = {}) {
@@ -1329,6 +1474,8 @@ async function improveBriefingJsonWithModel({ messages, modelSelection = "auto" 
 
 async function generateReferenceMaterialsJsonWithModel({
   prompt,
+  queries = [],
+  brief = {},
   modelSelection = "auto",
   maxTokens = Number(process.env.GENERATION_REFERENCE_SEARCH_MAX_TOKENS || 1400),
   fetchImpl = fetch
@@ -1342,24 +1489,43 @@ async function generateReferenceMaterialsJsonWithModel({
   }
 
   const model = getKimiReferenceSearchModel() || getRewriteSelectionModel(modelSelection);
-  const result = await runKimiReferenceSearchChat({
-    prompt,
-    apiKey,
-    baseUrl: getKimiReferenceSearchBaseUrl(),
-    model,
-    maxTokens,
-    fetchImpl
-  });
-  const parsed = extractJsonBlock(result.text) || {};
+  try {
+    const result = await runKimiReferenceSearchChat({
+      prompt,
+      apiKey,
+      baseUrl: getKimiReferenceSearchBaseUrl(),
+      model,
+      maxTokens,
+      fetchImpl
+    });
+    const parsed = extractJsonBlock(result.text) || {};
 
-  return {
-    ...parsed,
-    provider: "kimi",
-    model: result.model || model,
-    route: result.route,
-    routeLabel: result.routeLabel,
-    attemptedRoutes: result.attemptedRoutes || []
-  };
+    return {
+      ...parsed,
+      provider: "kimi",
+      model: result.model || model,
+      route: result.route,
+      routeLabel: result.routeLabel,
+      attemptedRoutes: result.attemptedRoutes || []
+    };
+  } catch (error) {
+    const fallbackQuery = String(brief?.briefing || "").trim() || prompt;
+    const fallback = await runTencentSearchFallback({
+      prompt: fallbackQuery,
+      queries,
+      fetchImpl
+    });
+
+    return {
+      items: fallback.items,
+      message: fallback.message,
+      provider: fallback.provider,
+      model: fallback.model,
+      route: fallback.route,
+      routeLabel: fallback.routeLabel,
+      attemptedRoutes: ["kimi-official-web-search", ...fallback.attemptedRoutes]
+    };
+  }
 }
 
 export async function improveGenerationBriefing({
@@ -1396,12 +1562,18 @@ export async function generateReferenceMaterials({
   generateJson = generateReferenceMaterialsJsonWithModel,
   fetchImpl
 } = {}) {
+  const queries = buildGenerationReferenceSearchQueries({
+    brief,
+    draft
+  });
   const prompt = buildGenerationReferenceMaterialSearchPrompt({
     brief,
     draft
   });
   const payload = await generateJson({
     prompt,
+    queries,
+    brief,
     modelSelection,
     fetchImpl
   });
