@@ -6,6 +6,7 @@ import {
 import { buildRewriteBodyMarkup } from "./rewrite-result-view.js";
 import {
   buildSampleLibraryCalibrationPrediction,
+  buildSampleLibraryCalibrationEvidenceState,
   resolveSampleLibraryCalibrationPrefillSource
 } from "./sample-library-calibration.js";
 import { deriveSampleLibraryReferenceApplication } from "./sample-library-reference-application.js";
@@ -6345,28 +6346,22 @@ function buildSampleLibraryLifecycleModalMarkup(record) {
 }
 
 function buildSampleLibraryCalibrationEvidenceMarkup(prediction = {}) {
-  const samples = Array.isArray(prediction?.evidenceSamples) ? prediction.evidenceSamples : [];
-  const signals = Array.isArray(prediction?.evidenceSignals) ? prediction.evidenceSignals : [];
-  const summary = String(prediction?.evidenceSummary || "").trim() || "当前还没有足够的匹配证据，建议先结合检测结果再判断。";
-  const confidence = Number(prediction?.confidence ?? 0) || 0;
-  const sampleItemsMarkup = (samples.length ? samples : [{ id: "", title: "暂无明确命中的历史样本" }])
+  const evidence = buildSampleLibraryCalibrationEvidenceState(prediction);
+  const sampleItemsMarkup = evidence.samples
     .map((item) => {
       const label = String(item?.title || item?.id || "未命名样本").trim() || "未命名样本";
       return `<li>${escapeHtml(label)}</li>`;
     })
     .join("");
-  const signalsMarkup = signals.length
-    ? signals.map((signal) => `<span class="meta-pill">${escapeHtml(signal)}</span>`).join("")
-    : '<span class="meta-pill">暂无可展示信号</span>';
-  const confidenceNote = confidence
-    ? `当前置信度 ${confidence} / 100，这是一条温和提示，适合辅助人工复核。`
-    : "当前置信度仍偏保守，建议把它当作辅助线索，不单独代替人工判断。";
+  const signalsMarkup = evidence.signals
+    .map((signal) => `<span class="meta-pill">${escapeHtml(signal)}</span>`)
+    .join("");
 
   return `
     <section class="sample-library-calibration-evidence" aria-label="预判依据">
       <div class="sample-library-calibration-evidence-head">
         <strong>预判依据</strong>
-        <p>${escapeHtml(summary)}</p>
+        <p>${escapeHtml(evidence.summary)}</p>
       </div>
       <div class="sample-library-calibration-evidence-block">
         <span class="sample-library-calibration-evidence-label">命中样本</span>
@@ -6376,7 +6371,7 @@ function buildSampleLibraryCalibrationEvidenceMarkup(prediction = {}) {
         <span class="sample-library-calibration-evidence-label">证据信号</span>
         <div class="meta-row sample-library-calibration-evidence-signals">${signalsMarkup}</div>
       </div>
-      <p class="sample-library-calibration-evidence-note">${escapeHtml(confidenceNote)}</p>
+      <p class="sample-library-calibration-evidence-note">${escapeHtml(evidence.confidenceNote)}</p>
     </section>
   `;
 }

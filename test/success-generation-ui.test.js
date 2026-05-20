@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { buildSampleLibraryCalibrationEvidenceState } from "../web/sample-library-calibration.js";
+
 async function readFrontendFiles() {
   const [indexHtml, appJs, styles] = await Promise.all([
     fs.readFile(path.join(process.cwd(), "web/index.html"), "utf8"),
@@ -1317,53 +1319,22 @@ test("frontend surfaces calibration visibility directly in the sample-library li
 
 test("frontend renders prediction evidence inside the sample-library calibration modal", async () => {
   const { appJs, styles } = await readFrontendFiles();
-  const evidenceHelperSource = appJs.match(/function\s+buildSampleLibraryCalibrationEvidenceMarkup\s*\([\s\S]*?\n}\n/)?.[0] || "";
-  const sectionsHelperSource = appJs.match(/function\s+buildSampleLibraryCalibrationEditorSectionsMarkup\s*\([\s\S]*?\n}\n/)?.[0] || "";
 
   assert.match(appJs, /function\s+buildSampleLibraryCalibrationEvidenceMarkup\s*\(/);
   assert.match(styles, /\.sample-library-calibration-evidence/);
 
-  const buildMarkup = new Function(
-    "escapeHtml",
-    "buildSampleLibraryModalSectionMarkup",
-    "getSampleLibraryCalibrationPredictionPrefillSourceSummary",
-    "getSampleLibraryRetroTimingHintClassName",
-    "joinCSV",
-    `${evidenceHelperSource}
-${sectionsHelperSource}
-return buildSampleLibraryCalibrationEditorSectionsMarkup;`
-  )(
-    (value) => String(value || ""),
-    ({ title = "", description = "", body = "" } = {}) => `<section><strong>${title}</strong><p>${description}</p>${body}</section>`,
-    () => "预填来源摘要",
-    () => "helper-text",
-    (items = []) => (Array.isArray(items) ? items.join(", ") : "")
-  );
-
-  const markup = buildMarkup({
-    prediction: {
-      predictedStatus: "published_passed",
-      predictedRiskLevel: "low",
-      predictedPerformanceTier: "medium",
-      confidence: 78,
-      reason: "综合判断偏稳",
-      evidenceSummary: "这条记录与 1 条历史样本的结构高度相似。",
-      evidenceSamples: [{ id: "record-1", title: "历史样本 1" }],
-      evidenceSignals: ["标题短语命中", "标签重合"]
-    },
-    retro: {},
-    comparisonStatusLabel: "待复盘",
-    missReasonSuggestion: "",
-    referenceAction: null,
-    retroTimingHint: null
+  const evidence = buildSampleLibraryCalibrationEvidenceState({
+    confidence: 78,
+    evidenceSummary: "这条记录与 1 条历史样本的结构高度相似。",
+    evidenceSamples: [{ id: "record-1", title: "历史样本 1" }],
+    evidenceSignals: ["标题短语命中", "标签重合"]
   });
 
-  assert.match(markup, /预判依据/);
-  assert.match(markup, /这条记录与 1 条历史样本的结构高度相似/);
-  assert.match(markup, /历史样本 1/);
-  assert.match(markup, /标题短语命中/);
-  assert.match(markup, /标签重合/);
-  assert.match(markup, /当前置信度 78/);
+  assert.equal(evidence.confidence, 78);
+  assert.equal(evidence.summary, "这条记录与 1 条历史样本的结构高度相似。");
+  assert.deepEqual(evidence.samples, [{ id: "record-1", title: "历史样本 1" }]);
+  assert.deepEqual(evidence.signals, ["标题短语命中", "标签重合"]);
+  assert.match(evidence.confidenceNote, /当前置信度 78/);
 });
 
 test("frontend exposes a calibration review queue with quick jumps back to sample detail", async () => {
@@ -1549,6 +1520,7 @@ test("sample library calibration modal renders visible evidence with matched sam
     "getSampleLibraryCalibrationPredictionPrefillSourceSummary",
     "getSampleLibraryRetroTimingHintClassName",
     "joinCSV",
+    "buildSampleLibraryCalibrationEvidenceState",
     `${evidenceHelperSource}
 ${calibrationSectionsSource}
 return {
@@ -1560,7 +1532,8 @@ return {
     (value) => String(value || ""),
     () => "当前预填来源：当前检测结果。",
     () => "helper-text",
-    (items = []) => (Array.isArray(items) ? items.join(", ") : "")
+    (items = []) => (Array.isArray(items) ? items.join(", ") : ""),
+    buildSampleLibraryCalibrationEvidenceState
   );
 
   const evidenceMarkup = helpers.buildSampleLibraryCalibrationEvidenceMarkup({

@@ -198,6 +198,23 @@ function buildCalibrationPredictionEvidence({ source = {}, analysis = null, rewr
   };
 }
 
+export function buildSampleLibraryCalibrationEvidenceState(prediction = {}) {
+  const samples = Array.isArray(prediction?.evidenceSamples) ? prediction.evidenceSamples : [];
+  const signals = Array.isArray(prediction?.evidenceSignals) ? prediction.evidenceSignals : [];
+  const summary = String(prediction?.evidenceSummary || "").trim() || "当前还没有足够的匹配证据，建议先结合检测结果再判断。";
+  const confidence = Number(prediction?.confidence ?? 0) || 0;
+
+  return {
+    samples: samples.length ? samples : [{ id: "", title: "暂无明确命中的历史样本" }],
+    signals: signals.length ? signals : ["暂无可展示信号"],
+    summary,
+    confidence,
+    confidenceNote: confidence
+      ? `当前置信度 ${confidence} / 100，这是一条温和提示，适合辅助人工复核。`
+      : "当前置信度仍偏保守，建议把它当作辅助线索，不单独代替人工判断。"
+  };
+}
+
 export function resolveSampleLibraryCalibrationPrefillSource({
   latestAnalyzePayload = null,
   latestAnalysis = null,
