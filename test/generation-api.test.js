@@ -617,6 +617,87 @@ test("theme inspiration endpoint persists cached inspirations and prepends new r
   assert.equal(Array.isArray(persisted.sourceRecordIds), true);
 });
 
+test("theme inspiration endpoint reuses cached inspirations even when source fingerprint has changed unless refresh is requested", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "theme-inspirations-cache-reuse-"));
+  const originals = {
+    noteRecords: paths.noteRecords,
+    themeInspirations: paths.themeInspirations
+  };
+
+  paths.noteRecords = path.join(tempDir, "note-records.json");
+  paths.themeInspirations = path.join(tempDir, "theme-inspirations.json");
+
+  t.after(async () => {
+    Object.assign(paths, originals);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  await fs.writeFile(
+    paths.noteRecords,
+    `${JSON.stringify([
+      {
+        id: "record-new-high-performing",
+        source: "manual",
+        stage: "published_reference",
+        note: {
+          title: "新的高表现内容",
+          body: "新的内容数据。",
+          tags: ["身体探索"],
+          collectionType: "科普"
+        },
+        publish: {
+          status: "published_passed",
+          metrics: { likes: 60, favorites: 30, comments: 12, views: 3500, shares: 25 }
+        },
+        reference: {
+          enabled: true,
+          tier: "featured",
+          selectedBy: "manual"
+        }
+      }
+    ], null, 2)}\n`,
+    "utf8"
+  );
+
+  await fs.writeFile(
+    paths.themeInspirations,
+    `${JSON.stringify({
+      items: [
+        {
+          themeId: "cached-1",
+          themeTitle: "从羞耻感讲",
+          hookAngle: "很多人不是欲望太强，而是羞耻感太重。",
+          whyNow: "旧缓存",
+          discussionSignal: "旧缓存",
+          sourceSignals: ["旧缓存"],
+          expandAngles: [],
+          boundaryNotes: ["避免病理化表达"],
+          confidenceScore: 0.82,
+          tags: ["身体探索", "情绪反应"],
+          prefillBriefing: "写一篇从羞耻感角度展开的轻松科普。",
+          prefillReferenceTitle: "从羞耻感讲",
+          prefillMaterialText: "旧缓存内容",
+          prefillCollectionType: "科普",
+          prefillTone: "温和"
+        }
+      ],
+      generatedAt: "2026-05-19T12:00:00.000Z",
+      sourceFingerprint: "old-fingerprint",
+      sourceRecordIds: ["record-old-high-performing"],
+      sourceRecordCount: 1,
+      clusterCount: 1
+    }, null, 2)}\n`,
+    "utf8"
+  );
+
+  const result = await invokeRoute("POST", "/api/generate-theme-inspirations", {});
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.items.map((item) => item.themeTitle), ["从羞耻感讲"]);
+  assert.equal(result.diagnostics.sourceRecordCount, 1);
+  assert.equal(result.diagnostics.clusterCount, 1);
+});
+
 test("theme inspiration endpoint keeps existing cache file when refresh produces no usable items", async (t) => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "theme-inspirations-preserve-"));
   const originals = {

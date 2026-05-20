@@ -1191,18 +1191,15 @@ async function handleRequest(request, response) {
     }
 
     if (!shouldRefresh && !payload?.mockThemeInspirationSummary) {
-      const records = await loadNoteRecords();
-      const sourceRecords = collectThemeInspirationSourceRecords(records);
-      const sourceFingerprint = sourceRecords.map((record) => String(record?.id || "").trim()).filter(Boolean).join("|");
       const cached = await loadThemeInspirations();
       const cachedItems = normalizeThemeInspirationItems(Array.isArray(cached?.items) ? cached.items : []);
 
-      if (cachedItems.length && String(cached?.sourceFingerprint || "").trim() === sourceFingerprint) {
+      if (cachedItems.length) {
         return sendJson(response, 200, {
           ok: true,
           items: cachedItems,
           diagnostics: {
-            sourceRecordCount: sourceRecords.length,
+            sourceRecordCount: Number(cached?.sourceRecordCount || 0),
             clusterCount: Number(cached?.clusterCount || 0),
             rawThemeItemCount: cachedItems.length,
             normalizedThemeItemCount: cachedItems.length,
