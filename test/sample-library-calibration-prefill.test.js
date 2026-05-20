@@ -52,6 +52,9 @@ test("prefill source falls back to the saved record analysis snapshot when curre
   assert.ok(Array.isArray(prediction.evidenceSignals));
   assert.ok(prediction.evidenceSamples.length > 0);
   assert.ok(prediction.evidenceSignals.length > 0);
+  assert.equal(prediction.evidenceSamples[0]?.title, "检测结论：人工复核");
+  assert.match(prediction.evidenceSignals.join("；"), /规则分：68/);
+  assert.match(prediction.evidenceSignals.join("；"), /语义摘要：标题表达仍然偏强/);
   assert.equal(typeof prediction.evidenceSummary, "string");
   assert.match(prediction.evidenceSummary, /证据|相似|检测/);
 });
