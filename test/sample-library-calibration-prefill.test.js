@@ -48,6 +48,12 @@ test("prefill source falls back to the saved record analysis snapshot when curre
   assert.equal(prediction.model, "glm-5.1");
   assert.match(prediction.reason, /当前检测结论：人工复核/);
   assert.match(prediction.reason, /标题表达仍然偏强/);
+  assert.ok(Array.isArray(prediction.evidenceSamples));
+  assert.ok(Array.isArray(prediction.evidenceSignals));
+  assert.ok(prediction.evidenceSamples.length > 0);
+  assert.ok(prediction.evidenceSignals.length > 0);
+  assert.equal(typeof prediction.evidenceSummary, "string");
+  assert.match(prediction.evidenceSummary, /证据|相似|检测/);
 });
 
 test("prefill source prefers current session results over saved record snapshots when both exist", () => {

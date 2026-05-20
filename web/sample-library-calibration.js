@@ -233,6 +233,8 @@ export function buildSampleLibraryCalibrationPrediction(source = {}, selectedMod
   const analysis = source?.analysis && typeof source.analysis === "object" ? source.analysis : null;
   const rewrite = source?.rewrite && typeof source.rewrite === "object" ? source.rewrite : null;
   const hasRewrite = hasMeaningfulNoteDraft(rewrite || {});
+  const evidenceSamples = [];
+  const evidenceSignals = [];
   const verdict = normalizeTextValue(analysis?.finalVerdict || analysis?.verdict) || "pass";
   const score = Number(analysis?.score || 0);
   const semanticSummary = normalizeTextValue(analysis?.semanticReview?.review?.summary);
@@ -264,6 +266,51 @@ export function buildSampleLibraryCalibrationPrediction(source = {}, selectedMod
     confidence = 66;
   }
 
+  if (analysis) {
+    evidenceSamples.push({
+      id: `${source?.kind || "source"}-analysis`,
+      title: `检测结论：${verdictLabel(verdict)}`
+    });
+    evidenceSignals.push(`检测结论：${verdictLabel(verdict)}`);
+
+    if (Number.isFinite(score)) {
+      evidenceSignals.push(`规则分：${Math.round(score)}`);
+    }
+
+    if (semanticSummary) {
+      evidenceSamples.push({
+        id: `${source?.kind || "source"}-summary`,
+        title: semanticSummary
+      });
+      evidenceSignals.push(`语义摘要：${semanticSummary}`);
+    }
+  }
+
+  if (hasRewrite) {
+    if (rewrite.rewriteNotes) {
+      evidenceSignals.push(`改写说明：${rewrite.rewriteNotes}`);
+      evidenceSamples.push({
+        id: `${source?.kind || "source"}-rewrite-notes`,
+        title: rewrite.rewriteNotes
+      });
+    }
+
+    if (rewrite.safetyNotes) {
+      evidenceSignals.push(`安全提示：${rewrite.safetyNotes}`);
+    }
+  }
+
+  if (!evidenceSamples.length) {
+    evidenceSamples.push({
+      id: `${source?.kind || "source"}-source`,
+      title: source?.summary || "当前预填来源"
+    });
+  }
+
+  if (!evidenceSignals.length) {
+    evidenceSignals.push(source?.summary || "暂无可用证据");
+  }
+
   const reasonParts = [
     `当前检测结论：${verdictLabel(verdict)}`,
     Number.isFinite(score) ? `规则分 ${Math.round(score)}` : "",
@@ -278,6 +325,9 @@ export function buildSampleLibraryCalibrationPrediction(source = {}, selectedMod
     predictedPerformanceTier,
     confidence,
     reason: reasonParts.join("；"),
+    evidenceSamples,
+    evidenceSignals,
+    evidenceSummary: `证据摘要：${evidenceSignals.join("；")}`,
     model: hasRewrite ? rewrite.model || selectedModels.rewrite || "" : selectedModels.semantic || "",
     createdAt: new Date().toISOString().slice(0, 10)
   };
