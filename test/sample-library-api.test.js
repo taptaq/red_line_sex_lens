@@ -245,6 +245,62 @@ test("sample library API persists prediction and retro calibration fields", asyn
   });
 });
 
+test("sample library API preserves prediction evidence fields across patch round-trips", async (t) => {
+  await withTempSampleLibraryApi(t, async () => {
+    const created = await invokeRoute("POST", "/api/sample-library", {
+      source: "manual",
+      stage: "draft",
+      note: {
+        title: "预测证据 API 样本",
+        body: "预测证据 API 正文",
+        collectionType: "科普"
+      },
+      calibration: {
+        prediction: {
+          predictedStatus: "limited",
+          predictedRiskLevel: "medium",
+          predictedPerformanceTier: "low",
+          confidence: 68,
+          reason: "标题结构接近历史高风险样本",
+          evidenceSamples: [{ id: "sample-1", title: "历史样本 1" }],
+          evidenceSignals: ["标题短语命中"],
+          evidenceSummary: "与 1 条历史样本相似"
+        }
+      }
+    });
+
+    assert.equal(created.status, 200);
+    assert.deepEqual(created.item.calibration.prediction.evidenceSamples, [{ id: "sample-1", title: "历史样本 1" }]);
+    assert.deepEqual(created.item.calibration.prediction.evidenceSignals, ["标题短语命中"]);
+    assert.equal(created.item.calibration.prediction.evidenceSummary, "与 1 条历史样本相似");
+
+    const patched = await invokeRoute("PATCH", "/api/sample-library", {
+      id: created.item.id,
+      calibration: {
+        prediction: {
+          evidenceSamples: [{ id: "sample-2", title: "历史样本 2" }],
+          evidenceSignals: ["标签重合"],
+          evidenceSummary: "与 2 条历史样本相似"
+        }
+      }
+    });
+    const records = await loadNoteRecords();
+
+    assert.equal(patched.status, 200);
+    assert.equal(patched.item.calibration.prediction.predictedStatus, "limited");
+    assert.equal(patched.item.calibration.prediction.predictedRiskLevel, "medium");
+    assert.equal(patched.item.calibration.prediction.predictedPerformanceTier, "low");
+    assert.equal(patched.item.calibration.prediction.confidence, 68);
+    assert.equal(patched.item.calibration.prediction.reason, "标题结构接近历史高风险样本");
+    assert.deepEqual(patched.item.calibration.prediction.evidenceSamples, [{ id: "sample-2", title: "历史样本 2" }]);
+    assert.deepEqual(patched.item.calibration.prediction.evidenceSignals, ["标签重合"]);
+    assert.equal(patched.item.calibration.prediction.evidenceSummary, "与 2 条历史样本相似");
+    assert.deepEqual(records[0].calibration.prediction.evidenceSamples, [{ id: "sample-2", title: "历史样本 2" }]);
+    assert.deepEqual(records[0].calibration.prediction.evidenceSignals, ["标签重合"]);
+    assert.equal(records[0].calibration.prediction.evidenceSummary, "与 2 条历史样本相似");
+  });
+});
+
 test("sample library calibration replay summarizes historical calibrated samples", async (t) => {
   await withTempSampleLibraryApi(t, async () => {
     await invokeRoute("POST", "/api/sample-library", {

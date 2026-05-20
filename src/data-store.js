@@ -269,6 +269,10 @@ function collapseNoteRecordsByCompatibility(items = []) {
   return next;
 }
 
+function normalizeStoredNoteRecords(items = []) {
+  return collapseNoteRecordsByCompatibility(dedupeNoteRecords(Array.isArray(items) ? items : [])).map((item) => buildNoteRecord(item));
+}
+
 function stripReferenceFromRecord(record = {}) {
   return buildNoteRecord({
     ...record,
@@ -541,7 +545,7 @@ export async function loadNoteRecords() {
     }
 
     const items = await readJson(configuredPath, []);
-    const normalized = collapseNoteRecordsByCompatibility(dedupeNoteRecords(Array.isArray(items) ? items : []));
+    const normalized = normalizeStoredNoteRecords(items);
     noteRecordsCache = {
       path: configuredPath,
       mtimeMs: stat.mtimeMs,
@@ -587,7 +591,7 @@ export async function loadNoteRecords() {
 }
 
 export async function saveNoteRecords(items) {
-  const normalized = collapseNoteRecordsByCompatibility(dedupeNoteRecords(Array.isArray(items) ? items : []));
+  const normalized = normalizeStoredNoteRecords(items);
   await writeJson(paths.noteRecords, normalized);
   const stat = await fs.stat(paths.noteRecords);
   noteRecordsCache = {

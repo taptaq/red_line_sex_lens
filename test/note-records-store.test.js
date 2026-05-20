@@ -305,6 +305,44 @@ test("note records normalize and merge prediction calibration details", () => {
   assert.equal(merged.calibration.retro.ruleImprovementCandidate, "保留这个标题结构");
 });
 
+test("note records preserve prediction evidence fields through normalization and merge", () => {
+  const existing = buildNoteRecord({
+    note: { title: "预测证据样本", body: "正文" },
+    calibration: {
+      prediction: {
+        predictedStatus: "limited",
+        predictedRiskLevel: "medium",
+        predictedPerformanceTier: "low",
+        confidence: 68,
+        reason: "标题结构接近历史高风险样本",
+        evidenceSamples: [{ id: "sample-1", title: "历史样本 1" }],
+        evidenceSignals: ["标题短语命中"],
+        evidenceSummary: "与 1 条历史样本相似"
+      }
+    }
+  });
+
+  const merged = mergeNoteRecords(existing, {
+    note: { title: "预测证据样本", body: "正文" },
+    calibration: {
+      prediction: {
+        evidenceSamples: [{ id: "sample-2", title: "历史样本 2" }],
+        evidenceSignals: ["标签重合"],
+        evidenceSummary: "与 2 条历史样本相似"
+      }
+    }
+  });
+
+  assert.equal(merged.calibration.prediction.predictedStatus, "limited");
+  assert.equal(merged.calibration.prediction.predictedRiskLevel, "medium");
+  assert.equal(merged.calibration.prediction.predictedPerformanceTier, "low");
+  assert.equal(merged.calibration.prediction.confidence, 68);
+  assert.equal(merged.calibration.prediction.reason, "标题结构接近历史高风险样本");
+  assert.deepEqual(merged.calibration.prediction.evidenceSamples, [{ id: "sample-2", title: "历史样本 2" }]);
+  assert.deepEqual(merged.calibration.prediction.evidenceSignals, ["标签重合"]);
+  assert.equal(merged.calibration.prediction.evidenceSummary, "与 2 条历史样本相似");
+});
+
 test("dedupeNoteRecords picks a deterministic id for duplicate records with different source ids", () => {
   const leftFirst = dedupeNoteRecords([
     migrateSuccessSampleToNoteRecord({

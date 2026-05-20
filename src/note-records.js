@@ -76,6 +76,27 @@ function normalizeSignalList(value = []) {
   );
 }
 
+function hasOwn(object, key) {
+  return Object.prototype.hasOwnProperty.call(object || {}, key);
+}
+
+function normalizeEvidenceSamples(value = []) {
+  const items = Array.isArray(value) ? value : [value];
+
+  return items
+    .filter((item) => item && typeof item === "object")
+    .map((item) => ({
+      ...item,
+      id: normalizeString(item.id),
+      title: normalizeString(item.title)
+    }))
+    .filter((item) => Object.values(item).some((entry) => {
+      if (Array.isArray(entry)) return entry.length > 0;
+      if (entry && typeof entry === "object") return Object.keys(entry).length > 0;
+      return Boolean(normalizeString(entry));
+    }));
+}
+
 function normalizeMetrics(metrics = {}) {
   return {
     likes: normalizeMetric(metrics.likes),
@@ -247,16 +268,86 @@ function hasMeaningfulCalibrationBranch(branch = {}) {
   });
 }
 
+function preferCalibrationString(left = "", right = "") {
+  return normalizeString(right) || normalizeString(left);
+}
+
+function preferCalibrationStatus(left = "", right = "") {
+  const normalizedLeft = normalizeStatus(left);
+  const normalizedRight = normalizeStatus(right);
+
+  if (normalizedRight !== "not_published" || normalizedLeft === "not_published") {
+    return normalizedRight;
+  }
+
+  return normalizedLeft;
+}
+
+function preferCalibrationConfidence(left = 0, right = 0) {
+  const normalizedLeft = normalizeConfidence(left);
+  const normalizedRight = normalizeConfidence(right);
+
+  if (normalizedRight > 0 || normalizedLeft === 0) {
+    return normalizedRight;
+  }
+
+  return normalizedLeft;
+}
+
+function preferCalibrationBoolean(left = false, right = false) {
+  const normalizedLeft = normalizeBoolean(left);
+  const normalizedRight = normalizeBoolean(right);
+
+  if (normalizedRight || normalizedLeft === false) {
+    return normalizedRight;
+  }
+
+  return normalizedLeft;
+}
+
+function preferCalibrationList(left = [], right = []) {
+  return Array.isArray(right) && right.length > 0 ? right : left;
+}
+
+function mergePredictionCalibration(left = {}, right = {}) {
+  return {
+    predictedStatus: preferCalibrationStatus(left.predictedStatus, right.predictedStatus),
+    predictedRiskLevel: preferCalibrationString(left.predictedRiskLevel, right.predictedRiskLevel),
+    predictedPerformanceTier: preferCalibrationString(left.predictedPerformanceTier, right.predictedPerformanceTier),
+    confidence: preferCalibrationConfidence(left.confidence, right.confidence),
+    reason: preferCalibrationString(left.reason, right.reason),
+    model: preferCalibrationString(left.model, right.model),
+    createdAt: preferCalibrationString(left.createdAt, right.createdAt),
+    evidenceSamples: preferCalibrationList(left.evidenceSamples, right.evidenceSamples),
+    evidenceSignals: preferCalibrationList(left.evidenceSignals, right.evidenceSignals),
+    evidenceSummary: preferCalibrationString(left.evidenceSummary, right.evidenceSummary)
+  };
+}
+
+function mergeRetroCalibration(left = {}, right = {}) {
+  return {
+    actualPerformanceTier: preferCalibrationString(left.actualPerformanceTier, right.actualPerformanceTier),
+    predictionMatched: preferCalibrationBoolean(left.predictionMatched, right.predictionMatched),
+    missReason: preferCalibrationString(left.missReason, right.missReason),
+    validatedSignals: preferCalibrationList(left.validatedSignals, right.validatedSignals),
+    invalidatedSignals: preferCalibrationList(left.invalidatedSignals, right.invalidatedSignals),
+    shouldBecomeReference: preferCalibrationBoolean(left.shouldBecomeReference, right.shouldBecomeReference),
+    ruleImprovementCandidate: preferCalibrationString(left.ruleImprovementCandidate, right.ruleImprovementCandidate),
+    notes: preferCalibrationString(left.notes, right.notes),
+    reviewedAt: preferCalibrationString(left.reviewedAt, right.reviewedAt)
+  };
+}
+
 function mergeCalibration(left = {}, right = {}) {
   const normalizedLeft = normalizeCalibration(left);
   const normalizedRight = normalizeCalibration(right);
 
   return {
     prediction: hasMeaningfulCalibrationBranch(normalizedRight.prediction)
-      ? preferStructuredValue(normalizedLeft.prediction, normalizedRight.prediction)
+      ? mergePredictionCalibration(normalizedLeft.prediction, normalizedRight.prediction)
       : normalizedLeft.prediction,
     retro: hasMeaningfulCalibrationBranch(normalizedRight.retro)
-      ? preferStructuredValue(normalizedLeft.retro, normalizedRight.retro)
+      ? mergeRetroCalibration(normalizedLeft.retro, normalizedRight.retro)
       : normalizedLeft.retro
   };
 }
@@ -319,7 +410,12 @@ function normalizeCalibration(calibration = {}) {
       confidence: normalizeConfidence(prediction.confidence),
       reason: normalizeString(prediction.reason),
       model: normalizeString(prediction.model),
-      createdAt: normalizeString(prediction.createdAt)
+      createdAt: normalizeString(prediction.createdAt),
+      evidenceSamples: normalizeEvidenceSamples(
+        hasOwn(prediction, "evidenceSamples") ? prediction.evidenceSamples : prediction.evidenceSampleIds
+      ),
+      evidenceSignals: normalizeSignalList(prediction.evidenceSignals),
+      evidenceSummary: normalizeString(prediction.evidenceSummary)
     },
     retro: {
       actualPerformanceTier: normalizeString(retro.actualPerformanceTier),

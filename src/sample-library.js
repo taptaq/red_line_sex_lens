@@ -21,6 +21,13 @@ function stripClientIdentityFields(payload = {}) {
   return rest;
 }
 
+function mergeCalibrationBranch(current = {}, incoming = {}) {
+  return {
+    ...(current && typeof current === "object" ? current : {}),
+    ...(incoming && typeof incoming === "object" ? incoming : {})
+  };
+}
+
 export function buildSampleLibraryImportPayload(item = {}) {
   const reference = item.reference && typeof item.reference === "object" ? item.reference : {};
   const publish = item.publish && typeof item.publish === "object" ? item.publish : {};
@@ -206,16 +213,10 @@ export function patchSampleLibraryRecord(current = {}, payload = {}) {
 
   if (payload.calibration && typeof payload.calibration === "object") {
     if (payload.calibration.prediction && typeof payload.calibration.prediction === "object") {
-      next.calibration.prediction = {
-        ...next.calibration.prediction,
-        ...payload.calibration.prediction
-      };
+      next.calibration.prediction = mergeCalibrationBranch(next.calibration.prediction, payload.calibration.prediction);
     }
     if (payload.calibration.retro && typeof payload.calibration.retro === "object") {
-      next.calibration.retro = {
-        ...next.calibration.retro,
-        ...payload.calibration.retro
-      };
+      next.calibration.retro = mergeCalibrationBranch(next.calibration.retro, payload.calibration.retro);
     }
   }
 
