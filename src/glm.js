@@ -2,7 +2,12 @@ import "./env.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { abstractReasonPhraseLabels, feedbackContextCategories } from "./feedback.js";
-import { filterProviderConfigsBySelection, getRewriteProviderSelection, getRewriteSelectionModel } from "./model-selection.js";
+import {
+  filterProviderConfigsBySelection,
+  getAutoRewriteProviderFallbackChain,
+  getRewriteProviderSelection,
+  getRewriteSelectionModel
+} from "./model-selection.js";
 import { formatInnerSpaceTermsPrompt } from "./inner-space-terms.js";
 import { buildXhsHumanizerSystemRules, buildXhsHumanizerUserRequirements } from "./xhs-humanizer-rules.js";
 
@@ -845,17 +850,16 @@ export function buildRewriteMessages({ input = {}, analysis = {}, semantic = nul
       role: "user",
       content: [
         "请根据下面的原始内容和检测结果，输出一个更稳妥的改写版本。",
-        "要求：",
-        "1. 尽量保留原本想表达的核心主题。",
-        "2. 尽量保持原文的说话方式、句子长短、口吻、轻重节奏、分享感和人设，不要偏离原笔记风格。",
-        "3. 如果原文有高风险点，优先做最小必要改写：删掉、替换、弱化、改写局部表达，而不是整体换一种文风。",
-        "4. 只有在原风格本身明显过于擦边、过于交易化、过于教程化时，才允许适度往教育、沟通、健康表达上收。",
-        "5. 不要编造医疗功效、绝对化承诺或联系方式。",
-        "6. tags 给 0-5 个更稳妥、但仍然贴近原内容风格的标签。",
-        "7. body 必须尽量保留原文的信息量和段落结构，不要把正文缩成摘要、提纲或短版。",
-        "8. 除非为删除高风险内容所必需，不要明显缩短正文篇幅；如果原文有三段，改写后也应尽量保持接近的段落数量。",
-        "9. 语言风格要自然、幽默风趣、说人话，有真实分享感，更像朋友聊天式分享，但不要低俗、油腻、浮夸。",
-        "10. 读起来要像朋友之间顺手分享经验、感受和观察，不要像上课、不要像培训、不要像公号文章。",
+        "改的时候，先保留原本想表达的核心主题。",
+        "尽量顺着原文的说话方式、句子长短、口吻、轻重节奏、分享感和人设去改，不要一改就变成另一个人的文风。",
+        "如果原文里有高风险点，优先做最小必要改写：删掉、替换、弱化、局部改写就够了，不要动不动整篇换一种文风。",
+        "只有在原风格本身已经明显太擦边、太交易化、太教程化时，才适度往教育、沟通、健康表达上收一收。",
+        "不要编造医疗功效、绝对化承诺或联系方式。",
+        "body 要尽量保留原文的信息量和段落结构，不要缩成摘要、提纲或短版；除非删风险内容真的有必要，不然不要明显缩短正文篇幅。",
+        "如果原文有三段，改写后也尽量保持接近的段落数量和呼吸感。",
+        "语气要自然、幽默风趣、说人话，有真实分享感，更像朋友之间顺手聊经验、讲感受、做观察，不要像上课、培训或公号文章。",
+        "不要写成那种一上来就先说 1、2、3 点的清单腔，也少用“首先、其次、最后”这种讲课感很重的连接词。",
+        "tags 给 0-5 个更稳妥、但仍然贴近原内容风格的标签。",
         "输出格式：",
         "{",
         '  "title": "改写后的标题",',
@@ -896,11 +900,11 @@ export function buildRewriteMessages({ input = {}, analysis = {}, semantic = nul
         terminologyPrompt,
         "",
         "改写偏好补充：",
-        "1. 不要把所有内容都改成统一的官方科普腔。",
-        "2. 不要无故拔高措辞，不要写得太像说明书。",
-        "3. 能保留原来的分享感、口语感、记录感，就尽量保留。",
-        "4. rewriteNotes 请说明你主要改掉了哪些风险点；如果保留了原风格，也请点明。",
-        retryGuidance ? "5. 这次不要泛泛重写，请优先针对上一轮复判指出的问题做定向修改。" : ""
+        "不要把所有内容都改成统一的官方科普腔。",
+        "不要无故拔高措辞，不要写得太像说明书。",
+        "能保留原来的分享感、口语感、记录感，就尽量保留。",
+        "rewriteNotes 请说明你主要改掉了哪些风险点；如果保留了原风格，也请点明。",
+        retryGuidance ? "这次不要泛泛重写，请优先针对上一轮复判指出的问题做定向修改。" : ""
       ].join("\n")
     }
   ];
@@ -1245,6 +1249,12 @@ function buildRoutedRequestBodies({ model, temperature, maxTokens, messages, res
         ];
   }
 
+  if (String(model || "").trim().toLowerCase().startsWith("kimi")) {
+    baseRequestBody.thinking = {
+      type: "disabled"
+    };
+  }
+
   return normalizedResponseFormat
     ? [
         {
@@ -1260,7 +1270,7 @@ function normalizeTemperatureForRoutedProvider({ provider = "", temperature = 0.
   const normalizedProvider = String(provider || "").trim().toLowerCase();
 
   if (normalizedProvider === "kimi" && !useDmxapi) {
-    return 1;
+    return Math.min(Number(temperature) || 0.2, 0.6);
   }
 
   return temperature;
@@ -1520,7 +1530,8 @@ export async function callRoutedTextProviderJson({
   timeoutMs = 0,
   allowDmxapi = true,
   allowOfficial = true,
-  scene = "unknown"
+  scene = "unknown",
+  selection = ""
 }) {
   const config = routedTextProviderConfigs[String(provider || "").trim()];
 
@@ -1665,7 +1676,50 @@ export async function callRoutedTextProviderJson({
     status: "error",
     message: officialResult.error?.message || ""
   });
-  throw attachAttemptedRoutes(officialResult.error, attemptedRoutes);
+  const finalError = attachAttemptedRoutes(officialResult.error, attemptedRoutes);
+  const fallbackProviders = getAutoRewriteProviderFallbackChain(selection).filter(
+    (candidateProvider) => String(candidateProvider || "").trim() && candidateProvider !== config.provider
+  );
+  const shouldTryNextProvider =
+    fallbackProviders.length > 0 &&
+    /只返回了思考过程|没有最终.*JSON|没有输出最终.*JSON|not an? valid JSON|invalid JSON|返回的结果不是有效 JSON/i.test(
+      String(finalError?.message || "")
+    );
+
+  if (shouldTryNextProvider) {
+    let lastFallbackError = finalError;
+
+    for (const fallbackProvider of fallbackProviders) {
+      try {
+        return await callRoutedTextProviderJson({
+          provider: fallbackProvider,
+          model: getRewriteSelectionModel(fallbackProvider),
+          temperature:
+            fallbackProvider === "deepseek"
+              ? 0.6
+              : fallbackProvider === "kimi"
+                ? 1
+                : temperature,
+          maxTokens,
+          messages,
+          missingKeyMessage,
+          responseFormat,
+          fallbackParser,
+          timeoutMs,
+          allowDmxapi,
+          allowOfficial,
+          scene,
+          selection: fallbackProvider
+        });
+      } catch (fallbackError) {
+        lastFallbackError = fallbackError;
+      }
+    }
+
+    throw lastFallbackError;
+  }
+
+  throw finalError;
 }
 
 export async function callQwenJson(options = {}) {

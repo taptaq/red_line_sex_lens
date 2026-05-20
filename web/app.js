@@ -710,6 +710,15 @@ const appState = {
     items: [],
     selectedIndices: []
   },
+  generationThemeInspiration: {
+    open: false,
+    loading: false,
+    items: [],
+    selectedThemeId: "",
+    message: "",
+    resultMessage: "",
+    requestId: 0
+  },
   generationReferenceAssetsPending: Promise.resolve(),
   generationReferenceAssetsLocked: false,
   sampleLibraryCalibrationReplayResult: null,
@@ -766,17 +775,24 @@ const sampleLibraryMarkdownImportCommitApi = "/api/sample-library/markdown-impor
 const sampleLibraryCalibrationReplayApi = "/api/sample-library/calibration-replay";
 const innerSpaceTermsApi = "/api/admin/inner-space-terms";
 const styleProfileAdminApi = "/api/admin/style-profile";
+const generationThemeInspirationsApi = "/api/generate-theme-inspirations";
 const SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT = 3;
 let generationReferenceSearchRequestSequence = 0;
+let generationThemeInspirationRequestSequence = 0;
 
 function syncBodyModalState() {
   const sampleLibraryModalOpen = byId("sample-library-modal")?.hidden === false;
   const lexiconWorkspaceModalOpen = byId("lexicon-workspace-modal")?.hidden === false;
   const sampleLibraryPoolsModalOpen = byId("sample-library-pools-modal")?.hidden === false;
+  const generationThemeInspirationModalOpen = byId("generation-theme-inspiration-modal")?.hidden === false;
   const generationReferenceSearchModalOpen = byId("generation-reference-search-modal")?.hidden === false;
   document.body.classList.toggle(
     "modal-open",
-    sampleLibraryModalOpen || lexiconWorkspaceModalOpen || sampleLibraryPoolsModalOpen || generationReferenceSearchModalOpen
+    sampleLibraryModalOpen ||
+      lexiconWorkspaceModalOpen ||
+      sampleLibraryPoolsModalOpen ||
+      generationThemeInspirationModalOpen ||
+      generationReferenceSearchModalOpen
   );
 }
 
@@ -6915,12 +6931,11 @@ async function refreshAll() {
 
   const [summary, collectionTypePayload] = await Promise.all([
     apiJson("/api/summary"),
-    apiJson(collectionTypesApi)
+    apiJson(collectionTypesApi),
+    refreshAdminDataState(),
+    refreshSampleLibraryWorkspace()
   ]);
-
-  await refreshAdminDataState();
   appState.collectionTypeOptions = Array.isArray(collectionTypePayload.options) ? collectionTypePayload.options : [];
-  await refreshSampleLibraryWorkspace();
   appState.summaryData = summary && typeof summary === "object" ? summary : {};
   setSummaryLoadingState("idle");
   setAdminDataLoadingState("idle");
@@ -7178,6 +7193,229 @@ function closeGenerationReferenceSearchModal() {
   setGenerationReferenceSearchModalOpen(false);
 }
 
+function setGenerationThemeInspirationModalOpen(isOpen) {
+  const modal = byId("generation-theme-inspiration-modal");
+  const trigger = byId("generation-theme-inspiration-button");
+
+  if (!modal) {
+    return;
+  }
+
+  modal.hidden = !isOpen;
+
+  if (trigger) {
+    trigger.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  }
+
+  syncBodyModalState();
+}
+
+function closeGenerationThemeInspirationModal() {
+  appState.generationThemeInspiration = {
+    ...appState.generationThemeInspiration,
+    open: false,
+    loading: false,
+    message: ""
+  };
+  setGenerationThemeInspirationModalOpen(false);
+}
+
+function getSelectedGenerationThemeInspiration() {
+  const state = appState.generationThemeInspiration || {};
+  const items = Array.isArray(state.items) ? state.items : [];
+  const selectedThemeId = String(state.selectedThemeId || "");
+
+  return items.find((item) => String(item?.themeId || "") === selectedThemeId) || items[0] || null;
+}
+
+function renderGenerationThemeInspirationDetail(item = null) {
+  const detailNode = byId("generation-theme-inspiration-modal-detail");
+
+  if (!detailNode) {
+    return;
+  }
+
+  if (!item) {
+    detailNode.innerHTML = `
+      <section class="generation-theme-card generation-theme-card-detail muted">
+        <strong>查看主题详情</strong>
+        <p>选择左侧主题后，这里会展示切入角度、边界提醒和预填信息。</p>
+      </section>
+    `;
+    return;
+  }
+
+  const tags = Array.isArray(item.tags) ? item.tags.filter(Boolean) : [];
+  const sourceSignals = Array.isArray(item.sourceSignals) ? item.sourceSignals.filter(Boolean) : [];
+  const expandAngles = Array.isArray(item.expandAngles) ? item.expandAngles.filter(Boolean) : [];
+  const boundaryNotes = Array.isArray(item.boundaryNotes) ? item.boundaryNotes.filter(Boolean) : [];
+  const sourceThemeTitle = String(item.sourceThemeTitle || "").trim();
+
+  detailNode.innerHTML = `
+    <section class="generation-theme-card generation-theme-card-detail">
+      <div class="meta-row">
+        ${tags.map((tag) => `<span class="meta-pill">${escapeHtml(tag)}</span>`).join("")}
+      </div>
+      ${sourceThemeTitle ? `<p class="helper-text">来源主题：${escapeHtml(sourceThemeTitle)}</p>` : ""}
+      <strong>${escapeHtml(item.themeTitle || "未命名灵感角度")}</strong>
+      <p>${escapeHtml(item.hookAngle || "暂无切入角度说明。")}</p>
+      <p class="helper-text">${escapeHtml(item.whyNow || "暂无为什么值得做的说明。")}</p>
+      <p class="helper-text">${escapeHtml(item.discussionSignal || "暂无讨论信号。")}</p>
+      ${
+        sourceSignals.length
+          ? `<div><strong>来源信号</strong><ul>${sourceSignals.map((entry) => `<li>${escapeHtml(entry)}</li>`).join("")}</ul></div>`
+          : ""
+      }
+      ${
+        expandAngles.length
+          ? `<div><strong>相关角度</strong><ul>${expandAngles.map((entry) => `<li>${escapeHtml(entry)}</li>`).join("")}</ul></div>`
+          : ""
+      }
+      ${
+        boundaryNotes.length
+          ? `<div><strong>边界提醒</strong><ul>${boundaryNotes.map((entry) => `<li>${escapeHtml(entry)}</li>`).join("")}</ul></div>`
+          : ""
+      }
+      <div class="item-actions">
+        <button type="button" class="button button-small" data-action="apply-generation-theme-inspiration">
+          一键填入生成表单
+        </button>
+      </div>
+    </section>
+  `;
+}
+
+function renderGenerationThemeInspirationModal() {
+  const modal = byId("generation-theme-inspiration-modal");
+  const contentNode = byId("generation-theme-inspiration-modal-content");
+
+  if (!modal || !contentNode) {
+    return;
+  }
+
+  const state = appState.generationThemeInspiration || {};
+
+  if (!state.open) {
+    modal.hidden = true;
+    syncBodyModalState();
+    return;
+  }
+
+  if (state.loading) {
+    contentNode.innerHTML =
+      '<article class="generation-theme-card muted"><strong>正在加载主题灵感</strong><p>先整理高表现内容里的可用主题方向。</p></article>';
+    renderGenerationThemeInspirationDetail(null);
+    setGenerationThemeInspirationModalOpen(true);
+    return;
+  }
+
+  const items = Array.isArray(state.items) ? state.items : [];
+
+  if (!items.length) {
+    const emptyMessage = String(state.message || "").trim();
+    contentNode.innerHTML = `
+      <article class="generation-theme-card muted">
+        <strong>${escapeHtml(emptyMessage || "这次还没有可用灵感")}</strong>
+        <p>${
+          emptyMessage
+            ? "可以稍后再试一次刷新，看看新的高表现内容是否已经整理完成。"
+            : "可以稍后刷新，看看新一轮高表现内容有没有跑出新主题。"
+        }</p>
+      </article>
+    `;
+    renderGenerationThemeInspirationDetail(null);
+    setGenerationThemeInspirationModalOpen(true);
+    return;
+  }
+
+  const selectedTheme = getSelectedGenerationThemeInspiration();
+  contentNode.innerHTML = items
+    .map((item) => {
+      const isSelected = String(item?.themeId || "") === String(selectedTheme?.themeId || "");
+      const tags = Array.isArray(item?.tags) ? item.tags.filter(Boolean).slice(0, 3) : [];
+      const sourceThemeTitle = String(item?.sourceThemeTitle || "").trim();
+      return `
+        <article class="generation-theme-card${isSelected ? " is-selected" : ""}">
+          <button
+            type="button"
+            class="generation-theme-card-button"
+            data-action="select-generation-theme-inspiration"
+            data-theme-id="${escapeHtml(String(item?.themeId || ""))}"
+            aria-pressed="${isSelected ? "true" : "false"}"
+          >
+            ${sourceThemeTitle ? `<span class="generation-theme-source-label">${escapeHtml(sourceThemeTitle)}</span>` : ""}
+            <strong>${escapeHtml(item?.themeTitle || "未命名灵感角度")}</strong>
+            <p>${escapeHtml(item?.hookAngle || item?.whyNow || "暂无说明")}</p>
+            <p class="helper-text">${escapeHtml(item?.discussionSignal || "暂无讨论信号")}</p>
+            <div class="meta-row">
+              ${tags.map((tag) => `<span class="meta-pill">${escapeHtml(tag)}</span>`).join("")}
+            </div>
+          </button>
+        </article>
+      `;
+    })
+    .join("");
+
+  renderGenerationThemeInspirationDetail(selectedTheme);
+  setGenerationThemeInspirationModalOpen(true);
+}
+
+function writeGenerationFieldValue(field, value) {
+  if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement)) {
+    return;
+  }
+
+  field.value = String(value || "");
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function applyGenerationThemeInspirationPrefill(item = {}) {
+  if (!item || typeof item !== "object") {
+    return;
+  }
+
+  const form = byId("generation-workbench-form");
+
+  if (!form) {
+    return;
+  }
+
+  const briefingField = form.querySelector('[name="briefing"]');
+  const referenceTitleField = form.querySelector('[name="referenceTitle"]');
+  const collectionTypeField = form.querySelector('[name="collectionType"]');
+  const tagReferencesField = form.querySelector('[name="tagReferences"]');
+
+  if (!String(briefingField?.value || "").trim() && String(item.prefillBriefing || "").trim()) {
+    writeGenerationFieldValue(briefingField, item.prefillBriefing);
+  }
+
+  if (!String(referenceTitleField?.value || "").trim() && String(item.prefillReferenceTitle || "").trim()) {
+    writeGenerationFieldValue(referenceTitleField, item.prefillReferenceTitle);
+  }
+
+  if (!String(collectionTypeField?.value || "").trim() && String(item.prefillCollectionType || "").trim()) {
+    writeGenerationFieldValue(collectionTypeField, item.prefillCollectionType);
+  }
+
+  if (String(item.prefillMaterialText || "").trim()) {
+    appendGenerationMaterialText(item.prefillMaterialText);
+  }
+
+  const nextTagReferences = uniqueStrings([
+    ...splitCSV(tagReferencesField?.value || ""),
+    ...(Array.isArray(item.tags) ? item.tags : [])
+  ]);
+  writeGenerationFieldValue(tagReferencesField, joinCSV(nextTagReferences));
+
+  appState.generationThemeInspiration = {
+    ...appState.generationThemeInspiration,
+    resultMessage: "已将主题灵感填入生成表单，可直接继续调整。"
+  };
+  closeGenerationThemeInspirationModal();
+  setActionGateHint("generation-action-hint", appState.generationThemeInspiration.resultMessage);
+  syncGenerationActions();
+}
+
 function appendGenerationMaterialText(nextText) {
   const field = byId("generation-workbench-form")?.querySelector('[name="materialText"]');
   const appended = String(nextText || "").trim();
@@ -7307,6 +7545,88 @@ function renderGenerationReferenceSearchModal() {
   }
 
   setGenerationReferenceSearchModalOpen(true);
+}
+
+async function refreshGenerationThemeInspirations({ forceRefresh = true } = {}) {
+  const modal = byId("generation-theme-inspiration-modal");
+  const button =
+    modal?.querySelector?.('[data-action="refresh-generation-theme-inspiration"]') ||
+    byId("generation-theme-inspiration-button");
+  const requestId = ++generationThemeInspirationRequestSequence;
+
+  appState.generationThemeInspiration = {
+    ...appState.generationThemeInspiration,
+    loading: true,
+    message: "",
+    requestId
+  };
+  renderGenerationThemeInspirationModal();
+  setButtonBusy(button, true, "刷新中...");
+
+  try {
+    const payload = await apiJson(generationThemeInspirationsApi, {
+      method: "POST",
+      body: JSON.stringify({
+        refresh: forceRefresh,
+        collectionType: String(byId("generation-collection-type-select")?.value || "").trim(),
+        modelSelection: getSelectedModelSelections()
+      })
+    });
+
+    if (requestId !== generationThemeInspirationRequestSequence) {
+      return;
+    }
+
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    const selectedThemeId = String(appState.generationThemeInspiration?.selectedThemeId || "");
+    const nextSelectedThemeId =
+      items.find((item) => String(item?.themeId || "") === selectedThemeId)?.themeId || items[0]?.themeId || "";
+
+    appState.generationThemeInspiration = {
+      ...appState.generationThemeInspiration,
+      loading: false,
+      items,
+      selectedThemeId: String(nextSelectedThemeId || ""),
+      message: items.length ? "" : "本次没有生成可直接使用的主题灵感。",
+      requestId
+    };
+  } catch (error) {
+    if (requestId !== generationThemeInspirationRequestSequence) {
+      return;
+    }
+
+    appState.generationThemeInspiration = {
+      ...appState.generationThemeInspiration,
+      loading: false,
+      items: Array.isArray(appState.generationThemeInspiration?.items) ? appState.generationThemeInspiration.items : [],
+      selectedThemeId: String(appState.generationThemeInspiration?.selectedThemeId || ""),
+      message: error.message || "主题灵感加载失败",
+      requestId
+    };
+  } finally {
+    if (requestId === generationThemeInspirationRequestSequence) {
+      setButtonBusy(button, false);
+      renderGenerationThemeInspirationModal();
+    }
+  }
+}
+
+async function openGenerationThemeInspirationModal() {
+  const cachedItems = Array.isArray(appState.generationThemeInspiration?.items) ? appState.generationThemeInspiration.items : [];
+
+  appState.generationThemeInspiration = {
+    ...appState.generationThemeInspiration,
+    open: true,
+    loading: cachedItems.length === 0,
+    resultMessage: "",
+    requestId: generationThemeInspirationRequestSequence
+  };
+  setGenerationThemeInspirationModalOpen(true);
+  renderGenerationThemeInspirationModal();
+
+  if (!cachedItems.length) {
+    await refreshGenerationThemeInspirations({ forceRefresh: false });
+  }
 }
 
 async function openGenerationReferenceSearchModal() {
@@ -9037,6 +9357,9 @@ byId("generation-reference-text-input")?.addEventListener("change", (event) => {
 byId("generation-briefing-improve").addEventListener("click", improveGenerationBriefingFromCurrentInput);
 byId("generation-reference-search-button")?.addEventListener("click", () => {
   openGenerationReferenceSearchModal().catch(() => {});
+});
+byId("generation-theme-inspiration-button")?.addEventListener("click", () => {
+  openGenerationThemeInspirationModal().catch(() => {});
 });
 byId("generation-reference-assets-preview")?.addEventListener("click", (event) => {
   const button = event.target instanceof Element ? event.target.closest("[data-action]") : null;
@@ -11064,6 +11387,38 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action === "refresh-generation-theme-inspiration") {
+    await refreshGenerationThemeInspirations();
+    return;
+  }
+
+  if (action === "select-generation-theme-inspiration") {
+    appState.generationThemeInspiration = {
+      ...appState.generationThemeInspiration,
+      selectedThemeId: String(button.dataset.themeId || "")
+    };
+    renderGenerationThemeInspirationModal();
+    return;
+  }
+
+  if (action === "apply-generation-theme-inspiration") {
+    const selectedThemeId = String(appState.generationThemeInspiration?.selectedThemeId || "");
+    const selectedTheme = selectedThemeId
+      ? getSelectedGenerationThemeInspiration()
+      : null;
+    const resultNode = byId("generation-action-hint");
+
+    if (!selectedTheme) {
+      if (resultNode) {
+        resultNode.textContent = "请先选择一张主题灵感卡片。";
+      }
+      return;
+    }
+
+    applyGenerationThemeInspirationPrefill(selectedTheme);
+    return;
+  }
+
   if (action === "prefill-custom-draft") {
     openLexiconWorkspaceModal("custom", {
       prefill: {
@@ -11243,6 +11598,11 @@ document.addEventListener("click", async (event) => {
 
   if (action === "close-lexicon-workspace-modal") {
     closeLexiconWorkspaceModal();
+    return;
+  }
+
+  if (action === "close-generation-theme-inspiration-modal") {
+    closeGenerationThemeInspirationModal();
     return;
   }
 

@@ -412,7 +412,15 @@ test("callRoutedTextProviderJson sends Kimi directly to the official Moonshot en
       const originalFetch = globalThis.fetch;
       globalThis.fetch = async (url, options = {}) => {
         const body = JSON.parse(String(options.body || "{}"));
-        calls.push({ url: String(url), model: body.model, temperature: body.temperature, stream: body.stream, top_p: body.top_p });
+        calls.push({
+          url: String(url),
+          model: body.model,
+          temperature: body.temperature,
+          stream: body.stream,
+          top_p: body.top_p,
+          response_format: body.response_format,
+          thinking: body.thinking
+        });
 
         return createJsonResponse(200, {
           model: "kimi-k2.6",
@@ -444,9 +452,198 @@ test("callRoutedTextProviderJson sends Kimi directly to the official Moonshot en
         assert.equal(calls.length, 1);
         assert.equal(calls[0].url, "https://api.moonshot.cn/v1/chat/completions");
         assert.equal(calls[0].model, "kimi-k2.6");
-        assert.equal(calls[0].temperature, 1);
+        assert.equal(calls[0].temperature, 0.2);
         assert.equal(calls[0].stream, undefined);
         assert.equal(calls[0].top_p, undefined);
+        assert.deepEqual(calls[0].response_format, { type: "json_object" });
+        assert.deepEqual(calls[0].thinking, { type: "disabled" });
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    }
+  );
+});
+
+test("callRoutedTextProviderJson caps Kimi official temperature at 0.6 when caller passes a higher value", async () => {
+  await withEnv(
+    {
+      DMXAPI_API_KEY: "dmxapi-test",
+      KIMI_API_KEY: "kimi-test",
+      KIMI_BASE_URL: "https://api.moonshot.cn/v1/chat/completions",
+      KIMI_TEXT_MODEL: "kimi-k2.6"
+    },
+    async () => {
+      const calls = [];
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async (url, options = {}) => {
+        const body = JSON.parse(String(options.body || "{}"));
+        calls.push({ url: String(url), model: body.model, temperature: body.temperature });
+
+        return createJsonResponse(200, {
+          model: "kimi-k2.6",
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  verdict: "pass",
+                  confidence: 0.8
+                })
+              }
+            }
+          ]
+        });
+      };
+
+      try {
+        const { callRoutedTextProviderJson } = await importFresh("../src/glm.js");
+        await callRoutedTextProviderJson({
+          provider: "kimi",
+          model: "kimi-k2.6",
+          messages: [{ role: "user", content: "hello" }],
+          temperature: 0.7,
+          timeoutMs: 1000
+        });
+
+        assert.equal(calls[0].temperature, 0.6);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    }
+  );
+});
+
+test("callRoutedTextProviderJson auto-falls through to the next provider when Kimi only returns reasoning", async () => {
+  await withEnv(
+    {
+      REWRITE_PROVIDER: "kimi",
+      KIMI_API_KEY: "kimi-test",
+      KIMI_BASE_URL: "https://api.moonshot.cn/v1/chat/completions",
+      KIMI_TEXT_MODEL: "kimi-k2.6",
+      DEEPSEEK_API_KEY: "deepseek-test",
+      DEEPSEEK_FEEDBACK_MODEL: "deepseek-v4-flash",
+      DMXAPI_API_KEY: "",
+      GLM_API_KEY: ""
+    },
+    async () => {
+      const calls = [];
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async (url, options = {}) => {
+        const body = JSON.parse(String(options.body || "{}"));
+        calls.push({ url: String(url), model: body.model });
+
+        if (body.model === "kimi-k2.6") {
+          return createJsonResponse(200, {
+            model: "kimi-k2.6",
+            choices: [
+              {
+                message: {
+                  reasoning_content: "我先想一下",
+                  content: ""
+                }
+              }
+            ]
+          });
+        }
+
+        return createJsonResponse(200, {
+          model: "deepseek-v4-flash",
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  verdict: "pass",
+                  confidence: 0.82
+                })
+              }
+            }
+          ]
+        });
+      };
+
+      try {
+        const { callRoutedTextProviderJson } = await importFresh("../src/glm.js");
+        const result = await callRoutedTextProviderJson({
+          provider: "kimi",
+          model: "kimi-k2.6",
+          messages: [{ role: "user", content: "hello" }],
+          timeoutMs: 1000,
+          selection: "auto"
+        });
+
+        assert.equal(result.model, "deepseek-v4-flash");
+        assert.equal(result.route, "official");
+        assert.equal(result.routeLabel, "官方");
+        assert.equal(calls.at(-1)?.model, "deepseek-v4-flash");
+        assert.equal(calls.some((item) => item.model === "kimi-k2.6"), true);
+        assert.equal(calls.some((item) => item.model === "deepseek-v4-flash"), true);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    }
+  );
+});
+
+test("callRoutedTextProviderJson re-normalizes temperature for fallback providers", async () => {
+  await withEnv(
+    {
+      REWRITE_PROVIDER: "kimi",
+      KIMI_API_KEY: "kimi-test",
+      KIMI_BASE_URL: "https://api.moonshot.cn/v1/chat/completions",
+      KIMI_TEXT_MODEL: "kimi-k2.6",
+      DEEPSEEK_API_KEY: "deepseek-test",
+      DEEPSEEK_FEEDBACK_MODEL: "deepseek-v4-flash",
+      DMXAPI_API_KEY: "",
+      GLM_API_KEY: ""
+    },
+    async () => {
+      const calls = [];
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async (url, options = {}) => {
+        const body = JSON.parse(String(options.body || "{}"));
+        calls.push({ url: String(url), model: body.model, temperature: body.temperature });
+
+        if (body.model === "kimi-k2.6") {
+          return createJsonResponse(200, {
+            model: "kimi-k2.6",
+            choices: [
+              {
+                message: {
+                  reasoning_content: "我先想一下",
+                  content: ""
+                }
+              }
+            ]
+          });
+        }
+
+        return createJsonResponse(200, {
+          model: "deepseek-v4-flash",
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  verdict: "pass",
+                  confidence: 0.82
+                })
+              }
+            }
+          ]
+        });
+      };
+
+      try {
+        const { callRoutedTextProviderJson } = await importFresh("../src/glm.js");
+        await callRoutedTextProviderJson({
+          provider: "kimi",
+          model: "kimi-k2.6",
+          messages: [{ role: "user", content: "hello" }],
+          timeoutMs: 1000,
+          temperature: 0.7,
+          selection: "auto"
+        });
+
+        const deepseekCall = calls.find((item) => item.model === "deepseek-v4-flash");
+        assert.equal(deepseekCall?.temperature, 0.6);
       } finally {
         globalThis.fetch = originalFetch;
       }

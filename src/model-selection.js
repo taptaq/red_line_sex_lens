@@ -8,7 +8,7 @@ const defaultCrossReviewSelection = "group";
 const defaultFeedbackScreenshotSelection = "auto";
 const defaultFeedbackSuggestionSelection = "auto";
 const standaloneDmxapiTextModels = [
-  "gemini-3.1-pro-preview-ssvip",
+  "gemini-3.5-flash",
   "gpt-5.4",
   "claude-sonnet-4-6-ssvip",
   "grok-4.2-nothinking"
@@ -348,4 +348,17 @@ export function getRewriteSelectionModel(selection = "") {
   if (provider === "minimax") return getMiniMaxDmxapiModel();
   if (provider === "deepseek") return getRewriteDeepSeekModel();
   return getRewriteGlmModel();
+}
+
+export function getAutoRewriteProviderFallbackChain(selection = "") {
+  const normalizedSelection = normalizeScopeSelection("rewrite", selection);
+
+  if (normalizedSelection && normalizedSelection !== defaultRewriteSelection) {
+    return [];
+  }
+
+  const primaryProvider = getRewriteProviderPreference();
+  const orderedProviders = [primaryProvider, "deepseek", "glm", "qwen", "minimax"];
+
+  return orderedProviders.filter((provider, index, list) => provider && list.indexOf(provider) === index);
 }

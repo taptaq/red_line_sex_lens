@@ -435,10 +435,7 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   const refreshAllEnd = appJs.indexOf("async function fileToDataUrl", refreshAllStart);
   const refreshAllSource = appJs.slice(refreshAllStart, refreshAllEnd);
   assert.ok(refreshAllStart !== -1 && refreshAllEnd !== -1, "expected refreshAll source");
-  assert.ok(
-    refreshAllSource.indexOf("await refreshSampleLibraryWorkspace();") < refreshAllSource.indexOf("renderSummary(appState.summaryData);"),
-    "expected refreshAll to update sample library state before rendering summary"
-  );
+  assert.match(refreshAllSource, /Promise\.all\(\[\s*[\s\S]*apiJson\("\/api\/summary"\)[\s\S]*apiJson\(collectionTypesApi\)[\s\S]*refreshAdminDataState\(\)[\s\S]*refreshSampleLibraryWorkspace\(\)/);
   assert.match(refreshAllSource, /const hasExistingSummary = Boolean\(appState\.summaryData\)/);
   assert.match(refreshAllSource, /const summaryPhase = hasExistingSummary \? "refresh" : "initial";/);
   assert.match(refreshAllSource, /setSummaryLoadingState\(summaryPhase\)/);
@@ -3149,4 +3146,912 @@ test("Escape closes generation reference search modal when open", async () => {
   assert.equal(closed, 1);
   assert.equal(appState.generationReferenceSearch.open, false);
   assert.equal(nodes["generation-reference-search-modal"].hidden, true);
+});
+
+test("frontend exposes theme inspiration modal entry beside generation workbench controls", async () => {
+  const { indexHtml, styles } = await readFrontendFiles();
+
+  assert.match(indexHtml, /id="generation-theme-inspiration-button"/);
+  assert.match(indexHtml, />\s*主题灵感\s*</);
+  assert.match(indexHtml, /id="generation-theme-inspiration-modal"/);
+  assert.match(indexHtml, /id="generation-theme-inspiration-modal-content"/);
+  assert.match(indexHtml, /id="generation-theme-inspiration-modal-detail"/);
+
+  assert.match(styles, /\.generation-theme-inspiration-modal\b/);
+  assert.match(styles, /\.generation-theme-inspiration-modal-dialog\b/);
+  assert.match(styles, /\.generation-theme-card\b/);
+  assert.match(styles, /\.generation-theme-card-button\b/);
+  assert.match(styles, /\.generation-theme-inspiration-modal-content\s+\.generation-theme-card\s*\{[\s\S]*border:\s*0/);
+});
+
+test("theme inspiration modal helpers keep existing briefing and reference title, append safe fields, and retain latest refresh only", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const modalHelpersSource = extractSourceBetween(
+    appJs,
+    "function setGenerationThemeInspirationModalOpen(",
+    "function setSampleLibraryImportBlockOpen("
+  );
+
+  class TestEvent {
+    constructor(type, init = {}) {
+      this.type = type;
+      this.bubbles = Boolean(init.bubbles);
+    }
+  }
+
+  class TestInputElement {
+    constructor(value = "") {
+      this.value = value;
+      this.disabled = false;
+      this.events = [];
+    }
+
+    dispatchEvent(event) {
+      this.events.push(event);
+      return true;
+    }
+  }
+
+  class TestTextAreaElement extends TestInputElement {}
+  class TestSelectElement extends TestInputElement {}
+
+  const requests = [];
+  const deferredRequests = [];
+  const cards = [
+    {
+      themeId: "theme-1",
+      themeTitle: "自慰后空虚并不一定异常",
+      hookAngle: "很多人以为这是问题，其实很常见。",
+      whyNow: "这个主题兼具反差和科普价值。",
+      discussionSignal: "多个高表现内容都反复命中。",
+      sourceSignals: ["命中 2 条高表现内容"],
+      expandAngles: ["从激素变化讲", "从羞耻感讲"],
+      boundaryNotes: ["避免病理化表达"],
+      tags: ["身体探索", "情绪反应"],
+      prefillBriefing: "写一篇轻松科普，解释自慰后空虚为什么不一定异常。",
+      prefillTopic: "自慰后空虚是不是异常",
+      prefillConstraints: "避免病理化，不做医疗诊断。",
+      prefillReferenceTitle: "为什么结束后会突然很空？",
+      prefillMaterialText: "关键点：常见、正常、可自我接纳。",
+      prefillCollectionType: "科普"
+    },
+    {
+      themeId: "theme-2",
+      themeTitle: "第二张卡片",
+      hookAngle: "另一个角度",
+      whyNow: "补充讨论",
+      discussionSignal: "也有价值",
+      sourceSignals: [],
+      expandAngles: [],
+      boundaryNotes: [],
+      tags: ["关系沟通"],
+      prefillBriefing: "第二条 briefing",
+      prefillTopic: "第二个主题",
+      prefillConstraints: "",
+      prefillReferenceTitle: "",
+      prefillMaterialText: "",
+      prefillCollectionType: "经验分享"
+    }
+  ];
+  const nextCards = [
+    {
+      themeId: "theme-9",
+      themeTitle: "最新灵感卡",
+      hookAngle: "更新后的角度",
+      whyNow: "应该保留最新响应",
+      discussionSignal: "最新请求",
+      sourceSignals: [],
+      expandAngles: [],
+      boundaryNotes: [],
+      tags: ["健康科普"],
+      prefillBriefing: "第三条 briefing",
+      prefillTopic: "第三个主题",
+      prefillConstraints: "",
+      prefillReferenceTitle: "新参考标题",
+      prefillMaterialText: "新一批素材",
+      prefillCollectionType: "科普"
+    }
+  ];
+
+  const detailNode = { innerHTML: "" };
+  const generationHintNode = { textContent: "" };
+  const refreshButton = { disabled: false, dataset: {}, textContent: "换一批灵感" };
+  const modalNode = { hidden: true };
+  const contentNode = {
+    innerHTML: "",
+    querySelector(selector) {
+      if (selector === '[data-action="refresh-generation-theme-inspiration"]') {
+        return refreshButton;
+      }
+      return null;
+    }
+  };
+  const generationFields = {
+    briefing: new TestTextAreaElement("已有一句话需求"),
+    materialText: new TestTextAreaElement("已有素材"),
+    referenceTitle: new TestInputElement("已有参考标题"),
+    collectionType: new TestSelectElement(""),
+    tagReferences: new TestInputElement(""),
+    lengthMode: new TestSelectElement("short")
+  };
+  const formNode = {
+    querySelector(selector) {
+      if (selector === '[name="briefing"]') return generationFields.briefing;
+      if (selector === '[name="materialText"]') return generationFields.materialText;
+      if (selector === '[name="referenceTitle"]') return generationFields.referenceTitle;
+      if (selector === '[name="collectionType"]') return generationFields.collectionType;
+      if (selector === '[name="tagReferences"]') return generationFields.tagReferences;
+      if (selector === '[name="lengthMode"]') return generationFields.lengthMode;
+      return null;
+    }
+  };
+  const appState = {
+    generationThemeInspiration: {
+      open: false,
+      loading: false,
+      items: [],
+      selectedThemeId: "",
+      message: "",
+      resultMessage: ""
+    }
+  };
+  const requestSequenceBox = { value: 0 };
+  const syncEvents = [];
+
+  const helpers = new Function(
+    "appState",
+    "requestSequenceBox",
+    "byId",
+    "syncBodyModalState",
+    "escapeHtml",
+    "apiJson",
+    "generationThemeInspirationsApi",
+    "getSelectedModelSelections",
+    "splitCSV",
+    "joinCSV",
+    "uniqueStrings",
+    "appendGenerationMaterialText",
+    "setActionGateHint",
+    "Event",
+    "HTMLInputElement",
+    "HTMLTextAreaElement",
+    "HTMLSelectElement",
+    "setButtonBusy",
+    "syncGenerationActions",
+    `let generationThemeInspirationRequestSequence = requestSequenceBox.value;
+${modalHelpersSource}
+return {
+  openGenerationThemeInspirationModal,
+  closeGenerationThemeInspirationModal,
+  refreshGenerationThemeInspirations,
+  renderGenerationThemeInspirationModal,
+  getSelectedGenerationThemeInspiration,
+  applyGenerationThemeInspirationPrefill,
+  getRequestSequence() {
+    return generationThemeInspirationRequestSequence;
+  }
+};`
+  )(
+    appState,
+    requestSequenceBox,
+    (id) => {
+      if (id === "generation-theme-inspiration-modal") return modalNode;
+      if (id === "generation-theme-inspiration-modal-content") return contentNode;
+      if (id === "generation-theme-inspiration-modal-detail") return detailNode;
+      if (id === "generation-action-hint") return generationHintNode;
+      if (id === "generation-workbench-form") return formNode;
+      return null;
+    },
+    () => {
+      syncEvents.push({ type: "syncBodyModalState", hidden: modalNode.hidden });
+    },
+    (value) => String(value || ""),
+    async (url, options = {}) => {
+      requests.push({ url, options });
+      if (requests.length <= 2) {
+        return { items: cards };
+      }
+
+      return await new Promise((resolve) => {
+        deferredRequests.push({ resolve });
+      });
+    },
+    "/api/generate-theme-inspirations",
+    () => ({ generation: "auto" }),
+    (value) =>
+      String(value || "")
+        .split(/[，,、]/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    (items = []) => (Array.isArray(items) ? items.join(", ") : ""),
+    (items = []) => [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))],
+    (nextText) => {
+      const appended = String(nextText || "").trim();
+      if (!appended) {
+        return;
+      }
+      const currentValue = String(generationFields.materialText.value || "");
+      generationFields.materialText.value = currentValue ? `${currentValue}\n\n${appended}` : appended;
+      generationFields.materialText.dispatchEvent(new TestEvent("input", { bubbles: true }));
+    },
+    (id, message) => {
+      if (id === "generation-action-hint") {
+        generationHintNode.textContent = String(message || "");
+      }
+    },
+    TestEvent,
+    TestInputElement,
+    TestTextAreaElement,
+    TestSelectElement,
+    (button, busy, busyLabel = "") => {
+      if (!button) return;
+      button.disabled = busy;
+      button.dataset.busy = busy ? "true" : "";
+      if (busyLabel) {
+        button.textContent = busy ? busyLabel : "换一批灵感";
+      }
+    },
+    () => {
+      syncEvents.push({ type: "syncGenerationActions" });
+    }
+  );
+
+  const pendingOpen = helpers.openGenerationThemeInspirationModal();
+
+  assert.equal(appState.generationThemeInspiration.open, true);
+  assert.equal(modalNode.hidden, false);
+
+  await pendingOpen;
+  requestSequenceBox.value = helpers.getRequestSequence();
+
+  assert.deepEqual(
+    requests.map((request) => [request.url, request.options.method || "GET"]),
+    [["/api/generate-theme-inspirations", "POST"]]
+  );
+  assert.equal(appState.generationThemeInspiration.loading, false);
+  assert.equal(appState.generationThemeInspiration.selectedThemeId, "theme-1");
+  assert.match(contentNode.innerHTML, /自慰后空虚并不一定异常/);
+  assert.match(contentNode.innerHTML, /data-action="select-generation-theme-inspiration"/);
+  assert.match(detailNode.innerHTML, /data-action="apply-generation-theme-inspiration"/);
+  assert.match(detailNode.innerHTML, /很多人以为这是问题，其实很常见/);
+
+  appState.generationThemeInspiration.selectedThemeId = "theme-2";
+  helpers.renderGenerationThemeInspirationModal();
+  assert.match(detailNode.innerHTML, /第二张卡片/);
+
+  await helpers.refreshGenerationThemeInspirations();
+  assert.equal(requests.length, 2);
+  requestSequenceBox.value = helpers.getRequestSequence();
+
+  const staleRefresh = helpers.refreshGenerationThemeInspirations();
+  const latestRefresh = helpers.refreshGenerationThemeInspirations();
+  assert.equal(requests.length, 4);
+  deferredRequests[1].resolve({ items: nextCards });
+  await latestRefresh;
+  requestSequenceBox.value = helpers.getRequestSequence();
+  deferredRequests[0].resolve({ items: cards });
+  await staleRefresh;
+  requestSequenceBox.value = helpers.getRequestSequence();
+
+  assert.equal(appState.generationThemeInspiration.selectedThemeId, "theme-9");
+  assert.match(contentNode.innerHTML, /最新灵感卡/);
+  assert.doesNotMatch(contentNode.innerHTML, /自慰后空虚并不一定异常/);
+
+  helpers.applyGenerationThemeInspirationPrefill(cards[0]);
+
+  assert.equal(generationFields.briefing.value, "已有一句话需求");
+  assert.equal(generationFields.referenceTitle.value, "已有参考标题");
+  assert.equal(generationFields.collectionType.value, "科普");
+  assert.equal(generationFields.tagReferences.value, "身体探索, 情绪反应");
+  assert.equal(generationFields.materialText.value, "已有素材\n\n关键点：常见、正常、可自我接纳。");
+  assert.equal(appState.generationThemeInspiration.open, false);
+  assert.equal(modalNode.hidden, true);
+  assert.match(generationHintNode.textContent, /已将主题灵感填入生成表单/);
+  assert.ok(syncEvents.some((event) => event.type === "syncGenerationActions"));
+});
+
+test("theme inspiration modal reopens existing cached items without auto-requesting again", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const modalHelpersSource = extractSourceBetween(
+    appJs,
+    "function setGenerationThemeInspirationModalOpen(",
+    "function setSampleLibraryImportBlockOpen("
+  );
+
+  const requests = [];
+  const modalNode = { hidden: true };
+  const contentNode = { innerHTML: "" };
+  const detailNode = { innerHTML: "" };
+  const appState = {
+    generationThemeInspiration: {
+      open: false,
+      loading: false,
+      items: [
+        {
+          themeId: "theme-1",
+          themeTitle: "从激素波动讲",
+          sourceThemeTitle: "自慰后空虚并不一定异常",
+          hookAngle: "很多人以为空虚就是异常，其实常见。",
+          whyNow: "这个角度更容易拉出反差。",
+          discussionSignal: "高表现内容里反复命中。",
+          sourceSignals: ["命中 2 条高表现内容"],
+          expandAngles: ["从羞耻感讲"],
+          boundaryNotes: ["避免病理化表达"],
+          tags: ["身体探索", "情绪反应"],
+          prefillBriefing: "写一篇轻松科普，解释自慰后空虚为什么不一定异常。",
+          prefillReferenceTitle: "为什么结束后会突然很空？",
+          prefillMaterialText: "关键点：常见、正常、可自我接纳。"
+        }
+      ],
+      selectedThemeId: "theme-1",
+      message: "",
+      resultMessage: ""
+    }
+  };
+
+  const helpers = new Function(
+    "appState",
+    "requestSequenceBox",
+    "byId",
+    "syncBodyModalState",
+    "escapeHtml",
+    "apiJson",
+    "generationThemeInspirationsApi",
+    "getSelectedModelSelections",
+    "splitCSV",
+    "joinCSV",
+    "uniqueStrings",
+    "appendGenerationMaterialText",
+    "setActionGateHint",
+    "Event",
+    "HTMLInputElement",
+    "HTMLTextAreaElement",
+    "HTMLSelectElement",
+    "setButtonBusy",
+    "syncGenerationActions",
+    `let generationThemeInspirationRequestSequence = 0;
+${modalHelpersSource}
+return {
+  openGenerationThemeInspirationModal
+};`
+  )(
+    appState,
+    { value: 0 },
+    (id) => {
+      if (id === "generation-theme-inspiration-modal") return modalNode;
+      if (id === "generation-theme-inspiration-modal-content") return contentNode;
+      if (id === "generation-theme-inspiration-modal-detail") return detailNode;
+      if (id === "generation-workbench-form") return { querySelector() { return null; } };
+      return null;
+    },
+    () => {},
+    (value) => String(value || ""),
+    async (url) => {
+      requests.push(url);
+      return { items: [] };
+    },
+    "/api/generate-theme-inspirations",
+    () => ({ generation: "auto" }),
+    () => [],
+    () => "",
+    () => [],
+    () => {},
+    () => {},
+    class TestEvent {
+      constructor(type, init = {}) {
+        this.type = type;
+        this.bubbles = Boolean(init.bubbles);
+      }
+    },
+    class TestInputElement {},
+    class TestTextAreaElement {},
+    class TestSelectElement {},
+    () => {},
+    () => {}
+  );
+
+  await helpers.openGenerationThemeInspirationModal();
+
+  assert.equal(requests.length, 0);
+  assert.equal(appState.generationThemeInspiration.open, true);
+  assert.equal(modalNode.hidden, false);
+  assert.match(contentNode.innerHTML, /从激素波动讲/);
+});
+
+test("theme inspiration modal uses non-refresh auto-load first and explicit refresh afterwards", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const modalHelpersSource = extractSourceBetween(
+    appJs,
+    "function setGenerationThemeInspirationModalOpen(",
+    "function setSampleLibraryImportBlockOpen("
+  );
+
+  const requests = [];
+  const modalNode = {
+    hidden: true,
+    querySelector(selector) {
+      if (selector === '[data-action="refresh-generation-theme-inspiration"]') {
+        return refreshButton;
+      }
+      return null;
+    }
+  };
+  const refreshButton = {
+    setAttribute() {}
+  };
+  const contentNode = { innerHTML: "" };
+  const detailNode = { innerHTML: "" };
+  const appState = {
+    generationThemeInspiration: {
+      open: false,
+      loading: false,
+      items: [],
+      selectedThemeId: "",
+      message: "",
+      resultMessage: ""
+    }
+  };
+
+  const helpers = new Function(
+    "appState",
+    "requestSequenceBox",
+    "byId",
+    "syncBodyModalState",
+    "escapeHtml",
+    "apiJson",
+    "generationThemeInspirationsApi",
+    "getSelectedModelSelections",
+    "splitCSV",
+    "joinCSV",
+    "uniqueStrings",
+    "appendGenerationMaterialText",
+    "setActionGateHint",
+    "Event",
+    "HTMLInputElement",
+    "HTMLTextAreaElement",
+    "HTMLSelectElement",
+    "setButtonBusy",
+    "syncGenerationActions",
+    `let generationThemeInspirationRequestSequence = 0;
+${modalHelpersSource}
+return {
+  openGenerationThemeInspirationModal,
+  refreshGenerationThemeInspirations
+};`
+  )(
+    appState,
+    { value: 0 },
+    (id) => {
+      if (id === "generation-theme-inspiration-modal") return modalNode;
+      if (id === "generation-theme-inspiration-modal-content") return contentNode;
+      if (id === "generation-theme-inspiration-modal-detail") return detailNode;
+      if (id === "generation-collection-type-select") return { value: "科普" };
+      if (id === "generation-workbench-form") return { querySelector() { return null; } };
+      if (id === "generation-theme-inspiration-button") return refreshButton;
+      return null;
+    },
+    () => {},
+    (value) => String(value || ""),
+    async (_url, options = {}) => {
+      requests.push(JSON.parse(options.body));
+      return {
+        items: [
+          {
+            themeId: "theme-1",
+            themeTitle: "从激素波动讲",
+            sourceThemeTitle: "自慰后空虚并不一定异常",
+            hookAngle: "很多人以为空虚就是异常，其实常见。",
+            whyNow: "这个角度更容易拉出反差。",
+            discussionSignal: "高表现内容里反复命中。",
+            sourceSignals: ["命中 2 条高表现内容"],
+            expandAngles: ["从羞耻感讲"],
+            boundaryNotes: ["避免病理化表达"],
+            tags: ["身体探索", "情绪反应"],
+            prefillBriefing: "写一篇轻松科普，解释自慰后空虚为什么不一定异常。",
+            prefillReferenceTitle: "为什么结束后会突然很空？",
+            prefillMaterialText: "关键点：常见、正常、可自我接纳。"
+          }
+        ]
+      };
+    },
+    "/api/generate-theme-inspirations",
+    () => ({ generation: "deepseek" }),
+    () => [],
+    () => "",
+    () => [],
+    () => {},
+    () => {},
+    class TestEvent {
+      constructor(type, init = {}) {
+        this.type = type;
+        this.bubbles = Boolean(init.bubbles);
+      }
+    },
+    class TestInputElement {},
+    class TestTextAreaElement {},
+    class TestSelectElement {},
+    () => {},
+    () => {}
+  );
+
+  await helpers.openGenerationThemeInspirationModal();
+  await helpers.refreshGenerationThemeInspirations();
+
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].refresh, false);
+  assert.equal(requests[1].refresh, true);
+});
+
+test("theme inspiration modal shows specific empty and error messages instead of one generic empty state", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const modalHelpersSource = extractSourceBetween(
+    appJs,
+    "function setGenerationThemeInspirationModalOpen(",
+    "function setSampleLibraryImportBlockOpen("
+  );
+
+  const appState = {
+    generationThemeInspiration: {
+      open: true,
+      loading: false,
+      items: [],
+      selectedThemeId: "",
+      message: "主题灵感加载失败",
+      resultMessage: ""
+    }
+  };
+  const modalNode = { hidden: false };
+  const contentNode = { innerHTML: "" };
+  const detailNode = { innerHTML: "" };
+
+  const helpers = new Function(
+    "appState",
+    "byId",
+    "syncBodyModalState",
+    "escapeHtml",
+    "Event",
+    "HTMLInputElement",
+    "HTMLTextAreaElement",
+    "HTMLSelectElement",
+    `${modalHelpersSource}
+return { renderGenerationThemeInspirationModal };`
+  )(
+    appState,
+    (id) => {
+      if (id === "generation-theme-inspiration-modal") return modalNode;
+      if (id === "generation-theme-inspiration-modal-content") return contentNode;
+      if (id === "generation-theme-inspiration-modal-detail") return detailNode;
+      return null;
+    },
+    () => {},
+    (value) => String(value || ""),
+    class TestEvent {
+      constructor(type, init = {}) {
+        this.type = type;
+        this.bubbles = Boolean(init.bubbles);
+      }
+    },
+    class TestInputElement {},
+    class TestTextAreaElement {},
+    class TestSelectElement {}
+  );
+
+  helpers.renderGenerationThemeInspirationModal();
+  assert.match(contentNode.innerHTML, /主题灵感加载失败/);
+
+  appState.generationThemeInspiration.message = "本次没有生成可直接使用的主题灵感。";
+  helpers.renderGenerationThemeInspirationModal();
+  assert.match(contentNode.innerHTML, /本次没有生成可直接使用的主题灵感/);
+});
+
+test("theme inspiration modal action handlers select cards, apply prefills, and show empty-selection guidance", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const actionHandlerSource = extractSourceBetween(
+    appJs,
+    '  if (action === "open-style-profile-modal") {',
+    '  if (action === "open-false-positive-list-modal") {'
+  );
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+
+  const appState = {
+    generationThemeInspiration: {
+      open: true,
+      loading: false,
+      items: [
+        {
+          themeId: "theme-1",
+          themeTitle: "主题 1",
+          prefillBriefing: "briefing 1",
+          prefillTopic: "topic 1"
+        }
+      ],
+      selectedThemeId: "",
+      message: "",
+      resultMessage: ""
+    },
+    sampleLibraryPoolsModal: { open: false, tab: "reference", search: "", metricFilters: {} }
+  };
+  const resultNode = { textContent: "" };
+  const generationHintNode = { textContent: "" };
+  let refreshCalls = 0;
+  let renderCalls = 0;
+  let appliedThemeId = "";
+  let closeCalls = 0;
+
+  const runAction = new AsyncFunction(
+    "appState",
+    "button",
+    "action",
+    "byId",
+    "setButtonBusy",
+    "openStyleProfileModal",
+    "openLexiconWorkspaceModal",
+    "focusSampleLibraryRecordFromPools",
+    "focusSampleLibraryRecordFromModal",
+    "openSampleLibraryDetailModal",
+    "closeSampleLibraryPoolsModal",
+    "apiJson",
+    "syncStyleProfileStateFromPayload",
+    "renderSampleLibraryWorkspace",
+    "openSampleLibraryImportAdvancedModal",
+    "openSampleLibraryBaseModal",
+    "openSampleLibraryRecordInlineEditorModal",
+    "requestSampleLibraryRecordInlineEditorSwitch",
+    "openSampleLibraryDeleteModal",
+    "requestCloseSampleLibraryRecordInlineEditorModal",
+    "closeLexiconWorkspaceModal",
+    "closeGenerationReferenceSearchModal",
+    "appendMultipleGenerationMaterialTexts",
+    "renderGenerationReferenceSearchModal",
+    "getSampleLibraryCalibrationPredictionPrefillSource",
+    "buildSampleLibraryCalibrationPredictionFromCurrentState",
+    "setSampleLibraryCalibrationPredictionFields",
+    "setSampleLibraryCalibrationPrefillMessage",
+    "getSampleLibraryReferenceApplicationState",
+    "setSampleLibraryModalMessage",
+    "applySampleLibraryReferenceFromRetro",
+    "getLifecycleSaveRequirementMessage",
+    "syncLifecycleResultActions",
+    "openPlatformOutcomeModal",
+    "openFeedbackRuleQueueModal",
+    "splitCSV",
+    "uniqueStrings",
+    "openFeedbackFalsePositiveModal",
+    "refreshGenerationThemeInspirations",
+    "renderGenerationThemeInspirationModal",
+    "getSelectedGenerationThemeInspiration",
+    "applyGenerationThemeInspirationPrefill",
+    "closeGenerationThemeInspirationModal",
+    `${actionHandlerSource}`
+  );
+
+  await runAction(
+    appState,
+    { dataset: { action: "refresh-generation-theme-inspiration" } },
+    "refresh-generation-theme-inspiration",
+    (id) => {
+      if (id === "generation-theme-inspiration-result") return resultNode;
+      if (id === "generation-action-hint") return generationHintNode;
+      return null;
+    },
+    () => {},
+    async () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    async () => ({}),
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => ({ requirementMessage: "" }),
+    () => ({}),
+    () => {},
+    () => {},
+    () => ({ canApply: false, requirementMessage: "" }),
+    () => {},
+    async () => {},
+    () => "",
+    () => {},
+    () => {},
+    () => {},
+    () => [],
+    (items) => [...new Set(items)],
+    () => {},
+    async () => {
+      refreshCalls += 1;
+    },
+    () => {
+      renderCalls += 1;
+    },
+    () => appState.generationThemeInspiration.items.find((item) => item.themeId === appState.generationThemeInspiration.selectedThemeId) || null,
+    (item) => {
+      appliedThemeId = item?.themeId || "";
+      appState.generationThemeInspiration.open = false;
+    },
+    () => {
+      closeCalls += 1;
+      appState.generationThemeInspiration.open = false;
+    }
+  );
+
+  assert.equal(refreshCalls, 1);
+
+  await runAction(
+    appState,
+    { dataset: { action: "select-generation-theme-inspiration", themeId: "theme-1" } },
+    "select-generation-theme-inspiration",
+    (id) => {
+      if (id === "generation-theme-inspiration-result") return resultNode;
+      if (id === "generation-action-hint") return generationHintNode;
+      return null;
+    },
+    () => {},
+    async () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    async () => ({}),
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => ({ requirementMessage: "" }),
+    () => ({}),
+    () => {},
+    () => {},
+    () => ({ canApply: false, requirementMessage: "" }),
+    () => {},
+    async () => {},
+    () => "",
+    () => {},
+    () => {},
+    () => {},
+    () => [],
+    (items) => [...new Set(items)],
+    () => {},
+    async () => {},
+    () => {
+      renderCalls += 1;
+    },
+    () => appState.generationThemeInspiration.items.find((item) => item.themeId === appState.generationThemeInspiration.selectedThemeId) || null,
+    () => {},
+    () => {}
+  );
+
+  assert.equal(appState.generationThemeInspiration.selectedThemeId, "theme-1");
+  assert.ok(renderCalls >= 1);
+
+  await runAction(
+    appState,
+    { dataset: { action: "apply-generation-theme-inspiration" } },
+    "apply-generation-theme-inspiration",
+    (id) => {
+      if (id === "generation-theme-inspiration-result") return resultNode;
+      if (id === "generation-action-hint") return generationHintNode;
+      return null;
+    },
+    () => {},
+    async () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    async () => ({}),
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => ({ requirementMessage: "" }),
+    () => ({}),
+    () => {},
+    () => {},
+    () => ({ canApply: false, requirementMessage: "" }),
+    () => {},
+    async () => {},
+    () => "",
+    () => {},
+    () => {},
+    () => {},
+    () => [],
+    (items) => [...new Set(items)],
+    () => {},
+    async () => {},
+    () => {},
+    () => appState.generationThemeInspiration.items.find((item) => item.themeId === appState.generationThemeInspiration.selectedThemeId) || null,
+    (item) => {
+      appliedThemeId = item?.themeId || "";
+      appState.generationThemeInspiration.open = false;
+    },
+    () => {
+      closeCalls += 1;
+    }
+  );
+
+  assert.equal(appliedThemeId, "theme-1");
+
+  appState.generationThemeInspiration.selectedThemeId = "";
+  await runAction(
+    appState,
+    { dataset: { action: "apply-generation-theme-inspiration" } },
+    "apply-generation-theme-inspiration",
+    (id) => {
+      if (id === "generation-theme-inspiration-result") return resultNode;
+      if (id === "generation-action-hint") return generationHintNode;
+      return null;
+    },
+    () => {},
+    async () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    async () => ({}),
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => ({ requirementMessage: "" }),
+    () => ({}),
+    () => {},
+    () => {},
+    () => ({ canApply: false, requirementMessage: "" }),
+    () => {},
+    async () => {},
+    () => "",
+    () => {},
+    () => {},
+    () => {},
+    () => [],
+    (items) => [...new Set(items)],
+    () => {},
+    async () => {},
+    () => {},
+    () => null,
+    () => {
+      throw new Error("should not apply when nothing is selected");
+    },
+    () => {}
+  );
+
+  assert.match(generationHintNode.textContent, /请先选择一张主题灵感卡片/);
+  assert.equal(closeCalls, 0);
 });

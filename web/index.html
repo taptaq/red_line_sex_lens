@@ -194,6 +194,14 @@
                     <div class="item-actions generation-style-profile-actions">
                       <button
                         type="button"
+                        id="generation-theme-inspiration-button"
+                        class="button button-ghost button-small"
+                        aria-controls="generation-theme-inspiration-modal"
+                      >
+                        主题灵感
+                      </button>
+                      <button
+                        type="button"
                         id="generation-style-profile-button"
                         class="button button-ghost button-small"
                         data-action="open-style-profile-modal"
@@ -802,6 +810,57 @@
         </div>
       </section>
     </div>
+    <section id="generation-theme-inspiration-modal" class="generation-theme-inspiration-modal" hidden>
+      <button
+        type="button"
+        class="generation-theme-inspiration-modal-overlay"
+        data-action="close-generation-theme-inspiration-modal"
+        aria-label="关闭主题灵感弹窗"
+      ></button>
+      <div
+        class="generation-theme-inspiration-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="generation-theme-inspiration-modal-title"
+      >
+        <header class="generation-theme-inspiration-modal-header">
+          <div>
+            <strong id="generation-theme-inspiration-modal-title">主题灵感</strong>
+            <p>基于高表现已发布内容，先静下来筛一轮值得继续写的新主题方向。</p>
+          </div>
+          <div class="item-actions">
+            <button
+              type="button"
+              class="button button-ghost button-small"
+              data-action="refresh-generation-theme-inspiration"
+            >
+              刷新灵感
+            </button>
+            <button
+              type="button"
+              class="button button-ghost button-small"
+              data-action="close-generation-theme-inspiration-modal"
+            >
+              关闭
+            </button>
+          </div>
+        </header>
+        <div class="generation-theme-inspiration-modal-body">
+          <div id="generation-theme-inspiration-modal-content" class="generation-theme-inspiration-modal-content">
+            <article class="generation-theme-card muted">
+              <strong>等待加载主题灵感</strong>
+              <p>这里会展示可继续展开的主题卡片列表。</p>
+            </article>
+          </div>
+          <aside id="generation-theme-inspiration-modal-detail" class="generation-theme-inspiration-modal-detail">
+            <section class="generation-theme-card generation-theme-card-detail muted">
+              <strong>查看主题详情</strong>
+              <p>选择左侧主题后，这里会展示切入角度、边界提醒和预填信息。</p>
+            </section>
+          </aside>
+        </div>
+      </div>
+    </section>
     <div id="generation-reference-search-modal" class="generation-reference-search-modal" hidden>
       <button
         type="button"

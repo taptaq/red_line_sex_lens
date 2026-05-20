@@ -17,6 +17,16 @@ import { withSampleWeight } from "./sample-weight.js";
 
 let memoryRetrievalServicePromise = null;
 let memoryRetrievalServiceRoot = "";
+let noteRecordsCache = {
+  path: "",
+  mtimeMs: null,
+  items: null
+};
+let themeInspirationsCache = {
+  path: "",
+  mtimeMs: null,
+  value: null
+};
 
 async function readJson(filePath, fallback) {
   try {
@@ -461,12 +471,87 @@ export async function saveReviewQueue(items) {
   await writeJson(paths.reviewQueue, items);
 }
 
+export async function loadThemeInspirations() {
+  const configuredPath = paths.themeInspirations;
+
+  if (await fileExists(configuredPath)) {
+    const stat = await fs.stat(configuredPath);
+
+    if (
+      themeInspirationsCache.path === configuredPath &&
+      themeInspirationsCache.mtimeMs === stat.mtimeMs &&
+      themeInspirationsCache.value &&
+      typeof themeInspirationsCache.value === "object"
+    ) {
+      return themeInspirationsCache.value;
+    }
+
+    const value = await readJson(configuredPath, { items: [] });
+    const normalized = value && typeof value === "object" ? value : { items: [] };
+    themeInspirationsCache = {
+      path: configuredPath,
+      mtimeMs: stat.mtimeMs,
+      value: normalized
+    };
+    return normalized;
+  }
+
+  if (
+    themeInspirationsCache.path === configuredPath &&
+    themeInspirationsCache.mtimeMs === null &&
+    themeInspirationsCache.value &&
+    typeof themeInspirationsCache.value === "object"
+  ) {
+    return themeInspirationsCache.value;
+  }
+
+  const fallback = { items: [] };
+  themeInspirationsCache = {
+    path: configuredPath,
+    mtimeMs: null,
+    value: fallback
+  };
+  return fallback;
+}
+
+export async function saveThemeInspirations(value) {
+  const normalized = value && typeof value === "object" ? value : { items: [] };
+  await writeJson(paths.themeInspirations, normalized);
+  const stat = await fs.stat(paths.themeInspirations);
+  themeInspirationsCache = {
+    path: paths.themeInspirations,
+    mtimeMs: stat.mtimeMs,
+    value: normalized
+  };
+  return normalized;
+}
+
 export async function loadNoteRecords() {
   const configuredPath = paths.noteRecords;
 
   if (await fileExists(configuredPath)) {
+    const stat = await fs.stat(configuredPath);
+
+    if (
+      noteRecordsCache.path === configuredPath &&
+      noteRecordsCache.mtimeMs === stat.mtimeMs &&
+      Array.isArray(noteRecordsCache.items)
+    ) {
+      return noteRecordsCache.items;
+    }
+
     const items = await readJson(configuredPath, []);
-    return collapseNoteRecordsByCompatibility(dedupeNoteRecords(Array.isArray(items) ? items : []));
+    const normalized = collapseNoteRecordsByCompatibility(dedupeNoteRecords(Array.isArray(items) ? items : []));
+    noteRecordsCache = {
+      path: configuredPath,
+      mtimeMs: stat.mtimeMs,
+      items: normalized
+    };
+    return normalized;
+  }
+
+  if (noteRecordsCache.path === configuredPath && noteRecordsCache.mtimeMs === null && Array.isArray(noteRecordsCache.items)) {
+    return noteRecordsCache.items;
   }
 
   const [successSamples, noteLifecycle] = await Promise.all([
@@ -493,12 +578,23 @@ export async function loadNoteRecords() {
     next[matchIndex] = mergeFallbackLifecycleIntoRecord(next[matchIndex], lifecycleRecord);
   }
 
+  noteRecordsCache = {
+    path: configuredPath,
+    mtimeMs: null,
+    items: next
+  };
   return next;
 }
 
 export async function saveNoteRecords(items) {
   const normalized = collapseNoteRecordsByCompatibility(dedupeNoteRecords(Array.isArray(items) ? items : []));
   await writeJson(paths.noteRecords, normalized);
+  const stat = await fs.stat(paths.noteRecords);
+  noteRecordsCache = {
+    path: paths.noteRecords,
+    mtimeMs: stat.mtimeMs,
+    items: normalized
+  };
   return normalized;
 }
 

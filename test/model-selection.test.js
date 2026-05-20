@@ -70,13 +70,13 @@ test("normalizeModelSelectionState keeps defaults and supported overrides", () =
       semantic: "gpt-5.4",
       rewrite: "claude-sonnet-4-6-ssvip",
       generation: "grok-4.2-nothinking",
-      crossReview: "gemini-3.1-pro-preview-ssvip"
+      crossReview: "gemini-3.5-flash"
     }),
     {
       semantic: "gpt-5.4",
       rewrite: "claude-sonnet-4-6-ssvip",
       generation: "grok-4.2-nothinking",
-      crossReview: "gemini-3.1-pro-preview-ssvip"
+      crossReview: "gemini-3.5-flash"
     }
   );
 

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { mock } from "node:test";
 
 import { paths } from "../src/config.js";
 import {
@@ -409,6 +410,60 @@ test("note records store round-trips canonical records", async (t) => {
     assert.equal(stored.length, 1);
     assert.deepEqual(stored[0], record);
   });
+});
+
+test("loadNoteRecords caches repeated reads for the same underlying file version", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "note-records-cache-"));
+  const originalPath = paths.noteRecords;
+  const tempPath = path.join(tempDir, "note-records.json");
+  paths.noteRecords = tempPath;
+
+  t.after(async () => {
+    paths.noteRecords = originalPath;
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  await fs.writeFile(
+    tempPath,
+    `${JSON.stringify([
+      {
+        id: "cache-1",
+        source: "manual",
+        stage: "published_reference",
+        note: {
+          title: "缓存测试",
+          body: "正文",
+          tags: ["科普"]
+        },
+        publish: {
+          status: "published_passed",
+          metrics: { likes: 42, favorites: 10, comments: 2, views: 120, shares: 0 }
+        },
+        reference: {
+          enabled: true,
+          tier: "featured",
+          selectedBy: "manual"
+        }
+      }
+    ], null, 2)}\n`,
+    "utf8"
+  );
+
+  const originalReadFile = fs.readFile.bind(fs);
+  let readCount = 0;
+  const readFileMock = mock.method(fs, "readFile", async (...args) => {
+    readCount += 1;
+    return originalReadFile(...args);
+  });
+
+  const first = await loadNoteRecords();
+  const second = await loadNoteRecords();
+
+  readFileMock.mock.restore();
+
+  assert.equal(readCount >= 1, true);
+  assert.equal(readCount, 1);
+  assert.deepEqual(first, second);
 });
 
 test("replaceNoteRecordCompatibilityView applies shared success/lifecycle reconciliation rules", () => {

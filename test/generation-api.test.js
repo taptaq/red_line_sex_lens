@@ -279,6 +279,440 @@ test("generation reference material endpoint returns 400 when briefing is missin
   });
 });
 
+test("theme inspiration endpoint returns normalized cards from high-performing published content", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const result = await invokeRoute("POST", "/api/generate-theme-inspirations", {
+      mockThemeInspirations: [
+        {
+          themeTitle: "自慰后空虚并不一定异常",
+          hookAngle: "很多人以为这是问题，其实很常见。",
+          whyNow: "这个主题兼具反差和科普价值。",
+          discussionSignal: "多个高表现内容都反复命中。",
+          sourceSignals: ["命中 2 条高表现内容"],
+          expandAngles: ["从激素变化讲", "从羞耻感讲"],
+          boundaryNotes: ["避免病理化表达"],
+          confidenceScore: 0.92,
+          tags: ["身体探索", "情绪反应"],
+          prefillBriefing: "写一篇轻松科普，解释自慰后空虚为什么不一定异常。",
+          prefillTopic: "自慰后空虚是不是异常",
+          prefillConstraints: "避免病理化，不做医疗诊断。",
+          prefillReferenceTitle: "为什么结束后会突然很空？",
+          prefillMaterialText: "关键点：常见、正常、可自我接纳。"
+        }
+      ]
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.equal(result.items.length, 2);
+    assert.deepEqual(
+      result.items.map((item) => item.themeTitle),
+      ["从激素变化讲", "从羞耻感讲"]
+    );
+    assert.equal(result.items[0].sourceThemeTitle, "自慰后空虚并不一定异常");
+    assert.deepEqual(result.modelTrace, {
+      provider: "mock",
+      model: "mock-theme-inspirations",
+      route: "mock",
+      routeLabel: "Mock Theme Inspirations",
+      attemptedRoutes: ["mock-theme-inspirations"]
+    });
+  });
+});
+
+test("theme inspiration endpoint returns a stable contract from existing high-performing published records", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "theme-inspirations-route-"));
+  const originals = {
+    noteRecords: paths.noteRecords
+  };
+
+  paths.noteRecords = path.join(tempDir, "note-records.json");
+
+  t.after(async () => {
+    Object.assign(paths, originals);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  await fs.writeFile(
+    paths.noteRecords,
+    `${JSON.stringify([
+      {
+        id: "record-high-performing",
+        source: "manual",
+        stage: "published_reference",
+        note: {
+          title: "自慰后空虚是不是异常",
+          body: "不少人结束后会短暂失落或空虚，这并不一定意味着异常。",
+          tags: ["身体探索", "情绪反应"],
+          collectionType: "科普"
+        },
+        publish: {
+          status: "published_passed",
+          metrics: { likes: 60, favorites: 30, comments: 12, views: 3500, shares: 25 }
+        },
+        reference: {
+          enabled: true,
+          tier: "featured",
+          selectedBy: "manual"
+        }
+      },
+      {
+        id: "record-unqualified",
+        source: "manual",
+        stage: "published_reference",
+        note: {
+          title: "普通记录",
+          body: "数据不够高。",
+          tags: ["日常"],
+          collectionType: "科普"
+        },
+        publish: {
+          status: "published_passed",
+          metrics: { likes: 2, favorites: 0, comments: 0, views: 10, shares: 0 }
+        },
+        reference: {
+          enabled: true,
+          tier: "passed",
+          selectedBy: "manual"
+        }
+      }
+    ], null, 2)}\n`,
+    "utf8"
+  );
+
+  const result = await invokeRoute("POST", "/api/generate-theme-inspirations", {
+    mockThemeInspirationSummary: {
+      items: [
+        {
+          themeTitle: "自慰后空虚并不一定异常",
+          hookAngle: "很多人以为空虚就是异常，其实很常见。",
+          whyNow: "高表现内容反复命中这个问题。",
+          discussionSignal: "容易引发“我是不是不正常”的讨论。",
+          sourceSignals: ["命中 1 条高表现内容"],
+          expandAngles: ["从激素波动讲", "从羞耻感讲"],
+          boundaryNotes: ["避免病理化表达"],
+          confidenceScore: 0.93,
+          tags: ["身体探索", "情绪反应"],
+          prefillBriefing: "写一篇轻松科普，解释自慰后空虚为什么不一定异常。",
+          prefillReferenceTitle: "为什么结束后会突然很空？",
+          prefillMaterialText: "关键点：常见、正常、可自我接纳。"
+        }
+      ],
+      provider: "mock",
+      model: "mock-theme-inspiration-summary",
+      route: "mock-route",
+      routeLabel: "Mock Route",
+      attemptedRoutes: ["mock-route"]
+    }
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.ok, true);
+  assert.equal(result.items.length, 2);
+  assert.equal(result.diagnostics.sourceRecordCount, 1);
+  assert.equal(result.diagnostics.clusterCount, 1);
+  assert.equal(result.diagnostics.rawThemeItemCount, 2);
+  assert.equal(result.diagnostics.normalizedThemeItemCount, 2);
+  assert.deepEqual(
+    result.items.map((item) => item.themeTitle),
+    ["从激素波动讲", "从羞耻感讲"]
+  );
+  assert.deepEqual(result.modelTrace, {
+    provider: "mock",
+    model: "mock-theme-inspiration-summary",
+    route: "mock-route",
+    routeLabel: "Mock Route",
+    attemptedRoutes: ["mock-route"]
+  });
+  assert.equal(Object.prototype.hasOwnProperty.call(result, "sourceRecords"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(result, "clusters"), false);
+});
+
+test("theme inspiration endpoint surfaces summarizer diagnostics when no usable cards are generated", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "theme-inspirations-empty-"));
+  const originals = {
+    noteRecords: paths.noteRecords
+  };
+
+  paths.noteRecords = path.join(tempDir, "note-records.json");
+
+  t.after(async () => {
+    Object.assign(paths, originals);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  await fs.writeFile(
+    paths.noteRecords,
+    `${JSON.stringify([
+      {
+        id: "record-high-performing",
+        source: "manual",
+        stage: "published_reference",
+        note: {
+          title: "自慰后空虚是不是异常",
+          body: "不少人结束后会短暂失落或空虚，这并不一定意味着异常。",
+          tags: ["身体探索", "情绪反应"],
+          collectionType: "科普"
+        },
+        publish: {
+          status: "published_passed",
+          metrics: { likes: 60, favorites: 30, comments: 12, views: 3500, shares: 25 }
+        },
+        reference: {
+          enabled: true,
+          tier: "featured",
+          selectedBy: "manual"
+        }
+      }
+    ], null, 2)}\n`,
+    "utf8"
+  );
+
+  const result = await invokeRoute("POST", "/api/generate-theme-inspirations", {
+    mockThemeInspirationSummary: {
+      items: [],
+      provider: "mock",
+      model: "mock-empty-theme-inspirations",
+      route: "mock-route",
+      routeLabel: "Mock Route",
+      attemptedRoutes: ["mock-route"],
+      rawText: "{\"items\":[]}",
+      parsedKeys: ["items"],
+      message: "模型没有生成可用主题卡。"
+    }
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.items, []);
+  assert.equal(result.diagnostics.sourceRecordCount, 1);
+  assert.equal(result.diagnostics.clusterCount, 1);
+  assert.equal(result.diagnostics.rawThemeItemCount, 0);
+  assert.equal(result.diagnostics.normalizedThemeItemCount, 0);
+  assert.equal(result.diagnostics.rawModelTextLength > 0, true);
+  assert.deepEqual(result.diagnostics.parsedKeys, ["items"]);
+  assert.equal(result.diagnostics.summarizerMessage, "模型没有生成可用主题卡。");
+  assert.deepEqual(result.modelTrace, {
+    provider: "mock",
+    model: "mock-empty-theme-inspirations",
+    route: "mock-route",
+    routeLabel: "Mock Route",
+    attemptedRoutes: ["mock-route"]
+  });
+});
+
+test("theme inspiration endpoint persists cached inspirations and prepends new refresh results", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "theme-inspirations-cache-"));
+  const originals = {
+    noteRecords: paths.noteRecords,
+    themeInspirations: paths.themeInspirations
+  };
+
+  paths.noteRecords = path.join(tempDir, "note-records.json");
+  paths.themeInspirations = path.join(tempDir, "theme-inspirations.json");
+
+  t.after(async () => {
+    Object.assign(paths, originals);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  await fs.writeFile(
+    paths.noteRecords,
+    `${JSON.stringify([
+      {
+        id: "record-high-performing",
+        source: "manual",
+        stage: "published_reference",
+        note: {
+          title: "自慰后空虚是不是异常",
+          body: "不少人结束后会短暂失落或空虚，这并不一定意味着异常。",
+          tags: ["身体探索", "情绪反应"],
+          collectionType: "科普"
+        },
+        publish: {
+          status: "published_passed",
+          metrics: { likes: 60, favorites: 30, comments: 12, views: 3500, shares: 25 }
+        },
+        reference: {
+          enabled: true,
+          tier: "featured",
+          selectedBy: "manual"
+        }
+      }
+    ], null, 2)}\n`,
+    "utf8"
+  );
+
+  await fs.writeFile(
+    paths.themeInspirations,
+    `${JSON.stringify({
+      items: [
+        {
+          themeId: "cached-1",
+          themeTitle: "从羞耻感讲",
+          hookAngle: "很多人不是欲望太强，而是羞耻感太重。",
+          whyNow: "旧缓存",
+          discussionSignal: "旧缓存",
+          sourceSignals: ["旧缓存"],
+          expandAngles: [],
+          boundaryNotes: ["避免病理化表达"],
+          confidenceScore: 0.82,
+          tags: ["身体探索", "情绪反应"],
+          prefillBriefing: "写一篇从羞耻感角度展开的轻松科普。",
+          prefillReferenceTitle: "从羞耻感讲",
+          prefillMaterialText: "旧缓存内容",
+          prefillCollectionType: "科普",
+          prefillTone: "温和"
+        }
+      ],
+      generatedAt: "2026-05-19T12:00:00.000Z",
+      sourceFingerprint: "record-high-performing",
+      sourceRecordIds: ["record-high-performing"]
+    }, null, 2)}\n`,
+    "utf8"
+  );
+
+  const cachedResult = await invokeRoute("POST", "/api/generate-theme-inspirations", {});
+  assert.equal(cachedResult.status, 200);
+  assert.deepEqual(cachedResult.items.map((item) => item.themeTitle), ["从羞耻感讲"]);
+
+  const refreshedResult = await invokeRoute("POST", "/api/generate-theme-inspirations", {
+    refresh: true,
+    mockThemeInspirationSummary: {
+      items: [
+        {
+          themeTitle: "自慰后空虚并不一定异常",
+          hookAngle: "很多人以为空虚就是异常，其实很常见。",
+          whyNow: "高表现内容反复命中这个问题。",
+          discussionSignal: "容易引发“我是不是不正常”的讨论。",
+          sourceSignals: ["命中 1 条高表现内容"],
+          expandAngles: ["从新手试错讲", "从羞耻感讲"],
+          boundaryNotes: ["避免病理化表达"],
+          confidenceScore: 0.93,
+          tags: ["身体探索", "情绪反应"],
+          prefillBriefing: "写一篇轻松科普，解释自慰后空虚为什么不一定异常。",
+          prefillReferenceTitle: "为什么结束后会突然很空？",
+          prefillMaterialText: "关键点：常见、正常、可自我接纳。"
+        }
+      ],
+      provider: "mock",
+      model: "mock-theme-inspiration-summary",
+      route: "mock-route",
+      routeLabel: "Mock Route",
+      attemptedRoutes: ["mock-route"]
+    }
+  });
+
+  assert.equal(refreshedResult.status, 200);
+  assert.deepEqual(
+    refreshedResult.items.map((item) => item.themeTitle),
+    ["从新手试错讲", "从羞耻感讲"]
+  );
+
+  const persisted = JSON.parse(await fs.readFile(paths.themeInspirations, "utf8"));
+  assert.deepEqual(
+    persisted.items.map((item) => item.themeTitle),
+    ["从新手试错讲", "从羞耻感讲"]
+  );
+  assert.equal(Array.isArray(persisted.sourceRecordIds), true);
+});
+
+test("theme inspiration endpoint keeps existing cache file when refresh produces no usable items", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "theme-inspirations-preserve-"));
+  const originals = {
+    noteRecords: paths.noteRecords,
+    themeInspirations: paths.themeInspirations
+  };
+
+  paths.noteRecords = path.join(tempDir, "note-records.json");
+  paths.themeInspirations = path.join(tempDir, "theme-inspirations.json");
+
+  t.after(async () => {
+    Object.assign(paths, originals);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  await fs.writeFile(
+    paths.noteRecords,
+    `${JSON.stringify([
+      {
+        id: "record-high-performing",
+        source: "manual",
+        stage: "published_reference",
+        note: {
+          title: "自慰后空虚是不是异常",
+          body: "不少人结束后会短暂失落或空虚，这并不一定意味着异常。",
+          tags: ["身体探索", "情绪反应"],
+          collectionType: "科普"
+        },
+        publish: {
+          status: "published_passed",
+          metrics: { likes: 60, favorites: 30, comments: 12, views: 3500, shares: 25 }
+        },
+        reference: {
+          enabled: true,
+          tier: "featured",
+          selectedBy: "manual"
+        }
+      }
+    ], null, 2)}\n`,
+    "utf8"
+  );
+
+  await fs.writeFile(
+    paths.themeInspirations,
+    `${JSON.stringify({
+      items: [
+        {
+          themeId: "cached-1",
+          themeTitle: "从羞耻感讲",
+          hookAngle: "很多人不是欲望太强，而是羞耻感太重。",
+          whyNow: "旧缓存",
+          discussionSignal: "旧缓存",
+          sourceSignals: ["旧缓存"],
+          expandAngles: [],
+          boundaryNotes: ["避免病理化表达"],
+          confidenceScore: 0.82,
+          tags: ["身体探索", "情绪反应"],
+          prefillBriefing: "写一篇从羞耻感角度展开的轻松科普。",
+          prefillReferenceTitle: "从羞耻感讲",
+          prefillMaterialText: "旧缓存内容",
+          prefillCollectionType: "科普",
+          prefillTone: "温和"
+        }
+      ],
+      generatedAt: "2026-05-19T12:00:00.000Z",
+      sourceFingerprint: "record-high-performing",
+      sourceRecordIds: ["record-high-performing"]
+    }, null, 2)}\n`,
+    "utf8"
+  );
+
+  const result = await invokeRoute("POST", "/api/generate-theme-inspirations", {
+    refresh: true,
+    mockThemeInspirationSummary: {
+      items: [],
+      provider: "mock",
+      model: "mock-empty-theme-inspirations",
+      route: "mock-route",
+      routeLabel: "Mock Route",
+      attemptedRoutes: ["mock-route"],
+      rawText: "{\"items\":[]}",
+      parsedKeys: ["items"],
+      message: "模型没有生成可用主题卡。"
+    }
+  });
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.items, []);
+  const persisted = JSON.parse(await fs.readFile(paths.themeInspirations, "utf8"));
+  assert.deepEqual(
+    persisted.items.map((item) => item.themeTitle),
+    ["从羞耻感讲"]
+  );
+  assert.equal(persisted.generatedAt, "2026-05-19T12:00:00.000Z");
+});
+
 test("generation selection normalization keeps generation separate and allows value-only fallback to rewrite", () => {
   const explicitGeneration = normalizeModelSelectionState({
     rewrite: "glm",

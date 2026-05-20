@@ -28,10 +28,12 @@ import {
   loadReviewQueue,
   loadSummary,
   loadStyleProfile,
+  loadThemeInspirations,
   saveAnalyzeTagOptions,
   saveFalsePositiveLog,
   saveNoteRecords,
   saveStyleProfile,
+  saveThemeInspirations,
   upsertFeedbackEntries
 } from "./data-store.js";
 import { assertValidCollectionType, buildCollectionTypeOptions } from "./collection-types.js";
@@ -62,6 +64,14 @@ import {
   repairGenerationCandidate,
   scoreGenerationCandidates
 } from "./generation-workbench.js";
+import {
+  buildThemeInspirationClusters,
+  buildThemeInspirationAngleCards,
+  collectThemeInspirationSourceRecords,
+  mergeThemeInspirationItems,
+  normalizeThemeInspirationItems,
+  summarizeThemeInspirationClusters
+} from "./theme-inspirations.js";
 import { recognizeFeedbackScreenshot, rewritePostForCompliance, suggestFeedbackCandidates, summarizeGenerationReferenceImage } from "./glm.js";
 import { summarizeGenerationReferenceAssets } from "./generation-reference-assets.js";
 import { mergeRuleAndSemanticAnalysis, runSemanticReview, runSemanticReviewComparison } from "./semantic-review.js";
@@ -1147,6 +1157,132 @@ async function handleRequest(request, response) {
       modelTrace: result.modelTrace || {
         provider: result.provider || "",
         model: result.model || ""
+      }
+    });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/generate-theme-inspirations") {
+    const payload = await readBody(request, { maxBytes: 256 * 1024 });
+    const shouldRefresh = payload?.refresh === true;
+
+    if (Array.isArray(payload?.mockThemeInspirations)) {
+      const normalizedMockItems = normalizeThemeInspirationItems(payload.mockThemeInspirations);
+      const angleCards = buildThemeInspirationAngleCards(normalizedMockItems);
+      return sendJson(response, 200, {
+        ok: true,
+        items: angleCards,
+        diagnostics: {
+          sourceRecordCount: 0,
+          clusterCount: 0,
+          rawThemeItemCount: normalizedMockItems.length,
+          normalizedThemeItemCount: angleCards.length,
+          rawModelTextLength: 0,
+          parsedKeys: [],
+          summarizerMessage: ""
+        },
+        modelTrace: {
+          provider: "mock",
+          model: "mock-theme-inspirations",
+          route: "mock",
+          routeLabel: "Mock Theme Inspirations",
+          attemptedRoutes: ["mock-theme-inspirations"]
+        }
+      });
+    }
+
+    if (!shouldRefresh && !payload?.mockThemeInspirationSummary) {
+      const records = await loadNoteRecords();
+      const sourceRecords = collectThemeInspirationSourceRecords(records);
+      const sourceFingerprint = sourceRecords.map((record) => String(record?.id || "").trim()).filter(Boolean).join("|");
+      const cached = await loadThemeInspirations();
+      const cachedItems = normalizeThemeInspirationItems(Array.isArray(cached?.items) ? cached.items : []);
+
+      if (cachedItems.length && String(cached?.sourceFingerprint || "").trim() === sourceFingerprint) {
+        return sendJson(response, 200, {
+          ok: true,
+          items: cachedItems,
+          diagnostics: {
+            sourceRecordCount: sourceRecords.length,
+            clusterCount: Number(cached?.clusterCount || 0),
+            rawThemeItemCount: cachedItems.length,
+            normalizedThemeItemCount: cachedItems.length,
+            rawModelTextLength: 0,
+            parsedKeys: [],
+            summarizerMessage: ""
+          },
+          modelTrace: {
+            provider: String(cached?.modelTrace?.provider || "").trim(),
+            model: String(cached?.modelTrace?.model || "").trim(),
+            route: String(cached?.modelTrace?.route || "").trim(),
+            routeLabel: String(cached?.modelTrace?.routeLabel || "").trim(),
+            attemptedRoutes: Array.isArray(cached?.modelTrace?.attemptedRoutes) ? cached.modelTrace.attemptedRoutes : []
+          }
+        });
+      }
+    }
+
+    const records = await loadNoteRecords();
+    const sourceRecords = collectThemeInspirationSourceRecords(records);
+    const clusters = buildThemeInspirationClusters(sourceRecords);
+    const referenceSamples = buildGenerationReferenceSamples({
+      successSamples: await loadQualifiedReferenceSamples(),
+      noteLifecycle: await loadNoteLifecycle()
+    });
+    const summary = await summarizeThemeInspirationClusters({
+      clusters,
+      referenceSamples,
+      summarizeJson: payload?.mockThemeInspirationSummary
+        ? async () => payload.mockThemeInspirationSummary
+        : undefined,
+      modelSelection: normalizeModelSelectionState(payload?.modelSelection).generation || normalizeModelSelectionState(payload?.modelSelection).rewrite
+    });
+    const cached = await loadThemeInspirations();
+    const rawNormalizedItems = normalizeThemeInspirationItems(summary.items || []);
+    const normalizedItems = shouldRefresh
+      ? rawNormalizedItems.length
+        ? mergeThemeInspirationItems({
+            cachedItems: Array.isArray(cached?.items) ? cached.items : [],
+            nextItems: rawNormalizedItems
+          })
+        : []
+      : rawNormalizedItems;
+
+    if (normalizedItems.length > 0) {
+      await saveThemeInspirations({
+        items: normalizedItems,
+        generatedAt: new Date().toISOString(),
+        sourceFingerprint: sourceRecords.map((record) => String(record?.id || "").trim()).filter(Boolean).join("|"),
+        sourceRecordIds: sourceRecords.map((record) => String(record?.id || "").trim()).filter(Boolean),
+        sourceRecordCount: sourceRecords.length,
+        clusterCount: clusters.length,
+        modelTrace: {
+          provider: String(summary?.modelTrace?.provider || "").trim(),
+          model: String(summary?.modelTrace?.model || "").trim(),
+          route: String(summary?.modelTrace?.route || "").trim(),
+          routeLabel: String(summary?.modelTrace?.routeLabel || "").trim(),
+          attemptedRoutes: Array.isArray(summary?.modelTrace?.attemptedRoutes) ? summary.modelTrace.attemptedRoutes : []
+        }
+      });
+    }
+
+    return sendJson(response, 200, {
+      ok: true,
+      items: normalizedItems,
+      diagnostics: {
+        sourceRecordCount: sourceRecords.length,
+        clusterCount: clusters.length,
+        rawThemeItemCount: Array.isArray(summary.items) ? summary.items.length : 0,
+        normalizedThemeItemCount: normalizedItems.length,
+        rawModelTextLength: Number(summary?.diagnostics?.rawModelTextLength || 0),
+        parsedKeys: Array.isArray(summary?.diagnostics?.parsedKeys) ? summary.diagnostics.parsedKeys : [],
+        summarizerMessage: String(summary?.diagnostics?.summarizerMessage || "").trim()
+      },
+      modelTrace: {
+        provider: String(summary?.modelTrace?.provider || "").trim(),
+        model: String(summary?.modelTrace?.model || "").trim(),
+        route: String(summary?.modelTrace?.route || "").trim(),
+        routeLabel: String(summary?.modelTrace?.routeLabel || "").trim(),
+        attemptedRoutes: Array.isArray(summary?.modelTrace?.attemptedRoutes) ? summary.modelTrace.attemptedRoutes : []
       }
     });
   }
