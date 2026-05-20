@@ -96,6 +96,22 @@ function verdictLabel(verdict) {
   return "通过";
 }
 
+function publishStatusLabel(status) {
+  if (status === "published_passed") return "已发布通过";
+  if (status === "limited") return "疑似限流";
+  if (status === "violation") return "平台判违规";
+  if (status === "false_positive") return "系统误报 / 平台放行";
+  if (status === "positive_performance") return "过审且表现好";
+  return "未发布";
+}
+
+function riskLevelLabel(level) {
+  if (level === "high") return "高风险";
+  if (level === "medium") return "中风险";
+  if (level === "low") return "低风险";
+  return "未预判";
+}
+
 function getRecordAnalysisSnapshot(record = {}) {
   if (record?.snapshots?.analysis && typeof record.snapshots.analysis === "object") {
     return record.snapshots.analysis;
@@ -355,6 +371,8 @@ export function buildSampleLibraryCalibrationPrediction(source = {}, selectedMod
     hasRewrite && rewrite.safetyNotes ? `安全提示：${rewrite.safetyNotes}` : ""
   ].filter(Boolean);
 
+  const successSummary = [publishStatusLabel(predictedStatus), riskLevelLabel(predictedRiskLevel)].filter(Boolean).join(" / ");
+
   return {
     predictedStatus,
     predictedRiskLevel,
@@ -364,6 +382,9 @@ export function buildSampleLibraryCalibrationPrediction(source = {}, selectedMod
     evidenceSamples: evidence.evidenceSamples,
     evidenceSignals: evidence.evidenceSignals,
     evidenceSummary: evidence.evidenceSummary,
+    successMessage: [source?.successMessage || "已预填预判字段。", successSummary ? `当前预判：${successSummary}。` : ""]
+      .filter(Boolean)
+      .join(" "),
     model: hasRewrite ? rewrite.model || selectedModels.rewrite || "" : selectedModels.semantic || "",
     createdAt: new Date().toISOString().slice(0, 10)
   };

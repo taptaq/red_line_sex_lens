@@ -9663,6 +9663,28 @@ function getSampleLibraryCalibrationPredictionPrefillRequirementMessage() {
   return getSampleLibraryCalibrationPredictionPrefillSource().requirementMessage;
 }
 
+function isSampleLibraryCalibrationPredictionFieldEmpty(name, field) {
+  if (
+    !(field instanceof HTMLInputElement) &&
+    !(field instanceof HTMLSelectElement) &&
+    !(field instanceof HTMLTextAreaElement)
+  ) {
+    return false;
+  }
+
+  const value = String(field.value || "").trim();
+
+  if (name === "predictedStatus") {
+    return !value || value === "not_published";
+  }
+
+  if (name === "predictionConfidence") {
+    return !value || Number(value) === 0;
+  }
+
+  return !value;
+}
+
 function setSampleLibraryCalibrationPredictionFields(section, prediction = {}) {
   if (!section) {
     return;
@@ -9685,7 +9707,9 @@ function setSampleLibraryCalibrationPredictionFields(section, prediction = {}) {
       field instanceof HTMLSelectElement ||
       field instanceof HTMLTextAreaElement
     ) {
-      field.value = value;
+      if (isSampleLibraryCalibrationPredictionFieldEmpty(name, field)) {
+        field.value = value;
+      }
     }
   });
 
@@ -11698,7 +11722,7 @@ document.addEventListener("click", async (event) => {
 
       const prediction = buildSampleLibraryCalibrationPredictionFromCurrentState();
       setSampleLibraryCalibrationPredictionFields(byId("sample-library-modal-content"), prediction);
-      setSampleLibraryCalibrationPrefillMessage(prefillSource.successMessage || "已预填预判字段。");
+      setSampleLibraryCalibrationPrefillMessage(prediction.successMessage || prefillSource.successMessage || "已预填预判字段。");
       return;
     }
 

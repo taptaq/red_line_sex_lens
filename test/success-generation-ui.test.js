@@ -1337,6 +1337,20 @@ test("frontend renders prediction evidence inside the sample-library calibration
   assert.match(evidence.confidenceNote, /当前置信度 78/);
 });
 
+test("frontend keeps publish prediction prefill conservative while reusing the same prediction payload for evidence and feedback", async () => {
+  const { appJs } = await readFrontendFiles();
+  const fieldSetterSource = extractSourceBetween(
+    appJs,
+    "function setSampleLibraryCalibrationPredictionFields(",
+    "function setSampleLibraryCalibrationPrefillMessage("
+  );
+
+  assert.match(appJs, /function\s+isSampleLibraryCalibrationPredictionFieldEmpty\s*\(/);
+  assert.match(fieldSetterSource, /if\s*\(\s*isSampleLibraryCalibrationPredictionFieldEmpty\(name,\s*field\)\s*\)\s*\{/);
+  assert.match(fieldSetterSource, /syncSampleLibraryCalibrationEvidencePanel\(section,\s*prediction\)/);
+  assert.match(appJs, /setSampleLibraryCalibrationPrefillMessage\(prediction\.successMessage \|\| prefillSource\.successMessage \|\| "已预填预判字段。"\)/);
+});
+
 test("frontend exposes a calibration review queue with quick jumps back to sample detail", async () => {
   const { indexHtml, appJs, styles } = await readFrontendFiles();
 

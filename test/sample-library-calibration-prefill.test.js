@@ -96,6 +96,21 @@ test("prefill source prefers current session results over saved record snapshots
   assert.equal(source.requirementMessage, "");
   assert.match(source.summary, /当前改写结果/);
   assert.match(source.successMessage, /当前检测\/改写结果/);
+
+  const prediction = buildSampleLibraryCalibrationPrediction(source, {
+    semantic: "glm-5.1",
+    rewrite: "kimi-k2.6"
+  });
+
+  assert.equal(prediction.predictedStatus, "published_passed");
+  assert.equal(prediction.predictedRiskLevel, "low");
+  assert.equal(prediction.predictedPerformanceTier, "medium");
+  assert.match(prediction.reason, /当前检测结论：观察通过/);
+  assert.match(prediction.evidenceSummary, /检测结论：观察通过/);
+  assert.equal(typeof prediction.successMessage, "string");
+  assert.match(prediction.successMessage, /已根据当前检测\/改写结果预填预判字段/);
+  assert.match(prediction.successMessage, /已发布通过/);
+  assert.match(prediction.successMessage, /低风险/);
 });
 
 test("prefill source surfaces a record-specific requirement when only a saved rewrite snapshot exists", () => {
@@ -133,5 +148,5 @@ test("sample library calibration modal wiring reads saved-record prefill sources
   assert.match(appJs, /modalState\.kind === "record-list-inline-editor"/);
   assert.match(appJs, /record: getActiveSampleLibraryCalibrationPrefillRecord\(\)/);
   assert.match(appJs, /const prefillSource = getSampleLibraryCalibrationPredictionPrefillSource\(\);/);
-  assert.match(appJs, /setSampleLibraryCalibrationPrefillMessage\(prefillSource\.successMessage \|\| "已预填预判字段。"\)/);
+  assert.match(appJs, /setSampleLibraryCalibrationPrefillMessage\(prediction\.successMessage \|\| prefillSource\.successMessage \|\| "已预填预判字段。"\)/);
 });
