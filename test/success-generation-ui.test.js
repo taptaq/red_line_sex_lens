@@ -1315,6 +1315,57 @@ test("frontend surfaces calibration visibility directly in the sample-library li
   assert.match(styles, /\.sample-library-calibration-pill/);
 });
 
+test("frontend renders prediction evidence inside the sample-library calibration modal", async () => {
+  const { appJs, styles } = await readFrontendFiles();
+  const evidenceHelperSource = appJs.match(/function\s+buildSampleLibraryCalibrationEvidenceMarkup\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const sectionsHelperSource = appJs.match(/function\s+buildSampleLibraryCalibrationEditorSectionsMarkup\s*\([\s\S]*?\n}\n/)?.[0] || "";
+
+  assert.match(appJs, /function\s+buildSampleLibraryCalibrationEvidenceMarkup\s*\(/);
+  assert.match(styles, /\.sample-library-calibration-evidence/);
+
+  const buildMarkup = new Function(
+    "escapeHtml",
+    "buildSampleLibraryModalSectionMarkup",
+    "getSampleLibraryCalibrationPredictionPrefillSourceSummary",
+    "getSampleLibraryRetroTimingHintClassName",
+    "joinCSV",
+    `${evidenceHelperSource}
+${sectionsHelperSource}
+return buildSampleLibraryCalibrationEditorSectionsMarkup;`
+  )(
+    (value) => String(value || ""),
+    ({ title = "", description = "", body = "" } = {}) => `<section><strong>${title}</strong><p>${description}</p>${body}</section>`,
+    () => "预填来源摘要",
+    () => "helper-text",
+    (items = []) => (Array.isArray(items) ? items.join(", ") : "")
+  );
+
+  const markup = buildMarkup({
+    prediction: {
+      predictedStatus: "published_passed",
+      predictedRiskLevel: "low",
+      predictedPerformanceTier: "medium",
+      confidence: 78,
+      reason: "综合判断偏稳",
+      evidenceSummary: "这条记录与 1 条历史样本的结构高度相似。",
+      evidenceSamples: [{ id: "record-1", title: "历史样本 1" }],
+      evidenceSignals: ["标题短语命中", "标签重合"]
+    },
+    retro: {},
+    comparisonStatusLabel: "待复盘",
+    missReasonSuggestion: "",
+    referenceAction: null,
+    retroTimingHint: null
+  });
+
+  assert.match(markup, /预判依据/);
+  assert.match(markup, /这条记录与 1 条历史样本的结构高度相似/);
+  assert.match(markup, /历史样本 1/);
+  assert.match(markup, /标题短语命中/);
+  assert.match(markup, /标签重合/);
+  assert.match(markup, /当前置信度 78/);
+});
+
 test("frontend exposes a calibration review queue with quick jumps back to sample detail", async () => {
   const { indexHtml, appJs, styles } = await readFrontendFiles();
 
@@ -1478,6 +1529,65 @@ test("frontend exposes a calibrated-history replay action in system calibration"
   assert.match(appJs, /data-action="run-sample-library-calibration-replay"/);
   assert.match(appJs, /sample-library-calibration-replay-result/);
   assert.match(appJs, /受影响样本/);
+});
+
+test("sample library calibration modal renders visible evidence with matched samples and explanation", async () => {
+  const { appJs, styles } = await readFrontendFiles();
+  const evidenceHelperSource = extractSourceBetween(
+    appJs,
+    "function buildSampleLibraryCalibrationEvidenceMarkup(",
+    "function buildSampleLibraryCalibrationEditorSectionsMarkup("
+  );
+  const calibrationSectionsSource = extractSourceBetween(
+    appJs,
+    "function buildSampleLibraryCalibrationEditorSectionsMarkup(",
+    "function buildSampleLibraryCalibrationModalMarkup("
+  );
+  const helpers = new Function(
+    "buildSampleLibraryModalSectionMarkup",
+    "escapeHtml",
+    "getSampleLibraryCalibrationPredictionPrefillSourceSummary",
+    "getSampleLibraryRetroTimingHintClassName",
+    "joinCSV",
+    `${evidenceHelperSource}
+${calibrationSectionsSource}
+return {
+  buildSampleLibraryCalibrationEvidenceMarkup,
+  buildSampleLibraryCalibrationEditorSectionsMarkup
+};`
+  )(
+    ({ body = "" } = {}) => body,
+    (value) => String(value || ""),
+    () => "当前预填来源：当前检测结果。",
+    () => "helper-text",
+    (items = []) => (Array.isArray(items) ? items.join(", ") : "")
+  );
+
+  const evidenceMarkup = helpers.buildSampleLibraryCalibrationEvidenceMarkup({
+    confidence: 84,
+    evidenceSamples: [{ id: "record-1", title: "历史样本 1" }],
+    evidenceSignals: ["标题短语命中", "标签重合"],
+    evidenceSummary: "这条记录与 1 条历史样本的结构高度相似。"
+  });
+  const modalMarkup = helpers.buildSampleLibraryCalibrationEditorSectionsMarkup({
+    prediction: {
+      confidence: 84,
+      evidenceSamples: [{ id: "record-1", title: "历史样本 1" }],
+      evidenceSignals: ["标题短语命中", "标签重合"],
+      evidenceSummary: "这条记录与 1 条历史样本的结构高度相似。"
+    },
+    retro: {}
+  });
+
+  assert.match(evidenceMarkup, /sample-library-calibration-evidence/);
+  assert.match(evidenceMarkup, /历史样本 1/);
+  assert.match(evidenceMarkup, /标题短语命中/);
+  assert.match(evidenceMarkup, /结构高度相似/);
+  assert.match(evidenceMarkup, /置信度 84/);
+  assert.match(modalMarkup, /sample-library-calibration-evidence/);
+  assert.match(modalMarkup, /历史样本 1/);
+  assert.match(modalMarkup, /结构高度相似/);
+  assert.match(styles, /\.sample-library-calibration-evidence\b/);
 });
 
 test("frontend exposes an inner-space terminology workspace for rewrite and generation guidance", async () => {

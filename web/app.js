@@ -6344,6 +6344,53 @@ function buildSampleLibraryLifecycleModalMarkup(record) {
   `;
 }
 
+function buildSampleLibraryCalibrationEvidenceMarkup(prediction = {}) {
+  const samples = Array.isArray(prediction?.evidenceSamples) ? prediction.evidenceSamples : [];
+  const signals = Array.isArray(prediction?.evidenceSignals) ? prediction.evidenceSignals : [];
+  const summary = String(prediction?.evidenceSummary || "").trim() || "当前还没有足够的匹配证据，建议先结合检测结果再判断。";
+  const confidence = Number(prediction?.confidence ?? 0) || 0;
+  const sampleItemsMarkup = (samples.length ? samples : [{ id: "", title: "暂无明确命中的历史样本" }])
+    .map((item) => {
+      const label = String(item?.title || item?.id || "未命名样本").trim() || "未命名样本";
+      return `<li>${escapeHtml(label)}</li>`;
+    })
+    .join("");
+  const signalsMarkup = signals.length
+    ? signals.map((signal) => `<span class="meta-pill">${escapeHtml(signal)}</span>`).join("")
+    : '<span class="meta-pill">暂无可展示信号</span>';
+  const confidenceNote = confidence
+    ? `当前置信度 ${confidence} / 100，这是一条温和提示，适合辅助人工复核。`
+    : "当前置信度仍偏保守，建议把它当作辅助线索，不单独代替人工判断。";
+
+  return `
+    <section class="sample-library-calibration-evidence" aria-label="预判依据">
+      <div class="sample-library-calibration-evidence-head">
+        <strong>预判依据</strong>
+        <p>${escapeHtml(summary)}</p>
+      </div>
+      <div class="sample-library-calibration-evidence-block">
+        <span class="sample-library-calibration-evidence-label">命中样本</span>
+        <ul class="sample-library-calibration-evidence-list">${sampleItemsMarkup}</ul>
+      </div>
+      <div class="sample-library-calibration-evidence-block">
+        <span class="sample-library-calibration-evidence-label">证据信号</span>
+        <div class="meta-row sample-library-calibration-evidence-signals">${signalsMarkup}</div>
+      </div>
+      <p class="sample-library-calibration-evidence-note">${escapeHtml(confidenceNote)}</p>
+    </section>
+  `;
+}
+
+function syncSampleLibraryCalibrationEvidencePanel(root = byId("sample-library-modal-content"), prediction = {}) {
+  const panel = root?.querySelector?.('[data-role="sample-library-calibration-evidence"]');
+
+  if (!panel) {
+    return;
+  }
+
+  panel.innerHTML = buildSampleLibraryCalibrationEvidenceMarkup(prediction);
+}
+
 function buildSampleLibraryCalibrationEditorSectionsMarkup({
   prediction = {},
   retro = {},
@@ -6412,6 +6459,9 @@ function buildSampleLibraryCalibrationEditorSectionsMarkup({
             prediction.reason || ""
           )}</textarea>
         </label>
+        <div data-role="sample-library-calibration-evidence">
+          ${buildSampleLibraryCalibrationEvidenceMarkup(prediction)}
+        </div>
         <div class="item-actions">
           <button type="button" class="button button-ghost button-small" data-action="prefill-sample-library-modal-calibration-prediction">
             从当前检测预填预判
@@ -9643,6 +9693,8 @@ function setSampleLibraryCalibrationPredictionFields(section, prediction = {}) {
       field.value = value;
     }
   });
+
+  syncSampleLibraryCalibrationEvidencePanel(section, prediction);
 
   if (appState.sampleLibraryModal?.kind === "record-list-inline-editor") {
     appState.sampleLibraryModal = {
