@@ -152,6 +152,62 @@ function serializeSampleLibraryRetroChipField(selected = [], supplement = "") {
   return chipText || noteText;
 }
 
+function buildSampleLibraryRetroChipGroupMarkup({
+  label = "",
+  hiddenFieldName = "",
+  hiddenFieldTag = "input",
+  hiddenFieldValue = "",
+  presetOptions = [],
+  selected = [],
+  supplementFieldName = "",
+  supplementValue = "",
+  supplementPlaceholder = "",
+  supplementRows = 2
+} = {}) {
+  const normalizedSelected = uniqueStrings(selected);
+  const optionsMarkup = (Array.isArray(presetOptions) ? presetOptions : [])
+    .map((option) => {
+      const normalizedOption = String(option || "").trim();
+
+      if (!normalizedOption) {
+        return "";
+      }
+
+      return `<button type="button" class="sample-library-retro-chip${
+        normalizedSelected.includes(normalizedOption) ? " is-selected" : ""
+      }">${escapeHtml(normalizedOption)}</button>`;
+    })
+    .join("");
+
+  const hiddenFieldMarkup =
+    hiddenFieldTag === "textarea"
+      ? `<textarea name="${escapeHtml(hiddenFieldName)}" hidden aria-hidden="true">${escapeHtml(hiddenFieldValue)}</textarea>`
+      : `<input type="hidden" name="${escapeHtml(hiddenFieldName)}" value="${escapeHtml(hiddenFieldValue)}" />`;
+  const supplementControlMarkup =
+    supplementRows > 1
+      ? `<textarea
+          class="sample-library-retro-supplement"
+          name="${escapeHtml(supplementFieldName)}"
+          rows="${Number(supplementRows) || 2}"
+          placeholder="${escapeHtml(supplementPlaceholder)}"
+        >${escapeHtml(supplementValue)}</textarea>`
+      : `<input
+          class="sample-library-retro-supplement"
+          name="${escapeHtml(supplementFieldName)}"
+          value="${escapeHtml(supplementValue)}"
+          placeholder="${escapeHtml(supplementPlaceholder)}"
+        />`;
+
+  return `
+    <label class="sample-library-retro-chip-group">
+      <span>${escapeHtml(label)}</span>
+      ${hiddenFieldMarkup}
+      <div class="sample-library-retro-chip-list">${optionsMarkup}</div>
+      ${supplementControlMarkup}
+    </label>
+  `;
+}
+
 function formatReferenceThresholdRule(parts = [], { joiner = "、", lastJoiner = " 或" } = {}) {
   const normalized = Array.isArray(parts) ? parts.filter(Boolean) : [];
 
@@ -6485,6 +6541,23 @@ function buildSampleLibraryCalibrationEditorSectionsMarkup({
   retroTimingHint = null
 } = {}) {
   const prefillSourceSummary = getSampleLibraryCalibrationPredictionPrefillSourceSummary();
+  const missReasonValue = String(retro.missReason || "");
+  const validatedSignalsValue = joinCSV(retro.validatedSignals);
+  const invalidatedSignalsValue = joinCSV(retro.invalidatedSignals);
+  const ruleImprovementCandidateValue = String(retro.ruleImprovementCandidate || "");
+  const missReasonState = parseSampleLibraryRetroChipField(missReasonValue, sampleLibraryRetroChipPresets.missReason);
+  const validatedSignalsState = parseSampleLibraryRetroChipField(
+    validatedSignalsValue,
+    sampleLibraryRetroChipPresets.validatedSignals
+  );
+  const invalidatedSignalsState = parseSampleLibraryRetroChipField(
+    invalidatedSignalsValue,
+    sampleLibraryRetroChipPresets.invalidatedSignals
+  );
+  const ruleImprovementCandidateState = parseSampleLibraryRetroChipField(
+    ruleImprovementCandidateValue,
+    sampleLibraryRetroChipPresets.ruleImprovementCandidate
+  );
 
   return `
       ${buildSampleLibraryModalSectionMarkup({
@@ -6601,24 +6674,48 @@ function buildSampleLibraryCalibrationEditorSectionsMarkup({
         <p class="helper-text">${escapeHtml(
           referenceAction?.helperText || "这里只是复盘建议，只有点击“应用为参考样本”后才会真正写入参考属性。"
         )}</p>
-        <label>
-          <span>偏差原因</span>
-          <input name="missReason" value="${escapeHtml(retro.missReason || "")}" placeholder="例如：标题命中，但正文留存不足" />
-        </label>
-        <label>
-          <span>被验证信号</span>
-          <input name="validatedSignals" value="${escapeHtml(joinCSV(retro.validatedSignals))}" placeholder="标题结构, 合集匹配" />
-        </label>
-        <label>
-          <span>被推翻信号</span>
-          <input name="invalidatedSignals" value="${escapeHtml(joinCSV(retro.invalidatedSignals))}" placeholder="正文过长, 标签不准" />
-        </label>
-        <label>
-          <span>规则优化候选</span>
-          <textarea name="ruleImprovementCandidate" rows="3" placeholder="例如：同类标题结构可提升参考权重">${escapeHtml(
-            retro.ruleImprovementCandidate || ""
-          )}</textarea>
-        </label>
+        ${buildSampleLibraryRetroChipGroupMarkup({
+          label: "偏差原因",
+          hiddenFieldName: "missReason",
+          hiddenFieldValue: missReasonValue,
+          presetOptions: sampleLibraryRetroChipPresets.missReason,
+          selected: missReasonState.selected,
+          supplementFieldName: "missReasonSupplement",
+          supplementValue: missReasonState.supplement,
+          supplementPlaceholder: "补充未覆盖的偏差原因"
+        })}
+        ${buildSampleLibraryRetroChipGroupMarkup({
+          label: "被验证信号",
+          hiddenFieldName: "validatedSignals",
+          hiddenFieldValue: validatedSignalsValue,
+          presetOptions: sampleLibraryRetroChipPresets.validatedSignals,
+          selected: validatedSignalsState.selected,
+          supplementFieldName: "validatedSignalsSupplement",
+          supplementValue: validatedSignalsState.supplement,
+          supplementPlaceholder: "补充被验证的其他信号"
+        })}
+        ${buildSampleLibraryRetroChipGroupMarkup({
+          label: "被推翻信号",
+          hiddenFieldName: "invalidatedSignals",
+          hiddenFieldValue: invalidatedSignalsValue,
+          presetOptions: sampleLibraryRetroChipPresets.invalidatedSignals,
+          selected: invalidatedSignalsState.selected,
+          supplementFieldName: "invalidatedSignalsSupplement",
+          supplementValue: invalidatedSignalsState.supplement,
+          supplementPlaceholder: "补充被推翻的其他信号"
+        })}
+        ${buildSampleLibraryRetroChipGroupMarkup({
+          label: "规则优化候选",
+          hiddenFieldName: "ruleImprovementCandidate",
+          hiddenFieldTag: "textarea",
+          hiddenFieldValue: ruleImprovementCandidateValue,
+          presetOptions: sampleLibraryRetroChipPresets.ruleImprovementCandidate,
+          selected: ruleImprovementCandidateState.selected,
+          supplementFieldName: "ruleImprovementCandidateSupplement",
+          supplementValue: ruleImprovementCandidateState.supplement,
+          supplementPlaceholder: "补充需要继续跟进的规则建议",
+          supplementRows: 3
+        })}
         <label>
           <span>复盘备注</span>
           <textarea name="retroNotes" rows="3" placeholder="例如：72 小时后表现稳定">${escapeHtml(retro.notes || "")}</textarea>

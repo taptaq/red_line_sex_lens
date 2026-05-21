@@ -1518,6 +1518,8 @@ test("frontend exposes a calibrated-history replay action in system calibration"
 
 test("sample library calibration modal renders visible evidence with matched samples and explanation", async () => {
   const { appJs, styles } = await readFrontendFiles();
+  const parseHelperSource = appJs.match(/function\s+parseSampleLibraryRetroChipField\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const retroChipGroupHelperSource = appJs.match(/function\s+buildSampleLibraryRetroChipGroupMarkup\s*\([\s\S]*?\n}\n/)?.[0] || "";
   const evidenceHelperSource = extractSourceBetween(
     appJs,
     "function buildSampleLibraryCalibrationEvidenceMarkup(",
@@ -1534,8 +1536,12 @@ test("sample library calibration modal renders visible evidence with matched sam
     "getSampleLibraryCalibrationPredictionPrefillSourceSummary",
     "getSampleLibraryRetroTimingHintClassName",
     "joinCSV",
+    "uniqueStrings",
+    "sampleLibraryRetroChipPresets",
     "buildSampleLibraryCalibrationEvidenceState",
-    `${evidenceHelperSource}
+    `${parseHelperSource}
+${retroChipGroupHelperSource}
+${evidenceHelperSource}
 ${calibrationSectionsSource}
 return {
   buildSampleLibraryCalibrationEvidenceMarkup,
@@ -1547,6 +1553,13 @@ return {
     () => "当前预填来源：当前检测结果。",
     () => "helper-text",
     (items = []) => (Array.isArray(items) ? items.join(", ") : ""),
+    (items = []) => [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))],
+    {
+      missReason: ["标题偏弱"],
+      validatedSignals: ["标题结构"],
+      invalidatedSignals: ["标题判断失准"],
+      ruleImprovementCandidate: ["同类标题结构可提权"]
+    },
     buildSampleLibraryCalibrationEvidenceState
   );
 
@@ -1599,6 +1612,23 @@ return { parseSampleLibraryRetroChipField, serializeSampleLibraryRetroChipField 
     helpers.serializeSampleLibraryRetroChipField(parsed.selected, parsed.supplement),
     "标题偏弱、合集不匹配、标签不准\n\n补充：封面与正文承接太弱。"
   );
+});
+
+test("calibration modal renders retro multi-select chip groups", async () => {
+  const { appJs, styles } = await readFrontendFiles();
+
+  assert.match(appJs, /sampleLibraryRetroChipPresets/);
+  assert.match(appJs, /偏差原因/);
+  assert.match(appJs, /被验证信号/);
+  assert.match(appJs, /被推翻信号/);
+  assert.match(appJs, /规则优化候选/);
+  assert.match(appJs, /sample-library-retro-chip-group/);
+  assert.match(appJs, /sample-library-retro-chip/);
+  assert.match(appJs, /sample-library-retro-supplement/);
+  assert.match(styles, /\.sample-library-retro-chip-group/);
+  assert.match(styles, /\.sample-library-retro-chip/);
+  assert.match(styles, /\.sample-library-retro-chip\.is-selected/);
+  assert.match(styles, /\.sample-library-retro-supplement/);
 });
 
 test("frontend exposes an inner-space terminology workspace for rewrite and generation guidance", async () => {
