@@ -1631,6 +1631,83 @@ test("calibration modal renders retro multi-select chip groups", async () => {
   assert.match(styles, /\.sample-library-retro-supplement/);
 });
 
+test("retro chip selections serialize back into the existing text fields", async () => {
+  const { appJs } = await readFrontendFiles();
+  const splitCsvSource = appJs.match(/function\s+splitCSV\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const uniqueStringsSource = appJs.match(/function\s+uniqueStrings\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const serializeHelperSource = appJs.match(/function\s+serializeSampleLibraryRetroChipField\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const readRetroListSource = appJs.match(/function\s+readSampleLibraryRetroChipListValue\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const readRetroFieldSource = appJs.match(/function\s+readSampleLibraryRetroChipFieldValue\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const readPayloadSource = appJs.match(/function\s+readSampleLibraryModalCalibrationPayload\s*\([\s\S]*?\n}\n/)?.[0] || "";
+
+  const fakeContentNode = {
+    querySelector(selector) {
+      const fieldMap = {
+        '[name="predictedStatus"]': { value: "positive_performance" },
+        '[name="predictedRiskLevel"]': { value: "low" },
+        '[name="predictedPerformanceTier"]': { value: "high" },
+        '[name="predictionConfidence"]': { value: "88" },
+        '[name="predictionReason"]': { value: "existing reason" },
+        '[name="predictionModel"]': { value: "gpt-5.4" },
+        '[name="predictionCreatedAt"]': { value: "2026-05-21" },
+        '[name="actualPerformanceTier"]': { value: "medium" },
+        '[name="predictionMatched"]': { checked: true },
+        '[name="missReason"]': { value: "旧值" },
+        '[name="missReasonSupplement"]': { value: "补充：封面与正文承接太弱。" },
+        '[name="validatedSignals"]': { value: "旧值" },
+        '[name="validatedSignalsSupplement"]': { value: "补充：评论区承接稳定" },
+        '[name="invalidatedSignals"]': { value: "旧值" },
+        '[name="invalidatedSignalsSupplement"]': { value: "补充：浏览预估偏高" },
+        '[name="shouldBecomeReference"]': { checked: false },
+        '[name="ruleImprovementCandidate"]': { value: "旧值" },
+        '[name="ruleImprovementCandidateSupplement"]': { value: "补充：增加封面衔接判断。" },
+        '[name="retroNotes"]': { value: "72 小时后复盘" },
+        '[name="reviewedAt"]': { value: "2026-05-21" }
+      };
+
+      return fieldMap[selector] || null;
+    },
+    querySelectorAll(selector) {
+      const selectedMap = {
+        '[name="missReason"] ~ .sample-library-retro-chip-list .sample-library-retro-chip.is-selected': [
+          { textContent: "标题偏弱" },
+          { textContent: "合集不匹配" }
+        ],
+        '[name="validatedSignals"] ~ .sample-library-retro-chip-list .sample-library-retro-chip.is-selected': [
+          { textContent: "标题结构" },
+          { textContent: "风格稳定" }
+        ],
+        '[name="invalidatedSignals"] ~ .sample-library-retro-chip-list .sample-library-retro-chip.is-selected': [
+          { textContent: "标题判断失准" }
+        ],
+        '[name="ruleImprovementCandidate"] ~ .sample-library-retro-chip-list .sample-library-retro-chip.is-selected': [
+          { textContent: "同类标题结构可提权" }
+        ]
+      };
+
+      return selectedMap[selector] || [];
+    }
+  };
+
+  const helpersFactory = new Function(
+    "byId",
+    `${splitCsvSource}
+${uniqueStringsSource}
+${serializeHelperSource}
+${readRetroListSource}
+${readRetroFieldSource}
+${readPayloadSource}
+return { readSampleLibraryModalCalibrationPayload };`
+  );
+  const helpers = helpersFactory((id) => (id === "sample-library-modal-content" ? fakeContentNode : null));
+  const payload = helpers.readSampleLibraryModalCalibrationPayload();
+
+  assert.equal(payload.retro.missReason, "标题偏弱、合集不匹配\n\n补充：封面与正文承接太弱。");
+  assert.deepEqual(payload.retro.validatedSignals, ["标题结构", "风格稳定", "补充：评论区承接稳定"]);
+  assert.deepEqual(payload.retro.invalidatedSignals, ["标题判断失准", "补充：浏览预估偏高"]);
+  assert.equal(payload.retro.ruleImprovementCandidate, "同类标题结构可提权\n\n补充：增加封面衔接判断。");
+});
+
 test("frontend exposes an inner-space terminology workspace for rewrite and generation guidance", async () => {
   const { indexHtml, appJs } = await readFrontendFiles();
 

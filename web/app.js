@@ -152,6 +152,61 @@ function serializeSampleLibraryRetroChipField(selected = [], supplement = "") {
   return chipText || noteText;
 }
 
+function readSampleLibraryRetroChipFieldValue(contentNode, fieldName) {
+  const normalizedFieldName = String(fieldName || "").trim();
+
+  if (!contentNode || !normalizedFieldName) {
+    return "";
+  }
+
+  const hiddenField = contentNode?.querySelector(`[name="${normalizedFieldName}"]`);
+
+  const selected = Array.from(
+    contentNode.querySelectorAll(
+      `[name="${normalizedFieldName}"] ~ .sample-library-retro-chip-list .sample-library-retro-chip.is-selected`
+    )
+  )
+    .map((node) => String(node.textContent || "").trim())
+    .filter(Boolean);
+  const supplement = contentNode?.querySelector(`[name="${normalizedFieldName}Supplement"]`)?.value || "";
+
+  if (selected.length || String(supplement || "").trim()) {
+    const serializedValue = serializeSampleLibraryRetroChipField(selected, supplement);
+
+    if (hiddenField) {
+      hiddenField.value = serializedValue;
+    }
+
+    return serializedValue;
+  }
+
+  return hiddenField?.value || "";
+}
+
+function readSampleLibraryRetroChipListValue(contentNode, fieldName) {
+  const normalizedFieldName = String(fieldName || "").trim();
+
+  if (!contentNode || !normalizedFieldName) {
+    return [];
+  }
+
+  const selected = Array.from(
+    contentNode.querySelectorAll(
+      `[name="${normalizedFieldName}"] ~ .sample-library-retro-chip-list .sample-library-retro-chip.is-selected`
+    )
+  )
+    .map((node) => String(node.textContent || "").trim())
+    .filter(Boolean);
+  const supplement = String(contentNode?.querySelector(`[name="${normalizedFieldName}Supplement"]`)?.value || "").trim();
+  const fallback = splitCSV(contentNode?.querySelector(`[name="${normalizedFieldName}"]`)?.value || "");
+
+  if (selected.length || supplement) {
+    return uniqueStrings([...selected, ...(supplement ? [supplement] : [])]);
+  }
+
+  return fallback;
+}
+
 function buildSampleLibraryRetroChipGroupMarkup({
   label = "",
   hiddenFieldName = "",
@@ -5165,11 +5220,11 @@ function readSampleLibraryRecordInlineEditorDraftFromModal() {
       retro: {
         actualPerformanceTier: contentNode?.querySelector('[name="actualPerformanceTier"]')?.value || "",
         predictionMatched: contentNode?.querySelector('[name="predictionMatched"]')?.checked === true,
-        missReason: contentNode?.querySelector('[name="missReason"]')?.value || "",
-        validatedSignals: splitCSV(contentNode?.querySelector('[name="validatedSignals"]')?.value || ""),
-        invalidatedSignals: splitCSV(contentNode?.querySelector('[name="invalidatedSignals"]')?.value || ""),
+        missReason: readSampleLibraryRetroChipFieldValue(contentNode, "missReason"),
+        validatedSignals: readSampleLibraryRetroChipListValue(contentNode, "validatedSignals"),
+        invalidatedSignals: readSampleLibraryRetroChipListValue(contentNode, "invalidatedSignals"),
         shouldBecomeReference: contentNode?.querySelector('[name="shouldBecomeReference"]')?.checked === true,
-        ruleImprovementCandidate: contentNode?.querySelector('[name="ruleImprovementCandidate"]')?.value || "",
+        ruleImprovementCandidate: readSampleLibraryRetroChipFieldValue(contentNode, "ruleImprovementCandidate"),
         notes: contentNode?.querySelector('[name="retroNotes"]')?.value || "",
         reviewedAt: contentNode?.querySelector('[name="reviewedAt"]')?.value || ""
       }
@@ -6846,11 +6901,11 @@ function readSampleLibraryModalCalibrationPayload() {
     retro: {
       actualPerformanceTier: contentNode?.querySelector('[name="actualPerformanceTier"]')?.value || "",
       predictionMatched: contentNode?.querySelector('[name="predictionMatched"]')?.checked === true,
-      missReason: contentNode?.querySelector('[name="missReason"]')?.value || "",
-      validatedSignals: splitCSV(contentNode?.querySelector('[name="validatedSignals"]')?.value || ""),
-      invalidatedSignals: splitCSV(contentNode?.querySelector('[name="invalidatedSignals"]')?.value || ""),
+      missReason: readSampleLibraryRetroChipFieldValue(contentNode, "missReason"),
+      validatedSignals: readSampleLibraryRetroChipListValue(contentNode, "validatedSignals"),
+      invalidatedSignals: readSampleLibraryRetroChipListValue(contentNode, "invalidatedSignals"),
       shouldBecomeReference: contentNode?.querySelector('[name="shouldBecomeReference"]')?.checked === true,
-      ruleImprovementCandidate: contentNode?.querySelector('[name="ruleImprovementCandidate"]')?.value || "",
+      ruleImprovementCandidate: readSampleLibraryRetroChipFieldValue(contentNode, "ruleImprovementCandidate"),
       notes: contentNode?.querySelector('[name="retroNotes"]')?.value || "",
       reviewedAt: contentNode?.querySelector('[name="reviewedAt"]')?.value || ""
     }
