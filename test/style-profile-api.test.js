@@ -300,6 +300,62 @@ test("admin style profile refresh clears stale source sample ids when the refere
   assert.deepEqual(listed.body.profile.current.sourceSamples, []);
 });
 
+test("admin style profile refresh includes retro hints when regenerating the profile", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "style-profile-retro-hints-"));
+  const originals = {
+    styleProfile: paths.styleProfile,
+    noteRecords: paths.noteRecords
+  };
+  paths.styleProfile = path.join(tempDir, "style-profile.json");
+  paths.noteRecords = path.join(tempDir, "note-records.json");
+  await fs.writeFile(paths.styleProfile, `${JSON.stringify({}, null, 2)}\n`, "utf8");
+  await fs.writeFile(
+    paths.noteRecords,
+    `${JSON.stringify(
+      [
+        {
+          id: "note-reference-a",
+          source: "manual",
+          stage: "published_reference",
+          note: {
+            title: "高质量参考样本",
+            body: "正文 A".repeat(40),
+            tags: ["身体探索"]
+          },
+          reference: {
+            enabled: true,
+            tier: "performed"
+          },
+          publish: {
+            status: "positive_performance",
+            metrics: { likes: 27, favorites: 8, comments: 47, views: 4594 }
+          },
+          calibration: {
+            retro: {
+              validatedSignals: ["标题结构"],
+              invalidatedSignals: ["标签判断失准"],
+              ruleImprovementCandidate: "同类标题结构可提权"
+            }
+          }
+        }
+      ],
+      null,
+      2
+    )}\n`,
+    "utf8"
+  );
+
+  t.after(async () => {
+    Object.assign(paths, originals);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  const refreshed = await invokeRoute("GET", "/api/admin/style-profile");
+
+  assert.equal(refreshed.status, 200);
+  assert.match(JSON.stringify(refreshed.body.profile || {}), /标题结构|标签判断失准|同类标题结构可提权/);
+});
+
 async function invokeRoute(method, pathname, body = null) {
   const request = new EventEmitter();
   request.method = method;

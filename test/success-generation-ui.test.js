@@ -1520,6 +1520,9 @@ test("sample library calibration modal renders visible evidence with matched sam
   const { appJs, styles } = await readFrontendFiles();
   const parseHelperSource = appJs.match(/function\s+parseSampleLibraryRetroChipField\s*\([\s\S]*?\n}\n/)?.[0] || "";
   const retroChipGroupHelperSource = appJs.match(/function\s+buildSampleLibraryRetroChipGroupMarkup\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const uniqueStringsSource = appJs.match(/function\s+uniqueStrings\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const signalCategoriesSource = appJs.match(/function\s+deriveSampleLibraryCalibrationSignalCategories\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const suggestionHelperSource = appJs.match(/function\s+deriveSampleLibraryRetroSignalSuggestions\s*\([\s\S]*?\n}\n/)?.[0] || "";
   const evidenceHelperSource = extractSourceBetween(
     appJs,
     "function buildSampleLibraryCalibrationEvidenceMarkup(",
@@ -1541,6 +1544,9 @@ test("sample library calibration modal renders visible evidence with matched sam
     "buildSampleLibraryCalibrationEvidenceState",
     `${parseHelperSource}
 ${retroChipGroupHelperSource}
+${uniqueStringsSource}
+${signalCategoriesSource}
+${suggestionHelperSource}
 ${evidenceHelperSource}
 ${calibrationSectionsSource}
 return {
@@ -1584,10 +1590,138 @@ return {
   assert.match(evidenceMarkup, /标题短语命中/);
   assert.match(evidenceMarkup, /结构高度相似/);
   assert.match(evidenceMarkup, /置信度 84/);
+  assert.match(evidenceMarkup, /可回看信号/);
+  assert.match(evidenceMarkup, /标题结构|开头切口|合集匹配|标签匹配/);
   assert.match(modalMarkup, /sample-library-calibration-evidence/);
   assert.match(modalMarkup, /历史样本 1/);
   assert.match(modalMarkup, /结构高度相似/);
   assert.match(styles, /\.sample-library-calibration-evidence\b/);
+});
+
+test("style profile modal surfaces retro feedback hints and reference sorting context", async () => {
+  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const modalSource = extractSourceBetween(
+    appJs,
+    "function buildStyleProfileModalMarkup(profileState = null) {",
+    "function readStyleProfileModalPayload()"
+  );
+  const buildStyleProfileModalMarkup = new Function(
+    "buildSampleLibraryModalSectionMarkup",
+    "escapeHtml",
+    "joinCSV",
+    "joinLineList",
+    "formatDate",
+    "buildStyleProfileGenerationLabel",
+    `${modalSource}
+return buildStyleProfileModalMarkup;`
+  )(
+    ({ title = "", description = "", body = "" } = {}) => `<section><h2>${title}</h2><p>${description}</p>${body}</section>`,
+    (value) => String(value || ""),
+    (items) => (Array.isArray(items) ? items.join(", ") : ""),
+    (items) => (Array.isArray(items) ? items.join("\n") : ""),
+    (value) => String(value || ""),
+    () => "本地规则"
+  );
+
+  const markup = buildStyleProfileModalMarkup({
+    current: {
+      topic: "身体探索",
+      name: "身体探索画像",
+      updatedAt: "2026-05-21T00:00:00.000Z",
+      sourceSampleIds: ["reference-a"],
+      sourceSamples: [
+        {
+          id: "reference-a",
+          title: "被验证过的参考样本",
+          collectionType: "身体探索"
+        }
+      ],
+      generationMeta: {
+        generatedAt: "2026-05-21T00:00:00.000Z",
+        retroHintsSummary: "styleHints: 已验证：标题结构；ruleCandidates: 同类标题结构可提权"
+      }
+    }
+  });
+
+  assert.match(markup, /反哺线索/);
+  assert.match(markup, /已验证：标题结构/);
+  assert.match(markup, /同类标题结构可提权/);
+  assert.match(markup, /来源样本按权重优先排序/);
+});
+
+test("calibration retro section ties review chips to the current prediction context", async () => {
+  const { appJs } = await readFrontendFiles();
+  const uniqueStringsSource = appJs.match(/function\s+uniqueStrings\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const signalCategoriesSource = appJs.match(/function\s+deriveSampleLibraryCalibrationSignalCategories\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const suggestionHelperSource = appJs.match(/function\s+deriveSampleLibraryRetroSignalSuggestions\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const sectionSource = appJs.match(/function\s+buildSampleLibraryCalibrationEditorSectionsMarkup\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const helpers = new Function(
+    "buildSampleLibraryModalSectionMarkup",
+    "buildSampleLibraryRetroChipGroupMarkup",
+    "buildSampleLibraryCalibrationEvidenceMarkup",
+    "parseSampleLibraryRetroChipField",
+    "sampleLibraryRetroChipPresets",
+    "joinCSV",
+    "escapeHtml",
+    "getSampleLibraryCalibrationPredictionPrefillSourceSummary",
+    "getSampleLibraryRetroTimingHintClassName",
+    "predictionMatchedLabel",
+    "buildSampleLibraryCalibrationEvidenceState",
+    "uniqueStrings",
+    "deriveSampleLibraryCalibrationSignalCategories",
+    `${uniqueStringsSource}
+${signalCategoriesSource}
+${suggestionHelperSource}
+${sectionSource}
+return { buildSampleLibraryCalibrationEditorSectionsMarkup };`
+  )(
+    ({ title = "", description = "", body = "" } = {}) => `<section><h2>${title}</h2><p>${description}</p>${body}</section>`,
+    () => "",
+    () => "",
+    () => ({ selected: [], supplement: "" }),
+    {
+      missReason: ["标题偏弱"],
+      validatedSignals: ["标题结构"],
+      invalidatedSignals: ["标签判断失准"],
+      ruleImprovementCandidate: ["同类标题结构可提权"]
+    },
+    (items) => (Array.isArray(items) ? items.join(", ") : ""),
+    (value) => String(value || ""),
+    () => "当前预判将影响复盘输入。",
+    () => ({ text: "建议至少等到 T+7 再做发布后复盘。", state: "pending" }),
+    () => "预判未命中",
+    () => ({ samples: [], signals: [], summary: "", confidenceNote: "" }),
+    (items) => [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))]
+  );
+
+  const markup = helpers.buildSampleLibraryCalibrationEditorSectionsMarkup({
+    prediction: {
+      predictedStatus: "limited",
+      predictedRiskLevel: "medium",
+      predictedPerformanceTier: "low",
+      confidence: 72
+    },
+    retro: {
+      actualPerformanceTier: "high",
+      predictionMatched: false,
+      missReason: "",
+      validatedSignals: [],
+      invalidatedSignals: [],
+      ruleImprovementCandidate: ""
+    },
+    comparisonStatusLabel: "预判未命中",
+    missReasonSuggestion: "发布后复盘会围绕当前预判的偏差来补充。",
+    referenceAction: {},
+    retroTimingHint: { text: "建议至少等到 T+7 再做发布后复盘。", state: "pending" }
+  });
+
+  assert.match(markup, /当前预判/);
+  assert.match(markup, /限流/);
+  assert.match(markup, /低表现/);
+  assert.match(markup, /中风险/);
+  assert.match(markup, /发布后复盘会围绕当前预判的偏差来补充/);
+  assert.match(markup, /建议优先关注/);
+  assert.match(markup, /被推翻信号/);
 });
 
 test("retro chip helpers split existing text into selected chips and supplement text", async () => {
@@ -1706,6 +1840,39 @@ return { readSampleLibraryModalCalibrationPayload };`
   assert.deepEqual(payload.retro.validatedSignals, ["标题结构", "风格稳定", "补充：评论区承接稳定"]);
   assert.deepEqual(payload.retro.invalidatedSignals, ["标题判断失准", "补充：浏览预估偏高"]);
   assert.equal(payload.retro.ruleImprovementCandidate, "同类标题结构可提权\n\n补充：增加封面衔接判断。");
+});
+
+test("retro chips toggle selected state when clicked in the calibration editor", async () => {
+  const { appJs } = await readFrontendFiles();
+  const toggleHelperSource = appJs.match(/function\s+toggleSampleLibraryRetroChipSelection\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const classList = {
+    values: new Set(),
+    toggle(name) {
+      if (this.values.has(name)) {
+        this.values.delete(name);
+        return false;
+      }
+
+      this.values.add(name);
+      return true;
+    },
+    contains(name) {
+      return this.values.has(name);
+    }
+  };
+  const chip = {
+    classList
+  };
+  const helpers = new Function(`${toggleHelperSource}
+return { toggleSampleLibraryRetroChipSelection };`)();
+
+  helpers.toggleSampleLibraryRetroChipSelection(chip);
+  assert.equal(classList.contains("is-selected"), true);
+
+  helpers.toggleSampleLibraryRetroChipSelection(chip);
+  assert.equal(classList.contains("is-selected"), false);
+  assert.match(appJs, /event\.target\.closest\("\.sample-library-retro-chip"\)/);
+  assert.match(appJs, /toggleSampleLibraryRetroChipSelection\(retroChip\)/);
 });
 
 test("frontend exposes an inner-space terminology workspace for rewrite and generation guidance", async () => {

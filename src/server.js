@@ -84,6 +84,7 @@ import {
   hydrateStyleProfileSourceSamples,
   updateStyleProfileManualOverrides
 } from "./style-profile.js";
+import { buildRetroWeightHints } from "./retro-feedback.js";
 import {
   normalizeForTitleComparison,
   normalizeMarkdownImportCommitItem,
@@ -385,9 +386,14 @@ function isSameLifecycleItem(left = {}, right = {}) {
 }
 
 async function refreshAutoStyleProfile({ topic = "", name = "" } = {}) {
-  const [currentProfile, referenceSamples] = await Promise.all([loadStyleProfile(), loadQualifiedReferenceSamples()]);
+  const [currentProfile, referenceSamples, noteRecords] = await Promise.all([
+    loadStyleProfile(),
+    loadQualifiedReferenceSamples(),
+    loadNoteRecords()
+  ]);
   const currentState = currentProfile && typeof currentProfile === "object" ? currentProfile : {};
   const current = currentState?.current || null;
+  const retroHints = buildRetroWeightHints(noteRecords);
 
   if (!referenceSamples.length) {
     if (!current) {
@@ -406,7 +412,8 @@ async function refreshAutoStyleProfile({ topic = "", name = "" } = {}) {
   const currentName = String(current?.name || "").trim();
   const generatedProfile = await generateStyleProfileWithFallback(referenceSamples, {
     topic: String(topic || "").trim() || currentTopic,
-    name: String(name || "").trim() || currentName
+    name: String(name || "").trim() || currentName,
+    retroHints
   });
   const nextProfile = buildAutoStyleProfileState(currentState, referenceSamples, {
     topic: String(topic || "").trim() || currentTopic,

@@ -207,6 +207,20 @@ function readSampleLibraryRetroChipListValue(contentNode, fieldName) {
   return fallback;
 }
 
+function toggleSampleLibraryRetroChipSelection(chipNode) {
+  if (!chipNode?.classList) {
+    return false;
+  }
+
+  const selected = chipNode.classList.toggle("is-selected");
+
+  if (typeof chipNode.setAttribute === "function") {
+    chipNode.setAttribute("aria-pressed", String(selected));
+  }
+
+  return selected;
+}
+
 function buildSampleLibraryRetroChipGroupMarkup({
   label = "",
   hiddenFieldName = "",
@@ -230,7 +244,7 @@ function buildSampleLibraryRetroChipGroupMarkup({
 
       return `<button type="button" class="sample-library-retro-chip${
         normalizedSelected.includes(normalizedOption) ? " is-selected" : ""
-      }">${escapeHtml(normalizedOption)}</button>`;
+      }" aria-pressed="${normalizedSelected.includes(normalizedOption) ? "true" : "false"}">${escapeHtml(normalizedOption)}</button>`;
     })
     .join("");
 
@@ -2698,6 +2712,60 @@ function buildSampleLibraryCalibrationRetroRecommendation({ prediction = {}, ret
   return {
     shouldBecomeReference,
     ruleImprovementCandidate
+  };
+}
+
+function deriveSampleLibraryRetroSignalSuggestions({ prediction = {}, comparison = {} } = {}) {
+  const evidenceSignals = Array.isArray(prediction?.evidenceSignals) ? prediction.evidenceSignals : [];
+  const validated = [];
+  const invalidated = [];
+  const predictedRiskLevel = String(prediction?.predictedRiskLevel || "").trim();
+  const predictedPerformanceTier = String(prediction?.predictedPerformanceTier || "").trim();
+  const actualPerformanceTier = String(comparison?.actualPerformanceTier || "").trim();
+  const missReasonSuggestion = String(comparison?.missReasonSuggestion || "").trim();
+
+  for (const signal of evidenceSignals) {
+    const text = String(signal || "").trim();
+
+    if (!text) {
+      continue;
+    }
+
+    if (text.includes("标题")) validated.push("标题结构");
+    if (text.includes("开头")) validated.push("开头切口");
+    if (text.includes("合集")) validated.push("合集匹配");
+    if (text.includes("标签")) validated.push("标签匹配");
+    if (text.includes("风格")) validated.push("风格稳定");
+    if (text.includes("情绪")) validated.push("情绪共鸣");
+    if (text.includes("互动")) validated.push("互动点明确");
+    if (text.includes("参考样本")) validated.push("参考样本有效");
+  }
+
+  if (comparison?.matched === true) {
+    validated.push("风险预判准确");
+  } else {
+    if (missReasonSuggestion.includes("预判状态偏差")) {
+      if (predictedRiskLevel === "high" || predictedRiskLevel === "medium") {
+        invalidated.push("风险偏高估");
+      } else if (predictedRiskLevel === "low") {
+        invalidated.push("风险偏低估");
+      }
+    }
+
+    if (predictedPerformanceTier && actualPerformanceTier && predictedPerformanceTier !== actualPerformanceTier) {
+      if (predictedPerformanceTier === "high") {
+        invalidated.push("表现高估");
+      } else if (predictedPerformanceTier === "low") {
+        invalidated.push("表现低估");
+      } else {
+        invalidated.push("互动预期失准");
+      }
+    }
+  }
+
+  return {
+    validated: uniqueStrings(validated),
+    invalidated: uniqueStrings(invalidated)
   };
 }
 
@@ -5322,6 +5390,10 @@ function buildSampleLibraryRecordInlineEditorModalMarkup({ sidebarItems = [], se
                 ${buildSampleLibraryCalibrationEditorSectionsMarkup({
                   prediction: draft.calibration.prediction,
                   retro: draft.calibration.retro,
+                  comparison: buildSampleLibraryCalibrationRetroComparison({
+                    prediction: draft.calibration.prediction,
+                    publish: draft.publish
+                  }),
                   comparisonStatusLabel: predictionMatchedLabel(comparisonMatched),
                   missReasonSuggestion: draft.calibration.retro.missReason,
                   referenceAction
@@ -5772,6 +5844,18 @@ function buildStyleProfileModalMarkup(profileState = null) {
   const generationGuidelines = joinLineList(current?.generationGuidelines || []);
   const generationLabel = buildStyleProfileGenerationLabel(current?.generationMeta);
   const generationTime = current?.generationMeta?.generatedAt ? formatDate(current.generationMeta.generatedAt) : "未知时间";
+  const retroHintsSummary = String(current?.generationMeta?.retroHintsSummary || "")
+    .trim()
+    .replace(/\bstyleHints:\s*/g, "风格信号：")
+    .replace(/\bruleCandidates:\s*/g, "规则候选：");
+  const retroHintsMarkup = retroHintsSummary
+    ? `
+            <div class="style-profile-summary-card style-profile-retro-summary-card">
+              <span class="style-profile-summary-label">反哺线索</span>
+              <p>${escapeHtml(retroHintsSummary)}</p>
+            </div>
+          `
+    : "";
   const summaryDescription = current
     ? `当前由 ${sourceSampleIds.length} 条参考样本沉淀；优先使用通义千问、Kimi、深度求索生成画像，失败后回退到本地规则汇总。`
     : "当前还没有自动沉淀画像；你可以先保存一版人工初始化画像，后续随着参考样本增加，系统会继续自动沉淀。";
@@ -5821,9 +5905,11 @@ function buildStyleProfileModalMarkup(profileState = null) {
               <strong>${escapeHtml(generationLabel)}</strong>
               <span class="helper-text">${escapeHtml(generationTime)}</span>
             </div>
+            ${retroHintsMarkup}
           </div>
           <p class="helper-text style-profile-helper-copy">优先使用通义千问、Kimi、深度求索生成画像，失败后回退到本地规则汇总。</p>
           <div class="style-profile-source-list">${sourceListMarkup}</div>
+          <p class="helper-text style-profile-source-note">来源样本按权重优先排序；发布后复盘里被验证或被推翻的信号会轻微影响参考权重。</p>
         `
       })}
       ${buildSampleLibraryModalSectionMarkup({
@@ -6546,8 +6632,35 @@ function buildSampleLibraryLifecycleModalMarkup(record) {
   `;
 }
 
+function deriveSampleLibraryCalibrationSignalCategories(prediction = {}) {
+  const sourceSignals = Array.isArray(prediction?.evidenceSignals) ? prediction.evidenceSignals : [];
+  const categories = [];
+
+  for (const signal of sourceSignals) {
+    const text = String(signal || "").trim();
+
+    if (!text) {
+      continue;
+    }
+
+    if (text.includes("标题")) categories.push("标题结构");
+    if (text.includes("开头")) categories.push("开头切口");
+    if (text.includes("合集")) categories.push("合集匹配");
+    if (text.includes("标签")) categories.push("标签匹配");
+    if (text.includes("正文")) categories.push("正文长度");
+    if (text.includes("风格")) categories.push("风格稳定");
+    if (text.includes("情绪")) categories.push("情绪共鸣");
+    if (text.includes("互动")) categories.push("互动点明确");
+    if (text.includes("风险")) categories.push("风险预判准确");
+    if (text.includes("参考样本") || text.includes("样本")) categories.push("参考样本有效");
+  }
+
+  return [...new Set(categories)];
+}
+
 function buildSampleLibraryCalibrationEvidenceMarkup(prediction = {}) {
   const evidence = buildSampleLibraryCalibrationEvidenceState(prediction);
+  const signalCategories = deriveSampleLibraryCalibrationSignalCategories(prediction);
   const sampleItemsMarkup = evidence.samples
     .map((item) => {
       const label = String(item?.title || item?.id || "未命名样本").trim() || "未命名样本";
@@ -6572,6 +6685,16 @@ function buildSampleLibraryCalibrationEvidenceMarkup(prediction = {}) {
         <span class="sample-library-calibration-evidence-label">证据信号</span>
         <div class="meta-row sample-library-calibration-evidence-signals">${signalsMarkup}</div>
       </div>
+      <div class="sample-library-calibration-evidence-block">
+        <span class="sample-library-calibration-evidence-label">可回看信号</span>
+        <div class="meta-row sample-library-calibration-evidence-signals">
+          ${
+            signalCategories.length
+              ? signalCategories.map((signal) => `<span class="meta-pill">${escapeHtml(signal)}</span>`).join("")
+              : '<span class="meta-pill">当前还没有可回看的预判信号</span>'
+          }
+        </div>
+      </div>
       <p class="sample-library-calibration-evidence-note">${escapeHtml(evidence.confidenceNote)}</p>
     </section>
   `;
@@ -6590,6 +6713,7 @@ function syncSampleLibraryCalibrationEvidencePanel(root = byId("sample-library-m
 function buildSampleLibraryCalibrationEditorSectionsMarkup({
   prediction = {},
   retro = {},
+  comparison = null,
   comparisonStatusLabel = "待复盘",
   missReasonSuggestion = "",
   referenceAction = null,
@@ -6613,6 +6737,20 @@ function buildSampleLibraryCalibrationEditorSectionsMarkup({
     ruleImprovementCandidateValue,
     sampleLibraryRetroChipPresets.ruleImprovementCandidate
   );
+  const retroSignalSuggestions = deriveSampleLibraryRetroSignalSuggestions({
+    prediction,
+    comparison: {
+      ...(comparison && typeof comparison === "object" ? comparison : {}),
+      missReasonSuggestion
+    }
+  });
+  const suggestionLead = comparison?.matched
+    ? "建议优先关注：这次预判命中，先从被验证信号里选最贴近的项。"
+    : "建议优先关注：这次预判有偏差，先从被推翻信号里选最贴近的项。";
+  const suggestionParts = [
+    retroSignalSuggestions.validated.length ? `被验证信号可优先看：${retroSignalSuggestions.validated.join("、")}` : "",
+    retroSignalSuggestions.invalidated.length ? `被推翻信号可优先看：${retroSignalSuggestions.invalidated.join("、")}` : ""
+  ].filter(Boolean);
 
   return `
       ${buildSampleLibraryModalSectionMarkup({
@@ -6729,6 +6867,9 @@ function buildSampleLibraryCalibrationEditorSectionsMarkup({
         <p class="helper-text">${escapeHtml(
           referenceAction?.helperText || "这里只是复盘建议，只有点击“应用为参考样本”后才会真正写入参考属性。"
         )}</p>
+        <p class="helper-text sample-library-retro-suggestion">${escapeHtml(
+          suggestionParts.length ? `${suggestionLead} ${suggestionParts.join("；")}` : suggestionLead
+        )}</p>
         ${buildSampleLibraryRetroChipGroupMarkup({
           label: "偏差原因",
           hiddenFieldName: "missReason",
@@ -6820,6 +6961,7 @@ function buildSampleLibraryCalibrationModalMarkup(record) {
       ${buildSampleLibraryCalibrationEditorSectionsMarkup({
         prediction: calibration.prediction,
         retro: effectiveRetro,
+        comparison,
         comparisonStatusLabel: predictionMatchedLabel(comparison.matched),
         missReasonSuggestion: comparison.missReasonSuggestion,
         referenceAction,
@@ -11626,6 +11768,13 @@ document.addEventListener("click", async (event) => {
 
   if (summaryAction) {
     await handleSummaryAction(summaryAction.dataset.summaryAction);
+    return;
+  }
+
+  const retroChip = event.target.closest(".sample-library-retro-chip");
+
+  if (retroChip) {
+    toggleSampleLibraryRetroChipSelection(retroChip);
     return;
   }
 

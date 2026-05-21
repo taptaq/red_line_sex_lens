@@ -106,6 +106,23 @@ function sourceQualityBoost(item = {}, fallback = "unknown") {
   return 0;
 }
 
+function retroWeightAdjustment(item = {}) {
+  const retro = item?.calibration?.retro && typeof item.calibration.retro === "object" ? item.calibration.retro : {};
+  const validatedSignals = Array.isArray(retro.validatedSignals) ? retro.validatedSignals.filter(Boolean) : [];
+  const invalidatedSignals = Array.isArray(retro.invalidatedSignals) ? retro.invalidatedSignals.filter(Boolean) : [];
+
+  let adjustment = 0;
+
+  if (retro.shouldBecomeReference === true) {
+    adjustment += 0.22;
+  }
+
+  adjustment += Math.min(validatedSignals.length, 3) * 0.06;
+  adjustment -= Math.min(invalidatedSignals.length, 3) * 0.06;
+
+  return adjustment;
+}
+
 function inferKind(item = {}, kind = "auto") {
   if (kind && kind !== "auto") {
     return kind;
@@ -127,6 +144,7 @@ export function calculateSampleWeight(item = {}, kind = "auto") {
       (successTierBase[tier] || successTierBase.passed) +
         confidenceBoost(item, normalizeString(item.source) === "manual" ? "confirmed" : "pending") +
         sourceQualityBoost(item, normalizeString(item.source) === "manual" ? "manual_verified" : "imported") +
+        retroWeightAdjustment(item) +
         engagementBoost(item.metrics) +
         viewsAssistBoost(item.metrics) +
         recencyBoost(item)

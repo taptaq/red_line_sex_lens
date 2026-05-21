@@ -188,7 +188,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -257,7 +260,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -325,7 +331,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -395,7 +404,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -465,7 +477,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -534,7 +549,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -603,7 +621,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -673,7 +694,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -742,7 +766,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -811,7 +838,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -881,7 +911,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -949,7 +982,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -1017,7 +1053,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -1087,7 +1126,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -1156,7 +1198,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -1226,7 +1271,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -1296,7 +1344,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -1366,7 +1417,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -1436,7 +1490,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -1507,7 +1564,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -1576,7 +1636,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -1645,7 +1708,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -1713,7 +1779,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -1782,7 +1851,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -1852,7 +1924,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -1921,7 +1996,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -1991,7 +2069,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -2061,7 +2142,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -2130,7 +2214,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -2199,7 +2286,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -2267,7 +2357,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -2337,7 +2430,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -2406,7 +2502,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -2476,7 +2575,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -2546,7 +2648,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -2616,7 +2721,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -2685,7 +2793,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -2755,7 +2866,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -2824,7 +2938,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -2894,7 +3011,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -2965,7 +3085,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -3034,7 +3157,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -3104,7 +3230,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -3175,7 +3304,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -3244,7 +3376,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -3315,7 +3450,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -3383,7 +3521,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -3452,7 +3593,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -3521,7 +3665,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -3590,7 +3737,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -3660,7 +3810,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -3733,7 +3886,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -3802,7 +3958,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -3870,7 +4029,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -3939,7 +4101,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -4008,7 +4173,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -4077,7 +4245,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -4140,7 +4311,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -4210,7 +4384,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -4280,7 +4457,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -4350,7 +4530,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -4417,7 +4600,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -4486,7 +4672,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -4555,7 +4744,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -4623,7 +4815,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -4692,7 +4887,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -4755,7 +4953,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -4825,7 +5026,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -4894,7 +5098,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -4962,7 +5169,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -5031,7 +5241,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -5100,7 +5313,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -5169,7 +5385,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -5239,7 +5458,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -5261,7 +5483,7 @@
     "stage": "draft",
     "sampleType": "",
     "createdAt": "2026-05-11T06:39:24.641Z",
-    "updatedAt": "2026-05-11T09:03:13.407Z",
+    "updatedAt": "2026-05-21T10:45:44.135Z",
     "note": {
       "title": "如果有天我突然die了,请务必帮我清理一下床头柜💥",
       "body": "家人们，谁懂啊！！😭 作为一个戏很多的 INFP，昨晚我又陷入了奇怪的“身后事焦虑”。\n我不怕鬼，也不怕黑。 但我一想到如果但我突然嘎了，我不懂事的七大姑八大姨涌入我的房间，以此生最大的耐心和细致，整理我的【床头柜第三个抽屉】…… 我就想连夜复活把抽屉锁吞下去！！！🗝️\n🛑 脑补画面太美我不敢看： 我妈举着一个硅胶体，一脸迷茫地问大家： “咦？这是一个长得像兔子的……起搏器？” 我二姨推了推老花镜：“看着像个按摩仪，但这震动频率是不是有点太大了？” 旁边的小表弟可能已经看懂了，但他憋红了脸不敢说话……😳\n救命啊！！！ 🔊 这不仅仅是社死，这是“死后鞭尸”！ 我的高冷人设！我的乖巧滤镜！在那一刻将碎得连渣都不剩！ 这种被公开处刑的恐惧，真的比死亡本身可怕一万倍好吗！😫\n为了维护我在家族族谱上最后的体面，我真的很想立下几条【铁血遗嘱】：\n生死契约 🤝 @我的怨种朋友，听好了！ 如果我三天没回消息，别报警，先带上锤子冲进我家！ 砸烂我的硬盘！清空我的抽屉！把那些奇形怪状的充电线全都带走！ 然后告诉大家：“他是个好人，他只是喜欢一些看起来很奇怪的科技产品。”\n伪装学的必要性 🎨 这就是为什么我现在买那些“小快乐”越来越挑剔了。 要么买长得像鹅卵石的，要么买像项链的。 主打一个“指鹿为马”。 万一被发现了，我就硬说是刮痧板！是现代艺术摆件！是镇纸！ 只要我咬死不认，尴尬的就是别人！😤\n​\n🌈 但在发疯的最后，我又突然把自己哄好了。\n其实仔细想想，我们到底在怕什么呢？ 那个抽屉里锁着的，不是脏东西。 那是我们在枯燥的打工生活里，一点点真实的欲望，一点点对身体的探索，和对自己笨拙的爱罢了。💗\n如果真的有那么一天，希望发现它们的人，能稍微温柔一点。 别用猎奇的眼光看它，就当是发现了我偷藏的一罐糖果。🍬\n心里默念一句： “哎呀，原来这个平时看起来正正经经的小孩，私底下过得还挺快乐的嘛。” ✨\n这就够了。 好了，焦虑结束！睡觉！ （但在嘎之前，我还是会先把钥匙藏好的🙂）",
@@ -5291,7 +5513,7 @@
     },
     "reference": {
       "enabled": true,
-      "tier": "performed",
+      "tier": "featured",
       "selectedBy": "",
       "notes": ""
     },
@@ -5309,7 +5531,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -5379,7 +5604,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -5448,7 +5676,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -5519,7 +5750,10 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -6036,7 +6270,10 @@
         "confidence": 58,
         "reason": "当前检测结论：观察通过；规则分 80",
         "model": "auto",
-        "createdAt": "2026-05-13"
+        "createdAt": "2026-05-13",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -6053,15 +6290,15 @@
   },
   {
     "id": "note-db0a61166e75dcca",
-    "fingerprint": "穿了=白穿？雨衣穿不对，迟早要交税！::各位领航员，咱们在内太空航行追求高级愉悦探索感固然重要，但安全也绝对是第一位的！\n但站长偷偷观测发现好多新手领航员（甚至有自称老司机的），给自己套防护服（没错，就是那件全宇宙最薄的小雨衣）的手法，那叫一个狂野和随性！\n“穿搭不规范，亲人两行泪”\n今天咱们就来聊聊，这件装备到底怎么穿，才不会在半路发生“事故”？\n1️⃣ 告别特种兵式“手榴弹”开法 💣\n很多人一到关键时刻就激动，直接上嘴咬包装。\n嘿！打住！你以为你在拍动作片拔手榴弹呢？牙齿、长指甲、戒指，都是防护服的致命天敌。只要稍微刮出一道肉眼看不见的微小裂痕，等你进入高压航行状态，随时面临“呼吸困难”或者“炸裂”的危机。\n正确姿势应该是沿着边缘锯齿，用指腹老老实实地撕开。记住，优雅，一定要优雅。\n2️⃣ 拿捏顶部的“神秘小灯泡” 🎈\n这一步最最最关键，也是翻车重灾区！\n防护服最顶端都有一个凸起的小储蓄仓（排气阀）。在把它扣上头部之前，一定要用两根手指捏扁它，把里面的空气挤出去！（真空环境）\n如果你带着一兜子空气强行起飞，随着物理摩擦和气压升高，顶部的空气球就会像吹爆的气球一样——“啪叽”。恭喜你（也不知道是喜是悲），可能要喜提一个新生命了。\n3️⃣ 丝滑度测试（认清正反面）🧭\n这玩意儿跟隐形眼镜一样，是分正反的。\n捏住排气阀放在头部后，顺着边缘往下卷。\n如果像铺开很丝滑、轻松，顺畅无阻，证明方向对了！\n如果推不动、卡卡的，那就是反了！ \n⚠️ 警告：如果刚开始戴反了，千万千万千万（很多个千万）不要翻个面接着用！因为顶端可能已经溢出了一些带有“生命力”的物种了。为了安全，狠心点，直接扔掉换个新的。不要在这种几十块钱的事情上省预算！\n4️⃣ 拒绝“高领毛衣”，一卷到底 ⬇️\n穿戴的时候，不要只套个头部就急着出发（这又不是穿高领半袖！）。 一定要顺着一路推到底，全方位包裹好自己。\n这样在剧烈刺激的内太空漫游中，才不会轻易卷边或者滑落。\n5️⃣ 事后撤退的“黄金法则” 🏃‍♂️\n探索圆满结束，但危险往往潜伏在最后一步。\n一定要趁着还有“动力”、处于饱满状态的时候撤出内太空！\n用手紧紧捏住防护服底部的边缘一起拔出。千万别等彻底“熄火变软”了再拔，那样防护服极度容易遗落在“内太空”里，到时候收拾残局的尴尬场面，想想都要落泪啊。\n🧑‍🚀\n穿好这件防护服，不仅是对自己身体生态的保护，更是对航线搭档的尊重。\n收起那些“我不喜欢穿雨衣”、“穿着没感觉”的侥幸心理，一个连安全都保障不了的领航员，是不合格的哦！\n💬\n你和你搭档有没有过什么因为“穿搭错误”导致的搞笑（或惊险）翻车经历？来匿名吐槽一下！::穿了=白穿？雨衣穿不对，迟早要交税！::情侣|愉悦|科普|身体探索|避孕套",
+    "fingerprint": "穿了=白穿？雨衣穿不对，迟早要交税！::各位领航员，咱们在内太空航行追求高级愉悦探索感固然重要，但安全也绝对是第一位的！\n站长最近偷偷观测发现好多新手领航员（甚至有自称老司机的），给自己套防护服（没错，就是那件小雨衣）的手法，那叫一个狂野和随性！\n“穿搭不规范，亲人两行泪”\n今天咱们就来聊聊，这件装备到底怎么穿，才不会在半路发生“事故”？\n\n1️⃣ 告别特种兵式“手榴弹”开法 💣\n很多人一到关键时刻就激动，直接上嘴咬包装。\n嘿！打住！你以为你在拍动作片拔手榴弹呢？牙齿、长指甲、戒指，都是防护服的致命天敌。只要稍微刮出一道肉眼看不见的微小裂痕，等你进入高压航行状态，随时面临“呼吸困难”或者“炸裂”的危机。\n正确姿势应该是沿着边缘锯齿，用指腹老老实实地撕开。记住，优雅，一定要优雅。\n\n2️⃣ 拿捏顶部的“神秘小灯泡” 🎈\n这一步最最最关键，也是翻车重灾区！\n防护服最顶端都有一个凸起的小储蓄仓（排气阀）。在把它扣上头部之前，一定要用两根手指捏扁它，把里面的空气挤出去！（真空环境）\n如果你带着一兜子空气强行起飞，随着物理摩擦和气压升高，顶部的空气球就会像吹爆的气球一样——“啪叽”。恭喜你（也不知道是喜是悲），可能要喜提一个新生命了。\n\n3️⃣ 丝滑度测试（认清正反面）🧭\n这玩意儿跟隐形眼镜一样，是分正反的。\n捏住排气阀放在头部后，顺着边缘往下卷。\n如果像铺开很丝滑、轻松，顺畅无阻，证明方向对了！\n如果推不动、卡卡的，那就是反了！ \n⚠️ 警告：如果刚开始戴反了，千万千万千万（很多个千万）不要翻个面接着用！因为顶端可能已经溢出了一些带有“生命力”的物种了。为了安全，狠心点，直接扔掉换个新的。不要在这种几十块钱的事情上省预算！\n\n4️⃣ 拒绝“高领毛衣”，一卷到底 ⬇️\n穿戴的时候，不要只套个头部就急着出发（这又不是穿高领半袖！）。 一定要顺着一路推到底，全方位包裹好自己。\n这样在剧烈刺激的内太空漫游中，才不会轻易卷边或者滑落。\n\n5️⃣ 事后撤退的“黄金法则” 🏃‍♂️\n探索圆满结束，但危险往往潜伏在最后一步。\n一定要趁着还有“动力”、处于饱满状态的时候撤出内太空！\n用手紧紧捏住防护服底部的边缘一起拔出。千万别等彻底“熄火变软”了再拔，那样防护服极度容易遗落在“内太空”里，到时候收拾残局的尴尬场面，想想都要落泪啊。\n\n🧑‍🚀\n穿好这件防护服，不仅是对自己身体生态的保护，更是对航线搭档的尊重。\n收起那些“我不喜欢穿雨衣”、“穿着没感觉”的侥幸心理，一个连安全都保障不了的领航员，是不合格的哦！\n\n💬\n你和你搭档有没有过什么因为“穿搭错误”导致的搞笑（或惊险）翻车经历？来匿名吐槽一下！::穿了=白穿？雨衣穿不对，迟早要交税！::安全套科普|情侣|愉悦|科普|身体探索|避孕套",
     "source": "analysis",
     "stage": "draft",
     "sampleType": "",
     "createdAt": "2026-05-13T05:35:03.583Z",
-    "updatedAt": "2026-05-13T05:35:03.583Z",
+    "updatedAt": "2026-05-21T07:35:30.480Z",
     "note": {
       "title": "穿了=白穿？雨衣穿不对，迟早要交税！",
-      "body": "各位领航员，咱们在内太空航行追求高级愉悦探索感固然重要，但安全也绝对是第一位的！\n但站长偷偷观测发现好多新手领航员（甚至有自称老司机的），给自己套防护服（没错，就是那件全宇宙最薄的小雨衣）的手法，那叫一个狂野和随性！\n“穿搭不规范，亲人两行泪”\n今天咱们就来聊聊，这件装备到底怎么穿，才不会在半路发生“事故”？\n1️⃣ 告别特种兵式“手榴弹”开法 💣\n很多人一到关键时刻就激动，直接上嘴咬包装。\n嘿！打住！你以为你在拍动作片拔手榴弹呢？牙齿、长指甲、戒指，都是防护服的致命天敌。只要稍微刮出一道肉眼看不见的微小裂痕，等你进入高压航行状态，随时面临“呼吸困难”或者“炸裂”的危机。\n正确姿势应该是沿着边缘锯齿，用指腹老老实实地撕开。记住，优雅，一定要优雅。\n2️⃣ 拿捏顶部的“神秘小灯泡” 🎈\n这一步最最最关键，也是翻车重灾区！\n防护服最顶端都有一个凸起的小储蓄仓（排气阀）。在把它扣上头部之前，一定要用两根手指捏扁它，把里面的空气挤出去！（真空环境）\n如果你带着一兜子空气强行起飞，随着物理摩擦和气压升高，顶部的空气球就会像吹爆的气球一样——“啪叽”。恭喜你（也不知道是喜是悲），可能要喜提一个新生命了。\n3️⃣ 丝滑度测试（认清正反面）🧭\n这玩意儿跟隐形眼镜一样，是分正反的。\n捏住排气阀放在头部后，顺着边缘往下卷。\n如果像铺开很丝滑、轻松，顺畅无阻，证明方向对了！\n如果推不动、卡卡的，那就是反了！ \n⚠️ 警告：如果刚开始戴反了，千万千万千万（很多个千万）不要翻个面接着用！因为顶端可能已经溢出了一些带有“生命力”的物种了。为了安全，狠心点，直接扔掉换个新的。不要在这种几十块钱的事情上省预算！\n4️⃣ 拒绝“高领毛衣”，一卷到底 ⬇️\n穿戴的时候，不要只套个头部就急着出发（这又不是穿高领半袖！）。 一定要顺着一路推到底，全方位包裹好自己。\n这样在剧烈刺激的内太空漫游中，才不会轻易卷边或者滑落。\n5️⃣ 事后撤退的“黄金法则” 🏃‍♂️\n探索圆满结束，但危险往往潜伏在最后一步。\n一定要趁着还有“动力”、处于饱满状态的时候撤出内太空！\n用手紧紧捏住防护服底部的边缘一起拔出。千万别等彻底“熄火变软”了再拔，那样防护服极度容易遗落在“内太空”里，到时候收拾残局的尴尬场面，想想都要落泪啊。\n🧑‍🚀\n穿好这件防护服，不仅是对自己身体生态的保护，更是对航线搭档的尊重。\n收起那些“我不喜欢穿雨衣”、“穿着没感觉”的侥幸心理，一个连安全都保障不了的领航员，是不合格的哦！\n💬\n你和你搭档有没有过什么因为“穿搭错误”导致的搞笑（或惊险）翻车经历？来匿名吐槽一下！",
+      "body": "各位领航员，咱们在内太空航行追求高级愉悦探索感固然重要，但安全也绝对是第一位的！\n站长最近偷偷观测发现好多新手领航员（甚至有自称老司机的），给自己套防护服（没错，就是那件小雨衣）的手法，那叫一个狂野和随性！\n“穿搭不规范，亲人两行泪”\n今天咱们就来聊聊，这件装备到底怎么穿，才不会在半路发生“事故”？\n\n1️⃣ 告别特种兵式“手榴弹”开法 💣\n很多人一到关键时刻就激动，直接上嘴咬包装。\n嘿！打住！你以为你在拍动作片拔手榴弹呢？牙齿、长指甲、戒指，都是防护服的致命天敌。只要稍微刮出一道肉眼看不见的微小裂痕，等你进入高压航行状态，随时面临“呼吸困难”或者“炸裂”的危机。\n正确姿势应该是沿着边缘锯齿，用指腹老老实实地撕开。记住，优雅，一定要优雅。\n\n2️⃣ 拿捏顶部的“神秘小灯泡” 🎈\n这一步最最最关键，也是翻车重灾区！\n防护服最顶端都有一个凸起的小储蓄仓（排气阀）。在把它扣上头部之前，一定要用两根手指捏扁它，把里面的空气挤出去！（真空环境）\n如果你带着一兜子空气强行起飞，随着物理摩擦和气压升高，顶部的空气球就会像吹爆的气球一样——“啪叽”。恭喜你（也不知道是喜是悲），可能要喜提一个新生命了。\n\n3️⃣ 丝滑度测试（认清正反面）🧭\n这玩意儿跟隐形眼镜一样，是分正反的。\n捏住排气阀放在头部后，顺着边缘往下卷。\n如果像铺开很丝滑、轻松，顺畅无阻，证明方向对了！\n如果推不动、卡卡的，那就是反了！ \n⚠️ 警告：如果刚开始戴反了，千万千万千万（很多个千万）不要翻个面接着用！因为顶端可能已经溢出了一些带有“生命力”的物种了。为了安全，狠心点，直接扔掉换个新的。不要在这种几十块钱的事情上省预算！\n\n4️⃣ 拒绝“高领毛衣”，一卷到底 ⬇️\n穿戴的时候，不要只套个头部就急着出发（这又不是穿高领半袖！）。 一定要顺着一路推到底，全方位包裹好自己。\n这样在剧烈刺激的内太空漫游中，才不会轻易卷边或者滑落。\n\n5️⃣ 事后撤退的“黄金法则” 🏃‍♂️\n探索圆满结束，但危险往往潜伏在最后一步。\n一定要趁着还有“动力”、处于饱满状态的时候撤出内太空！\n用手紧紧捏住防护服底部的边缘一起拔出。千万别等彻底“熄火变软”了再拔，那样防护服极度容易遗落在“内太空”里，到时候收拾残局的尴尬场面，想想都要落泪啊。\n\n🧑‍🚀\n穿好这件防护服，不仅是对自己身体生态的保护，更是对航线搭档的尊重。\n收起那些“我不喜欢穿雨衣”、“穿着没感觉”的侥幸心理，一个连安全都保障不了的领航员，是不合格的哦！\n\n💬\n你和你搭档有没有过什么因为“穿搭错误”导致的搞笑（或惊险）翻车经历？来匿名吐槽一下！",
       "coverText": "穿了=白穿？雨衣穿不对，迟早要交税！",
       "collectionType": "科普",
       "tags": [
@@ -6069,20 +6306,21 @@
         "科普",
         "避孕套",
         "情侣",
-        "身体探索"
+        "身体探索",
+        "安全套科普"
       ]
     },
     "publish": {
-      "status": "not_published",
+      "status": "published_passed",
       "metrics": {
         "likes": 0,
         "favorites": 0,
         "comments": 0,
-        "views": 0,
+        "views": 41,
         "shares": 0
       },
       "notes": "",
-      "publishedAt": "",
+      "publishedAt": "2026-05-20",
       "platformReason": ""
     },
     "reference": {
@@ -6551,13 +6789,16 @@
     },
     "calibration": {
       "prediction": {
-        "predictedStatus": "not_published",
-        "predictedRiskLevel": "",
-        "predictedPerformanceTier": "",
-        "confidence": 0,
-        "reason": "",
-        "model": "",
-        "createdAt": ""
+        "predictedStatus": "published_passed",
+        "predictedRiskLevel": "low",
+        "predictedPerformanceTier": "medium",
+        "confidence": 58,
+        "reason": "当前检测结论：观察通过；规则分 80",
+        "model": "auto",
+        "createdAt": "2026-05-20",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",
@@ -6579,7 +6820,7 @@
     "stage": "draft",
     "sampleType": "",
     "createdAt": "2026-05-13T07:16:40.880Z",
-    "updatedAt": "2026-05-14T03:07:46.474Z",
+    "updatedAt": "2026-05-21T10:14:20.776Z",
     "note": {
       "title": "喜欢“交出控制权”？其实“我”才是真正的主人！",
       "body": "（前提说明：本文是正经探讨科普，无涉及其他不良行为，请理性阅读！）\n很多人觉得，在一段极其信任的关系里，只要你交出主动权，就成了个“受气包”或者“软柿子”。\n但其实吧，对于咱们这种平时内心戏爆棚、高感知的人来说，这种在外人眼里看起来像“认怂”的操作，简直就是一次“偷懒”和情绪释放！\n大家总以为在亲密互动里，那个闭着眼听指挥的纯纯是弱势群体。\n今天站长就来扒一扒心理学里反直觉的真相：在这场“信任”的高端局里，表面上乖乖配合的那个，往往才是掐着全场节奏的 Boss。\n不信？来，带你重新认识一下“我们”：\n1️⃣ 表面上把方向盘交出去，其实是“心里有数”的放权 🔄\n互动的时候，看着是对方在带节奏、发号施令，威风得很。但实际上呢？安全底线全是由“躺平”的这方画的！\n心理学上管这叫“自愿的控制权让渡”。我为什么敢闭着眼让你带飞？因为我兜里揣着“随时喊停”的按键！\n这就好比我在自己心里建了个游乐场，我不仅是包场的老板，还是总导演。你以为你在通关打游戏，其实你只是在我的剧本里打工。表面顺从，背地里准确拿捏。\n2️⃣ 卸下防备后的“大脑放假” 🌊\n高感知的人，平时在社会上连轴转，情绪张力绷得紧紧的。一旦回到信任的安全网里，大脑的警报器就自动下班了。\n这时候，外界的安全引导不再触发防御机制，而是直接变成了纯纯的情绪发泄。大脑开始疯狂分泌内啡肽和多巴胺，带来一种“彻底不用动脑子”的松弛感。这其实是在利用生理机制卡bug，给高压的大脑放个痛快假！\n3️⃣ 心理放松：把成年人的包袱全甩了 🧘‍♀️\n真正的安全边界，不是嘴上叭叭说出来的，而是神经系统和肌肉实打实觉得“终于能瘫着了”。\n在靠谱的情感交换里，当你彻底卸下防备、把自己交出去的那一瞬间，其实是在给内心做深度大扫除。\n心理学称之为良性的“心理退行”：暂时把房贷、KPI、人际焦虑统统扔进垃圾桶，变成个只需要感受当下、被无条件接纳的“小废物”。\n每一次这种体验，都是在告诉身体：“别端着了，你现在很安全。” 直面自己内心柔软的一面，也反而把情绪的遥控器牢牢握在自己手里了！\n🚀\n其实这还有很多一些细分的类型，每一个细分的小癖好说白了都是在给自己的情绪找出口。\n所以如果你也喜欢在一段安全的关系里当个“甩手掌柜”，千万别觉得不好意思！\n你一点都不弱，你只是感知力点满了，而且敢于面对自己心里最真实的渴望。\n你比谁都清楚自己的底线在哪，也比谁都会用这种“软绵绵”的方式，去给自己放个痛快假。\n跟这个敏感的自己好好做朋友吧，在这个只属于你的“内太空”里，你才是那个发号施令的“隐藏Boss”。",
@@ -6599,7 +6840,7 @@
         "likes": 0,
         "favorites": 0,
         "comments": 0,
-        "views": 6,
+        "views": 38,
         "shares": 0
       },
       "notes": "",
@@ -7071,18 +7312,21 @@
         "confidence": 58,
         "reason": "当前检测结论：观察通过；规则分 80",
         "model": "auto",
-        "createdAt": "2026-05-13"
+        "createdAt": "2026-05-13",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
-        "actualPerformanceTier": "",
+        "actualPerformanceTier": "low",
         "predictionMatched": false,
-        "missReason": "",
+        "missReason": "低表现",
         "validatedSignals": [],
         "invalidatedSignals": [],
         "shouldBecomeReference": false,
         "ruleImprovementCandidate": "",
         "notes": "",
-        "reviewedAt": ""
+        "reviewedAt": "2026-05-21"
       }
     }
   },
@@ -7622,7 +7866,79 @@
         "confidence": 0,
         "reason": "",
         "model": "",
-        "createdAt": ""
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
+      },
+      "retro": {
+        "actualPerformanceTier": "",
+        "predictionMatched": false,
+        "missReason": "",
+        "validatedSignals": [],
+        "invalidatedSignals": [],
+        "shouldBecomeReference": false,
+        "ruleImprovementCandidate": "",
+        "notes": "",
+        "reviewedAt": ""
+      }
+    }
+  },
+  {
+    "id": "record-relevant-history",
+    "fingerprint": "为什么结束后会失落::很多人结束后会有短暂空虚和失落，这不一定意味着异常。很多人结束后会有短暂空虚和失落，这不一定意味着异常。很多人结束后会有短暂空虚和失落，这不一定意味着异常。很多人结束后会有短暂空虚和失落，这不一定意味着异常。很多人结束后会有短暂空虚和失落，这不一定意味着异常。很多人结束后会有短暂空虚和失落，这不一定意味着异常。很多人结束后会有短暂空虚和失落，这不一定意味着异常。很多人结束后会有短暂空虚和失落，这不一定意味着异常。很多人结束后会有短暂空虚和失落，这不一定意味着异常。很多人结束后会有短暂空虚和失落，这不一定意味着异常。::::情绪反应|身体探索",
+    "source": "manual",
+    "stage": "published_reference",
+    "sampleType": "",
+    "createdAt": "2026-05-21T07:32:46.191Z",
+    "updatedAt": "2026-05-21T07:33:26.021Z",
+    "note": {
+      "title": "为什么结束后会失落",
+      "body": "很多人结束后会有短暂空虚和失落，这不一定意味着异常。很多人结束后会有短暂空虚和失落，这不一定意味着异常。很多人结束后会有短暂空虚和失落，这不一定意味着异常。很多人结束后会有短暂空虚和失落，这不一定意味着异常。很多人结束后会有短暂空虚和失落，这不一定意味着异常。很多人结束后会有短暂空虚和失落，这不一定意味着异常。很多人结束后会有短暂空虚和失落，这不一定意味着异常。很多人结束后会有短暂空虚和失落，这不一定意味着异常。很多人结束后会有短暂空虚和失落，这不一定意味着异常。很多人结束后会有短暂空虚和失落，这不一定意味着异常。",
+      "coverText": "",
+      "collectionType": "科普",
+      "tags": [
+        "情绪反应",
+        "身体探索"
+      ]
+    },
+    "publish": {
+      "status": "not_published",
+      "metrics": {
+        "likes": 0,
+        "favorites": 0,
+        "comments": 0,
+        "views": 0,
+        "shares": 0
+      },
+      "notes": "",
+      "publishedAt": "",
+      "platformReason": ""
+    },
+    "reference": {
+      "enabled": false,
+      "tier": "",
+      "selectedBy": "manual",
+      "notes": ""
+    },
+    "snapshots": {
+      "analysis": null,
+      "rewrite": null,
+      "generation": null,
+      "crossReview": null
+    },
+    "calibration": {
+      "prediction": {
+        "predictedStatus": "not_published",
+        "predictedRiskLevel": "",
+        "predictedPerformanceTier": "",
+        "confidence": 0,
+        "reason": "",
+        "model": "",
+        "createdAt": "",
+        "evidenceSamples": [],
+        "evidenceSignals": [],
+        "evidenceSummary": ""
       },
       "retro": {
         "actualPerformanceTier": "",

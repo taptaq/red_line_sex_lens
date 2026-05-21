@@ -69,7 +69,11 @@ function normalizeStyleProfileAttempt(item = {}) {
   };
 }
 
-function buildLocalRuleGenerationMeta({ generatedAt = new Date().toISOString(), attemptedProviders = [] } = {}) {
+function buildLocalRuleGenerationMeta({
+  generatedAt = new Date().toISOString(),
+  attemptedProviders = [],
+  retroHintsSummary = ""
+} = {}) {
   return {
     method: "local_rule_fallback",
     provider: "",
@@ -78,7 +82,8 @@ function buildLocalRuleGenerationMeta({ generatedAt = new Date().toISOString(), 
     route: "",
     routeLabel: "",
     generatedAt,
-    attemptedProviders
+    attemptedProviders,
+    retroHintsSummary: String(retroHintsSummary || "").trim()
   };
 }
 
@@ -102,8 +107,29 @@ function sanitizeStyleProfileGenerationMeta(meta = {}, fallback = {}) {
     route: String(source.route || "").trim(),
     routeLabel: String(source.routeLabel || "").trim(),
     generatedAt: String(source.generatedAt || fallback.generatedAt || new Date().toISOString()).trim() || new Date().toISOString(),
-    attemptedProviders
+    attemptedProviders,
+    retroHintsSummary: String(source.retroHintsSummary || fallback.retroHintsSummary || "").trim()
   };
+}
+
+function stringifyRetroHints(retroHints = null) {
+  if (!retroHints || typeof retroHints !== "object") {
+    return "";
+  }
+
+  const styleHints = Array.isArray(retroHints.styleHints) ? retroHints.styleHints.filter(Boolean) : [];
+  const ruleCandidates = Array.isArray(retroHints.ruleCandidates) ? retroHints.ruleCandidates.filter(Boolean) : [];
+  const parts = [];
+
+  if (styleHints.length) {
+    parts.push(`styleHints: ${styleHints.join("、")}`);
+  }
+
+  if (ruleCandidates.length) {
+    parts.push(`ruleCandidates: ${ruleCandidates.join("、")}`);
+  }
+
+  return parts.join("；");
 }
 
 function tryParseJsonBlock(value = "") {
@@ -428,7 +454,7 @@ function sanitizeGeneratedStyleProfilePatch(payload = {}) {
   return sanitized;
 }
 
-function buildStyleProfilePromptMessages(referenceSamples = [], { topic = "", name = "" } = {}) {
+function buildStyleProfilePromptMessages(referenceSamples = [], { topic = "", name = "", retroHints = null } = {}) {
   const normalizedSamples = (Array.isArray(referenceSamples) ? referenceSamples : []).map((sample) => ({
     id: String(sample.id || "").trim(),
     title: String(sample.title || "").trim(),
@@ -467,8 +493,20 @@ function buildStyleProfilePromptMessages(referenceSamples = [], { topic = "", na
         "2. titleStyle / bodyStructure / tone 必须是自然中文，不要空泛套话。",
         "3. 不要编造不存在的样本内容或平台数据。",
         "4. 优先根据标题、封面文案、正文结构、标签、合集类型、入池层级、发布时间、互动指标与备注来归纳真实风格差异。",
+        retroHints && (Array.isArray(retroHints.styleHints) || Array.isArray(retroHints.ruleCandidates))
+          ? `retro 修正线索：${JSON.stringify(
+              {
+                styleHints: Array.isArray(retroHints.styleHints) ? retroHints.styleHints : [],
+                ruleCandidates: Array.isArray(retroHints.ruleCandidates) ? retroHints.ruleCandidates : []
+              },
+              null,
+              2
+            )}`
+          : "",
         `参考样本：${JSON.stringify(normalizedSamples, null, 2)}`
-      ].join("\n")
+      ]
+        .filter(Boolean)
+        .join("\n")
     }
   ];
 }
@@ -513,7 +551,11 @@ export async function generateStyleProfileWithFallback(referenceSamples = [], op
     typeof options.generateWithProvider === "function" ? options.generateWithProvider : defaultStyleProfileProviderGenerator;
   const baseProfile = buildStyleProfile(referenceSamples, { topic, name });
   const attemptedProviders = [];
-  const messages = buildStyleProfilePromptMessages(referenceSamples, { topic, name });
+  const messages = buildStyleProfilePromptMessages(referenceSamples, {
+    topic,
+    name,
+    retroHints: options.retroHints || null
+  });
 
   for (const candidate of STYLE_PROFILE_MODEL_CHAIN) {
     try {
@@ -562,7 +604,8 @@ export async function generateStyleProfileWithFallback(referenceSamples = [], op
           route,
           routeLabel,
           generatedAt: new Date().toISOString(),
-          attemptedProviders
+          attemptedProviders,
+          retroHintsSummary: stringifyRetroHints(options.retroHints)
         })
       };
     } catch (error) {
@@ -575,7 +618,8 @@ export async function generateStyleProfileWithFallback(referenceSamples = [], op
     name,
     generationMeta: buildLocalRuleGenerationMeta({
       generatedAt: new Date().toISOString(),
-      attemptedProviders
+      attemptedProviders,
+      retroHintsSummary: stringifyRetroHints(options.retroHints)
     })
   });
 }

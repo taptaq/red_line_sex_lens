@@ -101,3 +101,40 @@ test("generation prompt uses higher weighted reference samples first", () => {
 
   assert.ok(prompt.indexOf("精选样本") < prompt.indexOf("仅过审样本"));
 });
+
+test("sample weights can include bounded retro adjustments", () => {
+  const sampleA = {
+    id: "a",
+    title: "样本 A",
+    tier: "passed",
+    metrics: { likes: 0, favorites: 0, comments: 0 },
+    calibration: {
+      retro: {
+        shouldBecomeReference: true,
+        validatedSignals: ["标题结构", "合集匹配"],
+        invalidatedSignals: []
+      }
+    }
+  };
+  const sampleB = {
+    id: "b",
+    title: "样本 B",
+    tier: "passed",
+    metrics: { likes: 0, favorites: 0, comments: 0 },
+    calibration: {
+      retro: {
+        shouldBecomeReference: false,
+        validatedSignals: [],
+        invalidatedSignals: ["标签判断失准", "正文长度失准"]
+      }
+    }
+  };
+  const baseline = calculateSampleWeight({ tier: "passed", metrics: { likes: 0, favorites: 0, comments: 0 } }, "success");
+  const boosted = calculateSampleWeight(sampleA, "success");
+  const reduced = calculateSampleWeight(sampleB, "success");
+  const ranked = rankSamplesByWeight([sampleB, sampleA], "success");
+
+  assert.ok(boosted > baseline);
+  assert.ok(reduced < baseline);
+  assert.deepEqual(ranked.map((item) => item.id), ["a", "b"]);
+});

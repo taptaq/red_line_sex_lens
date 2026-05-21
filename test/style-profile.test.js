@@ -505,6 +505,51 @@ test("style profile model chain falls through qwen and kimi before deepseek succ
   assert.equal(profile.name, "双人沟通画像");
 });
 
+test("style profile prompt messages can include retro style hints", async () => {
+  const samples = [
+    {
+      id: "record-a",
+      tier: "performed",
+      title: "参考样本 A",
+      body: "正文 A".repeat(40),
+      tags: ["关系", "沟通"]
+    }
+  ];
+  let capturedMessages = null;
+
+  await generateStyleProfileWithFallback(samples, {
+    topic: "身体探索",
+    name: "身体探索画像",
+    retroHints: {
+      styleHints: ["已验证：标题结构", "被推翻：标签判断失准"],
+      ruleCandidates: ["同类标题结构可提权"]
+    },
+    generateWithProvider: async ({ messages }) => {
+      capturedMessages = messages;
+      return {
+        model: "test-model",
+        route: "official",
+        routeLabel: "官方",
+        parsed: {
+          topic: "身体探索",
+          name: "身体探索画像",
+          titleStyle: "标题更口语。",
+          bodyStructure: "先结论再展开。",
+          tone: "温和克制。",
+          preferredTags: ["关系", "沟通"],
+          avoidExpressions: ["绝对化承诺"],
+          generationGuidelines: ["多用真实场景"]
+        }
+      };
+    }
+  });
+
+  const prompt = capturedMessages?.[1]?.content || "";
+  assert.match(prompt, /已验证：标题结构/);
+  assert.match(prompt, /被推翻：标签判断失准/);
+  assert.match(prompt, /同类标题结构可提权/);
+});
+
 test("style profile model chain falls back to local rules when all model providers fail", async () => {
   const samples = [
     {

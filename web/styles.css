@@ -2290,6 +2290,18 @@ body.modal-open {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(247, 239, 226, 0.88));
 }
 
+.style-profile-retro-summary-card {
+  grid-column: 1 / -1;
+  background: rgba(240, 233, 220, 0.82);
+}
+
+.style-profile-retro-summary-card p {
+  margin: 0;
+  color: #5f4c3d;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
 .style-profile-summary-label {
   font-size: 0.76rem;
   letter-spacing: 0.08em;
@@ -2326,6 +2338,22 @@ body.modal-open {
 
 .style-profile-source-item strong {
   color: #3d2b1f;
+}
+
+.style-profile-source-note {
+  margin: 0;
+  padding: 0.65rem 0.78rem;
+  border-radius: 14px;
+  background: rgba(103, 115, 92, 0.1);
+  color: #5a614e;
+}
+
+.sample-library-retro-suggestion {
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  border-radius: 14px;
+  background: rgba(103, 115, 92, 0.08);
+  color: #5a614e;
 }
 
 .style-profile-helper-copy {
