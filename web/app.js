@@ -61,6 +61,96 @@ const GENERATION_REFERENCE_IMAGE_LIMIT = 5;
 const GENERATION_REFERENCE_IMAGE_MAX_FILE_BYTES = 4 * 1024 * 1024;
 const GENERATION_REFERENCE_TEXT_MAX_FILE_BYTES = 512 * 1024;
 const GENERATION_REFERENCE_TOTAL_MAX_BYTES = 12 * 1024 * 1024;
+const sampleLibraryRetroChipPresets = {
+  missReason: [
+    "低表现",
+    "标题偏弱",
+    "开头不够抓人",
+    "正文过长",
+    "正文信息密度不稳",
+    "标签不准",
+    "合集不匹配",
+    "风险判断偏差",
+    "参考样本不够贴",
+    "发布时间影响"
+  ],
+  validatedSignals: [
+    "标题结构",
+    "开头切口",
+    "合集匹配",
+    "标签匹配",
+    "风格稳定",
+    "情绪共鸣",
+    "互动点明确",
+    "风险预判准确",
+    "参考样本有效"
+  ],
+  invalidatedSignals: [
+    "标题判断失准",
+    "标签判断失准",
+    "合集判断失准",
+    "风险偏高估",
+    "风险偏低估",
+    "表现高估",
+    "表现低估",
+    "正文长度失准",
+    "互动预期失准"
+  ],
+  ruleImprovementCandidate: [
+    "同类标题结构可提权",
+    "同类合集可提权",
+    "情绪共鸣标签可提权",
+    "风险词权重需上调",
+    "风险词权重需下调",
+    "正文长度阈值需调整",
+    "标签映射需补充",
+    "参考样本权重需调整"
+  ]
+};
+
+function parseSampleLibraryRetroChipField(value = "", presetOptions = []) {
+  const raw = String(value || "").trim();
+  const options = Array.isArray(presetOptions) ? presetOptions : [];
+  const selected = [];
+  let remaining = raw;
+
+  for (const option of options) {
+    const normalizedOption = String(option || "").trim();
+
+    if (!normalizedOption || !remaining.includes(normalizedOption)) {
+      continue;
+    }
+
+    selected.push(normalizedOption);
+    remaining = remaining.split(normalizedOption).join("");
+  }
+
+  remaining = remaining
+    .replace(/[、，,]+/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return {
+    selected: [...new Set(selected)],
+    supplement: remaining
+  };
+}
+
+function serializeSampleLibraryRetroChipField(selected = [], supplement = "") {
+  const chipText = (Array.isArray(selected) ? selected : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .join("、");
+  const noteText = String(supplement || "").trim();
+
+  if (chipText && noteText) {
+    return `${chipText}\n\n${noteText}`;
+  }
+
+  return chipText || noteText;
+}
 
 function formatReferenceThresholdRule(parts = [], { joiner = "、", lastJoiner = " 或" } = {}) {
   const normalized = Array.isArray(parts) ? parts.filter(Boolean) : [];

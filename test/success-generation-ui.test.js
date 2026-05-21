@@ -1577,6 +1577,30 @@ return {
   assert.match(styles, /\.sample-library-calibration-evidence\b/);
 });
 
+test("retro chip helpers split existing text into selected chips and supplement text", async () => {
+  const { appJs } = await readFrontendFiles();
+  const parseHelperSource = appJs.match(/function\s+parseSampleLibraryRetroChipField\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const serializeHelperSource = appJs.match(/function\s+serializeSampleLibraryRetroChipField\s*\([\s\S]*?\n}\n/)?.[0] || "";
+
+  const helpers = new Function(
+    `${parseHelperSource}
+${serializeHelperSource}
+return { parseSampleLibraryRetroChipField, serializeSampleLibraryRetroChipField };`
+  )();
+
+  const parsed = helpers.parseSampleLibraryRetroChipField(
+    "标题偏弱、合集不匹配、标签不准\n\n补充：封面与正文承接太弱。",
+    ["标题偏弱", "合集不匹配", "标签不准", "风险判断偏差"]
+  );
+
+  assert.deepEqual(parsed.selected, ["标题偏弱", "合集不匹配", "标签不准"]);
+  assert.match(parsed.supplement, /封面与正文承接太弱/);
+  assert.equal(
+    helpers.serializeSampleLibraryRetroChipField(parsed.selected, parsed.supplement),
+    "标题偏弱、合集不匹配、标签不准\n\n补充：封面与正文承接太弱。"
+  );
+});
+
 test("frontend exposes an inner-space terminology workspace for rewrite and generation guidance", async () => {
   const { indexHtml, appJs } = await readFrontendFiles();
 
