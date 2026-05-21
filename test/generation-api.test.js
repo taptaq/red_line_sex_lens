@@ -180,6 +180,64 @@ test("generation endpoint keeps uploaded text content when materialText is very 
   });
 });
 
+test("generation endpoint attaches scoped context with compact relevant records", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const originalNoteRecords = await fs.readFile(paths.noteRecords, "utf8");
+    const records = JSON.parse(originalNoteRecords);
+
+    records.push({
+      id: "record-relevant-history",
+      source: "manual",
+      stage: "published_reference",
+      note: {
+        title: "为什么结束后会失落",
+        body: "很多人结束后会有短暂空虚和失落，这不一定意味着异常。".repeat(10),
+        tags: ["身体探索", "情绪反应"],
+        collectionType: "科普"
+      },
+      publish: {
+        status: "positive_performance",
+        metrics: { likes: 88, favorites: 20, comments: 10, views: 4000, shares: 22 }
+      },
+      reference: {
+        enabled: true,
+        tier: "featured",
+        selectedBy: "manual"
+      }
+    });
+
+    await fs.writeFile(paths.noteRecords, `${JSON.stringify(records, null, 2)}\n`, "utf8");
+
+    const result = await invokeRoute("POST", "/api/generate-note", {
+      mode: "from_scratch",
+      collectionType: "科普",
+      brief: {
+        briefing: "写自慰后空虚是不是异常，轻松一点",
+        collectionType: "科普"
+      },
+      draft: {
+        title: "",
+        body: "",
+        tags: ["身体探索", "情绪反应"]
+      },
+      mockCandidates: [
+        {
+          variant: "final",
+          title: "标题",
+          body: "正文".repeat(400),
+          coverText: "封面",
+          tags: ["身体探索", "情绪反应"]
+        }
+      ]
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(Array.isArray(result.memoryContext?.scopedContext?.relevantRecords), true);
+    assert.equal(result.memoryContext.scopedContext.relevantRecords[0]?.id, "record-relevant-history");
+    assert.equal(result.memoryContext.scopedContext.relevantRecords[0]?.summary.length < 220, true);
+  });
+});
+
 test("generation endpoint skips over-limit temporary reference assets server-side and returns warnings", async (t) => {
   await withTempGenerationData(t, async () => {
     const result = await invokeRoute("POST", "/api/generate-note", {

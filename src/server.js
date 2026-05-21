@@ -36,6 +36,7 @@ import {
   saveThemeInspirations,
   upsertFeedbackEntries
 } from "./data-store.js";
+import { buildScopedContextBundle } from "./context-bundle.js";
 import { assertValidCollectionType, buildCollectionTypeOptions } from "./collection-types.js";
 import {
   buildAnalysisSnapshot,
@@ -1052,7 +1053,7 @@ async function handleRequest(request, response) {
     const memoryContext = await (async () => {
       try {
         const memoryRetrievalService = await getMemoryRetrievalService();
-        return await memoryRetrievalService.retrieveForGeneration({
+        const retrieved = await memoryRetrievalService.retrieveForGeneration({
           topic: brief.topic,
           collectionType,
           constraints: brief.constraints,
@@ -1061,6 +1062,23 @@ async function handleRequest(request, response) {
             ...(Array.isArray(payload?.draft?.tags) ? payload.draft.tags : [])
           ]
         });
+        return {
+          ...retrieved,
+          scopedContext: buildScopedContextBundle({
+            taskType: "generation",
+            current: {
+              title: payload?.draft?.title || brief.referenceTitle || "",
+              body: payload?.draft?.body || brief.briefing || "",
+              tags: [
+                ...generationTagReferences,
+                ...(Array.isArray(payload?.draft?.tags) ? payload.draft.tags : [])
+              ],
+              collectionType
+            },
+            records: await loadNoteRecords(),
+            referenceSamples
+          })
+        };
       } catch {
         return buildEmptySharedMemoryContext("generation");
       }
@@ -1225,9 +1243,21 @@ async function handleRequest(request, response) {
       successSamples: await loadQualifiedReferenceSamples(),
       noteLifecycle: await loadNoteLifecycle()
     });
+    const scopedContext = buildScopedContextBundle({
+      taskType: "theme_inspiration",
+      current: {
+        title: payload?.brief?.referenceTitle || payload?.brief?.briefing || "",
+        body: payload?.brief?.briefing || "",
+        tags: [],
+        collectionType: String(payload?.collectionType || "").trim()
+      },
+      records: sourceRecords,
+      referenceSamples
+    });
     const summary = await summarizeThemeInspirationClusters({
       clusters,
       referenceSamples,
+      relevantRecords: scopedContext.relevantRecords,
       summarizeJson: payload?.mockThemeInspirationSummary
         ? async () => payload.mockThemeInspirationSummary
         : undefined,
