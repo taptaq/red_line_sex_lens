@@ -541,6 +541,25 @@ function stringifySharedMemoryContext(memoryContext = null) {
     return "";
   }
 
+  const scopedRecordSection = ensureArray(memoryContext.scopedContext?.relevantRecords)
+    .slice(0, 3)
+    .map((record, index) => {
+      const title = String(record?.title || "").trim();
+      const summary = String(record?.summary || "").trim();
+      const reasons = ensureArray(record?.reasons).map((item) => String(item || "").trim()).filter(Boolean);
+      const lines = [`相关历史样本 ${index + 1}：${title || "未命名历史样本"}`];
+
+      if (summary) {
+        lines.push(`样本摘要：${summary}`);
+      }
+
+      if (reasons.length) {
+        lines.push(`相关原因：${reasons.join("、")}`);
+      }
+
+      return lines.join("\n");
+    })
+    .join("\n\n");
   const referenceSection = ensureArray(memoryContext.referenceSamples)
     .slice(0, 3)
     .map((sample, index) => {
@@ -573,6 +592,7 @@ function stringifySharedMemoryContext(memoryContext = null) {
     .join("\n");
 
   return [
+    scopedRecordSection ? `相关历史样本：\n${scopedRecordSection}` : "",
     referenceSection ? `共享记忆参考：\n${referenceSection}` : "",
     memoryCardSection ? `共享记忆卡：\n${memoryCardSection}` : ""
   ]

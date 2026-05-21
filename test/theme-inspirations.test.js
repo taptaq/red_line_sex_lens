@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   collectThemeInspirationSourceRecords,
   buildThemeInspirationClusters,
+  buildThemeInspirationSummarizeMessages,
   mergeThemeInspirationItems,
   normalizeThemeInspirationItems,
   summarizeThemeInspirationClusters
@@ -320,4 +321,41 @@ test("mergeThemeInspirationItems prepends new deduped cards ahead of cached ones
   );
   assert.equal(merged[1].themeId, "new-2");
   assert.equal(merged[1].confidenceScore, 0.95);
+});
+
+test("theme inspiration summarize messages can include compact relevant record evidence", () => {
+  const messages = buildThemeInspirationSummarizeMessages({
+    clusters: [
+      {
+        id: "cluster-1",
+        recordIds: ["a"],
+        signatureTerms: ["身体探索", "情绪反应"],
+        records: [
+          {
+            note: {
+              title: "自慰后空虚是不是异常",
+              body: "很多人结束后会有短暂空虚和失落，这不一定意味着异常。",
+              tags: ["身体探索", "情绪反应"]
+            },
+            publish: { metrics: { likes: 60 } }
+          }
+        ]
+      }
+    ],
+    referenceSamples: [],
+    relevantRecords: [
+      {
+        id: "record-1",
+        title: "为什么结束后会失落",
+        summary: "高表现样本，同样命中空虚和羞耻感。",
+        reasons: ["标签重合 2 项", "标题短语命中 1 项"]
+      }
+    ]
+  });
+
+  const combined = messages.map((item) => item.content).join("\n");
+  assert.match(combined, /相关历史证据/);
+  assert.match(combined, /为什么结束后会失落/);
+  assert.match(combined, /高表现样本，同样命中空虚和羞耻感/);
+  assert.match(combined, /标签重合 2 项/);
 });

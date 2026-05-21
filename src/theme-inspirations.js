@@ -327,7 +327,7 @@ export function normalizeThemeInspirationItems(items = []) {
     .slice(0, 12);
 }
 
-function buildThemeInspirationSummarizeMessages({ clusters = [], referenceSamples = [] } = {}) {
+export function buildThemeInspirationSummarizeMessages({ clusters = [], referenceSamples = [], relevantRecords = [] } = {}) {
   const clusterSummary = clusters.map((cluster, index) => ({
     clusterId: cluster.id || `cluster-${index + 1}`,
     recordIds: Array.isArray(cluster.recordIds) ? cluster.recordIds : [],
@@ -343,6 +343,12 @@ function buildThemeInspirationSummarizeMessages({ clusters = [], referenceSample
     title: String(sample?.title || "").trim(),
     body: String(sample?.body || "").trim().slice(0, 180),
     tags: Array.isArray(sample?.tags) ? sample.tags : []
+  }));
+  const relatedRecordSummary = (Array.isArray(relevantRecords) ? relevantRecords : []).slice(0, 5).map((record) => ({
+    id: String(record?.id || "").trim(),
+    title: String(record?.title || "").trim(),
+    summary: String(record?.summary || "").trim(),
+    reasons: Array.isArray(record?.reasons) ? record.reasons : []
   }));
 
   return [
@@ -370,6 +376,9 @@ function buildThemeInspirationSummarizeMessages({ clusters = [], referenceSample
         "参考样本：",
         JSON.stringify(referenceSummary, null, 2),
         "",
+        "相关历史证据：",
+        JSON.stringify(relatedRecordSummary, null, 2),
+        "",
         "输出格式：",
         "{",
         '  "items": [',
@@ -396,7 +405,12 @@ function buildThemeInspirationSummarizeMessages({ clusters = [], referenceSample
   ];
 }
 
-async function summarizeThemeInspirationJsonWithModel({ clusters = [], referenceSamples = [], modelSelection = "auto" } = {}) {
+async function summarizeThemeInspirationJsonWithModel({
+  clusters = [],
+  referenceSamples = [],
+  relevantRecords = [],
+  modelSelection = "auto"
+} = {}) {
   const provider = "deepseek";
   const model = String(process.env.DEEPSEEK_FEEDBACK_MODEL || "deepseek-v4-flash").trim();
   const result = await callRoutedTextProviderJson({
@@ -406,7 +420,8 @@ async function summarizeThemeInspirationJsonWithModel({ clusters = [], reference
     maxTokens: 2400,
     messages: buildThemeInspirationSummarizeMessages({
       clusters,
-      referenceSamples
+      referenceSamples,
+      relevantRecords
     }),
     missingKeyMessage: `主题灵感缺少 ${provider} 可用密钥。`,
     scene: "generation",
@@ -429,6 +444,7 @@ async function summarizeThemeInspirationJsonWithModel({ clusters = [], reference
 export async function summarizeThemeInspirationClusters({
   clusters = [],
   referenceSamples = [],
+  relevantRecords = [],
   modelSelection = "auto",
   summarizeJson = summarizeThemeInspirationJsonWithModel
 } = {}) {
@@ -453,6 +469,7 @@ export async function summarizeThemeInspirationClusters({
   const payload = await summarizeJson({
     clusters,
     referenceSamples,
+    relevantRecords,
     modelSelection
   });
   const rawItems = Array.isArray(payload)
