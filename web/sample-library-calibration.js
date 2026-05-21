@@ -161,6 +161,29 @@ function buildCalibrationPredictionEvidence({ source = {}, analysis = null, rewr
   const hasRewrite = hasMeaningfulNoteDraft(rewrite || {});
   const verdict = normalizeTextValue(analysis?.finalVerdict || analysis?.verdict) || "pass";
   const score = Number(analysis?.score || 0);
+  const relatedRecords = Array.isArray(source?.relatedRecords) ? source.relatedRecords.filter(Boolean) : [];
+
+  if (relatedRecords.length) {
+    for (const record of relatedRecords.slice(0, 3)) {
+      evidenceSamples.push({
+        id: normalizeTextValue(record?.id),
+        title: normalizeTextValue(record?.title) || normalizeTextValue(record?.summary) || "历史相关样本"
+      });
+
+      if (Array.isArray(record?.reasons)) {
+        for (const reason of record.reasons) {
+          const normalizedReason = normalizeTextValue(reason);
+          if (normalizedReason) {
+            evidenceSignals.push(normalizedReason);
+          }
+        }
+      }
+
+      if (record?.summary) {
+        evidenceSignals.push(`历史样本摘要：${normalizeTextValue(record.summary)}`);
+      }
+    }
+  }
 
   if (analysis) {
     evidenceSamples.push({

@@ -113,6 +113,34 @@ test("prefill source prefers current session results over saved record snapshots
   assert.match(prediction.successMessage, /低风险/);
 });
 
+test("publish prediction evidence prefers matched historical records over generic local fallback", () => {
+  const prediction = buildSampleLibraryCalibrationPrediction(
+    {
+      kind: "record-analysis",
+      summary: "当前预填来源：这条记录的已保存检测结果。",
+      analysis: {
+        finalVerdict: "observe",
+        score: 22
+      },
+      rewrite: null,
+      relatedRecords: [
+        {
+          id: "record-good",
+          title: "为什么结束后会失落",
+          summary: "高表现样本，同样命中空虚和羞耻感。",
+          reasons: ["标签重合 2 项", "标题短语命中 1 项"]
+        }
+      ]
+    },
+    { semantic: "glm-5.1", rewrite: "kimi-k2.6" }
+  );
+
+  assert.equal(Array.isArray(prediction.evidenceSamples), true);
+  assert.equal(prediction.evidenceSamples[0]?.id, "record-good");
+  assert.match(prediction.evidenceSummary, /高表现样本/);
+  assert.match(prediction.evidenceSignals.join("；"), /标签重合 2 项/);
+});
+
 test("prefill source surfaces a record-specific requirement when only a saved rewrite snapshot exists", () => {
   const source = resolveSampleLibraryCalibrationPrefillSource({
     latestAnalyzePayload: null,
