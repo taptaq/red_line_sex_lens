@@ -608,6 +608,38 @@
                     </div>
                     <div id="sample-library-record-list" class="admin-list"></div>
                   </aside>
+                  <section id="sample-library-xhs-connector-mount">
+                    <section id="sample-library-xhs-connector-panel" class="sample-library-xhs-connector-panel result-card-shell">
+                      <div class="sample-library-section-head">
+                        <div>
+                          <p class="eyebrow">XHS Connector</p>
+                          <h3>样本库连接面板</h3>
+                        </div>
+                        <p>先在这里发现外部样本，再决定是否导入或同步到本地样本库。</p>
+                      </div>
+                      <div class="sample-library-xhs-connector-form">
+                        <label>
+                          <span>来源类型</span>
+                          <select name="xhsConnectorSourceType">
+                            <option value="note">笔记</option>
+                            <option value="profile">作者主页</option>
+                            <option value="search">搜索结果</option>
+                          </select>
+                        </label>
+                        <label class="field-wide">
+                          <span>检索词</span>
+                          <input name="xhsConnectorQuery" type="text" placeholder="输入话题、标题或作者名" />
+                        </label>
+                        <div class="item-actions sample-library-xhs-connector-actions">
+                          <button type="button" class="button button-ghost" data-action="xhs-connector-discover">发现外部样本</button>
+                          <button type="button" class="button button-ghost" data-action="xhs-connector-sync-preview">预览发布同步</button>
+                        </div>
+                      </div>
+                      <div id="sample-library-xhs-connector-result" class="sample-library-xhs-connector-result">
+                        <div class="result-card-shell muted">等待发现外部样本</div>
+                      </div>
+                    </section>
+                  </section>
                 </div>
               </section>
               <details id="sample-library-advanced-panel" class="admin-panel-block admin-accordion sample-library-advanced-panel">

@@ -46,6 +46,15 @@ import {
   renderSamplePoolCards as renderSamplePoolCardsView
 } from "./sample-library-record-view.js";
 import {
+  buildXhsConnectorDiscoveryResultMarkup as buildXhsConnectorDiscoveryResultMarkupView,
+  buildXhsConnectorPanelMarkup as buildXhsConnectorPanelMarkupView,
+  buildXhsConnectorSyncPreviewMarkup as buildXhsConnectorSyncPreviewMarkupView
+} from "./xhs-connector-view.js";
+import {
+  readXhsConnectorDiscoveryPayload as readXhsConnectorDiscoveryPayloadView,
+  readXhsConnectorSelectedIndexes as readXhsConnectorSelectedIndexesView
+} from "./xhs-connector-form-helpers.js";
+import {
   buildSampleLibraryRecordListModalMarkup as buildSampleLibraryRecordListModalMarkupView,
   buildSampleLibraryRecordInlineEditorDraft as buildSampleLibraryRecordInlineEditorDraftView,
   buildSampleLibraryRecordInlineEditorPatchPayload as buildSampleLibraryRecordInlineEditorPatchPayloadView,
@@ -828,6 +837,10 @@ const appState = {
     phase: "initial",
     error: ""
   },
+  xhsConnector: {
+    discoveryItems: [],
+    syncPreview: null
+  },
   selectedSampleLibraryRecordId: "",
   sampleLibraryDetailStep: "base",
   sampleLibraryCollectionFilter: "all",
@@ -917,6 +930,10 @@ const sampleLibraryApi = "/api/sample-library";
 const sampleLibraryMarkdownImportParseApi = "/api/sample-library/markdown-import/parse";
 const sampleLibraryMarkdownImportCommitApi = "/api/sample-library/markdown-import/commit";
 const sampleLibraryCalibrationReplayApi = "/api/sample-library/calibration-replay";
+const sampleLibraryXhsConnectorDiscoverApi = "/api/xhs-connector/discover";
+const sampleLibraryXhsConnectorImportApi = "/api/xhs-connector/import";
+const sampleLibraryXhsConnectorSyncPreviewApi = "/api/xhs-connector/sync-preview";
+const sampleLibraryXhsConnectorSyncApplyApi = "/api/xhs-connector/sync-apply";
 const innerSpaceTermsApi = "/api/admin/inner-space-terms";
 const styleProfileAdminApi = "/api/admin/style-profile";
 const generationThemeInspirationsApi = "/api/generate-theme-inspirations";
@@ -4969,8 +4986,9 @@ function renderSampleLibraryWorkspace() {
   const workspaceNode = byId("sample-library-workspace");
   const listNode = byId("sample-library-record-list");
   const queueNode = byId("sample-library-calibration-review-queue");
+  const xhsConnectorMountNode = byId("sample-library-xhs-connector-mount");
 
-  if (!workspaceNode && !listNode && !queueNode) {
+  if (!workspaceNode && !listNode && !queueNode && !xhsConnectorMountNode) {
     return;
   }
 
@@ -4978,6 +4996,7 @@ function renderSampleLibraryWorkspace() {
   const filteredItems = filterSampleLibraryRecords(appState.sampleLibraryRecords);
 
   renderSampleLibraryList(filteredItems);
+  renderSampleLibraryXhsConnectorPanel();
   renderSampleLibraryCalibrationReplayResult(appState.sampleLibraryCalibrationReplayResult);
   renderSampleLibraryCalibrationReviewQueue(appState.sampleLibraryRecords);
   if (appState.sampleLibraryModal?.kind === "record-list" && byId("sample-library-modal")?.hidden === false) {
@@ -4989,6 +5008,45 @@ function renderSampleLibraryWorkspace() {
   syncSampleLibraryCreateActions();
   syncSampleLibraryPrefillActions();
   syncSampleLibraryDetailActions();
+}
+
+function renderSampleLibraryXhsConnectorPanel() {
+  const mountNode = byId("sample-library-xhs-connector-mount");
+
+  if (!mountNode) {
+    return;
+  }
+
+  mountNode.innerHTML = buildXhsConnectorPanelMarkupView();
+  syncSampleLibraryXhsConnectorResult();
+}
+
+function syncSampleLibraryXhsConnectorResult() {
+  const resultNode = byId("sample-library-xhs-connector-result");
+
+  if (!resultNode) {
+    return;
+  }
+
+  const discoveryItems = Array.isArray(appState.xhsConnector?.discoveryItems) ? appState.xhsConnector.discoveryItems : [];
+  const selectedIndexes = readXhsConnectorSelectedIndexesView(resultNode);
+
+  if (appState.xhsConnector?.syncPreview) {
+    resultNode.innerHTML = buildXhsConnectorSyncPreviewMarkupView(appState.xhsConnector.syncPreview);
+    return;
+  }
+
+  if (discoveryItems.length) {
+    const items = discoveryItems.map((item, index) => ({
+      ...item,
+      selected: selectedIndexes.includes(index)
+    }));
+
+    resultNode.innerHTML = buildXhsConnectorDiscoveryResultMarkupView(items);
+    return;
+  }
+
+  resultNode.innerHTML = buildXhsConnectorDiscoveryResultMarkupView([]);
 }
 
 async function refreshSampleLibraryWorkspace() {

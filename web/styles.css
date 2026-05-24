@@ -2792,6 +2792,82 @@ body.modal-open {
   align-items: start;
 }
 
+.sample-library-xhs-connector-panel {
+  display: grid;
+  gap: 1rem;
+  width: min(100%, 980px);
+  padding: 1rem;
+  border: 1px solid rgba(54, 43, 31, 0.1);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 251, 244, 0.82), rgba(248, 238, 222, 0.64));
+}
+
+.sample-library-xhs-connector-form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.sample-library-xhs-connector-form label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.sample-library-xhs-connector-form span {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.sample-library-xhs-connector-actions {
+  justify-content: flex-start;
+}
+
+.sample-library-xhs-connector-result {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.sample-library-xhs-connector-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.sample-library-xhs-connector-card {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.sample-library-xhs-connector-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: space-between;
+  align-items: start;
+}
+
+.sample-library-xhs-connector-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink-soft);
+}
+
+.sample-library-xhs-connector-select input {
+  width: 16px;
+  height: 16px;
+}
+
+.sample-library-xhs-connector-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.sample-library-xhs-connector-sync-preview {
+  display: grid;
+  gap: 0.85rem;
+}
+
 .sample-library-record-list {
   display: grid;
   gap: 0.9rem;
