@@ -23,6 +23,24 @@ function renderSelectedSummary(selectedCount = 0, totalCount = 0) {
   return `已选择 ${selectedCount} / ${totalCount} 条候选样本`;
 }
 
+export function buildXhsConnectorItemKey(item = {}, fallback = "") {
+  const noteId = String(item?.noteId || item?.note_id || "").trim();
+  if (noteId) {
+    return `note:${noteId}`;
+  }
+
+  const url = String(item?.url || "").trim();
+  if (url) {
+    return `url:${url}`;
+  }
+
+  const provider = String(item?.provider || "").trim();
+  const title = String(item?.title || "").trim();
+  const authorName = String(item?.authorName || item?.author_name || "").trim();
+  const fallbackKey = String(fallback || "").trim() || "item";
+  return `fallback:${[provider, title, authorName, fallbackKey].filter(Boolean).join("|")}`;
+}
+
 export function buildXhsConnectorPanelMarkup() {
   return `
     <section id="sample-library-xhs-connector-panel" class="sample-library-xhs-connector-panel result-card-shell">
@@ -70,6 +88,7 @@ export function buildXhsConnectorDiscoveryResultMarkup(items = []) {
       ${records
         .map((item, index) => {
           const selected = item?.selected === true;
+          const itemKey = buildXhsConnectorItemKey(item, String(index));
           const title = String(item?.title || "未命名外部样本").trim();
           const bodyPreview = String(item?.bodyPreview || item?.desc || "暂无摘要").trim();
           const meta = [
@@ -83,7 +102,7 @@ export function buildXhsConnectorDiscoveryResultMarkup(items = []) {
             <article class="sample-library-xhs-connector-card result-card-shell${selected ? " is-selected" : ""}">
               <div class="sample-library-xhs-connector-card-head">
                 <label class="sample-library-xhs-connector-select">
-                  <input type="checkbox" name="xhsConnectorSelectedItem" value="${escapeHtml(String(index))}"${selected ? " checked" : ""} />
+                  <input type="checkbox" name="xhsConnectorSelectedItem" value="${escapeHtml(itemKey)}"${selected ? " checked" : ""} />
                   <span>选择</span>
                 </label>
                 <div class="meta-row">

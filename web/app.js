@@ -47,12 +47,13 @@ import {
 } from "./sample-library-record-view.js";
 import {
   buildXhsConnectorDiscoveryResultMarkup as buildXhsConnectorDiscoveryResultMarkupView,
+  buildXhsConnectorItemKey as buildXhsConnectorItemKeyView,
   buildXhsConnectorPanelMarkup as buildXhsConnectorPanelMarkupView,
   buildXhsConnectorSyncPreviewMarkup as buildXhsConnectorSyncPreviewMarkupView
 } from "./xhs-connector-view.js";
 import {
   readXhsConnectorDiscoveryPayload as readXhsConnectorDiscoveryPayloadView,
-  readXhsConnectorSelectedIndexes as readXhsConnectorSelectedIndexesView
+  readXhsConnectorSelectedKeys as readXhsConnectorSelectedKeysView
 } from "./xhs-connector-form-helpers.js";
 import {
   buildSampleLibraryRecordListModalMarkup as buildSampleLibraryRecordListModalMarkupView,
@@ -5017,7 +5018,10 @@ function renderSampleLibraryXhsConnectorPanel() {
     return;
   }
 
-  mountNode.innerHTML = buildXhsConnectorPanelMarkupView();
+  if (!mountNode.querySelector("#sample-library-xhs-connector-panel")) {
+    mountNode.innerHTML = buildXhsConnectorPanelMarkupView();
+  }
+
   syncSampleLibraryXhsConnectorResult();
 }
 
@@ -5029,7 +5033,7 @@ function syncSampleLibraryXhsConnectorResult() {
   }
 
   const discoveryItems = Array.isArray(appState.xhsConnector?.discoveryItems) ? appState.xhsConnector.discoveryItems : [];
-  const selectedIndexes = readXhsConnectorSelectedIndexesView(resultNode);
+  const selectedKeys = readXhsConnectorSelectedKeysView(resultNode);
 
   if (appState.xhsConnector?.syncPreview) {
     resultNode.innerHTML = buildXhsConnectorSyncPreviewMarkupView(appState.xhsConnector.syncPreview);
@@ -5039,7 +5043,7 @@ function syncSampleLibraryXhsConnectorResult() {
   if (discoveryItems.length) {
     const items = discoveryItems.map((item, index) => ({
       ...item,
-      selected: selectedIndexes.includes(index)
+      selected: selectedKeys.includes(buildXhsConnectorItemKeyView(item, String(index)))
     }));
 
     resultNode.innerHTML = buildXhsConnectorDiscoveryResultMarkupView(items);

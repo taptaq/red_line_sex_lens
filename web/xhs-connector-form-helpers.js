@@ -5,8 +5,8 @@ export function readXhsConnectorDiscoveryPayload(root) {
   };
 }
 
-export function readXhsConnectorSelectedIndexes(root) {
+export function readXhsConnectorSelectedKeys(root) {
   return Array.from(root?.querySelectorAll('[name="xhsConnectorSelectedItem"]:checked') || [])
-    .map((item) => Number(item?.value))
-    .filter((value) => Number.isInteger(value) && value >= 0);
+    .map((item) => String(item?.value || "").trim())
+    .filter(Boolean);
 }
