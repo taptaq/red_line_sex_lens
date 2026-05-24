@@ -22,6 +22,8 @@ test("app wires xhs connector selection state", async () => {
   assert.match(appJs, /appState\.xhsConnector\.selectedKeys/);
   assert.match(appJs, /buildXhsConnectorItemKeyView\(item\)/);
   assert.match(appJs, /syncSampleLibraryXhsConnectorSelectionState/);
+  assert.match(appJs, /byId\("sample-library-workspace"\)\?\.addEventListener\("change"/);
+  assert.doesNotMatch(appJs, /byId\("sample-library-xhs-connector-result"\)\?\.addEventListener\("change"/);
   assert.match(appJs, /xhs-connector-discover/);
   assert.match(appJs, /xhs-connector-import/);
   assert.match(appJs, /xhs-connector-sync-preview/);

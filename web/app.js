@@ -9743,7 +9743,7 @@ byId("sample-library-collection-filter").addEventListener("change", (event) => {
   renderSampleLibraryWorkspace();
 });
 
-byId("sample-library-xhs-connector-result")?.addEventListener("change", (event) => {
+byId("sample-library-workspace")?.addEventListener("change", (event) => {
   const checkbox = event.target instanceof HTMLInputElement ? event.target : null;
 
   if (!checkbox || checkbox.name !== "xhsConnectorSelectedItem") {
