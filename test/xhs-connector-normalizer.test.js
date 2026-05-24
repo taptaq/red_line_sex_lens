@@ -72,9 +72,13 @@ test("buildSampleLibraryPayloadFromConnectorItem produces conservative imported 
       shares: 2
     },
     tags: ["AI", "效率"]
+  }, {
+    fetchedAt: "2026-05-24T00:00:00.000Z"
   });
 
   assert.equal(result.source, "imported");
+  assert.equal(result.stage, "draft");
+  assert.equal(result.sampleType, "");
   assert.equal(result.note.title, "标题");
   assert.equal(result.note.body, "正文摘要");
   assert.deepEqual(result.publish.metrics, {
@@ -86,6 +90,7 @@ test("buildSampleLibraryPayloadFromConnectorItem produces conservative imported 
   });
   assert.equal(result.externalSource.provider, "stub-provider");
   assert.equal(result.externalSource.noteId, "note-1");
+  assert.equal(result.externalSource.fetchedAt, "2026-05-24T00:00:00.000Z");
 });
 
 test("buildLifecyclePatchFromConnectorSyncItem produces lifecycle-only patch", () => {
@@ -121,4 +126,38 @@ test("buildLifecyclePatchFromConnectorSyncItem produces lifecycle-only patch", (
       }
     }
   });
+});
+
+test("buildLifecyclePatchFromConnectorSyncItem normalizes unknown status to published_passed", () => {
+  const result = buildLifecyclePatchFromConnectorSyncItem({
+    recordId: "record-2",
+    status: "mystery-state",
+    publishedAt: "2026-05-20T10:00:00.000Z"
+  });
+
+  assert.equal(result.publish.status, "published_passed");
+});
+
+test("normalizeXhsConnectorDiscoveryItem dedupes tags, clamps invalid metrics, and preserves unknown note types", () => {
+  const result = normalizeXhsConnectorDiscoveryItem({
+    tags: ["AI", "AI", "  ", "效率", "效率"],
+    metrics: {
+      likes: "12",
+      favorites: "oops",
+      comments: undefined,
+      views: null,
+      shares: "3.5"
+    },
+    type: "carousel"
+  });
+
+  assert.deepEqual(result.tags, ["AI", "效率"]);
+  assert.deepEqual(result.metrics, {
+    likes: 12,
+    favorites: 0,
+    comments: 0,
+    views: 0,
+    shares: 3.5
+  });
+  assert.equal(result.noteType, "unknown");
 });
