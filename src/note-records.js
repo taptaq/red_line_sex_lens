@@ -224,6 +224,21 @@ function mergeReference(left = {}, right = {}) {
   };
 }
 
+function mergeExternalSource(left = {}, right = {}) {
+  const normalizedLeft = normalizeExternalSource(left);
+  const normalizedRight = normalizeExternalSource(right);
+
+  return {
+    provider: preferLongerString(normalizedLeft.provider, normalizedRight.provider),
+    noteId: preferLongerString(normalizedLeft.noteId, normalizedRight.noteId),
+    xsecToken: preferLongerString(normalizedLeft.xsecToken, normalizedRight.xsecToken),
+    url: preferLongerString(normalizedLeft.url, normalizedRight.url),
+    authorId: preferLongerString(normalizedLeft.authorId, normalizedRight.authorId),
+    authorName: preferLongerString(normalizedLeft.authorName, normalizedRight.authorName),
+    fetchedAt: latestTimestamp(normalizedLeft.fetchedAt, normalizedRight.fetchedAt)
+  };
+}
+
 function valueDensity(value) {
   if (!value) {
     return { size: 0, serialized: "" };
@@ -379,6 +394,20 @@ function normalizeReference(reference = {}) {
   };
 }
 
+function normalizeExternalSource(externalSource = {}) {
+  const source = externalSource && typeof externalSource === "object" ? externalSource : {};
+
+  return {
+    provider: normalizeString(source.provider),
+    noteId: normalizeString(source.noteId),
+    xsecToken: normalizeString(source.xsecToken),
+    url: normalizeString(source.url),
+    authorId: normalizeString(source.authorId),
+    authorName: normalizeString(source.authorName),
+    fetchedAt: normalizeString(source.fetchedAt)
+  };
+}
+
 function normalizePublish(publish = {}) {
   return {
     status: normalizeStatus(publish.status || publish.publishStatus),
@@ -463,6 +492,7 @@ export function buildNoteRecord(input = {}) {
     note,
     publish: normalizePublish(input.publish || input.publishResult || {}),
     reference: normalizeReference(input.reference || {}),
+    externalSource: normalizeExternalSource(input.externalSource || {}),
     snapshots: normalizeSnapshots(input.snapshots || {}),
     calibration: normalizeCalibration(input.calibration || {})
   };
@@ -540,6 +570,7 @@ export function mergeNoteRecords(current = {}, incoming = {}) {
     note: mergeNote(left.note, right.note),
     publish: mergePublish(left.publish, right.publish),
     reference: mergeReference(left.reference, right.reference),
+    externalSource: mergeExternalSource(left.externalSource, right.externalSource),
     snapshots: mergeSnapshots(left.snapshots, right.snapshots),
     calibration: mergeCalibration(left.calibration, right.calibration)
   });

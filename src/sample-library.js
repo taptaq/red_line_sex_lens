@@ -107,6 +107,7 @@ export function patchSampleLibraryRecord(current = {}, payload = {}) {
     updatedAt: new Date().toISOString(),
     note: { ...existing.note },
     reference: { ...existing.reference },
+    externalSource: { ...(existing.externalSource || {}) },
     publish: {
       ...existing.publish,
       metrics: { ...(existing.publish?.metrics || {}) }
@@ -161,6 +162,30 @@ export function patchSampleLibraryRecord(current = {}, payload = {}) {
     }
     if (hasOwn(payload.reference, "notes")) {
       next.reference.notes = payload.reference.notes;
+    }
+  }
+
+  if (payload.externalSource && typeof payload.externalSource === "object") {
+    if (hasOwn(payload.externalSource, "provider")) {
+      next.externalSource.provider = payload.externalSource.provider;
+    }
+    if (hasOwn(payload.externalSource, "noteId")) {
+      next.externalSource.noteId = payload.externalSource.noteId;
+    }
+    if (hasOwn(payload.externalSource, "xsecToken")) {
+      next.externalSource.xsecToken = payload.externalSource.xsecToken;
+    }
+    if (hasOwn(payload.externalSource, "url")) {
+      next.externalSource.url = payload.externalSource.url;
+    }
+    if (hasOwn(payload.externalSource, "authorId")) {
+      next.externalSource.authorId = payload.externalSource.authorId;
+    }
+    if (hasOwn(payload.externalSource, "authorName")) {
+      next.externalSource.authorName = payload.externalSource.authorName;
+    }
+    if (hasOwn(payload.externalSource, "fetchedAt")) {
+      next.externalSource.fetchedAt = payload.externalSource.fetchedAt;
     }
   }
 

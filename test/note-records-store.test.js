@@ -26,6 +26,7 @@ import {
   migrateLifecycleToNoteRecord,
   migrateSuccessSampleToNoteRecord
 } from "../src/note-records.js";
+import { patchSampleLibraryRecord } from "../src/sample-library.js";
 import { buildSuccessSampleRecord } from "../src/success-samples.js";
 
 async function withTempNoteRecordsStore(t, run) {
@@ -256,6 +257,97 @@ test("mergeNoteRecords preserves existing publish and reference details during p
   assert.equal(merged.reference.tier, "featured");
   assert.equal(merged.reference.selectedBy, "manual");
   assert.equal(merged.reference.notes, "人工精选");
+});
+
+test("persisted note records preserve externalSource metadata", async (t) => {
+  await withTempNoteRecordsStore(t, async () => {
+    await saveNoteRecords([
+      buildNoteRecord({
+        source: "imported",
+        note: {
+          title: "外部导入标题",
+          body: "外部导入正文",
+          coverText: "",
+          collectionType: "",
+          tags: ["AI"]
+        },
+        publish: {
+          status: "published_passed",
+          publishedAt: "2026-05-20T10:00:00.000Z",
+          metrics: {
+            likes: 12,
+            favorites: 3,
+            comments: 1,
+            views: 88,
+            shares: 2
+          }
+        },
+        externalSource: {
+          provider: "stub-provider",
+          noteId: "note-1",
+          url: "https://www.xiaohongshu.com/explore/note-1"
+        }
+      })
+    ]);
+
+    const records = await loadNoteRecords();
+    assert.equal(records.length, 1);
+    assert.equal(records[0].externalSource.provider, "stub-provider");
+    assert.equal(records[0].externalSource.noteId, "note-1");
+  });
+});
+
+test("patchSampleLibraryRecord applies lifecycle metric patch without replacing unrelated sections", () => {
+  const existing = buildNoteRecord({
+    source: "manual",
+    note: {
+      title: "已发布内容",
+      body: "正文",
+      coverText: "",
+      collectionType: "",
+      tags: []
+    },
+    publish: {
+      status: "published_passed",
+      publishedAt: "2026-05-20T10:00:00.000Z",
+      metrics: {
+        likes: 1,
+        favorites: 0,
+        comments: 0,
+        views: 10,
+        shares: 0
+      }
+    },
+    calibration: {
+      prediction: {
+        predictedStatus: "published_passed"
+      },
+      retro: {}
+    },
+    externalSource: {
+      provider: "stub-provider",
+      noteId: "note-1",
+      url: "https://www.xiaohongshu.com/explore/note-1"
+    }
+  });
+
+  const patched = patchSampleLibraryRecord(existing, {
+    publish: {
+      status: "published_passed",
+      publishedAt: "2026-05-20T10:00:00.000Z",
+      metrics: {
+        likes: 120,
+        favorites: 25,
+        comments: 5,
+        views: 3200,
+        shares: 12
+      }
+    }
+  });
+
+  assert.equal(patched.publish.metrics.likes, 120);
+  assert.equal(patched.calibration.prediction.predictedStatus, "published_passed");
+  assert.equal(patched.externalSource.noteId, "note-1");
 });
 
 test("note records normalize and merge prediction calibration details", () => {
