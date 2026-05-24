@@ -840,6 +840,7 @@ const appState = {
   },
   xhsConnector: {
     discoveryItems: [],
+    selectedKeys: [],
     syncPreview: null
   },
   selectedSampleLibraryRecordId: "",
@@ -5020,9 +5021,20 @@ function renderSampleLibraryXhsConnectorPanel() {
 
   if (!mountNode.querySelector("#sample-library-xhs-connector-panel")) {
     mountNode.innerHTML = buildXhsConnectorPanelMarkupView();
+    syncSampleLibraryXhsConnectorSelectionState();
   }
 
   syncSampleLibraryXhsConnectorResult();
+}
+
+function syncSampleLibraryXhsConnectorSelectionState() {
+  const resultNode = byId("sample-library-xhs-connector-result");
+
+  if (!resultNode) {
+    return;
+  }
+
+  appState.xhsConnector.selectedKeys = readXhsConnectorSelectedKeysView(resultNode);
 }
 
 function syncSampleLibraryXhsConnectorResult() {
@@ -5033,7 +5045,7 @@ function syncSampleLibraryXhsConnectorResult() {
   }
 
   const discoveryItems = Array.isArray(appState.xhsConnector?.discoveryItems) ? appState.xhsConnector.discoveryItems : [];
-  const selectedKeys = readXhsConnectorSelectedKeysView(resultNode);
+  const selectedKeys = Array.isArray(appState.xhsConnector?.selectedKeys) ? appState.xhsConnector.selectedKeys : [];
 
   if (appState.xhsConnector?.syncPreview) {
     resultNode.innerHTML = buildXhsConnectorSyncPreviewMarkupView(appState.xhsConnector.syncPreview);
@@ -5041,9 +5053,9 @@ function syncSampleLibraryXhsConnectorResult() {
   }
 
   if (discoveryItems.length) {
-    const items = discoveryItems.map((item, index) => ({
+    const items = discoveryItems.map((item) => ({
       ...item,
-      selected: selectedKeys.includes(buildXhsConnectorItemKeyView(item, String(index)))
+      selected: selectedKeys.includes(buildXhsConnectorItemKeyView(item))
     }));
 
     resultNode.innerHTML = buildXhsConnectorDiscoveryResultMarkupView(items);

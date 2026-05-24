@@ -16,6 +16,14 @@ test("sample-library workspace includes xhs connector mount only", async () => {
   assert.doesNotMatch(html, /id="sample-library-xhs-connector-result"/);
 });
 
+test("app wires xhs connector selection state", async () => {
+  const appJs = await fs.readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  assert.match(appJs, /selectedKeys:\s*\[\]/);
+  assert.match(appJs, /appState\.xhsConnector\.selectedKeys/);
+  assert.match(appJs, /buildXhsConnectorItemKeyView\(item\)/);
+  assert.match(appJs, /syncSampleLibraryXhsConnectorSelectionState/);
+});
+
 test("app wires xhs connector api constants", async () => {
   const appJs = await fs.readFile(new URL("../web/app.js", import.meta.url), "utf8");
   assert.match(appJs, /const sampleLibraryXhsConnectorDiscoverApi = "\/api\/xhs-connector\/discover"/);
@@ -49,14 +57,38 @@ test("buildXhsConnectorDiscoveryResultMarkup uses stable item keys for selection
       title: "二号样本"
     },
     {
-      title: "三号样本"
+      provider: "stub",
+      title: "三号样本",
+      authorName: "作者",
+      publishedAt: "2026-05-24T08:00:00.000Z",
+      bodyPreview: "摘要"
     }
   ]);
 
   assert.match(markup, /value="note:note-1"/);
   assert.match(markup, /value="url:https:\/\/www\.xiaohongshu\.com\/explore\/note-2"/);
-  assert.match(markup, /value="fallback:/);
+  assert.match(markup, /value="fallback:stub\|三号样本\|作者\|2026-05-24T08:00:00.000Z\|摘要"/);
   assert.match(markup, /checked/);
+});
+
+test("buildXhsConnectorItemKey is stable for equivalent fallback content", () => {
+  const itemA = {
+    provider: "stub",
+    title: "三号样本",
+    authorName: "作者",
+    publishedAt: "2026-05-24T08:00:00.000Z",
+    bodyPreview: "摘要"
+  };
+  const itemB = {
+    provider: "stub",
+    title: "三号样本",
+    authorName: "作者",
+    publishedAt: "2026-05-24T08:00:00.000Z",
+    bodyPreview: "摘要"
+  };
+
+  assert.equal(buildXhsConnectorItemKey(itemA), buildXhsConnectorItemKey(itemB));
+  assert.equal(buildXhsConnectorItemKey(itemA), "fallback:stub|三号样本|作者|2026-05-24T08:00:00.000Z|摘要");
 });
 
 test("buildXhsConnectorSyncPreviewMarkup renders counts", () => {
@@ -87,10 +119,4 @@ test("readXhsConnectorSelectedKeys returns checked keys", () => {
     "note:note-1",
     "url:https://example.com/note-2"
   ]);
-});
-
-test("buildXhsConnectorItemKey prefers noteId then url then fallback", () => {
-  assert.equal(buildXhsConnectorItemKey({ noteId: "note-1", url: "https://example.com" }), "note:note-1");
-  assert.equal(buildXhsConnectorItemKey({ url: "https://example.com" }), "url:https://example.com");
-  assert.match(buildXhsConnectorItemKey({ title: "三号样本" }, "fallback-3"), /^fallback:/);
 });

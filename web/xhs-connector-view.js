@@ -23,7 +23,7 @@ function renderSelectedSummary(selectedCount = 0, totalCount = 0) {
   return `已选择 ${selectedCount} / ${totalCount} 条候选样本`;
 }
 
-export function buildXhsConnectorItemKey(item = {}, fallback = "") {
+export function buildXhsConnectorItemKey(item = {}) {
   const noteId = String(item?.noteId || item?.note_id || "").trim();
   if (noteId) {
     return `note:${noteId}`;
@@ -37,8 +37,10 @@ export function buildXhsConnectorItemKey(item = {}, fallback = "") {
   const provider = String(item?.provider || "").trim();
   const title = String(item?.title || "").trim();
   const authorName = String(item?.authorName || item?.author_name || "").trim();
-  const fallbackKey = String(fallback || "").trim() || "item";
-  return `fallback:${[provider, title, authorName, fallbackKey].filter(Boolean).join("|")}`;
+  const publishedAt = String(item?.publishedAt || item?.publish_time || "").trim();
+  const bodyPreview = String(item?.bodyPreview || item?.desc || item?.body || "").trim();
+
+  return `fallback:${[provider, title, authorName, publishedAt, bodyPreview].filter(Boolean).join("|")}`;
 }
 
 export function buildXhsConnectorPanelMarkup() {
@@ -86,9 +88,9 @@ export function buildXhsConnectorDiscoveryResultMarkup(items = []) {
   return `
     <div class="sample-library-xhs-connector-list">
       ${records
-        .map((item, index) => {
+        .map((item) => {
           const selected = item?.selected === true;
-          const itemKey = buildXhsConnectorItemKey(item, String(index));
+          const itemKey = buildXhsConnectorItemKey(item);
           const title = String(item?.title || "未命名外部样本").trim();
           const bodyPreview = String(item?.bodyPreview || item?.desc || "暂无摘要").trim();
           const meta = [
