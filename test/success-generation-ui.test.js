@@ -6,13 +6,33 @@ import path from "node:path";
 import { buildSampleLibraryCalibrationEvidenceState } from "../web/sample-library-calibration.js";
 
 async function readFrontendFiles() {
-  const [indexHtml, appJs, styles] = await Promise.all([
+  const [indexHtml, appJs, styles, styleProfileViewJs, sampleLibraryCalibrationViewJs, themeInspirationViewJs, sampleLibraryRecordViewJs, analysisReviewViewJs, sampleLibraryModalViewJs, sampleLibrarySectionsViewJs, sampleLibraryFormHelpersJs] = await Promise.all([
     fs.readFile(path.join(process.cwd(), "web/index.html"), "utf8"),
     fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8"),
-    fs.readFile(path.join(process.cwd(), "web/styles.css"), "utf8")
+    fs.readFile(path.join(process.cwd(), "web/styles.css"), "utf8"),
+    fs.readFile(path.join(process.cwd(), "web/style-profile-view.js"), "utf8"),
+    fs.readFile(path.join(process.cwd(), "web/sample-library-calibration-view.js"), "utf8").catch(() => ""),
+    fs.readFile(path.join(process.cwd(), "web/theme-inspiration-view.js"), "utf8").catch(() => ""),
+    fs.readFile(path.join(process.cwd(), "web/sample-library-record-view.js"), "utf8").catch(() => ""),
+    fs.readFile(path.join(process.cwd(), "web/analysis-review-view.js"), "utf8").catch(() => ""),
+    fs.readFile(path.join(process.cwd(), "web/sample-library-modal-view.js"), "utf8").catch(() => ""),
+    fs.readFile(path.join(process.cwd(), "web/sample-library-sections-view.js"), "utf8").catch(() => ""),
+    fs.readFile(path.join(process.cwd(), "web/sample-library-form-helpers.js"), "utf8").catch(() => "")
   ]);
 
-  return { indexHtml, appJs, styles };
+  return {
+    indexHtml,
+    appJs,
+    styles,
+    styleProfileViewJs,
+    sampleLibraryCalibrationViewJs,
+    themeInspirationViewJs,
+    sampleLibraryRecordViewJs,
+    analysisReviewViewJs,
+    sampleLibraryModalViewJs,
+    sampleLibrarySectionsViewJs,
+    sampleLibraryFormHelpersJs
+  };
 }
 
 function extractElementInnerHtml(html, marker) {
@@ -74,11 +94,7 @@ function extractSourceBetween(source, startMarker, endMarker) {
 }
 
 test("frontend exposes a list-first sample library workspace with one primary create action", async () => {
-  const [indexHtml, appJs, styles] = await Promise.all([
-    fs.readFile(path.join(process.cwd(), "web/index.html"), "utf8"),
-    fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8"),
-    fs.readFile(path.join(process.cwd(), "web/styles.css"), "utf8")
-  ]);
+  const { indexHtml, appJs, styles, styleProfileViewJs, sampleLibraryCalibrationViewJs, sampleLibraryRecordViewJs, sampleLibrarySectionsViewJs, sampleLibraryFormHelpersJs } = await readFrontendFiles();
 
   assert.match(indexHtml, /data-tab-target="sample-library-pane"/);
   assert.match(indexHtml, /id="sample-library-pane"/);
@@ -131,9 +147,9 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.doesNotMatch(indexHtml, /id="sample-library-views-filter"/);
   assert.doesNotMatch(indexHtml, /id="sample-library-shares-filter"/);
   assert.match(indexHtml, /name="collectionType"/);
-  assert.match(appJs, /<select name="collectionType">/);
-  assert.match(appJs, /name="views"/);
-  assert.match(appJs, /name="shares"/);
+  assert.match(sampleLibrarySectionsViewJs, /<select name="collectionType">/);
+  assert.match(sampleLibrarySectionsViewJs, /name="views"/);
+  assert.match(sampleLibrarySectionsViewJs, /name="shares"/);
   assert.match(indexHtml, /id="analyze-collection-type-select"/);
   assert.match(indexHtml, /id="generation-collection-type-select"/);
   assert.match(indexHtml, /id="generation-model-selection"/);
@@ -250,6 +266,7 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /function\s+getSampleLibraryRecordStepLabel\s*\(/);
   assert.match(appJs, /function\s+renderSampleLibraryWorkspace\s*\(/);
   assert.match(appJs, /function\s+refreshSampleLibraryWorkspace\s*\(/);
+  assert.match(appJs, /from "\.\/sample-library-record-view\.js"/);
   assert.match(appJs, /function\s+setSummaryLoadingState\s*\(/);
   assert.match(appJs, /function\s+renderSummaryLoadingPlaceholders\s*\(/);
   assert.match(appJs, /function\s+setSampleLibraryLoadingState\s*\(/);
@@ -275,11 +292,10 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /generation:\s*String\(byId\("generation-model-selection"\)\?\.value \|\| "auto"\)\.trim\(\) \|\| "auto"/);
   assert.match(appJs, /lengthMode:\s*String\(form\.get\("lengthMode"\) \|\| "short"\)\.trim\(\) \|\| "short"/);
   assert.match(appJs, /function\s+syncGenerationActions\s*\(/);
+  assert.match(appJs, /from "\.\/analysis-review-view\.js"/);
   assert.match(appJs, /function\s+openStyleProfileModal\s*\(/);
-  assert.match(appJs, /function\s+buildStyleProfileModalMarkup\s*\(/);
   assert.match(appJs, /function\s+saveStyleProfileModal\s*\(/);
-  assert.match(appJs, /function\s+buildStyleProfileGenerationLabel\s*\(/);
-  assert.match(appJs, /function\s+getSampleLibraryCreateRequirementMessage\s*\(/);
+  assert.match(sampleLibraryFormHelpersJs, /function\s+getSampleLibraryCreateRequirementMessage\s*\(/);
   assert.match(appJs, /function\s+syncSampleLibraryCreateActions\s*\(/);
   assert.match(appJs, /publish:\s*\{\s*metrics:\s*\{\s*views:\s*payload\.views \|\| 0/s);
   assert.match(appJs, /function\s+setActionGateHint\s*\(/);
@@ -311,7 +327,7 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.doesNotMatch(renderSummarySource, /生命周期记录/);
   assert.match(appJs, /summary-card-meta/);
   assert.match(appJs, /summary-card-action/);
-  assert.match(appJs, /sample-library-record-step/);
+  assert.match(sampleLibraryRecordViewJs, /sample-library-record-step/);
   assert.match(appJs, /卡点/);
   assert.match(appJs, /data-summary-action/);
   assert.match(appJs, /summary-card-button/);
@@ -338,16 +354,16 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(appJs, /nextStep:\s*"lifecycle"/);
   assert.match(appJs, /nextStep:\s*"calibration"/);
   assert.match(appJs, /data-action="prefill-sample-library-modal-calibration-prediction"/);
-  assert.match(appJs, /从当前检测预填预判/);
+  assert.match(sampleLibraryCalibrationViewJs, /从当前检测预填预判/);
   assert.match(appJs, /setSampleLibraryCalibrationPredictionFields\(/);
   assert.match(appJs, /function\s+openSampleLibraryRecordInlineEditorModal\s*\(/);
   assert.match(appJs, /function\s+renderSampleLibraryRecordInlineEditorModal\s*\(/);
   assert.match(appJs, /kind:\s*"record-list-inline-editor"/);
   assert.match(appJs, /function ensureSupportWorkspaceOpen\(/);
   assert.match(appJs, /styleProfile:\s*adminData\.styleProfile && typeof adminData\.styleProfile === "object" \? adminData\.styleProfile : null/);
-  assert.match(appJs, /sourceSamples\.map/);
-  assert.match(appJs, /formatDate\(current\?\.updatedAt\)/);
-  assert.match(appJs, /优先使用通义千问、Kimi、深度求索生成画像，失败后回退到本地规则汇总/);
+  assert.match(styleProfileViewJs, /sourceSamples[\s\S]*?\.map/);
+  assert.match(styleProfileViewJs, /formatDate\(current\?\.updatedAt\)/);
+  assert.match(styleProfileViewJs, /优先使用通义千问、Kimi、深度求索生成画像，失败后回退到本地规则汇总/);
   assert.match(appJs, /syncStyleProfileStateFromPayload\(response\)/);
   assert.match(appJs, /async function openLexiconWorkspaceModal\(tab = "custom"/);
   assert.match(appJs, /function closeLexiconWorkspaceModal\(/);
@@ -403,12 +419,12 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(styles, /min-width:\s*0/);
   assert.match(styles, /\.lifecycle-update-grid\s*\{/);
   assert.match(styles, /\.sample-library-calibration-grid\s*\{/);
-  assert.match(appJs, /class="lifecycle-primary-grid"/);
-  assert.match(appJs, /class="lifecycle-metrics-grid"/);
-  assert.match(appJs, /<span>浏览数<\/span>/);
-  assert.match(appJs, /<span>分享数<\/span>/);
-  assert.match(appJs, /浏览 \${escapeHtml\(String\(publish\.metrics\.views \|\| 0\)\)}/);
-  assert.match(appJs, /分享 \${escapeHtml\(String\(publish\.metrics\.shares \|\| 0\)\)}/);
+  assert.match(sampleLibrarySectionsViewJs, /class="lifecycle-primary-grid"/);
+  assert.match(sampleLibrarySectionsViewJs, /class="lifecycle-metrics-grid"/);
+  assert.match(sampleLibrarySectionsViewJs, /<span>浏览数<\/span>/);
+  assert.match(sampleLibrarySectionsViewJs, /<span>分享数<\/span>/);
+  assert.match(sampleLibraryRecordViewJs, /浏览 \${escapeHtml\(String\(publish\.metrics\.views \|\| 0\)\)}/);
+  assert.match(sampleLibraryRecordViewJs, /分享 \${escapeHtml\(String\(publish\.metrics\.shares \|\| 0\)\)}/);
   assert.match(styles, /\.lifecycle-primary-grid\s*\{/);
   assert.match(styles, /\.lifecycle-metrics-grid\s*\{/);
   assert.match(styles, /\.sample-library-metric-grid\s*\{/);
@@ -582,7 +598,7 @@ test("refreshAll clears admin loading state before re-rendering admin sections",
 });
 
 test("sample library workspace exposes record preview and full-list modal controls", async () => {
-  const { indexHtml, appJs } = await readFrontendFiles();
+  const { indexHtml, appJs, sampleLibraryModalViewJs } = await readFrontendFiles();
   const sampleLibraryPaneHtml = extractElementInnerHtml(indexHtml, 'id="sample-library-pane"');
   const previewHelperSource = extractSourceBetween(
     appJs,
@@ -600,9 +616,9 @@ test("sample library workspace exposes record preview and full-list modal contro
     "function getSampleLibraryRecordStepLabel("
   );
   const modalBuilderSource = extractSourceBetween(
-    appJs,
+    sampleLibraryModalViewJs,
     "function buildSampleLibraryRecordListModalMarkup(",
-    "function renderSampleLibraryRecordListModal("
+    "function buildSampleLibraryRecordInlineEditorModalMarkup("
   );
   const focusSource = extractSourceBetween(
     appJs,
@@ -616,7 +632,7 @@ test("sample library workspace exposes record preview and full-list modal contro
   assert.match(appJs, /const SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT = 3/);
   assert.match(appJs, /function\s+getSampleLibraryRecordPreviewItems\s*\(/);
   assert.doesNotMatch(appJs, /function\s+openSampleLibraryRecordListModal\s*\(/);
-  assert.match(appJs, /function\s+buildSampleLibraryRecordListModalMarkup\s*\(/);
+  assert.match(sampleLibraryModalViewJs, /function\s+buildSampleLibraryRecordListModalMarkup\s*\(/);
   assert.match(appJs, /previewOpenButton\.hidden = items\.length === 0/);
   assert.match(appJs, /renderSampleLibraryRecordListModal\(\)/);
   assert.match(appJs, /if \(action === "open-sample-library-record-from-modal"\)/);
@@ -679,19 +695,19 @@ test("sample library workspace exposes record preview and full-list modal contro
 });
 
 test("sample library record modal upgrades to inline master-detail editing", async () => {
-  const { appJs, styles } = await readFrontendFiles();
+  const { appJs, styles, sampleLibraryModalViewJs } = await readFrontendFiles();
   const openInlineEditorSource = extractSourceBetween(
     appJs,
     "function openSampleLibraryRecordInlineEditorModal(",
     "function buildSampleLibraryRecordInlineEditorDraft("
   );
   const inlineEditorSource = extractSourceBetween(
-    appJs,
+    sampleLibraryModalViewJs,
     "function buildSampleLibraryRecordInlineEditorModalMarkup(",
-    "function renderSampleLibraryRecordInlineEditorModal("
+    "function buildSampleLibraryRecordInlineEditorSwitchConfirmModalMarkup("
   );
   const sidebarSource = extractSourceBetween(
-    appJs,
+    sampleLibraryModalViewJs,
     "function buildSampleLibraryRecordInlineEditorSidebarMarkup(",
     "function readSampleLibraryRecordInlineEditorDraftFromModal("
   );
@@ -705,7 +721,7 @@ test("sample library record modal upgrades to inline master-detail editing", asy
   assert.match(appJs, /function\s+buildSampleLibraryRecordInlineEditorDraft\s*\(/);
   assert.match(appJs, /function\s+filterSampleLibraryRecordInlineEditorItems\s*\(/);
   assert.match(appJs, /function\s+buildSampleLibraryRecordInlineEditorPatchPayload\s*\(/);
-  assert.match(appJs, /function\s+buildSampleLibraryRecordInlineEditorModalMarkup\s*\(/);
+  assert.match(sampleLibraryModalViewJs, /function\s+buildSampleLibraryRecordInlineEditorModalMarkup\s*\(/);
   assert.match(appJs, /function\s+saveSampleLibraryRecordInlineEditorModal\s*\(/);
   assert.match(appJs, /function\s+requestSampleLibraryRecordInlineEditorSwitch\s*\(/);
   assert.match(appJs, /function\s+requestCloseSampleLibraryRecordInlineEditorModal\s*\(/);
@@ -742,16 +758,16 @@ test("sample library record modal upgrades to inline master-detail editing", asy
 });
 
 test("record inline editor keeps one unified patch payload and dirty-aware record switching", async () => {
-  const { appJs } = await readFrontendFiles();
+  const { appJs, sampleLibraryModalViewJs } = await readFrontendFiles();
   const renderModalSource = extractSourceBetween(
     appJs,
     "function renderSampleLibraryRecordInlineEditorModal(",
     "function buildSampleLibraryRecordInlineEditorSwitchConfirmModalMarkup("
   );
   const switchConfirmMarkupSource = extractSourceBetween(
-    appJs,
+    sampleLibraryModalViewJs,
     "function buildSampleLibraryRecordInlineEditorSwitchConfirmModalMarkup(",
-    "function renderSampleLibraryRecordInlineEditorSwitchConfirmModal("
+    "function buildSampleLibraryRecordInlineEditorCloseConfirmModalMarkup("
   );
   const switchConfirmRenderSource = extractSourceBetween(
     appJs,
@@ -759,9 +775,9 @@ test("record inline editor keeps one unified patch payload and dirty-aware recor
     "function buildSampleLibraryRecordInlineEditorCloseConfirmModalMarkup("
   );
   const closeConfirmMarkupSource = extractSourceBetween(
-    appJs,
+    sampleLibraryModalViewJs,
     "function buildSampleLibraryRecordInlineEditorCloseConfirmModalMarkup(",
-    "function renderSampleLibraryRecordInlineEditorCloseConfirmModal("
+    "function buildSampleLibraryNoteModalMarkup("
   );
   const closeConfirmRenderSource = extractSourceBetween(
     appJs,
@@ -769,25 +785,25 @@ test("record inline editor keeps one unified patch payload and dirty-aware recor
     "function requestSampleLibraryRecordInlineEditorSwitch("
   );
   const draftHelperSource = extractSourceBetween(
-    appJs,
+    sampleLibraryModalViewJs,
     "function buildSampleLibraryRecordInlineEditorDraft(",
     "function buildSampleLibraryRecordInlineEditorPatchPayload("
-  );
+  ).replace(/^export\s+/gm, "");
   const payloadHelperSource = extractSourceBetween(
-    appJs,
+    sampleLibraryModalViewJs,
     "function buildSampleLibraryRecordInlineEditorPatchPayload(",
     "function isSampleLibraryRecordInlineEditorDirty("
-  );
+  ).replace(/^export\s+/gm, "");
   const dirtyHelperSource = extractSourceBetween(
-    appJs,
+    sampleLibraryModalViewJs,
     "function isSampleLibraryRecordInlineEditorDirty(",
     "function filterSampleLibraryRecordInlineEditorItems("
-  );
+  ).replace(/^export\s+/gm, "");
   const filterItemsHelperSource = extractSourceBetween(
-    appJs,
+    sampleLibraryModalViewJs,
     "function filterSampleLibraryRecordInlineEditorItems(",
     "function buildSampleLibraryRecordInlineEditorSidebarMarkup("
-  );
+  ).replace(/^export\s+/gm, "");
   const switchHelperSource = extractSourceBetween(
     appJs,
     "function requestSampleLibraryRecordInlineEditorSwitch(",
@@ -821,7 +837,7 @@ test("record inline editor keeps one unified patch payload and dirty-aware recor
   const deleteModalSource = extractSourceBetween(
     appJs,
     "function openSampleLibraryDeleteModal(",
-    "function buildSampleLibraryReferenceEditorSectionMarkup("
+    "function buildFeedbackRuleQueueModalMarkup("
   );
   const escapeHandlerSource = extractSourceBetween(
     appJs,
@@ -885,7 +901,8 @@ test("record inline editor keeps one unified patch payload and dirty-aware recor
         { id: "record-2", note: { title: "玩具避坑清单" } },
         { id: "record-3", note: { title: "纸片人进阶玩法" } }
       ],
-      "纸片人"
+      "纸片人",
+      { getSampleRecordTitle: (item) => String(item?.note?.title || item?.title || "") }
     ).map((item) => item.id),
     ["record-1", "record-3"]
   );
@@ -995,10 +1012,10 @@ test("sample pool classification treats false positive lifecycle outcomes as neg
 });
 
 test("negative pool actions route false positive lifecycle records to lifecycle editing instead of fake restore", async () => {
-  const { appJs } = await readFrontendFiles();
-  const actionMarkupStart = appJs.indexOf("function buildSamplePoolActionMarkup(record = {}, pool = \"reference\") {");
-  const actionMarkupEnd = appJs.indexOf("function renderSampleLibraryPoolsModal", actionMarkupStart);
-  const actionMarkupSource = appJs.slice(actionMarkupStart, actionMarkupEnd);
+  const { sampleLibraryRecordViewJs } = await readFrontendFiles();
+  const actionMarkupStart = sampleLibraryRecordViewJs.indexOf("export function buildSamplePoolActionMarkup(record = {}, pool = \"reference\", helpers = {}) {");
+  const actionMarkupEnd = sampleLibraryRecordViewJs.indexOf("export function renderSamplePoolCards", actionMarkupStart);
+  const actionMarkupSource = sampleLibraryRecordViewJs.slice(actionMarkupStart, actionMarkupEnd);
 
   assert.ok(actionMarkupStart !== -1 && actionMarkupEnd !== -1, "expected buildSamplePoolActionMarkup source");
   assert.match(actionMarkupSource, /\["limited", "violation", "false_positive"\]\.includes\(publish\.status\)/);
@@ -1024,7 +1041,7 @@ test("reference candidate qualification uses the same content-length floor as ru
 });
 
 test("sample pool explanation distinguishes direct engagement from views-assisted qualification", async () => {
-  const { indexHtml, appJs, styles } = await readFrontendFiles();
+  const { indexHtml, appJs, styles, sampleLibraryRecordViewJs } = await readFrontendFiles();
   assert.match(appJs, /function evaluateReferenceSampleThreshold\(metrics = \{\}\) \{/);
   assert.match(appJs, /likes:\s*30/);
   assert.match(appJs, /directViews:\s*2000/);
@@ -1044,7 +1061,7 @@ test("sample pool explanation distinguishes direct engagement from views-assiste
   assert.match(appJs, /至少一项已经单独达到参考门槛/);
   assert.match(appJs, /当前由浏览数单独达到参考门槛/);
   assert.match(appJs, /再由高浏览补足后进入参考池/);
-  assert.match(appJs, /sample-pool-why-helper/);
+  assert.match(sampleLibraryRecordViewJs, /sample-pool-why-helper/);
   assert.match(appJs, /只有浏览高，核心互动还没接近达标/);
   assert.match(indexHtml, /id="sample-library-flow-reference-threshold"/);
   assert.match(indexHtml, /id="sample-library-pools-modal-subtitle"/);
@@ -1148,21 +1165,21 @@ test("frontend keeps the analyze picker regression surface in the main UI file",
 });
 
 test("sample library create button toggles with explicit expanded state and scroll feedback", async () => {
-  const { appJs } = await readFrontendFiles();
+  const { appJs, sampleLibraryModalViewJs, sampleLibrarySectionsViewJs } = await readFrontendFiles();
 
-  assert.match(appJs, /function\s+buildSampleLibraryModalTagPickerMarkup\s*\(/);
+  assert.match(sampleLibrarySectionsViewJs, /function\s+buildSampleLibraryModalTagPickerMarkup\s*\(/);
   assert.match(appJs, /function\s+initializeSampleLibraryModalTagPicker\s*\(/);
   assert.match(appJs, /function\s+renderSampleLibraryModalTagOptions\s*\(/);
   assert.match(appJs, /function\s+writeSampleLibraryModalTags\s*\(/);
-  assert.match(appJs, /function\s+buildSampleLibraryCreateModalMarkup\s*\(/);
+  assert.match(sampleLibraryModalViewJs, /function\s+buildSampleLibraryCreateModalMarkup\s*\(/);
   assert.match(appJs, /function\s+openSampleLibraryCreateModal\s*\(/);
   assert.match(appJs, /function\s+saveSampleLibraryCreateModal\s*\(/);
   assert.match(appJs, /function\s+fillSampleLibraryCreateModalFromCurrent\s*\(/);
-  assert.match(appJs, /class="tag-picker field-wide sample-library-modal-tag-picker"/);
-  assert.match(appJs, /name="tags" type="hidden"/);
-  assert.match(appJs, /class="tag-picker-trigger sample-library-modal-tag-trigger"/);
-  assert.match(appJs, /class="tag-picker-dropdown sample-library-modal-tag-dropdown"/);
-  assert.match(appJs, /sample-library-modal-tag-custom/);
+  assert.match(sampleLibrarySectionsViewJs, /class="tag-picker field-wide sample-library-modal-tag-picker"/);
+  assert.match(sampleLibrarySectionsViewJs, /name="tags" type="hidden"/);
+  assert.match(sampleLibrarySectionsViewJs, /class="tag-picker-trigger sample-library-modal-tag-trigger"/);
+  assert.match(sampleLibrarySectionsViewJs, /class="tag-picker-dropdown sample-library-modal-tag-dropdown"/);
+  assert.match(sampleLibrarySectionsViewJs, /sample-library-modal-tag-custom/);
   assert.match(appJs, /renderSampleLibraryModalTagOptions\(\)[\s\S]*uniqueStrings\(analyzeTagOptions\)/);
   assert.match(appJs, /byId\("sample-library-create-button"\)\.addEventListener\("click", openSampleLibraryCreateModal\)/);
   assert.match(appJs, /openSampleLibraryCreateModal\(\)/);
@@ -1170,22 +1187,22 @@ test("sample library create button toggles with explicit expanded state and scro
 });
 
 test("sample library base editing and record deletion now route through modal confirmations", async () => {
-  const { appJs } = await readFrontendFiles();
+  const { appJs, sampleLibraryModalViewJs, sampleLibraryFormHelpersJs } = await readFrontendFiles();
 
-  assert.match(appJs, /function\s+buildSampleLibraryBaseModalMarkup\s*\(/);
-  assert.match(appJs, /function\s+readSampleLibraryModalBasePayload\s*\(/);
+  assert.match(sampleLibraryModalViewJs, /function\s+buildSampleLibraryBaseModalMarkup\s*\(/);
+  assert.match(sampleLibraryFormHelpersJs, /function\s+readSampleLibraryModalBasePayload\s*\(/);
   assert.match(appJs, /function\s+saveSampleLibraryDetailBaseModal\s*\(/);
-  assert.match(appJs, /function\s+buildSampleLibraryDeleteModalMarkup\s*\(/);
+  assert.match(sampleLibraryModalViewJs, /function\s+buildSampleLibraryDeleteModalMarkup\s*\(/);
   assert.match(appJs, /function\s+saveSampleLibraryDeleteModal\s*\(/);
   assert.match(appJs, /data-action="open-sample-library-base-modal"/);
-  assert.match(appJs, /data-action="open-sample-library-delete-modal"/);
+  assert.match(sampleLibraryModalViewJs, /data-action="open-sample-library-delete-modal"/);
   assert.match(appJs, /if \(action === "open-sample-library-base-modal"\)/);
   assert.match(appJs, /if \(action === "open-sample-library-delete-modal"\)/);
   assert.doesNotMatch(appJs, /data-action="save-sample-library-base"/);
 });
 
 test("frontend gates secondary sample-library and lifecycle-save actions with inline hints", async () => {
-  const { appJs } = await readFrontendFiles();
+  const { appJs, analysisReviewViewJs } = await readFrontendFiles();
   const referenceStateSource = extractSourceBetween(
     appJs,
     "function syncSampleLibraryReferenceSectionState(",
@@ -1208,8 +1225,8 @@ test("frontend gates secondary sample-library and lifecycle-save actions with in
   assert.match(appJs, /sample-library-reference-action-hint/);
   assert.match(appJs, /sample-library-lifecycle-action-hint/);
   assert.match(appJs, /sample-library-calibration-action-hint/);
-  assert.match(appJs, /id="analysis-lifecycle-action-hint"/);
-  assert.match(appJs, /id="rewrite-lifecycle-action-hint"/);
+  assert.match(analysisReviewViewJs, /id="analysis-lifecycle-action-hint"/);
+  assert.match(analysisReviewViewJs, /id="rewrite-lifecycle-action-hint"/);
 
   assert.match(appJs, /setActionGateHint\("sample-library-base-action-hint",\s*""\)/);
   assert.match(appJs, /setActionGateHint\("sample-library-reference-action-hint",\s*""\)/);
@@ -1303,7 +1320,7 @@ test("frontend explains the recommended retro review timing around T+7 only", as
 });
 
 test("frontend surfaces calibration visibility directly in the sample-library list", async () => {
-  const { indexHtml, appJs, styles } = await readFrontendFiles();
+  const { indexHtml, appJs, styles, sampleLibraryRecordViewJs } = await readFrontendFiles();
 
   assert.match(indexHtml, /<option value="calibration_pending">待复盘<\/option>/);
   assert.match(indexHtml, /<option value="calibration_matched">已命中<\/option>/);
@@ -1313,7 +1330,7 @@ test("frontend surfaces calibration visibility directly in the sample-library li
   assert.match(appJs, /filter === "calibration_matched"/);
   assert.match(appJs, /filter === "calibration_mismatch"/);
   assert.match(appJs, /sample-library-calibration-pill/);
-  assert.match(appJs, /riskLevelLabel\(calibration\.prediction\.predictedRiskLevel\)/);
+  assert.match(sampleLibraryRecordViewJs, /riskLevelLabel\(calibration\.prediction\.predictedRiskLevel\)/);
   assert.match(styles, /\.sample-library-calibration-pill/);
 });
 
@@ -1517,22 +1534,34 @@ test("frontend exposes a calibrated-history replay action in system calibration"
 });
 
 test("sample library calibration modal renders visible evidence with matched samples and explanation", async () => {
-  const { appJs, styles } = await readFrontendFiles();
-  const parseHelperSource = appJs.match(/function\s+parseSampleLibraryRetroChipField\s*\([\s\S]*?\n}\n/)?.[0] || "";
-  const retroChipGroupHelperSource = appJs.match(/function\s+buildSampleLibraryRetroChipGroupMarkup\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const { appJs, styles, sampleLibraryCalibrationViewJs } = await readFrontendFiles();
+  assert.match(appJs, /from "\.\/sample-library-calibration-view\.js"/);
   const uniqueStringsSource = appJs.match(/function\s+uniqueStrings\s*\([\s\S]*?\n}\n/)?.[0] || "";
-  const signalCategoriesSource = appJs.match(/function\s+deriveSampleLibraryCalibrationSignalCategories\s*\([\s\S]*?\n}\n/)?.[0] || "";
-  const suggestionHelperSource = appJs.match(/function\s+deriveSampleLibraryRetroSignalSuggestions\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const parseHelperSource =
+    sampleLibraryCalibrationViewJs.match(/export function\s+parseSampleLibraryRetroChipField\s*\([\s\S]*?\n}\n/)?.[0].replace(
+      "export function",
+      "function"
+    ) || "";
+  const retroChipGroupHelperSource =
+    sampleLibraryCalibrationViewJs
+      .match(/export function\s+buildSampleLibraryRetroChipGroupMarkup\s*\([\s\S]*?\n}\n/)?.[0]
+      .replace("export function", "function") || "";
+  const signalCategoriesSource =
+    sampleLibraryCalibrationViewJs
+      .match(/export function\s+deriveSampleLibraryCalibrationSignalCategories\s*\([\s\S]*?\n}\n/)?.[0]
+      .replace("export function", "function") || "";
+  const suggestionHelperSource =
+    sampleLibraryCalibrationViewJs
+      .match(/export function\s+deriveSampleLibraryRetroSignalSuggestions\s*\([\s\S]*?\n}\n/)?.[0]
+      .replace("export function", "function") || "";
   const evidenceHelperSource = extractSourceBetween(
-    appJs,
-    "function buildSampleLibraryCalibrationEvidenceMarkup(",
-    "function buildSampleLibraryCalibrationEditorSectionsMarkup("
-  );
-  const calibrationSectionsSource = extractSourceBetween(
-    appJs,
-    "function buildSampleLibraryCalibrationEditorSectionsMarkup(",
-    "function buildSampleLibraryCalibrationModalMarkup("
-  );
+    sampleLibraryCalibrationViewJs,
+    "export function buildSampleLibraryCalibrationEvidenceMarkup(",
+    "export function deriveSampleLibraryRetroSignalSuggestions("
+  ).replace("export function buildSampleLibraryCalibrationEvidenceMarkup", "function buildSampleLibraryCalibrationEvidenceMarkup");
+  const normalizedCalibrationSectionsSource = sampleLibraryCalibrationViewJs
+    .slice(sampleLibraryCalibrationViewJs.indexOf("export function buildSampleLibraryCalibrationEditorSectionsMarkup("))
+    .replace("export function buildSampleLibraryCalibrationEditorSectionsMarkup", "function buildSampleLibraryCalibrationEditorSectionsMarkup");
   const helpers = new Function(
     "buildSampleLibraryModalSectionMarkup",
     "escapeHtml",
@@ -1548,7 +1577,7 @@ ${uniqueStringsSource}
 ${signalCategoriesSource}
 ${suggestionHelperSource}
 ${evidenceHelperSource}
-${calibrationSectionsSource}
+${normalizedCalibrationSectionsSource}
 return {
   buildSampleLibraryCalibrationEvidenceMarkup,
   buildSampleLibraryCalibrationEditorSectionsMarkup
@@ -1569,21 +1598,49 @@ return {
     buildSampleLibraryCalibrationEvidenceState
   );
 
-  const evidenceMarkup = helpers.buildSampleLibraryCalibrationEvidenceMarkup({
-    confidence: 84,
-    evidenceSamples: [{ id: "record-1", title: "历史样本 1" }],
-    evidenceSignals: ["标题短语命中", "标签重合"],
-    evidenceSummary: "这条记录与 1 条历史样本的结构高度相似。"
-  });
-  const modalMarkup = helpers.buildSampleLibraryCalibrationEditorSectionsMarkup({
-    prediction: {
+  const evidenceMarkup = helpers.buildSampleLibraryCalibrationEvidenceMarkup(
+    {
       confidence: 84,
       evidenceSamples: [{ id: "record-1", title: "历史样本 1" }],
       evidenceSignals: ["标题短语命中", "标签重合"],
       evidenceSummary: "这条记录与 1 条历史样本的结构高度相似。"
     },
-    retro: {}
-  });
+    {
+      buildSampleLibraryCalibrationEvidenceState,
+      escapeHtml: (value) => String(value || "")
+    }
+  );
+  const modalMarkup = helpers.buildSampleLibraryCalibrationEditorSectionsMarkup(
+    {
+      prediction: {
+        confidence: 84,
+        evidenceSamples: [{ id: "record-1", title: "历史样本 1" }],
+        evidenceSignals: ["标题短语命中", "标签重合"],
+        evidenceSummary: "这条记录与 1 条历史样本的结构高度相似。"
+      },
+      retro: {}
+    },
+    {
+      buildSampleLibraryModalSectionMarkup: ({ body = "" } = {}) => body,
+      buildSampleLibraryCalibrationEvidenceMarkup: (prediction) =>
+        helpers.buildSampleLibraryCalibrationEvidenceMarkup(prediction, {
+          buildSampleLibraryCalibrationEvidenceState,
+          escapeHtml: (value) => String(value || "")
+        }),
+      buildSampleLibraryRetroChipGroupMarkup: () => "",
+      escapeHtml: (value) => String(value || ""),
+      getSampleLibraryCalibrationPredictionPrefillSourceSummary: () => "当前预填来源：当前检测结果。",
+      getSampleLibraryRetroTimingHintClassName: () => "helper-text",
+      joinCSV: (items = []) => (Array.isArray(items) ? items.join(", ") : ""),
+      parseSampleLibraryRetroChipField: () => ({ selected: [], supplement: "" }),
+      sampleLibraryRetroChipPresets: {
+        missReason: ["标题偏弱"],
+        validatedSignals: ["标题结构"],
+        invalidatedSignals: ["标题判断失准"],
+        ruleImprovementCandidate: ["同类标题结构可提权"]
+      }
+    }
+  );
 
   assert.match(evidenceMarkup, /sample-library-calibration-evidence/);
   assert.match(evidenceMarkup, /历史样本 1/);
@@ -1592,38 +1649,100 @@ return {
   assert.match(evidenceMarkup, /置信度 84/);
   assert.match(evidenceMarkup, /可回看信号/);
   assert.match(evidenceMarkup, /标题结构|开头切口|合集匹配|标签匹配/);
+  assert.doesNotMatch(evidenceMarkup, /一键合规改写/);
   assert.match(modalMarkup, /sample-library-calibration-evidence/);
   assert.match(modalMarkup, /历史样本 1/);
   assert.match(modalMarkup, /结构高度相似/);
   assert.match(styles, /\.sample-library-calibration-evidence\b/);
 });
 
-test("style profile modal surfaces retro feedback hints and reference sorting context", async () => {
-  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
-  const modalSource = extractSourceBetween(
-    appJs,
-    "function buildStyleProfileModalMarkup(profileState = null) {",
-    "function readStyleProfileModalPayload()"
-  );
-  const buildStyleProfileModalMarkup = new Function(
-    "buildSampleLibraryModalSectionMarkup",
+test("manual-review prediction evidence surfaces a compliance rewrite action", async () => {
+  const { appJs, sampleLibraryCalibrationViewJs } = await readFrontendFiles();
+  const evidenceHelperSource = extractSourceBetween(
+    sampleLibraryCalibrationViewJs,
+    "export function buildSampleLibraryCalibrationEvidenceMarkup(",
+    "export function deriveSampleLibraryRetroSignalSuggestions("
+  ).replace("export function buildSampleLibraryCalibrationEvidenceMarkup", "function buildSampleLibraryCalibrationEvidenceMarkup");
+  const signalCategoriesSource =
+    sampleLibraryCalibrationViewJs
+      .match(/export function\s+deriveSampleLibraryCalibrationSignalCategories\s*\([\s\S]*?\n}\n/)?.[0]
+      .replace("export function", "function") || "";
+  const helpers = new Function(
+    "buildSampleLibraryCalibrationEvidenceState",
     "escapeHtml",
-    "joinCSV",
-    "joinLineList",
-    "formatDate",
-    "buildStyleProfileGenerationLabel",
-    `${modalSource}
-return buildStyleProfileModalMarkup;`
+    `${signalCategoriesSource}
+${evidenceHelperSource}
+return { buildSampleLibraryCalibrationEvidenceMarkup };`
   )(
-    ({ title = "", description = "", body = "" } = {}) => `<section><h2>${title}</h2><p>${description}</p>${body}</section>`,
-    (value) => String(value || ""),
-    (items) => (Array.isArray(items) ? items.join(", ") : ""),
-    (items) => (Array.isArray(items) ? items.join("\n") : ""),
-    (value) => String(value || ""),
-    () => "本地规则"
+    (prediction = {}) => ({
+      samples: prediction.evidenceSamples || [],
+      signals: prediction.evidenceSignals || [],
+      summary: prediction.evidenceSummary || "",
+      confidence: prediction.confidence || 0,
+      confidenceNote: "当前置信度 80 / 100"
+    }),
+    (value) => String(value || "")
   );
 
-  const markup = buildStyleProfileModalMarkup({
+  const markup = helpers.buildSampleLibraryCalibrationEvidenceMarkup(
+    {
+      predictedStatus: "limited",
+      confidence: 80,
+      evidenceSamples: [{ id: "record-1", title: "历史样本 1" }],
+      evidenceSignals: ["检测结论：人工复核", "标题短语命中"],
+      evidenceSummary: "证据摘要：检测结论：人工复核；标题短语命中。"
+    },
+    {
+      buildSampleLibraryCalibrationEvidenceState: (prediction = {}) => ({
+        samples: prediction.evidenceSamples || [],
+        signals: prediction.evidenceSignals || [],
+        summary: prediction.evidenceSummary || "",
+        confidence: prediction.confidence || 0,
+        confidenceNote: "当前置信度 80 / 100"
+      }),
+      escapeHtml: (value) => String(value || "")
+    }
+  );
+
+  assert.match(markup, /一键合规改写/);
+});
+
+test("prediction evidence rewrite action reuses the main rewrite flow for manual-review records", async () => {
+  const { appJs, sampleLibraryCalibrationViewJs } = await readFrontendFiles();
+  assert.match(sampleLibraryCalibrationViewJs, /data-action="rewrite-sample-library-calibration-record"/);
+  assert.match(appJs, /async function runRewriteFromPayload\(/);
+  assert.match(appJs, /await runRewriteFromPayload\(getAnalyzePayload\(\),/);
+  assert.match(appJs, /await runRewriteFromPayload\(payload,\s*\{/);
+  assert.match(appJs, /apiJson\("\/api\/rewrite"/);
+  assert.match(appJs, /openResultPanel\("rewrite-result-panel"\)/);
+  assert.match(appJs, /renderRewriteResult\(/);
+  assert.match(appJs, /normalizeRewritePayload\(result\.rewrite\)/);
+  assert.match(appJs, /buildAnalyzePayloadFromSampleLibraryRecord\(/);
+});
+
+test("style profile modal surfaces retro feedback hints and reference sorting context", async () => {
+  const styleProfileViewJs = await fs.readFile(path.join(process.cwd(), "web/style-profile-view.js"), "utf8");
+  const modalSource = extractSourceBetween(
+    styleProfileViewJs,
+    "export function buildStyleProfileModalMarkup(profileState = null, helpers = {}) {",
+    "export function readStyleProfileModalPayload(contentNode, helpers = {}) {"
+  ).replace("export function buildStyleProfileModalMarkup", "function buildStyleProfileModalMarkup");
+  const buildStyleProfileModalMarkup = new Function(
+    "helpers",
+    `${modalSource}
+return buildStyleProfileModalMarkup;`
+  );
+  const helpers = {
+    buildSampleLibraryModalSectionMarkup: ({ title = "", description = "", body = "" } = {}) =>
+      `<section><h2>${title}</h2><p>${description}</p>${body}</section>`,
+    escapeHtml: (value) => String(value || ""),
+    joinCSV: (items) => (Array.isArray(items) ? items.join(", ") : ""),
+    joinLineList: (items) => (Array.isArray(items) ? items.join("\n") : ""),
+    formatDate: (value) => String(value || ""),
+    buildStyleProfileGenerationLabel: () => "本地规则"
+  };
+
+  const markup = buildStyleProfileModalMarkup(helpers)({
     current: {
       topic: "身体探索",
       name: "身体探索画像",
@@ -1641,7 +1760,7 @@ return buildStyleProfileModalMarkup;`
         retroHintsSummary: "styleHints: 已验证：标题结构；ruleCandidates: 同类标题结构可提权"
       }
     }
-  });
+  }, helpers);
 
   assert.match(markup, /反哺线索/);
   assert.match(markup, /已验证：标题结构/);
@@ -1650,11 +1769,20 @@ return buildStyleProfileModalMarkup;`
 });
 
 test("calibration retro section ties review chips to the current prediction context", async () => {
-  const { appJs } = await readFrontendFiles();
+  const { appJs, sampleLibraryCalibrationViewJs } = await readFrontendFiles();
   const uniqueStringsSource = appJs.match(/function\s+uniqueStrings\s*\([\s\S]*?\n}\n/)?.[0] || "";
-  const signalCategoriesSource = appJs.match(/function\s+deriveSampleLibraryCalibrationSignalCategories\s*\([\s\S]*?\n}\n/)?.[0] || "";
-  const suggestionHelperSource = appJs.match(/function\s+deriveSampleLibraryRetroSignalSuggestions\s*\([\s\S]*?\n}\n/)?.[0] || "";
-  const sectionSource = appJs.match(/function\s+buildSampleLibraryCalibrationEditorSectionsMarkup\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const signalCategoriesSource =
+    sampleLibraryCalibrationViewJs
+      .match(/export function\s+deriveSampleLibraryCalibrationSignalCategories\s*\([\s\S]*?\n}\n/)?.[0]
+      .replace("export function", "function") || "";
+  const suggestionHelperSource =
+    sampleLibraryCalibrationViewJs
+      .match(/export function\s+deriveSampleLibraryRetroSignalSuggestions\s*\([\s\S]*?\n}\n/)?.[0]
+      .replace("export function", "function") || "";
+  const sectionSource =
+    sampleLibraryCalibrationViewJs
+      .slice(sampleLibraryCalibrationViewJs.indexOf("export function buildSampleLibraryCalibrationEditorSectionsMarkup("))
+      .replace("export function buildSampleLibraryCalibrationEditorSectionsMarkup", "function buildSampleLibraryCalibrationEditorSectionsMarkup");
   const helpers = new Function(
     "buildSampleLibraryModalSectionMarkup",
     "buildSampleLibraryRetroChipGroupMarkup",
@@ -1694,26 +1822,45 @@ return { buildSampleLibraryCalibrationEditorSectionsMarkup };`
     (items) => [...new Set((Array.isArray(items) ? items : [items]).map((item) => String(item || "").trim()).filter(Boolean))]
   );
 
-  const markup = helpers.buildSampleLibraryCalibrationEditorSectionsMarkup({
-    prediction: {
-      predictedStatus: "limited",
-      predictedRiskLevel: "medium",
-      predictedPerformanceTier: "low",
-      confidence: 72
+  const markup = helpers.buildSampleLibraryCalibrationEditorSectionsMarkup(
+    {
+      prediction: {
+        predictedStatus: "limited",
+        predictedRiskLevel: "medium",
+        predictedPerformanceTier: "low",
+        confidence: 72
+      },
+      retro: {
+        actualPerformanceTier: "high",
+        predictionMatched: false,
+        missReason: "",
+        validatedSignals: [],
+        invalidatedSignals: [],
+        ruleImprovementCandidate: ""
+      },
+      comparisonStatusLabel: "预判未命中",
+      missReasonSuggestion: "发布后复盘会围绕当前预判的偏差来补充。",
+      referenceAction: {},
+      retroTimingHint: { text: "建议至少等到 T+7 再做发布后复盘。", state: "pending" }
     },
-    retro: {
-      actualPerformanceTier: "high",
-      predictionMatched: false,
-      missReason: "",
-      validatedSignals: [],
-      invalidatedSignals: [],
-      ruleImprovementCandidate: ""
-    },
-    comparisonStatusLabel: "预判未命中",
-    missReasonSuggestion: "发布后复盘会围绕当前预判的偏差来补充。",
-    referenceAction: {},
-    retroTimingHint: { text: "建议至少等到 T+7 再做发布后复盘。", state: "pending" }
-  });
+    {
+      buildSampleLibraryModalSectionMarkup: ({ title = "", description = "", body = "" } = {}) =>
+        `<section><h2>${title}</h2><p>${description}</p>${body}</section>`,
+      buildSampleLibraryRetroChipGroupMarkup: () => "",
+      buildSampleLibraryCalibrationEvidenceMarkup: () => "",
+      parseSampleLibraryRetroChipField: () => ({ selected: [], supplement: "" }),
+      sampleLibraryRetroChipPresets: {
+        missReason: ["标题偏弱"],
+        validatedSignals: ["标题结构"],
+        invalidatedSignals: ["标签判断失准"],
+        ruleImprovementCandidate: ["同类标题结构可提权"]
+      },
+      joinCSV: (items) => (Array.isArray(items) ? items.join(", ") : ""),
+      escapeHtml: (value) => String(value || ""),
+      getSampleLibraryCalibrationPredictionPrefillSourceSummary: () => "当前预判将影响复盘输入。",
+      getSampleLibraryRetroTimingHintClassName: () => "helper-text"
+    }
+  );
 
   assert.match(markup, /当前预判/);
   assert.match(markup, /限流/);
@@ -1725,9 +1872,15 @@ return { buildSampleLibraryCalibrationEditorSectionsMarkup };`
 });
 
 test("retro chip helpers split existing text into selected chips and supplement text", async () => {
-  const { appJs } = await readFrontendFiles();
-  const parseHelperSource = appJs.match(/function\s+parseSampleLibraryRetroChipField\s*\([\s\S]*?\n}\n/)?.[0] || "";
-  const serializeHelperSource = appJs.match(/function\s+serializeSampleLibraryRetroChipField\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const { sampleLibraryCalibrationViewJs } = await readFrontendFiles();
+  const parseHelperSource =
+    sampleLibraryCalibrationViewJs
+      .match(/export function\s+parseSampleLibraryRetroChipField\s*\([\s\S]*?\n}\n/)?.[0]
+      .replace("export function", "function") || "";
+  const serializeHelperSource =
+    sampleLibraryCalibrationViewJs
+      .match(/export function\s+serializeSampleLibraryRetroChipField\s*\([\s\S]*?\n}\n/)?.[0]
+      .replace("export function", "function") || "";
 
   const helpers = new Function(
     `${parseHelperSource}
@@ -1749,16 +1902,16 @@ return { parseSampleLibraryRetroChipField, serializeSampleLibraryRetroChipField 
 });
 
 test("calibration modal renders retro multi-select chip groups", async () => {
-  const { appJs, styles } = await readFrontendFiles();
+  const { appJs, styles, sampleLibraryCalibrationViewJs } = await readFrontendFiles();
 
   assert.match(appJs, /sampleLibraryRetroChipPresets/);
-  assert.match(appJs, /偏差原因/);
-  assert.match(appJs, /被验证信号/);
-  assert.match(appJs, /被推翻信号/);
-  assert.match(appJs, /规则优化候选/);
-  assert.match(appJs, /sample-library-retro-chip-group/);
-  assert.match(appJs, /sample-library-retro-chip/);
-  assert.match(appJs, /sample-library-retro-supplement/);
+  assert.match(sampleLibraryCalibrationViewJs, /偏差原因/);
+  assert.match(sampleLibraryCalibrationViewJs, /被验证信号/);
+  assert.match(sampleLibraryCalibrationViewJs, /被推翻信号/);
+  assert.match(sampleLibraryCalibrationViewJs, /规则优化候选/);
+  assert.match(sampleLibraryCalibrationViewJs, /sample-library-retro-chip-group/);
+  assert.match(sampleLibraryCalibrationViewJs, /sample-library-retro-chip/);
+  assert.match(sampleLibraryCalibrationViewJs, /sample-library-retro-supplement/);
   assert.match(styles, /\.sample-library-retro-chip-group/);
   assert.match(styles, /\.sample-library-retro-chip/);
   assert.match(styles, /\.sample-library-retro-chip\.is-selected/);
@@ -1766,13 +1919,25 @@ test("calibration modal renders retro multi-select chip groups", async () => {
 });
 
 test("retro chip selections serialize back into the existing text fields", async () => {
-  const { appJs } = await readFrontendFiles();
+  const { appJs, sampleLibraryCalibrationViewJs, sampleLibraryFormHelpersJs } = await readFrontendFiles();
   const splitCsvSource = appJs.match(/function\s+splitCSV\s*\([\s\S]*?\n}\n/)?.[0] || "";
   const uniqueStringsSource = appJs.match(/function\s+uniqueStrings\s*\([\s\S]*?\n}\n/)?.[0] || "";
-  const serializeHelperSource = appJs.match(/function\s+serializeSampleLibraryRetroChipField\s*\([\s\S]*?\n}\n/)?.[0] || "";
-  const readRetroListSource = appJs.match(/function\s+readSampleLibraryRetroChipListValue\s*\([\s\S]*?\n}\n/)?.[0] || "";
-  const readRetroFieldSource = appJs.match(/function\s+readSampleLibraryRetroChipFieldValue\s*\([\s\S]*?\n}\n/)?.[0] || "";
-  const readPayloadSource = appJs.match(/function\s+readSampleLibraryModalCalibrationPayload\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const serializeHelperSource =
+    sampleLibraryCalibrationViewJs
+      .match(/export function\s+serializeSampleLibraryRetroChipField\s*\([\s\S]*?\n}\n/)?.[0]
+      .replace("export function", "function") || "";
+  const readRetroListSource =
+    sampleLibraryCalibrationViewJs
+      .match(/export function\s+readSampleLibraryRetroChipListValue\s*\([\s\S]*?\n}\n/)?.[0]
+      .replace("export function", "function") || "";
+  const readRetroFieldSource =
+    sampleLibraryCalibrationViewJs
+      .match(/export function\s+readSampleLibraryRetroChipFieldValue\s*\([\s\S]*?\n}\n/)?.[0]
+      .replace("export function", "function") || "";
+  const readPayloadSource =
+    sampleLibraryFormHelpersJs
+      .match(/export function\s+readSampleLibraryModalCalibrationPayload\s*\([\s\S]*?\n}\n/)?.[0]
+      .replace("export function", "function") || "";
 
   const fakeContentNode = {
     querySelector(selector) {
@@ -1824,17 +1989,27 @@ test("retro chip selections serialize back into the existing text fields", async
   };
 
   const helpersFactory = new Function(
-    "byId",
     `${splitCsvSource}
 ${uniqueStringsSource}
 ${serializeHelperSource}
 ${readRetroListSource}
 ${readRetroFieldSource}
 ${readPayloadSource}
-return { readSampleLibraryModalCalibrationPayload };`
+return {
+  readSampleLibraryModalCalibrationPayload,
+  readSampleLibraryRetroChipFieldValue,
+  readSampleLibraryRetroChipListValue,
+  splitCSV,
+  uniqueStrings
+};`
   );
-  const helpers = helpersFactory((id) => (id === "sample-library-modal-content" ? fakeContentNode : null));
-  const payload = helpers.readSampleLibraryModalCalibrationPayload();
+  const helpers = helpersFactory();
+  const payload = helpers.readSampleLibraryModalCalibrationPayload(fakeContentNode, {
+    readSampleLibraryRetroChipFieldValue: helpers.readSampleLibraryRetroChipFieldValue,
+    readSampleLibraryRetroChipListValue: helpers.readSampleLibraryRetroChipListValue,
+    splitCSV: helpers.splitCSV,
+    uniqueStrings: helpers.uniqueStrings
+  });
 
   assert.equal(payload.retro.missReason, "标题偏弱、合集不匹配\n\n补充：封面与正文承接太弱。");
   assert.deepEqual(payload.retro.validatedSignals, ["标题结构", "风格稳定", "补充：评论区承接稳定"]);
@@ -1843,8 +2018,11 @@ return { readSampleLibraryModalCalibrationPayload };`
 });
 
 test("retro chips toggle selected state when clicked in the calibration editor", async () => {
-  const { appJs } = await readFrontendFiles();
-  const toggleHelperSource = appJs.match(/function\s+toggleSampleLibraryRetroChipSelection\s*\([\s\S]*?\n}\n/)?.[0] || "";
+  const { appJs, sampleLibraryCalibrationViewJs } = await readFrontendFiles();
+  const toggleHelperSource =
+    sampleLibraryCalibrationViewJs
+      .match(/export function\s+toggleSampleLibraryRetroChipSelection\s*\([\s\S]*?\n}\n/)?.[0]
+      .replace("export function", "function") || "";
   const classList = {
     values: new Set(),
     toggle(name) {
@@ -1891,7 +2069,7 @@ test("frontend exposes an inner-space terminology workspace for rewrite and gene
   assert.match(appJs, /catch \(error\) \{[\s\S]*const adminData = await apiJson\("\/api\/admin\/data"\)/);
   assert.match(appJs, /if \(normalizedTab === "inner-space"\) \{[\s\S]*await refreshInnerSpaceTermsState\(\);/);
   assert.match(appJs, /if \(normalizedTab === "inner-space"\) \{[\s\S]*renderLexiconWorkspaceModal\(\);/);
-  assert.match(appJs, /function buildInnerSpaceTermsListMarkup\s*\(/);
+  assert.match(appJs, /from "\.\/admin-panels-view\.js"/);
   assert.match(appJs, /function\s+setAdminDataLoadingState\s*\(/);
   assert.match(appJs, /function\s+syncAdminDataLoadingUI\s*\(/);
   assert.match(appJs, /function\s+renderAdminDataLoadingPlaceholders\s*\(/);
@@ -1908,13 +2086,13 @@ test("frontend exposes an inner-space terminology workspace for rewrite and gene
 });
 
 test("frontend exposes platform outcome shortcuts from analysis and rewrite results", async () => {
-  const { appJs } = await readFrontendFiles();
-  const analysisStart = appJs.indexOf("function renderAnalysis(");
-  const rewriteStart = appJs.indexOf("function renderRewriteResult(", analysisStart);
+  const { appJs, analysisReviewViewJs } = await readFrontendFiles();
+  const analysisStart = analysisReviewViewJs.indexOf("function renderAnalysis(");
+  const rewriteStart = analysisReviewViewJs.indexOf("function renderRewriteResult(", analysisStart);
   const generationStart = appJs.indexOf("function renderGenerationResult(");
   const generationEnd = appJs.indexOf("function buildLexiconEntry(", generationStart);
-  const analysisSource = appJs.slice(analysisStart, rewriteStart);
-  const rewriteSource = appJs.slice(rewriteStart, appJs.indexOf("function buildCrossReviewMarkup(", rewriteStart));
+  const analysisSource = analysisReviewViewJs.slice(analysisStart, rewriteStart);
+  const rewriteSource = analysisReviewViewJs.slice(rewriteStart, analysisReviewViewJs.indexOf("function buildCrossReviewMarkup(", rewriteStart));
 
   assert.match(appJs, /function\s+buildPlatformOutcomeActions\s*\(/);
   assert.match(appJs, /function\s+buildPlatformOutcomeModalMarkup\s*\(/);
@@ -1924,15 +2102,15 @@ test("frontend exposes platform outcome shortcuts from analysis and rewrite resu
   assert.match(analysisSource, /buildPlatformOutcomeActions\("analysis"\)/);
   assert.match(rewriteSource, /buildPlatformOutcomeActions\("rewrite"\)/);
   assert.doesNotMatch(appJs, /buildPlatformOutcomeActions\("generation"/);
-  assert.match(appJs, /data-action="save-platform-outcome"/);
-  assert.match(appJs, /平台通过/);
-  assert.match(appJs, /平台违规/);
-  assert.match(appJs, /效果好/);
-  assert.match(appJs, /效果一般/);
-  assert.match(appJs, /系统误判/);
-  assert.match(appJs, /name="platformOutcomeViews"/);
-  assert.match(appJs, /name="platformOutcomeShares"/);
-  assert.match(appJs, /name="platformOutcomeNotes"/);
+  assert.match(analysisReviewViewJs, /data-action="save-platform-outcome"/);
+  assert.match(analysisReviewViewJs, /平台通过/);
+  assert.match(analysisReviewViewJs, /平台违规/);
+  assert.match(analysisReviewViewJs, /效果好/);
+  assert.match(analysisReviewViewJs, /效果一般/);
+  assert.match(analysisReviewViewJs, /系统误判/);
+  assert.match(analysisReviewViewJs, /name="platformOutcomeViews"/);
+  assert.match(analysisReviewViewJs, /name="platformOutcomeShares"/);
+  assert.match(analysisReviewViewJs, /name="platformOutcomeNotes"/);
   assert.match(appJs, /publishStatus:\s*button\.dataset\.publishStatus/);
   assert.match(appJs, /openPlatformOutcomeModal\(\{/);
   assert.match(appJs, /views:\s*payload\.views \|\| 0/);
@@ -1941,10 +2119,10 @@ test("frontend exposes platform outcome shortcuts from analysis and rewrite resu
 });
 
 test("frontend explains how saved platform outcomes feed future detection and generation", async () => {
-  const { appJs } = await readFrontendFiles();
+  const { appJs, analysisReviewViewJs } = await readFrontendFiles();
 
-  assert.match(appJs, /已作为生成风格参考/);
-  assert.match(appJs, /已进入误判降权候选/);
+  assert.match(analysisReviewViewJs, /已作为生成风格参考/);
+  assert.match(analysisReviewViewJs, /已进入误判降权候选/);
   assert.match(appJs, /平台结果已回填到学习样本/);
   assert.match(appJs, /sample-library-create-result/);
   assert.doesNotMatch(appJs, /当前改写成功样本/);
@@ -1956,7 +2134,7 @@ test("frontend explains how saved platform outcomes feed future detection and ge
 });
 
 test("frontend also gates prefill and lexicon submit actions that depend on prerequisite content", async () => {
-  const { indexHtml, appJs } = await readFrontendFiles();
+  const { indexHtml, appJs, sampleLibrarySectionsViewJs } = await readFrontendFiles();
 
   assert.doesNotMatch(indexHtml, /legacy-lexicon-workspace/);
   assert.doesNotMatch(indexHtml, /id="custom-lexicon-form"/);
@@ -1966,8 +2144,8 @@ test("frontend also gates prefill and lexicon submit actions that depend on prer
   assert.match(appJs, /function\s+getSampleLibraryPrefillAnalysisRequirementMessage\s*\(/);
   assert.match(appJs, /function\s+getSampleLibraryPrefillRewriteRequirementMessage\s*\(/);
   assert.match(appJs, /function\s+syncSampleLibraryPrefillActions\s*\(/);
-  assert.match(appJs, /data-action="prefill-sample-library-create-analysis"/);
-  assert.match(appJs, /data-action="prefill-sample-library-create-rewrite"/);
+  assert.match(sampleLibrarySectionsViewJs, /data-action="prefill-sample-library-create-analysis"/);
+  assert.match(sampleLibrarySectionsViewJs, /data-action="prefill-sample-library-create-rewrite"/);
   assert.match(appJs, /async function\s+submitLexiconWorkspaceLexiconForm\s*\(/);
   assert.match(appJs, /async function\s+submitLexiconWorkspaceInnerSpaceForm\s*\(/);
   assert.match(appJs, /function buildLexiconWorkspaceLexiconFormMarkup\s*\(/);
@@ -2181,7 +2359,7 @@ test("getGenerationPayload only includes materialText inside referenceAssets for
 test("generation result rendering includes temporary reference warning details when server skips assets", async () => {
   const { appJs } = await readFrontendFiles();
   const generationStart = appJs.indexOf("function generationVariantLabel(");
-  const generationEnd = appJs.indexOf("function buildInnerSpaceTermsListMarkup(", generationStart);
+  const generationEnd = appJs.indexOf("function renderAdminData(", generationStart);
   const generationSource = appJs.slice(generationStart, generationEnd);
   const nodes = {
     "generation-result": { innerHTML: "" }
@@ -3544,13 +3722,14 @@ test("Escape closes generation reference search modal when open", async () => {
 });
 
 test("frontend exposes theme inspiration modal entry beside generation workbench controls", async () => {
-  const { indexHtml, styles } = await readFrontendFiles();
+  const { indexHtml, styles, appJs } = await readFrontendFiles();
 
   assert.match(indexHtml, /id="generation-theme-inspiration-button"/);
   assert.match(indexHtml, />\s*主题灵感\s*</);
   assert.match(indexHtml, /id="generation-theme-inspiration-modal"/);
   assert.match(indexHtml, /id="generation-theme-inspiration-modal-content"/);
   assert.match(indexHtml, /id="generation-theme-inspiration-modal-detail"/);
+  assert.match(appJs, /from "\.\/theme-inspiration-view\.js"/);
 
   assert.match(styles, /\.generation-theme-inspiration-modal\b/);
   assert.match(styles, /\.generation-theme-inspiration-modal-dialog\b/);
@@ -3561,6 +3740,7 @@ test("frontend exposes theme inspiration modal entry beside generation workbench
 
 test("theme inspiration modal helpers keep existing briefing and reference title, append safe fields, and retain latest refresh only", async () => {
   const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const themeInspirationViewJs = await fs.readFile(path.join(process.cwd(), "web/theme-inspiration-view.js"), "utf8");
   const modalHelpersSource = extractSourceBetween(
     appJs,
     "function setGenerationThemeInspirationModalOpen(",
@@ -3713,7 +3893,13 @@ test("theme inspiration modal helpers keep existing briefing and reference title
     "HTMLSelectElement",
     "setButtonBusy",
     "syncGenerationActions",
+    "themeInspirationViewFactory",
     `let generationThemeInspirationRequestSequence = requestSequenceBox.value;
+const {
+  getSelectedGenerationThemeInspiration: getSelectedGenerationThemeInspirationView,
+  renderGenerationThemeInspirationDetail: renderGenerationThemeInspirationDetailView,
+  renderGenerationThemeInspirationModal: renderGenerationThemeInspirationModalView
+} = themeInspirationViewFactory();
 ${modalHelpersSource}
 return {
   openGenerationThemeInspirationModal,
@@ -3788,7 +3974,13 @@ return {
     },
     () => {
       syncEvents.push({ type: "syncGenerationActions" });
-    }
+    },
+    new Function(`${themeInspirationViewJs.replace(/export function /g, "function ")}
+return {
+  getSelectedGenerationThemeInspiration,
+  renderGenerationThemeInspirationDetail,
+  renderGenerationThemeInspirationModal
+};`)
   );
 
   const pendingOpen = helpers.openGenerationThemeInspirationModal();
@@ -3847,6 +4039,7 @@ return {
 
 test("theme inspiration modal reopens existing cached items without auto-requesting again", async () => {
   const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const themeInspirationViewJs = await fs.readFile(path.join(process.cwd(), "web/theme-inspiration-view.js"), "utf8");
   const modalHelpersSource = extractSourceBetween(
     appJs,
     "function setGenerationThemeInspirationModalOpen(",
@@ -3904,7 +4097,13 @@ test("theme inspiration modal reopens existing cached items without auto-request
     "HTMLSelectElement",
     "setButtonBusy",
     "syncGenerationActions",
+    "themeInspirationViewFactory",
     `let generationThemeInspirationRequestSequence = 0;
+const {
+  getSelectedGenerationThemeInspiration: getSelectedGenerationThemeInspirationView,
+  renderGenerationThemeInspirationDetail: renderGenerationThemeInspirationDetailView,
+  renderGenerationThemeInspirationModal: renderGenerationThemeInspirationModalView
+} = themeInspirationViewFactory();
 ${modalHelpersSource}
 return {
   openGenerationThemeInspirationModal
@@ -3942,7 +4141,13 @@ return {
     class TestTextAreaElement {},
     class TestSelectElement {},
     () => {},
-    () => {}
+    () => {},
+    new Function(`${themeInspirationViewJs.replace(/export function /g, "function ")}
+return {
+  getSelectedGenerationThemeInspiration,
+  renderGenerationThemeInspirationDetail,
+  renderGenerationThemeInspirationModal
+};`)
   );
 
   await helpers.openGenerationThemeInspirationModal();
@@ -3955,6 +4160,7 @@ return {
 
 test("theme inspiration modal uses non-refresh auto-load first and explicit refresh afterwards", async () => {
   const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const themeInspirationViewJs = await fs.readFile(path.join(process.cwd(), "web/theme-inspiration-view.js"), "utf8");
   const modalHelpersSource = extractSourceBetween(
     appJs,
     "function setGenerationThemeInspirationModalOpen(",
@@ -4007,7 +4213,13 @@ test("theme inspiration modal uses non-refresh auto-load first and explicit refr
     "HTMLSelectElement",
     "setButtonBusy",
     "syncGenerationActions",
+    "themeInspirationViewFactory",
     `let generationThemeInspirationRequestSequence = 0;
+const {
+  getSelectedGenerationThemeInspiration: getSelectedGenerationThemeInspirationView,
+  renderGenerationThemeInspirationDetail: renderGenerationThemeInspirationDetailView,
+  renderGenerationThemeInspirationModal: renderGenerationThemeInspirationModalView
+} = themeInspirationViewFactory();
 ${modalHelpersSource}
 return {
   openGenerationThemeInspirationModal,
@@ -4066,7 +4278,13 @@ return {
     class TestTextAreaElement {},
     class TestSelectElement {},
     () => {},
-    () => {}
+    () => {},
+    new Function(`${themeInspirationViewJs.replace(/export function /g, "function ")}
+return {
+  getSelectedGenerationThemeInspiration,
+  renderGenerationThemeInspirationDetail,
+  renderGenerationThemeInspirationModal
+};`)
   );
 
   await helpers.openGenerationThemeInspirationModal();
@@ -4079,6 +4297,7 @@ return {
 
 test("theme inspiration modal shows specific empty and error messages instead of one generic empty state", async () => {
   const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const themeInspirationViewJs = await fs.readFile(path.join(process.cwd(), "web/theme-inspiration-view.js"), "utf8");
   const modalHelpersSource = extractSourceBetween(
     appJs,
     "function setGenerationThemeInspirationModalOpen(",
@@ -4108,7 +4327,13 @@ test("theme inspiration modal shows specific empty and error messages instead of
     "HTMLInputElement",
     "HTMLTextAreaElement",
     "HTMLSelectElement",
-    `${modalHelpersSource}
+    "themeInspirationViewFactory",
+    `const {
+  getSelectedGenerationThemeInspiration: getSelectedGenerationThemeInspirationView,
+  renderGenerationThemeInspirationDetail: renderGenerationThemeInspirationDetailView,
+  renderGenerationThemeInspirationModal: renderGenerationThemeInspirationModalView
+} = themeInspirationViewFactory();
+${modalHelpersSource}
 return { renderGenerationThemeInspirationModal };`
   )(
     appState,
@@ -4128,7 +4353,13 @@ return { renderGenerationThemeInspirationModal };`
     },
     class TestInputElement {},
     class TestTextAreaElement {},
-    class TestSelectElement {}
+    class TestSelectElement {},
+    new Function(`${themeInspirationViewJs.replace(/export function /g, "function ")}
+return {
+  getSelectedGenerationThemeInspiration,
+  renderGenerationThemeInspirationDetail,
+  renderGenerationThemeInspirationModal
+};`)
   );
 
   helpers.renderGenerationThemeInspirationModal();

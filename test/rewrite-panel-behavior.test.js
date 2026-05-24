@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 test("rewrite result panel no longer renders the false positive capture block", async () => {
-  const source = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const source = await fs.readFile(path.join(process.cwd(), "web/analysis-review-view.js"), "utf8");
   const start = source.indexOf("function renderRewriteResult(");
   const end = source.indexOf("function buildCrossReviewMarkup(", start);
   const renderRewriteResultSource = source.slice(start, end);
@@ -17,7 +17,7 @@ test("rewrite result panel no longer renders the false positive capture block", 
 });
 
 test("rewrite and cross review panels explain model responsibilities clearly", async () => {
-  const source = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const source = await fs.readFile(path.join(process.cwd(), "web/analysis-review-view.js"), "utf8");
   const rewriteStart = source.indexOf("function renderRewriteResult(");
   const crossReviewStart = source.indexOf("function buildCrossReviewMarkup(");
   const crossReviewEnd = source.indexOf("function renderCrossReviewResult(", crossReviewStart);
@@ -33,7 +33,7 @@ test("rewrite and cross review panels explain model responsibilities clearly", a
 });
 
 test("analysis panel shows rule engine and semantic model source labels", async () => {
-  const source = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const source = await fs.readFile(path.join(process.cwd(), "web/analysis-review-view.js"), "utf8");
   const start = source.indexOf("function renderAnalysis(");
   const end = source.indexOf("function renderRewriteResult(", start);
   const renderAnalysisSource = source.slice(start, end);
@@ -45,7 +45,7 @@ test("analysis panel shows rule engine and semantic model source labels", async 
 });
 
 test("analysis panel distinguishes failed semantic attempts from successful semantic model output", async () => {
-  const source = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const source = await fs.readFile(path.join(process.cwd(), "web/analysis-review-view.js"), "utf8");
   const start = source.indexOf("function renderAnalysis(");
   const end = source.indexOf("function renderRewriteResult(", start);
   const renderAnalysisSource = source.slice(start, end);
@@ -56,7 +56,7 @@ test("analysis panel distinguishes failed semantic attempts from successful sema
 });
 
 test("analysis panel shows false-positive downgrade signals when they affect rule detection", async () => {
-  const source = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const source = await fs.readFile(path.join(process.cwd(), "web/analysis-review-view.js"), "utf8");
   const start = source.indexOf("function renderAnalysis(");
   const end = source.indexOf("function renderRewriteResult(", start);
   const renderAnalysisSource = source.slice(start, end);
@@ -71,7 +71,7 @@ test("analysis panel shows false-positive downgrade signals when they affect rul
 
 test("analysis panel explains when long-term memory calibration adjusts the final verdict", async () => {
   const [source, styles] = await Promise.all([
-    fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8"),
+    fs.readFile(path.join(process.cwd(), "web/analysis-review-view.js"), "utf8"),
     fs.readFile(path.join(process.cwd(), "web/styles.css"), "utf8")
   ]);
   const start = source.indexOf("function renderAnalysis(");
@@ -175,7 +175,7 @@ test("main workbench no longer keeps a separate workflow assistant layer", async
 });
 
 test("rewrite result panel renders round-by-round retry guidance", async () => {
-  const source = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const source = await fs.readFile(path.join(process.cwd(), "web/analysis-review-view.js"), "utf8");
   const start = source.indexOf("function renderRewriteResult(");
   const end = source.indexOf("function buildCrossReviewMarkup(", start);
   const renderRewriteResultSource = source.slice(start, end);

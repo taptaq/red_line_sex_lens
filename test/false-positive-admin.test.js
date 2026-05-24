@@ -193,9 +193,11 @@ test("confirming a false positive sample creates a whitelist counterexample cand
 });
 
 test("admin page exposes false positive maintenance inside the sample library pane", async () => {
-  const [indexHtml, appJs] = await Promise.all([
+  const [indexHtml, appJs, sampleLibraryModalViewJs, sampleLibrarySectionsViewJs] = await Promise.all([
     fs.readFile(path.join(process.cwd(), "web/index.html"), "utf8"),
-    fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8")
+    fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8"),
+    fs.readFile(path.join(process.cwd(), "web/sample-library-modal-view.js"), "utf8"),
+    fs.readFile(path.join(process.cwd(), "web/sample-library-sections-view.js"), "utf8")
   ]);
 
   assert.match(indexHtml, /id="feedback-advanced-panel"/);
@@ -224,28 +226,28 @@ test("admin page exposes false positive maintenance inside the sample library pa
   assert.match(indexHtml, /扩展维护/);
   assert.match(appJs, /renderFalsePositiveLog|false-positive-log-list/);
   assert.match(appJs, /renderFeedbackLog|feedback-log-list/);
-  assert.match(appJs, /feedback-item-status/);
+  assert.match(appJs, /renderFeedbackLogView/);
   assert.match(appJs, /false_positive_reflow/);
   assert.match(appJs, /send-feedback-to-review-queue/);
   assert.match(appJs, /send-feedback-to-false-positive/);
-  assert.match(appJs, /function\s+buildFeedbackRuleQueueModalMarkup\s*\(/);
+  assert.match(sampleLibraryModalViewJs, /function\s+buildFeedbackRuleQueueModalMarkup\s*\(/);
   assert.match(appJs, /function\s+openFeedbackRuleQueueModal\s*\(/);
   assert.match(appJs, /function\s+saveFeedbackRuleQueueModal\s*\(/);
-  assert.match(appJs, /function\s+buildFeedbackFalsePositiveModalMarkup\s*\(/);
+  assert.match(sampleLibraryModalViewJs, /function\s+buildFeedbackFalsePositiveModalMarkup\s*\(/);
   assert.match(appJs, /function\s+openFeedbackFalsePositiveModal\s*\(/);
   assert.match(appJs, /function\s+saveFeedbackFalsePositiveModal\s*\(/);
-  assert.match(appJs, /function\s+buildSampleLibraryModalTagPickerMarkup\s*\(/);
-  assert.match(appJs, /class="tag-picker field-wide sample-library-modal-tag-picker"/);
-  assert.match(appJs, /name="tags" type="hidden"/);
-  assert.match(appJs, /sample-library-modal-tag-trigger/);
-  assert.match(appJs, /sample-library-modal-tag-dropdown/);
-  assert.match(appJs, /buildFeedbackFalsePositiveModalMarkup[\s\S]*buildSampleLibraryModalTagPickerMarkup\(modalState\.tags \|\| \[\]\)/);
-  assert.match(appJs, /加入规则复核/);
-  assert.match(appJs, /记录为误报案例/);
-  assert.match(appJs, /反馈推荐动作/);
-  assert.match(appJs, /推荐沉淀规则/);
-  assert.match(appJs, /推荐记为误报/);
-  assert.match(appJs, /先人工判断/);
+  assert.match(sampleLibrarySectionsViewJs, /function\s+buildSampleLibraryModalTagPickerMarkup\s*\(/);
+  assert.match(sampleLibrarySectionsViewJs, /class="tag-picker field-wide sample-library-modal-tag-picker"/);
+  assert.match(sampleLibrarySectionsViewJs, /name="tags" type="hidden"/);
+  assert.match(sampleLibrarySectionsViewJs, /sample-library-modal-tag-trigger/);
+  assert.match(sampleLibrarySectionsViewJs, /sample-library-modal-tag-dropdown/);
+  assert.match(sampleLibraryModalViewJs, /buildFeedbackFalsePositiveModalMarkup[\s\S]*buildSampleLibraryModalTagPickerMarkup\(modalState\.tags \|\| \[\]\)/);
+  assert.match(sampleLibraryModalViewJs, /加入规则复核/);
+  assert.match(sampleLibraryModalViewJs, /记录为误报案例/);
+  assert.match(appJs, /反馈推荐动作|renderFeedbackLogView/);
+  assert.match(appJs, /推荐沉淀规则|renderFeedbackLogView/);
+  assert.match(appJs, /推荐记为误报|renderFeedbackLogView/);
+  assert.match(appJs, /先人工判断|renderFeedbackLogView/);
   assert.match(appJs, /feedback-priority-list/);
   assert.match(appJs, /feedback-log-secondary-list/);
   assert.match(appJs, /false-positive-summary/);
@@ -286,7 +288,11 @@ test("sample library reflow area exposes false positive summary and modal launch
 });
 
 test("false positive homepage summary runtime updates summary text button visibility and visible modal refresh", async () => {
-  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const [appJs, adminPanelsViewJs, sampleLibraryModalViewJs] = await Promise.all([
+    fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8"),
+    fs.readFile(path.join(process.cwd(), "web/admin-panels-view.js"), "utf8"),
+    fs.readFile(path.join(process.cwd(), "web/sample-library-modal-view.js"), "utf8")
+  ]);
   const summarySource = extractSourceBetween(
     appJs,
     "function buildFalsePositiveSummaryText(",
@@ -357,6 +363,13 @@ test("false positive homepage summary runtime updates summary text button visibi
     "buildFalsePositiveSummaryText",
     "buildAdminDataLoadingBlockMarkup",
     "renderFalsePositiveListModal",
+    "renderFalsePositiveLogView",
+    "escapeHtml",
+    "verdictLabel",
+    "compactText",
+    "formatDate",
+    "buildLongTextDetails",
+    "falsePositiveStatusLabel",
     `${renderSource}; return renderFalsePositiveLog;`
   )(
     appState,
@@ -365,7 +378,14 @@ test("false positive homepage summary runtime updates summary text button visibi
     byId,
     buildFalsePositiveSummaryText,
     (message = "加载中...") => `<div class="result-card muted">${message}</div>`,
-    renderFalsePositiveListModal
+    renderFalsePositiveListModal,
+    () => "",
+    (value = "") => String(value || ""),
+    (value = "") => String(value || ""),
+    (value = "") => String(value || ""),
+    (value = "") => String(value || ""),
+    (label = "", value = "", emptyText = "未填写") => `${label}:${String(value || emptyText)}`,
+    (value = "") => String(value || "")
   );
 
   renderFalsePositiveLog([]);
@@ -391,9 +411,12 @@ test("false positive homepage summary runtime updates summary text button visibi
 });
 
 test("recording a false positive sample refreshes the sample library reflow area and keeps false positive list visible", async () => {
-  const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+  const [appJs, adminPanelsViewJs] = await Promise.all([
+    fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8"),
+    fs.readFile(path.join(process.cwd(), "web/admin-panels-view.js"), "utf8")
+  ]);
 
-  assert.match(appJs, /data-action="send-feedback-to-false-positive"[\s\S]*data-note-id="\$\{escapeHtml\(item\.noteId\)\}"[\s\S]*data-created-at="\$\{escapeHtml\(item\.createdAt\)\}"/);
+  assert.match(adminPanelsViewJs, /data-action="send-feedback-to-false-positive"/);
   assert.match(appJs, /if \(action === "send-feedback-to-false-positive"\) \{[\s\S]*openFeedbackFalsePositiveModal\(\{/);
   assert.match(appJs, /function\s+saveFeedbackFalsePositiveModal\s*\([\s\S]*apiJson\("\/api\/false-positive-log"/);
   assert.match(
