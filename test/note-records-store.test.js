@@ -259,6 +259,51 @@ test("mergeNoteRecords preserves existing publish and reference details during p
   assert.equal(merged.reference.notes, "人工精选");
 });
 
+test("mergeNoteRecords preserves split externalSource metadata across records", () => {
+  const left = buildNoteRecord({
+    note: {
+      title: "外部源合并",
+      body: "正文",
+      coverText: "",
+      collectionType: "",
+      tags: []
+    },
+    externalSource: {
+      provider: "stub-provider",
+      noteId: "note-1",
+      url: "https://www.xiaohongshu.com/explore/note-1"
+    }
+  });
+
+  const right = buildNoteRecord({
+    note: {
+      title: "外部源合并",
+      body: "正文",
+      coverText: "",
+      collectionType: "",
+      tags: []
+    },
+    externalSource: {
+      xsecToken: "token-1",
+      authorId: "author-1",
+      authorName: "作者 A",
+      fetchedAt: "2026-05-21T09:00:00.000Z"
+    }
+  });
+
+  const merged = mergeNoteRecords(left, right);
+
+  assert.deepEqual(merged.externalSource, {
+    provider: "stub-provider",
+    noteId: "note-1",
+    xsecToken: "token-1",
+    url: "https://www.xiaohongshu.com/explore/note-1",
+    authorId: "author-1",
+    authorName: "作者 A",
+    fetchedAt: "2026-05-21T09:00:00.000Z"
+  });
+});
+
 test("persisted note records preserve externalSource metadata", async (t) => {
   await withTempNoteRecordsStore(t, async () => {
     await saveNoteRecords([

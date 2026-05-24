@@ -227,14 +227,15 @@ function mergeReference(left = {}, right = {}) {
 function mergeExternalSource(left = {}, right = {}) {
   const normalizedLeft = normalizeExternalSource(left);
   const normalizedRight = normalizeExternalSource(right);
+  const mergeIdentityField = (leftValue = "", rightValue = "") => normalizeString(rightValue) || normalizeString(leftValue);
 
   return {
-    provider: preferLongerString(normalizedLeft.provider, normalizedRight.provider),
-    noteId: preferLongerString(normalizedLeft.noteId, normalizedRight.noteId),
-    xsecToken: preferLongerString(normalizedLeft.xsecToken, normalizedRight.xsecToken),
-    url: preferLongerString(normalizedLeft.url, normalizedRight.url),
-    authorId: preferLongerString(normalizedLeft.authorId, normalizedRight.authorId),
-    authorName: preferLongerString(normalizedLeft.authorName, normalizedRight.authorName),
+    provider: mergeIdentityField(normalizedLeft.provider, normalizedRight.provider),
+    noteId: mergeIdentityField(normalizedLeft.noteId, normalizedRight.noteId),
+    xsecToken: mergeIdentityField(normalizedLeft.xsecToken, normalizedRight.xsecToken),
+    url: mergeIdentityField(normalizedLeft.url, normalizedRight.url),
+    authorId: mergeIdentityField(normalizedLeft.authorId, normalizedRight.authorId),
+    authorName: mergeIdentityField(normalizedLeft.authorName, normalizedRight.authorName),
     fetchedAt: latestTimestamp(normalizedLeft.fetchedAt, normalizedRight.fetchedAt)
   };
 }
