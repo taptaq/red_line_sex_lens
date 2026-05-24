@@ -5027,6 +5027,28 @@ function renderSampleLibraryXhsConnectorPanel() {
   syncSampleLibraryXhsConnectorResult();
 }
 
+function buildSampleLibraryXhsConnectorActionMarkup({
+  action = "",
+  label = "",
+  busyLabel = "",
+  disabled = false,
+  buttonClass = "button button-alt"
+} = {}) {
+  return `
+    <div class="item-actions sample-library-xhs-connector-actions">
+      <button
+        type="button"
+        class="${escapeHtml(buttonClass)}"
+        data-action="${escapeHtml(action)}"
+        ${disabled ? "disabled" : ""}
+        data-busy-label="${escapeHtml(busyLabel || label)}"
+      >
+        ${escapeHtml(label)}
+      </button>
+    </div>
+  `;
+}
+
 function syncSampleLibraryXhsConnectorSelectionState() {
   const resultNode = byId("sample-library-xhs-connector-result");
 
@@ -5048,7 +5070,15 @@ function syncSampleLibraryXhsConnectorResult() {
   const selectedKeys = Array.isArray(appState.xhsConnector?.selectedKeys) ? appState.xhsConnector.selectedKeys : [];
 
   if (appState.xhsConnector?.syncPreview) {
-    resultNode.innerHTML = buildXhsConnectorSyncPreviewMarkupView(appState.xhsConnector.syncPreview);
+    const previewMarkup = buildXhsConnectorSyncPreviewMarkupView(appState.xhsConnector.syncPreview);
+    const applyDisabled = !Array.isArray(appState.xhsConnector.syncPreview?.matched) || !appState.xhsConnector.syncPreview.matched.length;
+
+    resultNode.innerHTML = `${previewMarkup}${buildSampleLibraryXhsConnectorActionMarkup({
+      action: "xhs-connector-sync-apply",
+      label: "应用同步更新",
+      busyLabel: "应用中...",
+      disabled: applyDisabled
+    })}`;
     return;
   }
 
@@ -5058,11 +5088,133 @@ function syncSampleLibraryXhsConnectorResult() {
       selected: selectedKeys.includes(buildXhsConnectorItemKeyView(item))
     }));
 
-    resultNode.innerHTML = buildXhsConnectorDiscoveryResultMarkupView(items);
+    resultNode.innerHTML = `${buildXhsConnectorDiscoveryResultMarkupView(items)}${buildSampleLibraryXhsConnectorActionMarkup({
+      action: "xhs-connector-import",
+      label: "导入选中样本",
+      busyLabel: "导入中...",
+      disabled: !selectedKeys.length
+    })}`;
     return;
   }
 
   resultNode.innerHTML = buildXhsConnectorDiscoveryResultMarkupView([]);
+}
+
+async function runSampleLibraryXhsConnectorDiscovery(button = null) {
+  const root = byId("sample-library-xhs-connector-panel");
+
+  if (!root) {
+    return;
+  }
+
+  if (button) {
+    setButtonBusy(button, true, "发现中...");
+  }
+
+  try {
+    const payload = readXhsConnectorDiscoveryPayloadView(root);
+    const response = await apiJson(sampleLibraryXhsConnectorDiscoverApi, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+
+    appState.xhsConnector.discoveryItems = Array.isArray(response.items) ? response.items : [];
+    appState.xhsConnector.selectedKeys = [];
+    appState.xhsConnector.syncPreview = null;
+    renderSampleLibraryWorkspace();
+  } finally {
+    if (button) {
+      setButtonBusy(button, false);
+    }
+  }
+}
+
+async function runSampleLibraryXhsConnectorImport(button = null) {
+  const discoveryItems = Array.isArray(appState.xhsConnector?.discoveryItems) ? appState.xhsConnector.discoveryItems : [];
+  const selectedKeys = Array.isArray(appState.xhsConnector?.selectedKeys) ? appState.xhsConnector.selectedKeys : [];
+  const selectedItems = discoveryItems.filter((item) => selectedKeys.includes(buildXhsConnectorItemKeyView(item)));
+
+  if (!selectedItems.length) {
+    return;
+  }
+
+  if (button) {
+    setButtonBusy(button, true, "导入中...");
+  }
+
+  try {
+    await apiJson(sampleLibraryXhsConnectorImportApi, {
+      method: "POST",
+      body: JSON.stringify({
+        items: selectedItems
+      })
+    });
+
+    appState.xhsConnector.selectedKeys = [];
+    appState.xhsConnector.syncPreview = null;
+    await refreshAll();
+    renderSampleLibraryWorkspace();
+  } finally {
+    if (button) {
+      setButtonBusy(button, false);
+    }
+  }
+}
+
+async function runSampleLibraryXhsConnectorSyncPreview(button = null) {
+  const root = byId("sample-library-xhs-connector-panel");
+
+  if (!root) {
+    return;
+  }
+
+  if (button) {
+    setButtonBusy(button, true, "预览中...");
+  }
+
+  try {
+    const payload = readXhsConnectorDiscoveryPayloadView(root);
+    const response = await apiJson(sampleLibraryXhsConnectorSyncPreviewApi, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+
+    appState.xhsConnector.syncPreview = response && typeof response === "object" ? response : null;
+    appState.xhsConnector.selectedKeys = [];
+    renderSampleLibraryWorkspace();
+  } finally {
+    if (button) {
+      setButtonBusy(button, false);
+    }
+  }
+}
+
+async function runSampleLibraryXhsConnectorSyncApply(button = null) {
+  const preview = appState.xhsConnector?.syncPreview;
+
+  if (!preview) {
+    return;
+  }
+
+  if (button) {
+    setButtonBusy(button, true, "应用中...");
+  }
+
+  try {
+    await apiJson(sampleLibraryXhsConnectorSyncApplyApi, {
+      method: "POST",
+      body: JSON.stringify(preview)
+    });
+
+    appState.xhsConnector.syncPreview = null;
+    appState.xhsConnector.selectedKeys = [];
+    await refreshAll();
+    renderSampleLibraryWorkspace();
+  } finally {
+    if (button) {
+      setButtonBusy(button, false);
+    }
+  }
 }
 
 async function refreshSampleLibraryWorkspace() {
@@ -9591,6 +9743,17 @@ byId("sample-library-collection-filter").addEventListener("change", (event) => {
   renderSampleLibraryWorkspace();
 });
 
+byId("sample-library-xhs-connector-result")?.addEventListener("change", (event) => {
+  const checkbox = event.target instanceof HTMLInputElement ? event.target : null;
+
+  if (!checkbox || checkbox.name !== "xhsConnectorSelectedItem") {
+    return;
+  }
+
+  syncSampleLibraryXhsConnectorSelectionState();
+  syncSampleLibraryXhsConnectorResult();
+});
+
 initializeTabs();
 syncReferenceThresholdCopy();
 renderSampleLibraryWorkspace();
@@ -9683,6 +9846,26 @@ document.addEventListener("click", async (event) => {
 
   if (action === "refresh-generation-theme-inspiration") {
     await refreshGenerationThemeInspirations();
+    return;
+  }
+
+  if (action === "xhs-connector-discover") {
+    await runSampleLibraryXhsConnectorDiscovery(button);
+    return;
+  }
+
+  if (action === "xhs-connector-import") {
+    await runSampleLibraryXhsConnectorImport(button);
+    return;
+  }
+
+  if (action === "xhs-connector-sync-preview") {
+    await runSampleLibraryXhsConnectorSyncPreview(button);
+    return;
+  }
+
+  if (action === "xhs-connector-sync-apply") {
+    await runSampleLibraryXhsConnectorSyncApply(button);
     return;
   }
 

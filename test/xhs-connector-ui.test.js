@@ -22,6 +22,15 @@ test("app wires xhs connector selection state", async () => {
   assert.match(appJs, /appState\.xhsConnector\.selectedKeys/);
   assert.match(appJs, /buildXhsConnectorItemKeyView\(item\)/);
   assert.match(appJs, /syncSampleLibraryXhsConnectorSelectionState/);
+  assert.match(appJs, /xhs-connector-discover/);
+  assert.match(appJs, /xhs-connector-import/);
+  assert.match(appJs, /xhs-connector-sync-preview/);
+  assert.match(appJs, /xhs-connector-sync-apply/);
+  assert.match(appJs, /runSampleLibraryXhsConnectorDiscovery/);
+  assert.match(appJs, /runSampleLibraryXhsConnectorImport/);
+  assert.match(appJs, /runSampleLibraryXhsConnectorSyncPreview/);
+  assert.match(appJs, /runSampleLibraryXhsConnectorSyncApply/);
+  assert.match(appJs, /sample-library-xhs-connector-result/);
 });
 
 test("app wires xhs connector api constants", async () => {
@@ -43,6 +52,8 @@ test("buildXhsConnectorPanelMarkup renders the shell and result region", () => {
 
   assert.match(markup, /sample-library-xhs-connector-panel/);
   assert.match(markup, /sample-library-xhs-connector-result/);
+  assert.match(markup, /xhs-connector-discover/);
+  assert.match(markup, /xhs-connector-sync-preview/);
 });
 
 test("buildXhsConnectorDiscoveryResultMarkup uses stable item keys for selection", () => {
