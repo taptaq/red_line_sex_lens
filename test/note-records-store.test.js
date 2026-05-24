@@ -292,8 +292,15 @@ test("persisted note records preserve externalSource metadata", async (t) => {
 
     const records = await loadNoteRecords();
     assert.equal(records.length, 1);
-    assert.equal(records[0].externalSource.provider, "stub-provider");
-    assert.equal(records[0].externalSource.noteId, "note-1");
+    assert.deepEqual(records[0].externalSource, {
+      provider: "stub-provider",
+      noteId: "note-1",
+      xsecToken: "",
+      url: "https://www.xiaohongshu.com/explore/note-1",
+      authorId: "",
+      authorName: "",
+      fetchedAt: ""
+    });
   });
 });
 
@@ -346,6 +353,10 @@ test("patchSampleLibraryRecord applies lifecycle metric patch without replacing 
   });
 
   assert.equal(patched.publish.metrics.likes, 120);
+  assert.equal(patched.note.title, "已发布内容");
+  assert.equal(patched.note.body, "正文");
+  assert.equal(patched.reference.enabled, false);
+  assert.equal(patched.reference.tier, "");
   assert.equal(patched.calibration.prediction.predictedStatus, "published_passed");
   assert.equal(patched.externalSource.noteId, "note-1");
 });
