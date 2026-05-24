@@ -70,7 +70,6 @@ export function buildSampleLibraryPayloadFromConnectorItem(item = {}, options = 
       title: normalized.title,
       body: normalized.bodyPreview,
       coverText: normalized.coverText,
-      collectionType: "",
       tags: normalized.tags
     },
     publish: {

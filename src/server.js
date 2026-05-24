@@ -98,6 +98,12 @@ import {
   findSampleLibraryRecord,
   patchSampleLibraryRecord
 } from "./sample-library.js";
+import {
+  applyXhsConnectorSync,
+  discoverXhsConnectorItems,
+  importXhsConnectorItems,
+  previewXhsConnectorSync
+} from "./xhs-connector.js";
 import { replayCalibratedSamples } from "./calibration-replay.js";
 import { filterQualifiedReferenceSamples } from "./reference-samples.js";
 import { rankSamplesByWeight, withSampleWeight } from "./sample-weight.js";
@@ -1416,6 +1422,44 @@ async function handleRequest(request, response) {
       items,
       styleProfile
     });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/xhs-connector/discover") {
+    const payload = await readBody(request);
+    const items = await discoverXhsConnectorItems(payload);
+    return sendJson(response, 200, { ok: true, items });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/xhs-connector/import") {
+    const payload = await readBody(request);
+    const result = await importXhsConnectorItems(payload?.items || [], {
+      persistRecord: async (itemPayload) => {
+        const { item } = await persistSampleLibraryRecord(itemPayload);
+        return item;
+      }
+    });
+    return sendJson(response, 200, { ok: true, ...result });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/xhs-connector/sync-preview") {
+    const result = await previewXhsConnectorSync();
+    return sendJson(response, 200, {
+      ok: true,
+      matched: result.matched,
+      unmatched: result.unmatched,
+      summary: result.summary
+    });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/xhs-connector/sync-apply") {
+    const payload = await readBody(request);
+    const result = await applyXhsConnectorSync(payload, {
+      patchRecord: async (itemPatch) => {
+        const { item } = await patchSampleLibraryRecordAndReturn(itemPatch);
+        return item;
+      }
+    });
+    return sendJson(response, 200, { ok: true, ...result });
   }
 
   if (request.method === "POST" && url.pathname === "/api/analyze-tag-options") {
