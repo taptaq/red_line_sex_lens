@@ -4,8 +4,9 @@ import fs from "node:fs/promises";
 
 test("sample-library workspace includes xhs connector panel anchors", async () => {
   const html = await fs.readFile(new URL("../web/index.html", import.meta.url), "utf8");
-  assert.match(html, /id="sample-library-xhs-connector-panel"/);
-  assert.match(html, /id="sample-library-xhs-connector-result"/);
+  assert.match(html, /id="sample-library-xhs-connector-mount"/);
+  assert.doesNotMatch(html, /id="sample-library-xhs-connector-panel"/);
+  assert.doesNotMatch(html, /id="sample-library-xhs-connector-result"/);
 });
 
 test("app wires xhs connector api constants", async () => {
