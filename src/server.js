@@ -19,6 +19,7 @@ import { analyzePost } from "./analyzer.js";
 import {
   loadAnalyzeTagOptions,
   loadCollectionTypes,
+  loadExternalReferenceSamples,
   loadFalsePositiveLog,
   getMemoryRetrievalService,
   loadInnerSpaceTerms,
@@ -30,6 +31,7 @@ import {
   loadStyleProfile,
   loadThemeInspirations,
   saveAnalyzeTagOptions,
+  saveExternalReferenceSamples,
   saveFalsePositiveLog,
   saveNoteRecords,
   saveStyleProfile,
@@ -38,6 +40,7 @@ import {
 } from "./data-store.js";
 import { buildScopedContextBundle } from "./context-bundle.js";
 import { assertValidCollectionType, buildCollectionTypeOptions } from "./collection-types.js";
+import { normalizeExternalReferenceSample } from "./external-reference-samples.js";
 import {
   buildAnalysisSnapshot,
   buildFalsePositiveAudit,
@@ -73,6 +76,8 @@ import {
   normalizeThemeInspirationItems,
   summarizeThemeInspirationClusters
 } from "./theme-inspirations.js";
+import { parseAccountPlannerImportFiles } from "./account-planner-import.js";
+import { summarizeAccountPlanner } from "./account-planner.js";
 import { recognizeFeedbackScreenshot, rewritePostForCompliance, suggestFeedbackCandidates, summarizeGenerationReferenceImage } from "./glm.js";
 import { summarizeGenerationReferenceAssets } from "./generation-reference-assets.js";
 import { mergeRuleAndSemanticAnalysis, runSemanticReview, runSemanticReviewComparison } from "./semantic-review.js";
@@ -98,12 +103,6 @@ import {
   findSampleLibraryRecord,
   patchSampleLibraryRecord
 } from "./sample-library.js";
-import {
-  applyXhsConnectorSync,
-  discoverXhsConnectorItems,
-  importXhsConnectorItems,
-  previewXhsConnectorSync
-} from "./xhs-connector.js";
 import { replayCalibratedSamples } from "./calibration-replay.js";
 import { filterQualifiedReferenceSamples } from "./reference-samples.js";
 import { rankSamplesByWeight, withSampleWeight } from "./sample-weight.js";
@@ -916,6 +915,14 @@ async function handleRequest(request, response) {
     return sendJson(response, 200, summary);
   }
 
+  if (request.method === "GET" && url.pathname === "/api/sample-library/external-reference-samples") {
+    const items = await loadExternalReferenceSamples();
+    return sendJson(response, 200, {
+      ok: true,
+      items
+    });
+  }
+
   if (request.method === "GET" && url.pathname === "/api/admin/data") {
     const data = await loadAdminData();
     return sendJson(response, 200, data);
@@ -1424,42 +1431,80 @@ async function handleRequest(request, response) {
     });
   }
 
-  if (request.method === "POST" && url.pathname === "/api/xhs-connector/discover") {
+  if (request.method === "POST" && url.pathname === "/api/sample-library/account-planner/parse") {
     const payload = await readBody(request);
-    const items = await discoverXhsConnectorItems(payload);
-    return sendJson(response, 200, { ok: true, items });
-  }
-
-  if (request.method === "POST" && url.pathname === "/api/xhs-connector/import") {
-    const payload = await readBody(request);
-    const result = await importXhsConnectorItems(payload?.items || [], {
-      persistRecord: async (itemPayload) => {
-        const { item } = await persistSampleLibraryRecord(itemPayload);
-        return item;
-      }
-    });
-    return sendJson(response, 200, { ok: true, ...result });
-  }
-
-  if (request.method === "POST" && url.pathname === "/api/xhs-connector/sync-preview") {
-    const result = await previewXhsConnectorSync();
+    const items = await parseAccountPlannerImportFiles(payload?.files || []);
     return sendJson(response, 200, {
       ok: true,
-      matched: result.matched,
-      unmatched: result.unmatched,
-      summary: result.summary
+      items,
+      diagnostics: {
+        fileCount: Array.isArray(payload?.files) ? payload.files.length : 0,
+        importedCount: items.length
+      }
     });
   }
 
-  if (request.method === "POST" && url.pathname === "/api/xhs-connector/sync-apply") {
+  if (request.method === "POST" && url.pathname === "/api/sample-library/external-reference-samples/import") {
     const payload = await readBody(request);
-    const result = await applyXhsConnectorSync(payload, {
-      patchRecord: async (itemPatch) => {
-        const { item } = await patchSampleLibraryRecordAndReturn(itemPatch);
-        return item;
+    const parsedItems = await parseAccountPlannerImportFiles(payload?.files || []);
+    const current = await loadExternalReferenceSamples();
+    const next = [...current, ...parsedItems.map((item) => normalizeExternalReferenceSample(item))];
+    const items = await saveExternalReferenceSamples(next);
+    return sendJson(response, 200, {
+      ok: true,
+      items,
+      diagnostics: {
+        fileCount: Array.isArray(payload?.files) ? payload.files.length : 0,
+        importedCount: parsedItems.length
       }
     });
-    return sendJson(response, 200, { ok: true, ...result });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/sample-library/account-planner/analyze") {
+    const payload = await readBody(request, { maxBytes: 5 * 1024 * 1024 });
+    const localRecords = Array.isArray(payload?.records) ? payload.records : await loadNoteRecords();
+    const externalSamples = Array.isArray(payload?.externalSamples) ? payload.externalSamples : await loadExternalReferenceSamples();
+    const result = await summarizeAccountPlanner({
+      localRecords,
+      externalSamples,
+      summarize: payload?.mockAccountPlannerSummary
+        ? async () => payload.mockAccountPlannerSummary
+        : null
+    });
+
+    return sendJson(response, 200, {
+      ok: true,
+      summary: result.summary,
+      cards: result.cards,
+      modelTrace: result.modelTrace,
+      diagnostics: {
+        localRecordCount: localRecords.length,
+        externalSampleCount: externalSamples.length,
+        cardCount: result.cards.length
+      }
+    });
+  }
+
+  if (request.method === "DELETE" && url.pathname === "/api/sample-library/external-reference-samples") {
+    const payload = await readBody(request);
+
+    if (payload?.clear === true) {
+      const items = await saveExternalReferenceSamples([]);
+      return sendJson(response, 200, { ok: true, items });
+    }
+
+    const id = String(payload?.id || "").trim();
+    const current = await loadExternalReferenceSamples();
+    const next = current.filter((item) => String(item?.id || "").trim() !== id);
+
+    if (next.length === current.length) {
+      const error = new Error("未找到要删除的外部参考样本。");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const items = await saveExternalReferenceSamples(next);
+    return sendJson(response, 200, { ok: true, items });
   }
 
   if (request.method === "POST" && url.pathname === "/api/analyze-tag-options") {

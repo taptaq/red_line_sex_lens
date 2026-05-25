@@ -533,6 +533,44 @@
                     <li>仅保存到学习样本：不会直接进入内容检测规则；检测仍主要依赖词库、白名单和误报回流。</li>
                   </ol>
                 </article>
+                <section id="sample-library-account-planner-panel" class="result-card-shell sample-library-account-planner">
+                  <div class="tab-panel-head">
+                    <strong>账号级复盘与下一篇建议</strong>
+                    <span>结合样本记录库和手工导入的外部样本，直接产出可回填到生成工作台的下一篇 Planner 卡片。</span>
+                  </div>
+                  <div class="item-actions">
+                    <button
+                      type="button"
+                      class="button button-ghost"
+                      id="sample-library-external-samples-button"
+                      aria-controls="sample-library-external-samples-modal"
+                      aria-expanded="false"
+                    >
+                      管理外部参考样本
+                    </button>
+                    <button
+                      type="button"
+                      class="button button-alt"
+                      id="sample-library-account-planner-run"
+                    >
+                      运行账号级复盘
+                    </button>
+                    <input
+                      id="sample-library-account-planner-import-input"
+                      type="file"
+                      accept=".md,.markdown,text/markdown,.csv,text/csv"
+                      multiple
+                      hidden
+                    />
+                  </div>
+                  <p id="sample-library-account-planner-import-summary" class="helper-text">
+                    可选：导入 Markdown / CSV 外部样本，补充账号外部对照。
+                  </p>
+                  <div class="sample-library-account-planner-workspace">
+                    <section id="sample-library-account-planner-result" class="result-card muted">等待运行账号级复盘</section>
+                    <aside id="sample-library-account-planner-detail"></aside>
+                  </div>
+                </section>
                 <div class="sample-library-toolbar">
                   <div class="sample-library-toolbar-filters">
                     <label>
@@ -608,7 +646,6 @@
                     </div>
                     <div id="sample-library-record-list" class="admin-list"></div>
                   </aside>
-                  <section id="sample-library-xhs-connector-mount"></section>
                 </div>
               </section>
               <details id="sample-library-advanced-panel" class="admin-panel-block admin-accordion sample-library-advanced-panel">
@@ -771,6 +808,60 @@
         </div>
         <div id="sample-library-pools-modal-content" class="sample-library-pools-modal-content">
           <div class="result-card muted">等待打开样本池工作台</div>
+        </div>
+      </section>
+    </div>
+    <div id="sample-library-external-samples-modal" class="sample-library-external-samples-modal" hidden>
+      <button
+        type="button"
+        class="sample-library-external-samples-modal-overlay"
+        data-action="close-sample-library-external-samples-modal"
+        aria-label="关闭外部参考样本弹窗"
+      ></button>
+      <section
+        class="sample-library-external-samples-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sample-library-external-samples-modal-title"
+      >
+        <header class="sample-library-external-samples-modal-header">
+          <div>
+            <strong id="sample-library-external-samples-modal-title">外部参考样本</strong>
+            <p>单独存放对照样本，只作为账号级复盘和下一篇规划的辅助证据层。</p>
+          </div>
+          <div class="item-actions">
+            <button
+              type="button"
+              class="button button-ghost button-small"
+              id="sample-library-account-planner-import-button"
+            >
+              导入 Markdown / CSV
+            </button>
+            <button
+              type="button"
+              class="button button-ghost button-small"
+              data-action="clear-sample-library-external-samples"
+            >
+              清空
+            </button>
+            <button
+              type="button"
+              class="button button-ghost button-small"
+              data-action="close-sample-library-external-samples-modal"
+            >
+              关闭
+            </button>
+          </div>
+          <input
+            id="sample-library-account-planner-import-input"
+            type="file"
+            accept=".md,.markdown,text/markdown,.csv,text/csv"
+            multiple
+            hidden
+          />
+        </header>
+        <div id="sample-library-external-samples-modal-content" class="sample-library-external-samples-modal-content">
+          <div class="result-card muted">等待加载外部参考样本</div>
         </div>
       </section>
     </div>

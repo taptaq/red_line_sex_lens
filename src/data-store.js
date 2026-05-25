@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { isSameFeedbackNote } from "./feedback-identity.js";
 import { dataDir, paths } from "./config.js";
+import { normalizeExternalReferenceSample } from "./external-reference-samples.js";
 import { buildLifecycleRecord } from "./note-lifecycle.js";
 import {
   buildNoteRecord,
@@ -26,6 +27,11 @@ let themeInspirationsCache = {
   path: "",
   mtimeMs: null,
   value: null
+};
+let externalReferenceSamplesCache = {
+  path: "",
+  mtimeMs: null,
+  items: null
 };
 
 async function readJson(filePath, fallback) {
@@ -717,6 +723,61 @@ export async function loadCollectionTypes() {
   return {
     custom: uniqueStrings(payload.custom || [])
   };
+}
+
+export async function loadExternalReferenceSamples() {
+  const configuredPath = paths.externalReferenceSamples;
+
+  try {
+    const stat = await fs.stat(configuredPath);
+
+    if (
+      externalReferenceSamplesCache.path === configuredPath &&
+      externalReferenceSamplesCache.mtimeMs === stat.mtimeMs &&
+      Array.isArray(externalReferenceSamplesCache.items)
+    ) {
+      return externalReferenceSamplesCache.items;
+    }
+
+    const items = (await readJson(configuredPath, [])).map((item) => normalizeExternalReferenceSample(item));
+    externalReferenceSamplesCache = {
+      path: configuredPath,
+      mtimeMs: stat.mtimeMs,
+      items
+    };
+    return items;
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  if (
+    externalReferenceSamplesCache.path === configuredPath &&
+    externalReferenceSamplesCache.mtimeMs === null &&
+    Array.isArray(externalReferenceSamplesCache.items)
+  ) {
+    return externalReferenceSamplesCache.items;
+  }
+
+  externalReferenceSamplesCache = {
+    path: configuredPath,
+    mtimeMs: null,
+    items: []
+  };
+  return [];
+}
+
+export async function saveExternalReferenceSamples(items) {
+  const normalized = (Array.isArray(items) ? items : []).map((item) => normalizeExternalReferenceSample(item));
+  await writeJson(paths.externalReferenceSamples, normalized);
+  const stat = await fs.stat(paths.externalReferenceSamples);
+  externalReferenceSamplesCache = {
+    path: paths.externalReferenceSamples,
+    mtimeMs: stat.mtimeMs,
+    items: normalized
+  };
+  return normalized;
 }
 
 export async function saveCollectionTypes(value = {}) {

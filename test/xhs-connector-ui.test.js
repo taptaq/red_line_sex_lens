@@ -1,135 +1,48 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
-import {
-  buildXhsConnectorPanelMarkup,
-  buildXhsConnectorDiscoveryResultMarkup,
-  buildXhsConnectorSyncPreviewMarkup,
-  buildXhsConnectorItemKey
-} from "../web/xhs-connector-view.js";
-import { readXhsConnectorSelectedKeys } from "../web/xhs-connector-form-helpers.js";
 
-test("sample-library workspace includes xhs connector mount only", async () => {
+test("sample-library workspace does not include xhs connector mount or panel", async () => {
   const html = await fs.readFile(new URL("../web/index.html", import.meta.url), "utf8");
-  assert.match(html, /id="sample-library-xhs-connector-mount"/);
+  assert.doesNotMatch(html, /id="sample-library-xhs-connector-mount"/);
   assert.doesNotMatch(html, /id="sample-library-xhs-connector-panel"/);
   assert.doesNotMatch(html, /id="sample-library-xhs-connector-result"/);
 });
 
-test("app wires xhs connector selection state", async () => {
+test("app does not wire xhs connector UI state or actions", async () => {
   const appJs = await fs.readFile(new URL("../web/app.js", import.meta.url), "utf8");
-  assert.match(appJs, /selectedKeys:\s*\[\]/);
-  assert.match(appJs, /appState\.xhsConnector\.selectedKeys/);
-  assert.match(appJs, /buildXhsConnectorItemKeyView\(item\)/);
-  assert.match(appJs, /syncSampleLibraryXhsConnectorSelectionState/);
-  assert.match(appJs, /byId\("sample-library-workspace"\)\?\.addEventListener\("change"/);
-  assert.doesNotMatch(appJs, /byId\("sample-library-xhs-connector-result"\)\?\.addEventListener\("change"/);
-  assert.match(appJs, /xhs-connector-discover/);
-  assert.match(appJs, /xhs-connector-import/);
-  assert.match(appJs, /xhs-connector-sync-preview/);
-  assert.match(appJs, /xhs-connector-sync-apply/);
-  assert.match(appJs, /runSampleLibraryXhsConnectorDiscovery/);
-  assert.match(appJs, /runSampleLibraryXhsConnectorImport/);
-  assert.match(appJs, /runSampleLibraryXhsConnectorSyncPreview/);
-  assert.match(appJs, /runSampleLibraryXhsConnectorSyncApply/);
-  assert.match(appJs, /sample-library-xhs-connector-result/);
+  assert.doesNotMatch(appJs, /xhsConnector/);
+  assert.doesNotMatch(appJs, /XhsConnector/);
+  assert.doesNotMatch(appJs, /xhs-connector-view/);
+  assert.doesNotMatch(appJs, /xhs-connector-form-helpers/);
+  assert.doesNotMatch(appJs, /xhs-connector-discover/);
+  assert.doesNotMatch(appJs, /xhs-connector-sync-preview/);
+  assert.doesNotMatch(appJs, /runSampleLibraryXhsConnectorDiscovery/);
+  assert.doesNotMatch(appJs, /runSampleLibraryXhsConnectorSyncPreview/);
 });
 
-test("app wires xhs connector api constants", async () => {
+test("app does not expose external xhs connector api calls", async () => {
   const appJs = await fs.readFile(new URL("../web/app.js", import.meta.url), "utf8");
-  assert.match(appJs, /const sampleLibraryXhsConnectorDiscoverApi = "\/api\/xhs-connector\/discover"/);
-  assert.match(appJs, /const sampleLibraryXhsConnectorImportApi = "\/api\/xhs-connector\/import"/);
-  assert.match(appJs, /const sampleLibraryXhsConnectorSyncPreviewApi = "\/api\/xhs-connector\/sync-preview"/);
-  assert.match(appJs, /const sampleLibraryXhsConnectorSyncApplyApi = "\/api\/xhs-connector\/sync-apply"/);
+
+  assert.doesNotMatch(appJs, /sampleLibraryXhsConnectorDiscoverApi/);
+  assert.doesNotMatch(appJs, /sampleLibraryXhsConnectorImportApi/);
+  assert.doesNotMatch(appJs, /sampleLibraryXhsConnectorSyncPreviewApi/);
+  assert.doesNotMatch(appJs, /sampleLibraryXhsConnectorSyncApplyApi/);
 });
 
-test("styles define xhs connector panel blocks", async () => {
+test("styles do not keep xhs connector panel blocks", async () => {
   const styles = await fs.readFile(new URL("../web/styles.css", import.meta.url), "utf8");
-  assert.match(styles, /\.sample-library-xhs-connector-panel/);
-  assert.match(styles, /\.sample-library-xhs-connector-list/);
+  assert.doesNotMatch(styles, /sample-library-xhs-connector/);
 });
 
-test("buildXhsConnectorPanelMarkup renders the shell and result region", () => {
-  const markup = buildXhsConnectorPanelMarkup();
+test("xhs connector view and form helper modules are removed", async () => {
+  await assert.rejects(
+    fs.stat(new URL("../web/xhs-connector-view.js", import.meta.url)),
+    /ENOENT/
+  );
 
-  assert.match(markup, /sample-library-xhs-connector-panel/);
-  assert.match(markup, /sample-library-xhs-connector-result/);
-  assert.match(markup, /xhs-connector-discover/);
-  assert.match(markup, /xhs-connector-sync-preview/);
-});
-
-test("buildXhsConnectorDiscoveryResultMarkup uses stable item keys for selection", () => {
-  const markup = buildXhsConnectorDiscoveryResultMarkup([
-    {
-      noteId: "note-1",
-      title: "一号样本",
-      selected: true
-    },
-    {
-      url: "https://www.xiaohongshu.com/explore/note-2",
-      title: "二号样本"
-    },
-    {
-      provider: "stub",
-      title: "三号样本",
-      authorName: "作者",
-      publishedAt: "2026-05-24T08:00:00.000Z",
-      bodyPreview: "摘要"
-    }
-  ]);
-
-  assert.match(markup, /value="note:note-1"/);
-  assert.match(markup, /value="url:https:\/\/www\.xiaohongshu\.com\/explore\/note-2"/);
-  assert.match(markup, /value="fallback:stub\|三号样本\|作者\|2026-05-24T08:00:00.000Z\|摘要"/);
-  assert.match(markup, /checked/);
-});
-
-test("buildXhsConnectorItemKey is stable for equivalent fallback content", () => {
-  const itemA = {
-    provider: "stub",
-    title: "三号样本",
-    authorName: "作者",
-    publishedAt: "2026-05-24T08:00:00.000Z",
-    bodyPreview: "摘要"
-  };
-  const itemB = {
-    provider: "stub",
-    title: "三号样本",
-    authorName: "作者",
-    publishedAt: "2026-05-24T08:00:00.000Z",
-    bodyPreview: "摘要"
-  };
-
-  assert.equal(buildXhsConnectorItemKey(itemA), buildXhsConnectorItemKey(itemB));
-  assert.equal(buildXhsConnectorItemKey(itemA), "fallback:stub|三号样本|作者|2026-05-24T08:00:00.000Z|摘要");
-});
-
-test("buildXhsConnectorSyncPreviewMarkup renders counts", () => {
-  const markup = buildXhsConnectorSyncPreviewMarkup({
-    summary: {
-      selectedCount: 2,
-      totalCount: 3
-    },
-    matched: [{ id: 1 }, { id: 2 }],
-    unmatched: [{ id: 3 }]
-  });
-
-  assert.match(markup, /匹配 2/);
-  assert.match(markup, /未匹配 1/);
-  assert.match(markup, /总计 3/);
-  assert.match(markup, /已选择 2 \/ 3 条候选样本/);
-});
-
-test("readXhsConnectorSelectedKeys returns checked keys", () => {
-  const root = {
-    querySelectorAll(selector) {
-      assert.equal(selector, '[name="xhsConnectorSelectedItem"]:checked');
-      return [{ value: "note:note-1" }, { value: "url:https://example.com/note-2" }];
-    }
-  };
-
-  assert.deepEqual(readXhsConnectorSelectedKeys(root), [
-    "note:note-1",
-    "url:https://example.com/note-2"
-  ]);
+  await assert.rejects(
+    fs.stat(new URL("../web/xhs-connector-form-helpers.js", import.meta.url)),
+    /ENOENT/
+  );
 });

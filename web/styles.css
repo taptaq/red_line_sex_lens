@@ -2578,6 +2578,71 @@ body.modal-open {
   padding: 1rem 1.35rem 1.35rem;
 }
 
+.sample-library-external-samples-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 74;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.sample-library-external-samples-modal[hidden] {
+  display: none;
+}
+
+.sample-library-external-samples-modal-overlay {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(38, 28, 20, 0.48);
+  cursor: pointer;
+}
+
+.sample-library-external-samples-modal-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(1040px, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  display: grid;
+  gap: 1rem;
+  padding: 1.2rem;
+  border-radius: 28px;
+  border: 1px solid rgba(54, 43, 31, 0.12);
+  background: linear-gradient(180deg, rgba(255, 251, 244, 0.99), rgba(247, 237, 221, 0.96));
+  box-shadow: 0 26px 70px rgba(52, 35, 22, 0.18);
+}
+
+.sample-library-external-samples-modal-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.sample-library-external-samples-modal-header p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.sample-library-external-samples-modal-content,
+.sample-library-external-samples-list {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.sample-library-external-sample-card {
+  display: grid;
+  gap: 0.7rem;
+  padding: 1rem;
+  border-radius: 22px;
+  border: 1px solid rgba(54, 43, 31, 0.1);
+  background: rgba(255, 255, 255, 0.56);
+}
+
 .lexicon-workspace-modal {
   position: fixed;
   inset: 0;
@@ -2792,80 +2857,66 @@ body.modal-open {
   align-items: start;
 }
 
-.sample-library-xhs-connector-panel {
+.sample-library-account-planner {
   display: grid;
   gap: 1rem;
-  width: min(100%, 980px);
-  padding: 1rem;
-  border: 1px solid rgba(54, 43, 31, 0.1);
-  border-radius: 24px;
-  background:
-    linear-gradient(180deg, rgba(255, 251, 244, 0.82), rgba(248, 238, 222, 0.64));
 }
 
-.sample-library-xhs-connector-form {
+.sample-library-account-planner-workspace {
   display: grid;
-  gap: 0.85rem;
-}
-
-.sample-library-xhs-connector-form label {
-  display: grid;
-  gap: 0.35rem;
-}
-
-.sample-library-xhs-connector-form span {
-  color: var(--muted);
-  font-size: 0.88rem;
-}
-
-.sample-library-xhs-connector-actions {
-  justify-content: flex-start;
-}
-
-.sample-library-xhs-connector-result {
-  display: grid;
-  gap: 0.85rem;
-}
-
-.sample-library-xhs-connector-list {
-  display: grid;
-  gap: 0.85rem;
-}
-
-.sample-library-xhs-connector-card {
-  display: grid;
-  gap: 0.55rem;
-}
-
-.sample-library-xhs-connector-card-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.65rem;
-  justify-content: space-between;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+  gap: 1rem;
   align-items: start;
 }
 
-.sample-library-xhs-connector-select {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--ink-soft);
+.sample-library-account-planner-card-list {
+  display: grid;
+  gap: 0.85rem;
 }
 
-.sample-library-xhs-connector-select input {
-  width: 16px;
-  height: 16px;
+.sample-library-account-planner-card,
+#sample-library-account-planner-detail {
+  display: grid;
+  gap: 0.7rem;
 }
 
-.sample-library-xhs-connector-card p {
+.sample-library-account-planner-card {
+  padding: 1rem;
+  border-radius: 22px;
+  border: 1px solid rgba(54, 43, 31, 0.1);
+  background: linear-gradient(180deg, rgba(255, 251, 244, 0.82), rgba(248, 238, 222, 0.64));
+}
+
+.sample-library-account-planner-card.is-selected {
+  border-color: rgba(199, 154, 69, 0.42);
+  box-shadow: 0 10px 24px rgba(67, 43, 25, 0.08);
+}
+
+.sample-library-account-planner-card-button {
+  display: grid;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.sample-library-account-planner-card-button p,
+.sample-library-account-planner-card-detail p {
   margin: 0;
   color: var(--muted);
   line-height: 1.6;
 }
 
-.sample-library-xhs-connector-sync-preview {
-  display: grid;
-  gap: 0.85rem;
+.sample-library-account-planner-card-detail ol,
+.sample-library-account-planner-card-detail ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--ink);
+  line-height: 1.6;
 }
 
 .sample-library-record-list {
@@ -4115,6 +4166,7 @@ body.modal-open {
   .review-provider-split,
   .generation-candidate-grid,
   .cross-review-top,
+  .sample-library-account-planner-workspace,
   .form-grid,
   .input-workflow-card .form-grid {
     grid-template-columns: 1fr;

@@ -17,6 +17,8 @@ async function withTempGenerationData(t, run) {
     collectionTypes: paths.collectionTypes,
     successSamples: paths.successSamples,
     styleProfile: paths.styleProfile,
+    themeInspirations: paths.themeInspirations,
+    externalReferenceSamples: paths.externalReferenceSamples,
     memoryRoot: paths.memoryRoot,
     memoryDocuments: paths.memoryDocuments,
     memoryCards: paths.memoryCards,
@@ -26,6 +28,8 @@ async function withTempGenerationData(t, run) {
   paths.collectionTypes = path.join(tempDir, "collection-types.json");
   paths.successSamples = path.join(tempDir, "success-samples.json");
   paths.styleProfile = path.join(tempDir, "style-profile.json");
+  paths.themeInspirations = path.join(tempDir, "theme-inspirations.json");
+  paths.externalReferenceSamples = path.join(tempDir, "external-reference-samples.json");
   paths.memoryRoot = path.join(tempDir, "memory");
   paths.memoryDocuments = path.join(paths.memoryRoot, "documents.jsonl");
   paths.memoryCards = path.join(paths.memoryRoot, "cards.jsonl");
@@ -320,6 +324,304 @@ test("generation reference material endpoint returns normalized candidate cards"
     assert.equal(result.ok, true);
     assert.equal(result.items.length, 1);
     assert.equal(result.items[0].title, "经期使用玩具前先看这几点");
+  });
+});
+
+test("account planner parse endpoint normalizes markdown and csv external samples", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const result = await invokeRoute("POST", "/api/sample-library/account-planner/parse", {
+      files: [
+        {
+          name: "external.csv",
+          contentBase64: Buffer.from(
+            [
+              "title,body,tags,collectionType,likes,favorites,comments,views,shares",
+              '"高表现外部样本","外部正文摘要","情绪反应,身体探索","科普",88,20,6,3200,12'
+            ].join("\n"),
+            "utf8"
+          ).toString("base64")
+        },
+        {
+          name: "external-note.md",
+          contentBase64: Buffer.from(
+            [
+              "---",
+              "title: 外部 Markdown 样本",
+              "tags: 关系沟通, 情绪反应",
+              "collectionType: 科普",
+              "likes: 66",
+              "views: 2400",
+              "---",
+              "",
+              "# 外部 Markdown 样本",
+              "",
+              "这是一段可用于账号复盘的外部正文。"
+            ].join("\n"),
+            "utf8"
+          ).toString("base64")
+        }
+      ]
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.equal(Array.isArray(result.items), true);
+    assert.equal(result.items.length, 2);
+    assert.equal(result.items[0].title, "高表现外部样本");
+    assert.deepEqual(result.items[0].tags, ["情绪反应", "身体探索"]);
+    assert.equal(result.items[0].publish.metrics.likes, 88);
+    assert.equal(result.items[1].title, "外部 Markdown 样本");
+    assert.equal(result.items[1].publish.metrics.views, 2400);
+    assert.deepEqual(result.diagnostics, {
+      fileCount: 2,
+      importedCount: 2
+    });
+  });
+});
+
+test("external reference sample import endpoint persists parsed markdown and csv samples", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const result = await invokeRoute("POST", "/api/sample-library/external-reference-samples/import", {
+      files: [
+        {
+          name: "external.csv",
+          contentBase64: Buffer.from(
+            [
+              "title,body,tags,collectionType,likes,views",
+              '"外部 CSV 样本","CSV 正文","情绪反应,身体探索","科普",88,3200'
+            ].join("\n"),
+            "utf8"
+          ).toString("base64")
+        },
+        {
+          name: "external-note.md",
+          contentBase64: Buffer.from(
+            [
+              "---",
+              "title: 外部 Markdown 样本",
+              "tags: 关系沟通, 情绪反应",
+              "collectionType: 科普",
+              "likes: 66",
+              "views: 2400",
+              "---",
+              "",
+              "# 外部 Markdown 样本",
+              "",
+              "这是一段可用于账号复盘的外部正文。"
+            ].join("\n"),
+            "utf8"
+          ).toString("base64")
+        }
+      ]
+    });
+
+    const loaded = await invokeRoute("GET", "/api/sample-library/external-reference-samples");
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.equal(result.items.length, 2);
+    assert.equal(loaded.status, 200);
+    assert.equal(loaded.items.length, 2);
+    assert.equal(loaded.items[0].title, "外部 CSV 样本");
+    assert.equal(loaded.items[1].title, "外部 Markdown 样本");
+  });
+});
+
+test("external reference sample delete endpoint removes a single stored sample", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const imported = await invokeRoute("POST", "/api/sample-library/external-reference-samples/import", {
+      files: [
+        {
+          name: "external.csv",
+          contentBase64: Buffer.from(
+            [
+              "title,body,tags,collectionType,likes,views",
+              '"外部 CSV 样本","CSV 正文","情绪反应,身体探索","科普",88,3200'
+            ].join("\n"),
+            "utf8"
+          ).toString("base64")
+        }
+      ]
+    });
+
+    const deleted = await invokeRoute("DELETE", "/api/sample-library/external-reference-samples", {
+      id: imported.items[0].id
+    });
+
+    assert.equal(deleted.status, 200);
+    assert.equal(deleted.ok, true);
+    assert.deepEqual(deleted.items, []);
+  });
+});
+
+test("external reference sample clear endpoint removes all stored samples", async (t) => {
+  await withTempGenerationData(t, async () => {
+    await invokeRoute("POST", "/api/sample-library/external-reference-samples/import", {
+      files: [
+        {
+          name: "external.csv",
+          contentBase64: Buffer.from(
+            [
+              "title,body,tags,collectionType,likes,views",
+              '"外部 CSV 样本","CSV 正文","情绪反应,身体探索","科普",88,3200'
+            ].join("\n"),
+            "utf8"
+          ).toString("base64")
+        }
+      ]
+    });
+
+    const cleared = await invokeRoute("DELETE", "/api/sample-library/external-reference-samples", {
+      clear: true
+    });
+
+    assert.equal(cleared.status, 200);
+    assert.equal(cleared.ok, true);
+    assert.deepEqual(cleared.items, []);
+  });
+});
+
+test("account planner analyze endpoint returns planner cards with prefills from local and external evidence", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const result = await invokeRoute("POST", "/api/sample-library/account-planner/analyze", {
+      records: [
+        {
+          id: "record-1",
+          note: {
+            title: "为什么结束后会突然很空？",
+            body: "最近高表现内容更偏轻科普和情绪解释。",
+            tags: ["情绪反应", "身体探索"],
+            collectionType: "科普"
+          },
+          publish: {
+            status: "positive_performance",
+            metrics: {
+              likes: 120,
+              favorites: 40,
+              comments: 15,
+              views: 5200,
+              shares: 21
+            }
+          },
+          calibration: {
+            retro: {
+              predictionMatched: true,
+              shouldBecomeReference: true
+            }
+          }
+        }
+      ],
+      externalSamples: [
+        {
+          title: "外部对照样本",
+          body: "外部样本更强调具体场景和轻解释结构。",
+          tags: ["关系沟通"],
+          collectionType: "科普",
+          publish: {
+            status: "positive_performance",
+            metrics: { likes: 90, favorites: 18, comments: 5, views: 3000, shares: 8 }
+          }
+        }
+      ],
+      mockAccountPlannerSummary: {
+        summary: {
+          strengths: ["轻科普 + 情绪解释更稳定"],
+          gaps: ["近期关系沟通角度偏少"],
+          nextMove: "继续放大轻科普解释路线，并补一个关系沟通切角。"
+        },
+        cards: [
+          {
+            planId: "plan-1",
+            planTitle: "把高表现的情绪解释路线继续做深",
+            estimatedValue: "high",
+            whyThisWorks: "本地高表现记录稳定命中情绪解释结构，外部样本补充了更具体的场景切口。",
+            titleFormula: "反常识提问 + 情绪解释 + 安抚落点",
+            bodyStructure: ["先抛问题", "解释原因", "给正常化结论"],
+            riskBoundary: ["避免病理化", "不做医疗诊断"],
+            sourceSignals: ["本地高表现记录 1 条", "外部对照样本 1 条"],
+            tags: ["情绪反应", "身体探索"],
+            prefillBriefing: "写一篇轻松科普，解释为什么结束后突然空虚并不一定异常。",
+            prefillReferenceTitle: "为什么结束后会突然很空？",
+            prefillMaterialText: "结构重点：反常识提问 -> 情绪解释 -> 正常化安抚。",
+            prefillCollectionType: "科普",
+            prefillTone: "温和"
+          }
+        ]
+      }
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.summary.strengths, ["轻科普 + 情绪解释更稳定"]);
+    assert.equal(result.cards.length, 1);
+    assert.equal(result.cards[0].planTitle, "把高表现的情绪解释路线继续做深");
+    assert.equal(result.cards[0].prefillBriefing, "写一篇轻松科普，解释为什么结束后突然空虚并不一定异常。");
+    assert.deepEqual(result.modelTrace, {
+      provider: "",
+      model: "",
+      route: "",
+      routeLabel: "",
+      attemptedRoutes: []
+    });
+    assert.deepEqual(result.diagnostics, {
+      localRecordCount: 1,
+      externalSampleCount: 1,
+      cardCount: 1
+    });
+  });
+});
+
+test("account planner analyze endpoint keeps model summary but falls back to planner cards when model omits them", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const result = await invokeRoute("POST", "/api/sample-library/account-planner/analyze", {
+      records: [
+        {
+          id: "record-1",
+          note: {
+            title: "为什么结束后会突然很空？",
+            body: "最近高表现内容更偏轻科普和情绪解释。",
+            tags: ["情绪反应", "身体探索"],
+            collectionType: "科普"
+          },
+          publish: {
+            status: "positive_performance",
+            metrics: {
+              likes: 120,
+              favorites: 40,
+              comments: 15,
+              views: 5200,
+              shares: 21
+            }
+          }
+        }
+      ],
+      externalSamples: [],
+      mockAccountPlannerSummary: {
+        summary: {
+          strengths: ["模型判断：情绪解释路线最稳"],
+          gaps: ["模型判断：最近关系沟通切角偏少"],
+          nextMove: "模型判断：继续围绕情绪解释，补一个关系沟通切口。"
+        },
+        provider: "mock",
+        model: "mock-account-planner",
+        route: "mock-route",
+        routeLabel: "Mock Route",
+        attemptedRoutes: ["mock-route"]
+      }
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.summary.strengths, ["模型判断：情绪解释路线最稳"]);
+    assert.equal(result.cards.length > 0, true);
+    assert.match(result.cards[0].prefillBriefing, /为什么结束后会突然很空/);
+    assert.deepEqual(result.modelTrace, {
+      provider: "mock",
+      model: "mock-account-planner",
+      route: "mock-route",
+      routeLabel: "Mock Route",
+      attemptedRoutes: ["mock-route"]
+    });
   });
 });
 

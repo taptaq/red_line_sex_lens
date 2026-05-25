@@ -40,21 +40,18 @@ import {
   renderGenerationThemeInspirationModal as renderGenerationThemeInspirationModalView
 } from "./theme-inspiration-view.js";
 import {
+  applySampleLibraryAccountPlannerPrefill as applySampleLibraryAccountPlannerPrefillView,
+  getSelectedSampleLibraryAccountPlannerCard as getSelectedSampleLibraryAccountPlannerCardView,
+  renderSampleLibraryAccountPlannerDetail as renderSampleLibraryAccountPlannerDetailView,
+  renderSampleLibraryAccountPlannerResult as renderSampleLibraryAccountPlannerResultView,
+  renderSampleLibraryExternalSamplesModal as renderSampleLibraryExternalSamplesModalView
+} from "./account-planner-view.js";
+import {
   buildSampleLibraryRecordCardMarkup as buildSampleLibraryRecordCardMarkupView,
   buildSampleLibraryRecordListMarkup as buildSampleLibraryRecordListMarkupView,
   buildSamplePoolActionMarkup as buildSamplePoolActionMarkupView,
   renderSamplePoolCards as renderSamplePoolCardsView
 } from "./sample-library-record-view.js";
-import {
-  buildXhsConnectorDiscoveryResultMarkup as buildXhsConnectorDiscoveryResultMarkupView,
-  buildXhsConnectorItemKey as buildXhsConnectorItemKeyView,
-  buildXhsConnectorPanelMarkup as buildXhsConnectorPanelMarkupView,
-  buildXhsConnectorSyncPreviewMarkup as buildXhsConnectorSyncPreviewMarkupView
-} from "./xhs-connector-view.js";
-import {
-  readXhsConnectorDiscoveryPayload as readXhsConnectorDiscoveryPayloadView,
-  readXhsConnectorSelectedKeys as readXhsConnectorSelectedKeysView
-} from "./xhs-connector-form-helpers.js";
 import {
   buildSampleLibraryRecordListModalMarkup as buildSampleLibraryRecordListModalMarkupView,
   buildSampleLibraryRecordInlineEditorDraft as buildSampleLibraryRecordInlineEditorDraftView,
@@ -838,11 +835,6 @@ const appState = {
     phase: "initial",
     error: ""
   },
-  xhsConnector: {
-    discoveryItems: [],
-    selectedKeys: [],
-    syncPreview: null
-  },
   selectedSampleLibraryRecordId: "",
   sampleLibraryDetailStep: "base",
   sampleLibraryCollectionFilter: "all",
@@ -857,6 +849,19 @@ const appState = {
   },
   sampleLibraryImportDrafts: [],
   sampleLibraryImportMessage: "",
+  externalReferenceSamples: [],
+  externalReferenceSamplesModal: {
+    open: false,
+    loading: false,
+    message: ""
+  },
+  sampleLibraryAccountPlanner: {
+    loading: false,
+    message: "",
+    summary: null,
+    cards: [],
+    selectedPlanId: ""
+  },
   generationReferenceAssets: {
     images: [],
     textFiles: [],
@@ -932,10 +937,9 @@ const sampleLibraryApi = "/api/sample-library";
 const sampleLibraryMarkdownImportParseApi = "/api/sample-library/markdown-import/parse";
 const sampleLibraryMarkdownImportCommitApi = "/api/sample-library/markdown-import/commit";
 const sampleLibraryCalibrationReplayApi = "/api/sample-library/calibration-replay";
-const sampleLibraryXhsConnectorDiscoverApi = "/api/xhs-connector/discover";
-const sampleLibraryXhsConnectorImportApi = "/api/xhs-connector/import";
-const sampleLibraryXhsConnectorSyncPreviewApi = "/api/xhs-connector/sync-preview";
-const sampleLibraryXhsConnectorSyncApplyApi = "/api/xhs-connector/sync-apply";
+const sampleLibraryExternalSamplesApi = "/api/sample-library/external-reference-samples";
+const sampleLibraryAccountPlannerParseApi = "/api/sample-library/account-planner/parse";
+const sampleLibraryAccountPlannerAnalyzeApi = "/api/sample-library/account-planner/analyze";
 const innerSpaceTermsApi = "/api/admin/inner-space-terms";
 const styleProfileAdminApi = "/api/admin/style-profile";
 const generationThemeInspirationsApi = "/api/generate-theme-inspirations";
@@ -947,6 +951,7 @@ function syncBodyModalState() {
   const sampleLibraryModalOpen = byId("sample-library-modal")?.hidden === false;
   const lexiconWorkspaceModalOpen = byId("lexicon-workspace-modal")?.hidden === false;
   const sampleLibraryPoolsModalOpen = byId("sample-library-pools-modal")?.hidden === false;
+  const sampleLibraryExternalSamplesModalOpen = byId("sample-library-external-samples-modal")?.hidden === false;
   const generationThemeInspirationModalOpen = byId("generation-theme-inspiration-modal")?.hidden === false;
   const generationReferenceSearchModalOpen = byId("generation-reference-search-modal")?.hidden === false;
   document.body.classList.toggle(
@@ -954,6 +959,7 @@ function syncBodyModalState() {
     sampleLibraryModalOpen ||
       lexiconWorkspaceModalOpen ||
       sampleLibraryPoolsModalOpen ||
+      sampleLibraryExternalSamplesModalOpen ||
       generationThemeInspirationModalOpen ||
       generationReferenceSearchModalOpen
   );
@@ -4988,9 +4994,9 @@ function renderSampleLibraryWorkspace() {
   const workspaceNode = byId("sample-library-workspace");
   const listNode = byId("sample-library-record-list");
   const queueNode = byId("sample-library-calibration-review-queue");
-  const xhsConnectorMountNode = byId("sample-library-xhs-connector-mount");
+  const plannerNode = byId("sample-library-account-planner-panel");
 
-  if (!workspaceNode && !listNode && !queueNode && !xhsConnectorMountNode) {
+  if (!workspaceNode && !listNode && !queueNode && !plannerNode) {
     return;
   }
 
@@ -4998,7 +5004,7 @@ function renderSampleLibraryWorkspace() {
   const filteredItems = filterSampleLibraryRecords(appState.sampleLibraryRecords);
 
   renderSampleLibraryList(filteredItems);
-  renderSampleLibraryXhsConnectorPanel();
+  syncSampleLibraryAccountPlannerPanel();
   renderSampleLibraryCalibrationReplayResult(appState.sampleLibraryCalibrationReplayResult);
   renderSampleLibraryCalibrationReviewQueue(appState.sampleLibraryRecords);
   if (appState.sampleLibraryModal?.kind === "record-list" && byId("sample-library-modal")?.hidden === false) {
@@ -5010,211 +5016,6 @@ function renderSampleLibraryWorkspace() {
   syncSampleLibraryCreateActions();
   syncSampleLibraryPrefillActions();
   syncSampleLibraryDetailActions();
-}
-
-function renderSampleLibraryXhsConnectorPanel() {
-  const mountNode = byId("sample-library-xhs-connector-mount");
-
-  if (!mountNode) {
-    return;
-  }
-
-  if (!mountNode.querySelector("#sample-library-xhs-connector-panel")) {
-    mountNode.innerHTML = buildXhsConnectorPanelMarkupView();
-    syncSampleLibraryXhsConnectorSelectionState();
-  }
-
-  syncSampleLibraryXhsConnectorResult();
-}
-
-function buildSampleLibraryXhsConnectorActionMarkup({
-  action = "",
-  label = "",
-  busyLabel = "",
-  disabled = false,
-  buttonClass = "button button-alt"
-} = {}) {
-  return `
-    <div class="item-actions sample-library-xhs-connector-actions">
-      <button
-        type="button"
-        class="${escapeHtml(buttonClass)}"
-        data-action="${escapeHtml(action)}"
-        ${disabled ? "disabled" : ""}
-        data-busy-label="${escapeHtml(busyLabel || label)}"
-      >
-        ${escapeHtml(label)}
-      </button>
-    </div>
-  `;
-}
-
-function syncSampleLibraryXhsConnectorSelectionState() {
-  const resultNode = byId("sample-library-xhs-connector-result");
-
-  if (!resultNode) {
-    return;
-  }
-
-  appState.xhsConnector.selectedKeys = readXhsConnectorSelectedKeysView(resultNode);
-}
-
-function syncSampleLibraryXhsConnectorResult() {
-  const resultNode = byId("sample-library-xhs-connector-result");
-
-  if (!resultNode) {
-    return;
-  }
-
-  const discoveryItems = Array.isArray(appState.xhsConnector?.discoveryItems) ? appState.xhsConnector.discoveryItems : [];
-  const selectedKeys = Array.isArray(appState.xhsConnector?.selectedKeys) ? appState.xhsConnector.selectedKeys : [];
-
-  if (appState.xhsConnector?.syncPreview) {
-    const previewMarkup = buildXhsConnectorSyncPreviewMarkupView(appState.xhsConnector.syncPreview);
-    const applyDisabled = !Array.isArray(appState.xhsConnector.syncPreview?.matched) || !appState.xhsConnector.syncPreview.matched.length;
-
-    resultNode.innerHTML = `${previewMarkup}${buildSampleLibraryXhsConnectorActionMarkup({
-      action: "xhs-connector-sync-apply",
-      label: "应用同步更新",
-      busyLabel: "应用中...",
-      disabled: applyDisabled
-    })}`;
-    return;
-  }
-
-  if (discoveryItems.length) {
-    const items = discoveryItems.map((item) => ({
-      ...item,
-      selected: selectedKeys.includes(buildXhsConnectorItemKeyView(item))
-    }));
-
-    resultNode.innerHTML = `${buildXhsConnectorDiscoveryResultMarkupView(items)}${buildSampleLibraryXhsConnectorActionMarkup({
-      action: "xhs-connector-import",
-      label: "导入选中样本",
-      busyLabel: "导入中...",
-      disabled: !selectedKeys.length
-    })}`;
-    return;
-  }
-
-  resultNode.innerHTML = buildXhsConnectorDiscoveryResultMarkupView([]);
-}
-
-async function runSampleLibraryXhsConnectorDiscovery(button = null) {
-  const root = byId("sample-library-xhs-connector-panel");
-
-  if (!root) {
-    return;
-  }
-
-  if (button) {
-    setButtonBusy(button, true, "发现中...");
-  }
-
-  try {
-    const payload = readXhsConnectorDiscoveryPayloadView(root);
-    const response = await apiJson(sampleLibraryXhsConnectorDiscoverApi, {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-
-    appState.xhsConnector.discoveryItems = Array.isArray(response.items) ? response.items : [];
-    appState.xhsConnector.selectedKeys = [];
-    appState.xhsConnector.syncPreview = null;
-    renderSampleLibraryWorkspace();
-  } finally {
-    if (button) {
-      setButtonBusy(button, false);
-    }
-  }
-}
-
-async function runSampleLibraryXhsConnectorImport(button = null) {
-  const discoveryItems = Array.isArray(appState.xhsConnector?.discoveryItems) ? appState.xhsConnector.discoveryItems : [];
-  const selectedKeys = Array.isArray(appState.xhsConnector?.selectedKeys) ? appState.xhsConnector.selectedKeys : [];
-  const selectedItems = discoveryItems.filter((item) => selectedKeys.includes(buildXhsConnectorItemKeyView(item)));
-
-  if (!selectedItems.length) {
-    return;
-  }
-
-  if (button) {
-    setButtonBusy(button, true, "导入中...");
-  }
-
-  try {
-    await apiJson(sampleLibraryXhsConnectorImportApi, {
-      method: "POST",
-      body: JSON.stringify({
-        items: selectedItems
-      })
-    });
-
-    appState.xhsConnector.selectedKeys = [];
-    appState.xhsConnector.syncPreview = null;
-    await refreshAll();
-    renderSampleLibraryWorkspace();
-  } finally {
-    if (button) {
-      setButtonBusy(button, false);
-    }
-  }
-}
-
-async function runSampleLibraryXhsConnectorSyncPreview(button = null) {
-  const root = byId("sample-library-xhs-connector-panel");
-
-  if (!root) {
-    return;
-  }
-
-  if (button) {
-    setButtonBusy(button, true, "预览中...");
-  }
-
-  try {
-    const payload = readXhsConnectorDiscoveryPayloadView(root);
-    const response = await apiJson(sampleLibraryXhsConnectorSyncPreviewApi, {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-
-    appState.xhsConnector.syncPreview = response && typeof response === "object" ? response : null;
-    appState.xhsConnector.selectedKeys = [];
-    renderSampleLibraryWorkspace();
-  } finally {
-    if (button) {
-      setButtonBusy(button, false);
-    }
-  }
-}
-
-async function runSampleLibraryXhsConnectorSyncApply(button = null) {
-  const preview = appState.xhsConnector?.syncPreview;
-
-  if (!preview) {
-    return;
-  }
-
-  if (button) {
-    setButtonBusy(button, true, "应用中...");
-  }
-
-  try {
-    await apiJson(sampleLibraryXhsConnectorSyncApplyApi, {
-      method: "POST",
-      body: JSON.stringify(preview)
-    });
-
-    appState.xhsConnector.syncPreview = null;
-    appState.xhsConnector.selectedKeys = [];
-    await refreshAll();
-    renderSampleLibraryWorkspace();
-  } finally {
-    if (button) {
-      setButtonBusy(button, false);
-    }
-  }
 }
 
 async function refreshSampleLibraryWorkspace() {
@@ -5760,6 +5561,128 @@ function renderGenerationThemeInspirationModal() {
   });
 }
 
+function getSelectedSampleLibraryAccountPlannerCard() {
+  const state = appState.sampleLibraryAccountPlanner || {};
+  return getSelectedSampleLibraryAccountPlannerCardView(state.cards, state.selectedPlanId);
+}
+
+function renderSampleLibraryAccountPlannerDetail(card = null) {
+  return renderSampleLibraryAccountPlannerDetailView(card, {
+    byId,
+    escapeHtml
+  });
+}
+
+function renderSampleLibraryAccountPlannerResult() {
+  return renderSampleLibraryAccountPlannerResultView(appState.sampleLibraryAccountPlanner || {}, {
+    byId,
+    escapeHtml,
+    renderSampleLibraryAccountPlannerDetail
+  });
+}
+
+function setSampleLibraryExternalSamplesModalOpen(isOpen) {
+  const modal = byId("sample-library-external-samples-modal");
+  const trigger = byId("sample-library-external-samples-button");
+
+  if (!modal) {
+    return;
+  }
+
+  modal.hidden = !isOpen;
+
+  if (trigger) {
+    trigger.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  }
+
+  syncBodyModalState();
+}
+
+function renderSampleLibraryExternalSamplesModal() {
+  return renderSampleLibraryExternalSamplesModalView(
+    {
+      ...appState.externalReferenceSamplesModal,
+      items: appState.externalReferenceSamples
+    },
+    {
+      byId,
+      syncBodyModalState,
+      setSampleLibraryExternalSamplesModalOpen,
+      escapeHtml
+    }
+  );
+}
+
+function syncSampleLibraryAccountPlannerPanel() {
+  const summaryNode = byId("sample-library-account-planner-import-summary");
+  const externalSamples = Array.isArray(appState.externalReferenceSamples) ? appState.externalReferenceSamples : [];
+
+  if (summaryNode) {
+    summaryNode.textContent = externalSamples.length
+      ? `已导入 ${externalSamples.length} 条外部样本，会作为账号复盘的辅助对照。`
+      : "可选：导入 Markdown / CSV 外部样本，补充账号外部对照。";
+  }
+
+  renderSampleLibraryAccountPlannerResult();
+}
+
+async function refreshExternalReferenceSamples({ openModal = false, message = "" } = {}) {
+  appState.externalReferenceSamplesModal = {
+    ...appState.externalReferenceSamplesModal,
+    open: openModal ? true : appState.externalReferenceSamplesModal.open,
+    loading: true,
+    message
+  };
+  renderSampleLibraryExternalSamplesModal();
+
+  try {
+    const payload = await apiJson(sampleLibraryExternalSamplesApi);
+    appState.externalReferenceSamples = Array.isArray(payload?.items) ? payload.items : [];
+    appState.externalReferenceSamplesModal = {
+      ...appState.externalReferenceSamplesModal,
+      open: openModal ? true : appState.externalReferenceSamplesModal.open,
+      loading: false,
+      message: ""
+    };
+  } catch (error) {
+    appState.externalReferenceSamplesModal = {
+      ...appState.externalReferenceSamplesModal,
+      open: openModal ? true : appState.externalReferenceSamplesModal.open,
+      loading: false,
+      message: error?.message || "外部参考样本加载失败"
+    };
+  }
+
+  syncSampleLibraryAccountPlannerPanel();
+  renderSampleLibraryExternalSamplesModal();
+}
+
+function closeSampleLibraryExternalSamplesModal() {
+  appState.externalReferenceSamplesModal = {
+    ...appState.externalReferenceSamplesModal,
+    open: false,
+    loading: false,
+    message: ""
+  };
+  setSampleLibraryExternalSamplesModalOpen(false);
+}
+
+async function importExternalReferenceSamples(files = []) {
+  const payload = {
+    files: await Promise.all(
+      [...files].map(async (file) => ({
+        name: file.name,
+        contentBase64: await fileToBase64(file)
+      }))
+    )
+  };
+
+  return apiJson(`${sampleLibraryExternalSamplesApi}/import`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
 function writeGenerationFieldValue(field, value) {
   if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement)) {
     return;
@@ -5813,6 +5736,46 @@ function applyGenerationThemeInspirationPrefill(item = {}) {
   };
   closeGenerationThemeInspirationModal();
   setActionGateHint("generation-action-hint", appState.generationThemeInspiration.resultMessage);
+  syncGenerationActions();
+}
+
+function readGenerationWorkbenchFieldValue(fieldName = "") {
+  const form = byId("generation-workbench-form");
+  const field = form?.querySelector?.(`[name="${fieldName}"]`);
+  return String(field?.value || "");
+}
+
+function writeGenerationWorkbenchFieldValue(fieldName = "", value = "") {
+  const form = byId("generation-workbench-form");
+  const field = form?.querySelector?.(`[name="${fieldName}"]`);
+  writeGenerationFieldValue(field, value);
+}
+
+function applySampleLibraryAccountPlannerCard() {
+  const selectedCard = getSelectedSampleLibraryAccountPlannerCard();
+
+  if (!selectedCard) {
+    const resultNode = byId("sample-library-account-planner-result");
+    if (resultNode) {
+      resultNode.textContent = "请先选择一张下一篇建议卡。";
+    }
+    return;
+  }
+
+  applySampleLibraryAccountPlannerPrefillView(selectedCard, {
+    readFieldValue: readGenerationWorkbenchFieldValue,
+    writeFieldValue: writeGenerationWorkbenchFieldValue,
+    appendMaterialText: appendGenerationMaterialText,
+    splitCSV,
+    joinCSV,
+    uniqueStrings
+  });
+
+  appState.sampleLibraryAccountPlanner = {
+    ...appState.sampleLibraryAccountPlanner,
+    message: "已将下一篇建议填入生成工作台，可直接继续生成。"
+  };
+  setActionGateHint("generation-action-hint", appState.sampleLibraryAccountPlanner.message);
   syncGenerationActions();
 }
 
@@ -6229,6 +6192,77 @@ async function parseSampleLibraryMarkdownFiles(files = []) {
     method: "POST",
     body: JSON.stringify(payload)
   });
+}
+
+async function parseSampleLibraryAccountPlannerFiles(files = []) {
+  const payload = {
+    files: await Promise.all(
+      [...files].map(async (file) => ({
+        name: file.name,
+        contentBase64: await fileToBase64(file)
+      }))
+    )
+  };
+
+  return apiJson(sampleLibraryAccountPlannerParseApi, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+async function runSampleLibraryAccountPlannerAnalysis() {
+  const runButton = byId("sample-library-account-planner-run");
+  const filteredRecords = filterSampleLibraryRecords(appState.sampleLibraryRecords);
+
+  if (!filteredRecords.length) {
+    appState.sampleLibraryAccountPlanner = {
+      ...appState.sampleLibraryAccountPlanner,
+      message: "请先准备至少一条学习样本记录，再运行账号级复盘。"
+    };
+    syncSampleLibraryAccountPlannerPanel();
+    return;
+  }
+
+  appState.sampleLibraryAccountPlanner = {
+    ...appState.sampleLibraryAccountPlanner,
+    loading: true,
+    message: ""
+  };
+  syncSampleLibraryAccountPlannerPanel();
+  setButtonBusy(runButton, true, "分析中...");
+
+  try {
+    const response = await apiJson(sampleLibraryAccountPlannerAnalyzeApi, {
+      method: "POST",
+      body: JSON.stringify({
+        records: filteredRecords,
+        ...(Array.isArray(appState.externalReferenceSamples) && appState.externalReferenceSamples.length
+          ? { externalSamples: appState.externalReferenceSamples }
+          : {})
+      })
+    });
+
+    appState.sampleLibraryAccountPlanner = {
+      ...appState.sampleLibraryAccountPlanner,
+      loading: false,
+      message: "",
+      summary: response.summary || null,
+      cards: Array.isArray(response.cards) ? response.cards : [],
+      selectedPlanId: String(response.cards?.[0]?.planId || "")
+    };
+  } catch (error) {
+    appState.sampleLibraryAccountPlanner = {
+      ...appState.sampleLibraryAccountPlanner,
+      loading: false,
+      message: error?.message || "账号级复盘失败",
+      summary: null,
+      cards: [],
+      selectedPlanId: ""
+    };
+  } finally {
+    setButtonBusy(runButton, false);
+    syncSampleLibraryAccountPlannerPanel();
+  }
 }
 
 function readSampleLibraryImportDraftReference(item = {}) {
@@ -9172,6 +9206,10 @@ byId("sample-library-import-button").addEventListener("click", () => {
   byId("sample-library-import-input").click();
 });
 
+byId("sample-library-account-planner-import-button")?.addEventListener("click", () => {
+  byId("sample-library-account-planner-import-input")?.click();
+});
+
 byId("sample-library-import-input").addEventListener("change", async (event) => {
   const input = event.currentTarget;
   const files = input.files || [];
@@ -9194,6 +9232,45 @@ byId("sample-library-import-input").addEventListener("change", async (event) => 
     syncSampleLibraryImportActions();
   } finally {
     input.value = "";
+  }
+});
+
+byId("sample-library-account-planner-import-input")?.addEventListener("change", async (event) => {
+  const input = event.currentTarget;
+  const files = [...(input.files || [])];
+
+  if (!files.length) {
+    return;
+  }
+
+  appState.externalReferenceSamplesModal = {
+    ...appState.externalReferenceSamplesModal,
+    open: true,
+    loading: true,
+    message: "正在导入外部参考样本..."
+  };
+  renderSampleLibraryExternalSamplesModal();
+
+  try {
+    const result = await importExternalReferenceSamples(files);
+    appState.externalReferenceSamples = Array.isArray(result?.items) ? result.items : [];
+    appState.externalReferenceSamplesModal = {
+      ...appState.externalReferenceSamplesModal,
+      open: true,
+      loading: false,
+      message: ""
+    };
+  } catch (error) {
+    appState.externalReferenceSamplesModal = {
+      ...appState.externalReferenceSamplesModal,
+      open: true,
+      loading: false,
+      message: error?.message || "外部样本导入失败"
+    };
+  } finally {
+    input.value = "";
+    renderSampleLibraryExternalSamplesModal();
+    syncSampleLibraryAccountPlannerPanel();
   }
 });
 
@@ -9738,20 +9815,17 @@ byId("sample-library-pools-button")?.addEventListener("click", () => {
   openSampleLibraryPoolsModal("reference");
 });
 
+byId("sample-library-external-samples-button")?.addEventListener("click", async () => {
+  await refreshExternalReferenceSamples({ openModal: true });
+});
+
+byId("sample-library-account-planner-run")?.addEventListener("click", async () => {
+  await runSampleLibraryAccountPlannerAnalysis();
+});
+
 byId("sample-library-collection-filter").addEventListener("change", (event) => {
   appState.sampleLibraryCollectionFilter = String(event.currentTarget.value || "all");
   renderSampleLibraryWorkspace();
-});
-
-byId("sample-library-workspace")?.addEventListener("change", (event) => {
-  const checkbox = event.target instanceof HTMLInputElement ? event.target : null;
-
-  if (!checkbox || checkbox.name !== "xhsConnectorSelectedItem") {
-    return;
-  }
-
-  syncSampleLibraryXhsConnectorSelectionState();
-  syncSampleLibraryXhsConnectorResult();
 });
 
 initializeTabs();
@@ -9820,6 +9894,17 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const plannerCard = event.target.closest('[data-action="select-sample-library-account-planner-card"]');
+
+  if (plannerCard) {
+    appState.sampleLibraryAccountPlanner = {
+      ...appState.sampleLibraryAccountPlanner,
+      selectedPlanId: String(plannerCard.dataset.planId || "")
+    };
+    syncSampleLibraryAccountPlannerPanel();
+    return;
+  }
+
   const button = event.target.closest("button[data-action]");
 
   if (!button) {
@@ -9849,26 +9934,6 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
-  if (action === "xhs-connector-discover") {
-    await runSampleLibraryXhsConnectorDiscovery(button);
-    return;
-  }
-
-  if (action === "xhs-connector-import") {
-    await runSampleLibraryXhsConnectorImport(button);
-    return;
-  }
-
-  if (action === "xhs-connector-sync-preview") {
-    await runSampleLibraryXhsConnectorSyncPreview(button);
-    return;
-  }
-
-  if (action === "xhs-connector-sync-apply") {
-    await runSampleLibraryXhsConnectorSyncApply(button);
-    return;
-  }
-
   if (action === "select-generation-theme-inspiration") {
     appState.generationThemeInspiration = {
       ...appState.generationThemeInspiration,
@@ -9893,6 +9958,56 @@ document.addEventListener("click", async (event) => {
     }
 
     applyGenerationThemeInspirationPrefill(selectedTheme);
+    return;
+  }
+
+  if (action === "apply-sample-library-account-planner-card") {
+    applySampleLibraryAccountPlannerCard();
+    return;
+  }
+
+  if (action === "close-sample-library-external-samples-modal") {
+    closeSampleLibraryExternalSamplesModal();
+    return;
+  }
+
+  if (action === "delete-sample-library-external-sample") {
+    const response = await apiJson(sampleLibraryExternalSamplesApi, {
+      method: "DELETE",
+      body: JSON.stringify({
+        id: button.dataset.id || ""
+      })
+    });
+
+    appState.externalReferenceSamples = Array.isArray(response?.items) ? response.items : [];
+    appState.externalReferenceSamplesModal = {
+      ...appState.externalReferenceSamplesModal,
+      open: true,
+      loading: false,
+      message: ""
+    };
+    syncSampleLibraryAccountPlannerPanel();
+    renderSampleLibraryExternalSamplesModal();
+    return;
+  }
+
+  if (action === "clear-sample-library-external-samples") {
+    const response = await apiJson(sampleLibraryExternalSamplesApi, {
+      method: "DELETE",
+      body: JSON.stringify({
+        clear: true
+      })
+    });
+
+    appState.externalReferenceSamples = Array.isArray(response?.items) ? response.items : [];
+    appState.externalReferenceSamplesModal = {
+      ...appState.externalReferenceSamplesModal,
+      open: true,
+      loading: false,
+      message: ""
+    };
+    syncSampleLibraryAccountPlannerPanel();
+    renderSampleLibraryExternalSamplesModal();
     return;
   }
 
