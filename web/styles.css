@@ -1648,6 +1648,95 @@ li + li {
   min-height: 100%;
 }
 
+.generation-draft-inbox-panel {
+  margin-top: 1.2rem;
+  display: grid;
+  gap: 1rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(54, 43, 31, 0.08);
+}
+
+.generation-draft-inbox-panel .section-heading {
+  margin-bottom: 0.1rem;
+}
+
+.generation-draft-inbox-panel .section-heading h2 {
+  font-size: clamp(1.15rem, 1.55vw, 1.5rem);
+  line-height: 1.2;
+}
+
+.generation-draft-inbox-panel .section-note {
+  max-width: 58ch;
+}
+
+.draft-ideas-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.draft-ideas-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: start;
+}
+
+.draft-ideas-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: end;
+}
+
+.draft-ideas-view-switch {
+  justify-content: start;
+}
+
+.draft-ideas-sort-control {
+  min-width: 150px;
+}
+
+.draft-ideas-sort-control span {
+  margin-bottom: 0.35rem;
+}
+
+.draft-idea-card {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 0.6rem;
+  min-height: 224px;
+  padding: 1rem 1.05rem;
+  border: 1px solid rgba(54, 43, 31, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.48);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.draft-idea-card.is-used {
+  opacity: 0.72;
+}
+
+.draft-idea-card strong {
+  font-family: "Songti SC", "STSong", "Noto Serif SC", serif;
+  font-size: 0.98rem;
+  line-height: 1.4;
+}
+
+.draft-idea-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.draft-idea-card .item-actions {
+  margin-top: auto;
+  align-self: end;
+}
+
+@media (max-width: 760px) {
+  .draft-ideas-toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+
 .generation-reference-selection input {
   position: absolute;
   inset: 0;

@@ -530,6 +530,7 @@ test("refreshAll clears admin loading state before re-rendering admin sections",
     "collectionTypesApi",
     "refreshAdminDataState",
     "refreshSampleLibraryWorkspace",
+    "refreshDraftIdeas",
     "setSummaryLoadingState",
     "renderSummaryLoadingPlaceholders",
     "renderSummary",
@@ -558,6 +559,7 @@ test("refreshAll clears admin loading state before re-rendering admin sections",
       };
     },
     async () => [],
+    async () => {},
     (phase) => {
       appState.summaryLoading.phase = phase;
     },
@@ -3705,6 +3707,30 @@ test("frontend exposes theme inspiration modal entry beside generation workbench
   assert.match(styles, /\.generation-theme-card\b/);
   assert.match(styles, /\.generation-theme-card-button\b/);
   assert.match(styles, /\.generation-theme-inspiration-modal-content\s+\.generation-theme-card\s*\{[\s\S]*border:\s*0/);
+});
+
+test("frontend exposes a draft inbox grid inside the main workbench footer area with filters and sorting", async () => {
+  const { indexHtml, appJs, styles } = await readFrontendFiles();
+
+  assert.match(indexHtml, /id="generation-draft-inbox-panel"/);
+  assert.match(indexHtml, /id="draft-ideas-list"/);
+  assert.match(indexHtml, /id="draft-ideas-toolbar"/);
+  assert.match(indexHtml, /name="draftIdeasStatusView"/);
+  assert.match(indexHtml, /name="draftIdeasSortOrder"/);
+  assert.match(indexHtml, /待写选题/);
+  assert.match(indexHtml, /待写/);
+  assert.match(indexHtml, /已使用/);
+  assert.match(styles, /\.generation-draft-inbox-panel\b/);
+  assert.match(styles, /\.draft-ideas-list\b/);
+  assert.match(styles, /\.draft-ideas-grid\b/);
+  assert.match(styles, /\.draft-ideas-toolbar\b/);
+  assert.match(appJs, /draftIdeasApi/);
+  assert.match(appJs, /addDraftIdeaFromAccountPlannerCard/);
+  assert.match(appJs, /addDraftIdeaFromThemeInspirationCard/);
+  assert.match(appJs, /addDraftIdeaFromGenerationCandidate/);
+  assert.match(appJs, /loadDraftIdeaIntoGenerationForm/);
+  assert.match(appJs, /draftIdeasStatusView/);
+  assert.match(appJs, /draftIdeasSortOrder/);
 });
 
 test("theme inspiration modal helpers keep existing briefing and reference title, append safe fields, and retain latest refresh only", async () => {

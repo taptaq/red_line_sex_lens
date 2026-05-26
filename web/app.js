@@ -46,6 +46,7 @@ import {
   renderSampleLibraryAccountPlannerResult as renderSampleLibraryAccountPlannerResultView,
   renderSampleLibraryExternalSamplesModal as renderSampleLibraryExternalSamplesModalView
 } from "./account-planner-view.js";
+import { renderDraftIdeasList as renderDraftIdeasListView } from "./draft-ideas-view.js";
 import {
   buildSampleLibraryRecordCardMarkup as buildSampleLibraryRecordCardMarkupView,
   buildSampleLibraryRecordListMarkup as buildSampleLibraryRecordListMarkupView,
@@ -855,6 +856,13 @@ const appState = {
     cards: [],
     selectedPlanId: ""
   },
+  draftIdeas: {
+    loading: false,
+    message: "",
+    items: [],
+    draftIdeasStatusView: "draft",
+    draftIdeasSortOrder: "newest"
+  },
   generationReferenceAssets: {
     images: [],
     textFiles: [],
@@ -933,6 +941,7 @@ const sampleLibraryCalibrationReplayApi = "/api/sample-library/calibration-repla
 const sampleLibraryExternalSamplesApi = "/api/sample-library/external-reference-samples";
 const sampleLibraryAccountPlannerParseApi = "/api/sample-library/account-planner/parse";
 const sampleLibraryAccountPlannerAnalyzeApi = "/api/sample-library/account-planner/analyze";
+const draftIdeasApi = "/api/draft-ideas";
 const innerSpaceTermsApi = "/api/admin/inner-space-terms";
 const styleProfileAdminApi = "/api/admin/style-profile";
 const generationThemeInspirationsApi = "/api/generate-theme-inspirations";
@@ -5143,6 +5152,15 @@ function renderGenerationResult(result = {}) {
           >
             复制封面图 Prompt
           </button>
+          <button
+            type="button"
+            class="button button-ghost button-small"
+            data-action="add-generation-candidate-to-draft"
+            data-candidate-id="${escapeHtml(String(displayItem.id || ""))}"
+            data-candidate-index="${escapeHtml(String(displayIndex))}"
+          >
+            加入草稿区
+          </button>
         </div>
         <p class="helper-text">复制发布稿会带上正文、#科普 和标签，便于直接粘贴发布。</p>
         <p class="helper-text action-gate-hint" id="generation-publish-copy-hint" aria-live="polite"></p>
@@ -5260,6 +5278,9 @@ async function refreshAdminDataState() {
 async function refreshAll() {
   const hasExistingSummary = Boolean(appState.summaryData);
   const summaryPhase = hasExistingSummary ? "refresh" : "initial";
+  const refreshAccountPlannerSafely =
+    typeof refreshSampleLibraryAccountPlannerState === "function" ? refreshSampleLibraryAccountPlannerState : async () => {};
+  const refreshDraftIdeasSafely = typeof refreshDraftIdeas === "function" ? refreshDraftIdeas : async () => {};
 
   setSummaryLoadingState(summaryPhase);
 
@@ -5272,7 +5293,8 @@ async function refreshAll() {
     apiJson(collectionTypesApi),
     refreshAdminDataState(),
     refreshSampleLibraryWorkspace(),
-    refreshSampleLibraryAccountPlannerState()
+    refreshAccountPlannerSafely(),
+    refreshDraftIdeasSafely()
   ]);
   appState.collectionTypeOptions = Array.isArray(collectionTypePayload.options) ? collectionTypePayload.options : [];
   appState.summaryData = summary && typeof summary === "object" ? summary : {};
@@ -5602,6 +5624,32 @@ function renderSampleLibraryAccountPlannerResult() {
   });
 }
 
+function renderDraftIdeasList() {
+  const state = appState.draftIdeas || {};
+  const statusView = String(state.draftIdeasStatusView || "draft");
+  const sortOrder = String(state.draftIdeasSortOrder || "newest");
+  const items = (Array.isArray(state.items) ? state.items : [])
+    .filter((item) => String(item?.status || "draft") === statusView)
+    .sort((left, right) => {
+      const leftTime = Date.parse(left?.createdAt || "") || 0;
+      const rightTime = Date.parse(right?.createdAt || "") || 0;
+      return sortOrder === "oldest" ? leftTime - rightTime : rightTime - leftTime;
+    });
+
+  byId("draft-ideas-sort-order") && (byId("draft-ideas-sort-order").value = sortOrder);
+  byId("draft-ideas-status-view") && (byId("draft-ideas-status-view").value = statusView);
+  document.querySelectorAll("[data-draft-ideas-status-view]").forEach((button) => {
+    const selected = String(button.getAttribute("data-draft-ideas-status-view") || "") === statusView;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-pressed", selected ? "true" : "false");
+  });
+
+  return renderDraftIdeasListView({ ...state, items }, {
+    byId,
+    escapeHtml
+  });
+}
+
 function setSampleLibraryExternalSamplesModalOpen(isOpen) {
   const modal = byId("sample-library-external-samples-modal");
   const trigger = byId("sample-library-external-samples-button");
@@ -5645,6 +5693,25 @@ function syncSampleLibraryAccountPlannerPanel() {
   }
 
   renderSampleLibraryAccountPlannerResult();
+}
+
+async function refreshDraftIdeas() {
+  try {
+    const payload = await apiJson(draftIdeasApi);
+    appState.draftIdeas = {
+      loading: false,
+      message: "",
+      items: Array.isArray(payload?.items) ? payload.items : []
+    };
+  } catch (error) {
+    appState.draftIdeas = {
+      ...appState.draftIdeas,
+      loading: false,
+      message: error?.message || "草稿区加载失败"
+    };
+  }
+
+  renderDraftIdeasList();
 }
 
 async function refreshSampleLibraryAccountPlannerState() {
@@ -5820,6 +5887,177 @@ function applySampleLibraryAccountPlannerCard() {
   };
   setActionGateHint("generation-action-hint", appState.sampleLibraryAccountPlanner.message);
   syncGenerationActions();
+}
+
+function buildDraftIdeaPayload({
+  title = "",
+  briefing = "",
+  collectionType = "",
+  materialText = "",
+  referenceTitle = "",
+  tags = [],
+  sourceType = "manual",
+  sourceLabel = ""
+} = {}) {
+  return {
+    title: String(title || "").trim(),
+    briefing: String(briefing || "").trim(),
+    collectionType: String(collectionType || "").trim() || "科普",
+    materialText: String(materialText || "").trim(),
+    referenceTitle: String(referenceTitle || "").trim(),
+    tags: uniqueStrings(tags || []),
+    sourceType: String(sourceType || "").trim() || "manual",
+    sourceLabel: String(sourceLabel || "").trim()
+  };
+}
+
+async function saveDraftIdea(payload = {}) {
+  const response = await apiJson(draftIdeasApi, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+
+  appState.draftIdeas = {
+    loading: false,
+    message: "",
+    items: Array.isArray(response?.items) ? response.items : []
+  };
+  renderDraftIdeasList();
+  return response?.item || null;
+}
+
+async function addDraftIdeaFromAccountPlannerCard() {
+  const selectedCard = getSelectedSampleLibraryAccountPlannerCard();
+
+  if (!selectedCard) {
+    return;
+  }
+
+  await saveDraftIdea(
+    buildDraftIdeaPayload({
+      title: selectedCard.planTitle,
+      briefing: selectedCard.prefillBriefing,
+      collectionType: selectedCard.prefillCollectionType,
+      materialText: selectedCard.prefillMaterialText,
+      referenceTitle: selectedCard.prefillReferenceTitle,
+      tags: selectedCard.tags,
+      sourceType: "account_planner",
+      sourceLabel: "账号复盘卡"
+    })
+  );
+  setActionGateHint("generation-action-hint", "已加入草稿区，可稍后继续写。");
+}
+
+async function addDraftIdeaFromThemeInspirationCard() {
+  const selectedTheme = getSelectedGenerationThemeInspiration();
+
+  if (!selectedTheme) {
+    return;
+  }
+
+  await saveDraftIdea(
+    buildDraftIdeaPayload({
+      title: selectedTheme.themeTitle,
+      briefing: selectedTheme.prefillBriefing,
+      collectionType: selectedTheme.prefillCollectionType || "科普",
+      materialText: selectedTheme.prefillMaterialText,
+      referenceTitle: selectedTheme.prefillReferenceTitle,
+      tags: selectedTheme.tags,
+      sourceType: "theme_inspiration",
+      sourceLabel: "主题灵感卡"
+    })
+  );
+  setActionGateHint("generation-action-hint", "已加入草稿区，可稍后继续写。");
+}
+
+async function addDraftIdeaFromGenerationCandidate(candidateId = "", candidateIndex = "") {
+  const candidate = findGenerationResultCandidate(candidateId, candidateIndex);
+  const finalDraft = candidate?.finalDraft || candidate || {};
+
+  if (!String(finalDraft?.title || "").trim() && !String(finalDraft?.body || "").trim()) {
+    return;
+  }
+
+  await saveDraftIdea(
+    buildDraftIdeaPayload({
+      title: finalDraft.title,
+      briefing: finalDraft.title || "生成候选稿待继续完善",
+      collectionType: appState.latestGeneration?.collectionType || "科普",
+      materialText: finalDraft.body,
+      referenceTitle: finalDraft.title,
+      tags: finalDraft.tags,
+      sourceType: "generation_candidate",
+      sourceLabel: "生成候选稿"
+    })
+  );
+  setActionGateHint("generation-action-hint", "已加入草稿区，可稍后继续写。");
+}
+
+function loadDraftIdeaIntoGenerationForm(id = "") {
+  const item = (Array.isArray(appState.draftIdeas?.items) ? appState.draftIdeas.items : []).find(
+    (entry) => String(entry?.id || "") === String(id || "")
+  );
+  const form = byId("generation-workbench-form");
+
+  if (!item || !form) {
+    return;
+  }
+
+  writeGenerationFieldValue(form.querySelector('[name="mode"]'), "from_scratch");
+
+  const briefingField = form.querySelector('[name="briefing"]');
+  const referenceTitleField = form.querySelector('[name="referenceTitle"]');
+  const collectionTypeField = form.querySelector('[name="collectionType"]');
+  const tagReferencesField = form.querySelector('[name="tagReferences"]');
+
+  if (!String(briefingField?.value || "").trim()) {
+    writeGenerationFieldValue(briefingField, item.briefing);
+  }
+  if (!String(referenceTitleField?.value || "").trim()) {
+    writeGenerationFieldValue(referenceTitleField, item.referenceTitle);
+  }
+  if (!String(collectionTypeField?.value || "").trim()) {
+    writeGenerationFieldValue(collectionTypeField, item.collectionType);
+  }
+  if (String(item.materialText || "").trim()) {
+    appendGenerationMaterialText(item.materialText);
+  }
+  writeGenerationFieldValue(
+    tagReferencesField,
+    joinCSV(uniqueStrings([...splitCSV(tagReferencesField?.value || ""), ...(item.tags || [])]))
+  );
+
+  syncGenerationModeFields();
+  syncGenerationActions();
+  setActionGateHint("generation-action-hint", "已将草稿区选题载入生成工作台。");
+}
+
+async function markDraftIdeaUsed(id = "") {
+  const response = await apiJson(draftIdeasApi, {
+    method: "PATCH",
+    body: JSON.stringify({ id, status: "used" })
+  });
+
+  appState.draftIdeas = {
+    loading: false,
+    message: "",
+    items: Array.isArray(response?.items) ? response.items : []
+  };
+  renderDraftIdeasList();
+}
+
+async function removeDraftIdea(id = "") {
+  const response = await apiJson(draftIdeasApi, {
+    method: "DELETE",
+    body: JSON.stringify({ id })
+  });
+
+  appState.draftIdeas = {
+    loading: false,
+    message: "",
+    items: Array.isArray(response?.items) ? response.items : []
+  };
+  renderDraftIdeasList();
 }
 
 function appendGenerationMaterialText(nextText) {
@@ -9921,9 +10159,18 @@ byId("sample-library-collection-filter")?.addEventListener("change", (event) => 
   renderSampleLibraryWorkspace();
 });
 
+byId("draft-ideas-sort-order")?.addEventListener("change", (event) => {
+  appState.draftIdeas = {
+    ...appState.draftIdeas,
+    draftIdeasSortOrder: String(event.currentTarget.value || "newest")
+  };
+  renderDraftIdeasList();
+});
+
 initializeTabs();
 syncReferenceThresholdCopy();
 renderSampleLibraryWorkspace();
+renderDraftIdeasList();
 
 document.addEventListener("click", async (event) => {
   const summaryAction = event.target.closest("[data-summary-action]");
@@ -9998,6 +10245,17 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const draftIdeasViewTab = event.target.closest("[data-draft-ideas-status-view]");
+
+  if (draftIdeasViewTab) {
+    appState.draftIdeas = {
+      ...appState.draftIdeas,
+      draftIdeasStatusView: String(draftIdeasViewTab.getAttribute("data-draft-ideas-status-view") || "draft")
+    };
+    renderDraftIdeasList();
+    return;
+  }
+
   const button = event.target.closest("button[data-action]");
 
   if (!button) {
@@ -10054,8 +10312,38 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action === "add-generation-theme-inspiration-to-draft") {
+    await addDraftIdeaFromThemeInspirationCard();
+    return;
+  }
+
   if (action === "apply-sample-library-account-planner-card") {
     applySampleLibraryAccountPlannerCard();
+    return;
+  }
+
+  if (action === "add-sample-library-account-planner-card-to-draft") {
+    await addDraftIdeaFromAccountPlannerCard();
+    return;
+  }
+
+  if (action === "add-generation-candidate-to-draft") {
+    await addDraftIdeaFromGenerationCandidate(button.dataset.candidateId || "", button.dataset.candidateIndex || "");
+    return;
+  }
+
+  if (action === "load-draft-idea") {
+    loadDraftIdeaIntoGenerationForm(button.dataset.id || "");
+    return;
+  }
+
+  if (action === "mark-draft-idea-used") {
+    await markDraftIdeaUsed(button.dataset.id || "");
+    return;
+  }
+
+  if (action === "delete-draft-idea") {
+    await removeDraftIdea(button.dataset.id || "");
     return;
   }
 

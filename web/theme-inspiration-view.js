@@ -58,6 +58,9 @@ export function renderGenerationThemeInspirationDetail(item = null, helpers = {}
         <button type="button" class="button button-small" data-action="apply-generation-theme-inspiration">
           一键填入生成表单
         </button>
+        <button type="button" class="button button-ghost button-small" data-action="add-generation-theme-inspiration-to-draft">
+          加入草稿区
+        </button>
       </div>
     </section>
   `;

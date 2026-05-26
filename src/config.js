@@ -22,6 +22,7 @@ export const paths = {
   noteRecords: path.join(dataDir, "note-records.json"),
   accountPlannerSummary: path.join(dataDir, "account-planner-summary.json"),
   themeInspirations: path.join(dataDir, "theme-inspirations.json"),
+  draftIdeas: path.join(dataDir, "draft-ideas.json"),
   externalReferenceSamples: path.join(dataDir, "external-reference-samples.json"),
   analyzeTagOptions: path.join(dataDir, "analyze-tag-options.json"),
   innerSpaceTerms: path.join(dataDir, "inner-space-terms.json"),

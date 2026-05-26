@@ -20,6 +20,7 @@ import {
   loadAnalyzeTagOptions,
   loadAccountPlannerSummary,
   loadCollectionTypes,
+  loadDraftIdeas,
   loadExternalReferenceSamples,
   loadFalsePositiveLog,
   getMemoryRetrievalService,
@@ -33,11 +34,15 @@ import {
   loadThemeInspirations,
   saveAnalyzeTagOptions,
   saveAccountPlannerSummary,
+  saveDraftIdeas,
   saveExternalReferenceSamples,
   saveFalsePositiveLog,
   saveNoteRecords,
   saveStyleProfile,
   saveThemeInspirations,
+  upsertDraftIdea,
+  patchDraftIdea,
+  deleteDraftIdea,
   upsertFeedbackEntries
 } from "./data-store.js";
 import { buildScopedContextBundle } from "./context-bundle.js";
@@ -1507,6 +1512,43 @@ async function handleRequest(request, response) {
         externalSampleCount: Number(cached.externalSampleCount || 0),
         cardCount: Array.isArray(cached.cards) ? cached.cards.length : 0
       }
+    });
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/draft-ideas") {
+    const current = await loadDraftIdeas();
+    return sendJson(response, 200, {
+      ok: true,
+      items: current.items
+    });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/draft-ideas") {
+    const payload = await readBody(request);
+    const result = await upsertDraftIdea(payload || {});
+    return sendJson(response, 200, {
+      ok: true,
+      items: result.items,
+      item: result.item
+    });
+  }
+
+  if (request.method === "PATCH" && url.pathname === "/api/draft-ideas") {
+    const payload = await readBody(request);
+    const result = await patchDraftIdea(payload || {});
+    return sendJson(response, 200, {
+      ok: true,
+      items: result.items,
+      item: result.item
+    });
+  }
+
+  if (request.method === "DELETE" && url.pathname === "/api/draft-ideas") {
+    const payload = await readBody(request);
+    const saved = await deleteDraftIdea(payload?.id || "");
+    return sendJson(response, 200, {
+      ok: true,
+      items: saved.items
     });
   }
 

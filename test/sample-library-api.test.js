@@ -16,7 +16,8 @@ async function withTempSampleLibraryApi(t, run) {
     successSamples: paths.successSamples,
     noteLifecycle: paths.noteLifecycle,
     noteRecords: paths.noteRecords,
-    styleProfile: paths.styleProfile
+    styleProfile: paths.styleProfile,
+    draftIdeas: paths.draftIdeas
   };
 
   paths.collectionTypes = path.join(tempDir, "collection-types.json");
@@ -24,12 +25,14 @@ async function withTempSampleLibraryApi(t, run) {
   paths.noteLifecycle = path.join(tempDir, "note-lifecycle.json");
   paths.noteRecords = path.join(tempDir, "note-records.json");
   paths.styleProfile = path.join(tempDir, "style-profile.json");
+  paths.draftIdeas = path.join(tempDir, "draft-ideas.json");
 
   await Promise.all([
     fs.writeFile(paths.collectionTypes, `${JSON.stringify({ custom: [] }, null, 2)}\n`, "utf8"),
     fs.writeFile(paths.successSamples, "[]\n", "utf8"),
     fs.writeFile(paths.noteLifecycle, "[]\n", "utf8"),
-    fs.writeFile(paths.styleProfile, "{}\n", "utf8")
+    fs.writeFile(paths.styleProfile, "{}\n", "utf8"),
+    fs.writeFile(paths.draftIdeas, `${JSON.stringify({ items: [] }, null, 2)}\n`, "utf8")
   ]);
 
   t.after(async () => {
@@ -39,6 +42,50 @@ async function withTempSampleLibraryApi(t, run) {
 
   return run();
 }
+
+test("draft ideas API supports list create patch delete", async (t) => {
+  await withTempSampleLibraryApi(t, async () => {
+    const initial = await invokeRoute("GET", "/api/draft-ideas");
+    assert.equal(initial.status, 200);
+    assert.equal(initial.ok, true);
+    assert.deepEqual(initial.items, []);
+
+    const created = await invokeRoute("POST", "/api/draft-ideas", {
+      title: "先写一篇关系沟通选题",
+      briefing: "围绕拒绝表达与关系安全感，写一篇轻科普。",
+      collectionType: "科普",
+      materialText: "先共情，再给边界表达模板。",
+      referenceTitle: "怎么把拒绝说清楚又不伤人？",
+      tags: ["关系沟通", "边界表达"],
+      sourceType: "account_planner",
+      sourceLabel: "账号复盘卡"
+    });
+
+    assert.equal(created.status, 200);
+    assert.equal(created.ok, true);
+    assert.equal(created.items.length, 1);
+    assert.equal(created.item.title, "先写一篇关系沟通选题");
+    assert.equal(created.item.status, "draft");
+    assert.equal(created.item.sourceType, "account_planner");
+
+    const patched = await invokeRoute("PATCH", "/api/draft-ideas", {
+      id: created.item.id,
+      status: "used"
+    });
+
+    assert.equal(patched.status, 200);
+    assert.equal(patched.ok, true);
+    assert.equal(patched.item.status, "used");
+
+    const deleted = await invokeRoute("DELETE", "/api/draft-ideas", {
+      id: created.item.id
+    });
+
+    assert.equal(deleted.status, 200);
+    assert.equal(deleted.ok, true);
+    assert.deepEqual(deleted.items, []);
+  });
+});
 
 test("sample library API supports GET POST PATCH for canonical note records", async (t) => {
   await withTempSampleLibraryApi(t, async () => {

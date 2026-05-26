@@ -348,6 +348,30 @@
                 <div id="generation-result" class="result-card-shell muted">等待生成</div>
               </section>
             </section>
+            <section class="generation-draft-inbox-panel" id="generation-draft-inbox-panel">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">草稿区</p>
+                  <h2>待写选题</h2>
+                </div>
+                <p class="section-note">先把复盘卡、灵感卡和生成候选稿收进来，再决定什么时候开写。</p>
+              </div>
+              <div class="draft-ideas-toolbar" id="draft-ideas-toolbar">
+                <div class="tab-strip draft-ideas-view-switch" role="tablist" aria-label="草稿区视图切换">
+                  <button type="button" class="tab-button" data-draft-ideas-status-view="draft">待写</button>
+                  <button type="button" class="tab-button" data-draft-ideas-status-view="used">已使用</button>
+                </div>
+                <label class="draft-ideas-sort-control">
+                  <span>排序</span>
+                  <select name="draftIdeasSortOrder" id="draft-ideas-sort-order">
+                    <option value="newest">最近加入</option>
+                    <option value="oldest">最早加入</option>
+                  </select>
+                </label>
+                <input type="hidden" name="draftIdeasStatusView" id="draft-ideas-status-view" value="draft" />
+              </div>
+              <div id="draft-ideas-list" class="draft-ideas-list draft-ideas-grid"></div>
+            </section>
           </div>
         </article>
         <aside class="dashboard-sidebar dashboard-secondary-grid">

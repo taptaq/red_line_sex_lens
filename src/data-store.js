@@ -15,6 +15,7 @@ import { isQualifiedReferenceRecord } from "./reference-samples.js";
 import { sanitizeInnerSpaceTerms } from "./inner-space-terms.js";
 import { sanitizeStyleProfileState } from "./style-profile.js";
 import { withSampleWeight } from "./sample-weight.js";
+import { normalizeDraftIdea, normalizeDraftIdeaStore } from "./draft-ideas.js";
 
 let memoryRetrievalServicePromise = null;
 let memoryRetrievalServiceRoot = "";
@@ -29,6 +30,11 @@ let themeInspirationsCache = {
   value: null
 };
 let accountPlannerSummaryCache = {
+  path: "",
+  mtimeMs: null,
+  value: null
+};
+let draftIdeasCache = {
   path: "",
   mtimeMs: null,
   value: null
@@ -594,6 +600,126 @@ export async function saveAccountPlannerSummary(value) {
     value: normalized
   };
   return normalized;
+}
+
+export async function loadDraftIdeas() {
+  const configuredPath = paths.draftIdeas;
+
+  if (await fileExists(configuredPath)) {
+    const stat = await fs.stat(configuredPath);
+
+    if (
+      draftIdeasCache.path === configuredPath &&
+      draftIdeasCache.mtimeMs === stat.mtimeMs &&
+      draftIdeasCache.value &&
+      typeof draftIdeasCache.value === "object"
+    ) {
+      return draftIdeasCache.value;
+    }
+
+    const value = normalizeDraftIdeaStore(await readJson(configuredPath, { items: [] }));
+    draftIdeasCache = {
+      path: configuredPath,
+      mtimeMs: stat.mtimeMs,
+      value
+    };
+    return value;
+  }
+
+  if (
+    draftIdeasCache.path === configuredPath &&
+    draftIdeasCache.mtimeMs === null &&
+    draftIdeasCache.value &&
+    typeof draftIdeasCache.value === "object"
+  ) {
+    return draftIdeasCache.value;
+  }
+
+  const fallback = { items: [] };
+  draftIdeasCache = {
+    path: configuredPath,
+    mtimeMs: null,
+    value: fallback
+  };
+  return fallback;
+}
+
+export async function saveDraftIdeas(value) {
+  const normalized = normalizeDraftIdeaStore(value);
+  await writeJson(paths.draftIdeas, normalized);
+  const stat = await fs.stat(paths.draftIdeas);
+  draftIdeasCache = {
+    path: paths.draftIdeas,
+    mtimeMs: stat.mtimeMs,
+    value: normalized
+  };
+  return normalized;
+}
+
+export async function upsertDraftIdea(item = {}) {
+  const current = await loadDraftIdeas();
+  const nextItem = normalizeDraftIdea(item);
+  const nextItems = [...current.items];
+  const index = nextItems.findIndex((entry) => entry.id === nextItem.id);
+
+  if (index === -1) {
+    nextItems.unshift(nextItem);
+  } else {
+    nextItems[index] = {
+      ...nextItems[index],
+      ...nextItem,
+      createdAt: nextItems[index].createdAt || nextItem.createdAt,
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  const saved = await saveDraftIdeas({ items: nextItems });
+  return {
+    items: saved.items,
+    item: saved.items.find((entry) => entry.id === nextItem.id) || null
+  };
+}
+
+export async function patchDraftIdea(item = {}) {
+  const current = await loadDraftIdeas();
+  const targetId = normalizeString(item?.id);
+  const index = current.items.findIndex((entry) => entry.id === targetId);
+
+  if (index === -1) {
+    const error = new Error("未找到要更新的草稿。");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const merged = normalizeDraftIdea({
+    ...current.items[index],
+    ...item,
+    id: current.items[index].id,
+    createdAt: current.items[index].createdAt,
+    updatedAt: new Date().toISOString()
+  });
+  const nextItems = [...current.items];
+  nextItems[index] = merged;
+  const saved = await saveDraftIdeas({ items: nextItems });
+
+  return {
+    items: saved.items,
+    item: saved.items[index] || null
+  };
+}
+
+export async function deleteDraftIdea(id = "") {
+  const current = await loadDraftIdeas();
+  const targetId = normalizeString(id);
+  const nextItems = current.items.filter((entry) => entry.id !== targetId);
+
+  if (nextItems.length === current.items.length) {
+    const error = new Error("未找到要删除的草稿。");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return saveDraftIdeas({ items: nextItems });
 }
 
 export async function loadNoteRecords() {
