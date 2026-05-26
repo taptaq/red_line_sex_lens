@@ -5,6 +5,34 @@ export function getSelectedSampleLibraryAccountPlannerCard(cards = [], selectedP
   return items.find((item) => String(item?.planId || "").trim() === normalizedId) || items[0] || null;
 }
 
+function formatAccountPlannerGapLabel(value = "") {
+  const text = String(value || "").trim();
+
+  if (!text) {
+    return "";
+  }
+
+  if (text.startsWith("可补充视角：")) {
+    return text;
+  }
+
+  return `可补充视角：${text}`;
+}
+
+function formatAccountPlannerEstimatedValueLabel(value = "") {
+  const normalized = String(value || "").trim().toLowerCase();
+
+  if (normalized === "high") {
+    return "高优先";
+  }
+
+  if (normalized === "medium") {
+    return "可尝试";
+  }
+
+  return "先观察";
+}
+
 export function renderSampleLibraryAccountPlannerDetail(card = null, helpers = {}) {
   const { byId, escapeHtml } = helpers;
   const detailNode = byId?.("sample-library-account-planner-detail");
@@ -31,7 +59,7 @@ export function renderSampleLibraryAccountPlannerDetail(card = null, helpers = {
   detailNode.innerHTML = `
     <article class="sample-library-account-planner-card sample-library-account-planner-card-detail">
       <div class="meta-row">
-        <span class="meta-pill">价值 ${escapeHtml(card.estimatedValue || "observe")}</span>
+        <span class="meta-pill">价值 ${escapeHtml(formatAccountPlannerEstimatedValueLabel(card.estimatedValue || "observe"))}</span>
         ${tags.map((tag) => `<span class="meta-pill">${escapeHtml(tag)}</span>`).join("")}
       </div>
       <strong>${escapeHtml(card.planTitle || "未命名建议")}</strong>
@@ -86,7 +114,7 @@ export function renderSampleLibraryAccountPlannerResult(state = {}, helpers = {}
       ? `模型总结：${[modelTrace.provider, modelTrace.model].filter(Boolean).join(" / ")}${
           modelTrace.routeLabel ? ` · ${modelTrace.routeLabel}` : ""
         }`
-      : "";
+      : "分析来源：本地兜底";
 
   if (!cards.length) {
     const message = String(state.message || "").trim() || "先导入外部样本并运行复盘，这里会出现 3-5 张下一篇建议卡。";
@@ -110,7 +138,7 @@ export function renderSampleLibraryAccountPlannerResult(state = {}, helpers = {}
           .join("")}
         ${(Array.isArray(summary.gaps) ? summary.gaps : [])
           .slice(0, 2)
-          .map((item) => `<span class="meta-pill meta-pill-soft">${escapeHtml(item)}</span>`)
+          .map((item) => `<span class="meta-pill meta-pill-soft">${escapeHtml(formatAccountPlannerGapLabel(item))}</span>`)
           .join("")}
       </div>
     </section>
@@ -128,7 +156,7 @@ export function renderSampleLibraryAccountPlannerResult(state = {}, helpers = {}
                 aria-pressed="${selected ? "true" : "false"}"
               >
                 <div class="meta-row">
-                  <span class="meta-pill">价值 ${escapeHtml(card?.estimatedValue || "observe")}</span>
+                  <span class="meta-pill">价值 ${escapeHtml(formatAccountPlannerEstimatedValueLabel(card?.estimatedValue || "observe"))}</span>
                 </div>
                 <strong>${escapeHtml(card?.planTitle || "未命名建议")}</strong>
                 <p>${escapeHtml(card?.whyThisWorks || "暂无说明")}</p>

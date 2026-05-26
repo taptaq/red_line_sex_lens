@@ -21,8 +21,8 @@
       </header>
 
       <!-- ② 主工作区：检测台 + 反馈回流 -->
-      <section class="workspace workspace-main">
-        <article class="panel analyzer-panel">
+      <section class="workspace dashboard-grid workspace-main">
+        <article class="panel analyzer-panel dashboard-main-card">
           <div class="section-heading">
             <div>
               <p class="eyebrow">内容工作台</p>
@@ -350,91 +350,125 @@
             </section>
           </div>
         </article>
-        <article class="panel feedback-panel">
+        <aside class="dashboard-sidebar dashboard-secondary-grid">
+          <article class="panel feedback-panel dashboard-side-card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">反馈回流</p>
+                <h2>违规原因回流</h2>
+              </div>
+              <p class="section-note">默认先快速写入真实违规反馈；只有需要截图识别或模型补充时，再展开高级识别。</p>
+            </div>
+            <form id="feedback-form" class="stack form-grid compact-feedback">
+              <div class="tab-panel-head field-wide">
+                <strong>快速回流</strong>
+                <span>直接填写内容、平台原因和候选词，优先完成最常见的反馈写入。</span>
+              </div>
+              <label class="field-wide">
+                <span>对应笔记内容</span>
+                <textarea
+                  name="noteContent"
+                  rows="5"
+                  placeholder="输入被判违规的笔记正文、标题摘要，或你想回流给系统的原始内容"
+                ></textarea>
+              </label>
+              <label class="field-wide">
+                <span>平台违规原因</span>
+                <input type="text" name="platformReason" placeholder="例如：疑似低俗或导流" />
+              </label>
+              <label class="field-wide">
+                <span>候选词/短语（逗号分隔）</span>
+                <input type="text" name="suspiciousPhrases" placeholder="例如：加我, 完整版, 二维码；系统也会补充语境候选" />
+              </label>
+              <button type="submit" class="button button-alt field-wide" id="feedback-quick-submit">写入反馈日志</button>
+              <p class="helper-text action-gate-hint field-wide" id="feedback-action-hint" aria-live="polite"></p>
+              <details id="feedback-advanced-panel" class="admin-accordion feedback-advanced-panel field-wide">
+                <summary class="advanced-judgement-summary">高级识别</summary>
+                <div class="admin-accordion-body">
+                  <p class="helper-text">需要截图识别、自动补平台原因或借助模型补候选时，再展开这里。</p>
+                  <label class="field-wide">
+                    <span>违规截图</span>
+                    <input type="file" name="screenshot" id="feedback-screenshot" accept="image/*" />
+                  </label>
+                  <div class="field-wide feedback-model-grid">
+                    <div class="model-action-card">
+                      <label for="feedback-screenshot-model-selection" class="model-action-label">
+                        <span>截图识别模型</span>
+                      </label>
+                      <div class="model-action-control">
+                        <select
+                          id="feedback-screenshot-model-selection"
+                          name="feedbackScreenshotModelSelection"
+                          class="model-action-select"
+                        >
+                          <option value="auto">默认自动 / 加载中...</option>
+                        </select>
+                        <button type="button" class="button button-ghost" id="feedback-recognize">
+                          识别截图并回填
+                        </button>
+                      </div>
+                    </div>
+                    <div class="model-action-card">
+                      <label for="feedback-suggestion-model-selection" class="model-action-label">
+                        <span>候选补充模型</span>
+                      </label>
+                      <div class="model-action-control">
+                        <select
+                          id="feedback-suggestion-model-selection"
+                          name="feedbackSuggestionModelSelection"
+                          class="model-action-select"
+                        >
+                          <option value="auto">默认自动 / 加载中...</option>
+                        </select>
+                        <p class="helper-text">只写入文件元信息和识别摘要，不会把整张图片保存到日志。</p>
+                      </div>
+                    </div>
+                  </div>
+                  <p class="helper-text action-gate-hint" id="feedback-recognize-action-hint" aria-live="polite"></p>
+                  <div id="feedback-screenshot-result" class="result-card muted field-wide">等待截图识别</div>
+                </div>
+              </details>
+            </form>
+            <div id="feedback-result" class="result-card muted">等待回流</div>
+          </article>
+
+        <section id="sample-library-account-planner-panel" class="panel dashboard-planner-card sample-library-account-planner">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">反馈回流</p>
-              <h2>违规原因回流</h2>
+              <p class="eyebrow">下一篇方向</p>
+              <h2>账号级复盘与下一篇建议</h2>
             </div>
-            <p class="section-note">默认先快速写入真实违规反馈；只有需要截图识别或模型补充时，再展开高级识别。</p>
+            <p class="section-note">优先参考样本、效果好样本与外部样本，直接产出可回填到生成工作台的 Planner 卡片。</p>
           </div>
-          <form id="feedback-form" class="stack form-grid compact-feedback">
-            <div class="tab-panel-head field-wide">
-              <strong>快速回流</strong>
-              <span>直接填写内容、平台原因和候选词，优先完成最常见的反馈写入。</span>
-            </div>
-            <label class="field-wide">
-              <span>对应笔记内容</span>
-              <textarea
-                name="noteContent"
-                rows="5"
-                placeholder="输入被判违规的笔记正文、标题摘要，或你想回流给系统的原始内容"
-              ></textarea>
-            </label>
-            <label class="field-wide">
-              <span>平台违规原因</span>
-              <input type="text" name="platformReason" placeholder="例如：疑似低俗或导流" />
-            </label>
-            <label class="field-wide">
-              <span>候选词/短语（逗号分隔）</span>
-              <input type="text" name="suspiciousPhrases" placeholder="例如：加我, 完整版, 二维码；系统也会补充语境候选" />
-            </label>
-            <button type="submit" class="button button-alt field-wide" id="feedback-quick-submit">写入反馈日志</button>
-            <p class="helper-text action-gate-hint field-wide" id="feedback-action-hint" aria-live="polite"></p>
-            <details id="feedback-advanced-panel" class="admin-accordion feedback-advanced-panel field-wide">
-              <summary class="advanced-judgement-summary">高级识别</summary>
-              <div class="admin-accordion-body">
-                <p class="helper-text">需要截图识别、自动补平台原因或借助模型补候选时，再展开这里。</p>
-                <label class="field-wide">
-                  <span>违规截图</span>
-                  <input type="file" name="screenshot" id="feedback-screenshot" accept="image/*" />
-                </label>
-                <div class="field-wide feedback-model-grid">
-                  <div class="model-action-card">
-                    <label for="feedback-screenshot-model-selection" class="model-action-label">
-                      <span>截图识别模型</span>
-                    </label>
-                    <div class="model-action-control">
-                      <select
-                        id="feedback-screenshot-model-selection"
-                        name="feedbackScreenshotModelSelection"
-                        class="model-action-select"
-                      >
-                        <option value="auto">默认自动 / 加载中...</option>
-                      </select>
-                      <button type="button" class="button button-ghost" id="feedback-recognize">
-                        识别截图并回填
-                      </button>
-                    </div>
-                  </div>
-                  <div class="model-action-card">
-                    <label for="feedback-suggestion-model-selection" class="model-action-label">
-                      <span>候选补充模型</span>
-                    </label>
-                    <div class="model-action-control">
-                      <select
-                        id="feedback-suggestion-model-selection"
-                        name="feedbackSuggestionModelSelection"
-                        class="model-action-select"
-                      >
-                        <option value="auto">默认自动 / 加载中...</option>
-                      </select>
-                      <p class="helper-text">只写入文件元信息和识别摘要，不会把整张图片保存到日志。</p>
-                    </div>
-                  </div>
-                </div>
-                <p class="helper-text action-gate-hint" id="feedback-recognize-action-hint" aria-live="polite"></p>
-                <div id="feedback-screenshot-result" class="result-card muted field-wide">等待截图识别</div>
-              </div>
-            </details>
-          </form>
-          <div id="feedback-result" class="result-card muted">等待回流</div>
-        </article>
-      </section>
+          <div class="item-actions">
+            <button
+              type="button"
+              class="button button-ghost"
+              id="sample-library-external-samples-button"
+              aria-controls="sample-library-external-samples-modal"
+              aria-expanded="false"
+            >
+              管理外部参考样本
+            </button>
+            <button
+              type="button"
+              class="button button-alt"
+              id="sample-library-account-planner-run"
+            >
+              运行账号级复盘
+            </button>
+          </div>
+          <p id="sample-library-account-planner-import-summary" class="helper-text">
+            参考样本用于长期参考，效果好样本表示发布结果已回填为“效果好”；可选导入 Markdown / CSV 外部样本补充对照。
+          </p>
+          <div class="sample-library-account-planner-workspace">
+            <section id="sample-library-account-planner-result" class="result-card muted">等待运行账号级复盘</section>
+            <aside id="sample-library-account-planner-detail"></aside>
+          </div>
+        </section>
 
       <!-- ③ 学习区：回流 / 样本 / 规则 -->
-      <details id="support-workspace-panel" class="panel support-workspace-panel admin-accordion">
-        <summary class="support-workspace-summary">
+      <section id="support-workspace-panel" class="panel support-workspace-panel dashboard-assets-card">
           <div class="section-heading">
             <div>
               <p class="eyebrow">学习样本</p>
@@ -442,89 +476,81 @@
             </div>
             <p class="section-note">把平台反馈、误判样本和好样本收进同一处，让检测和生成持续变准。</p>
           </div>
-        </summary>
         <div class="admin-accordion-body">
           <section class="workspace workspace-support">
-            <article class="panel queue-panel">
+            <article class="panel queue-panel support-review-card">
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">人工复核</p>
                   <h2>候选词 / 语境人工复核队列</h2>
                 </div>
-                <p class="section-note">直接在这里完成填表、加入白名单、加入违规词库或删除，不再来回滚动切换。</p>
+                <p class="section-note">主页面只保留入口摘要，具体复核、入库和删除动作都放到弹窗里完成。</p>
               </div>
-              <div id="review-queue" class="queue"></div>
+              <div id="review-queue" class="queue review-queue-entry-host">
+                <div class="result-card muted">正在加载人工复核队列入口...</div>
+              </div>
             </article>
 
-            <article class="panel data-panel panel-sticky">
+            <article class="panel support-feedback-card">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">回流反馈</p>
+                  <h2>违规反馈 / 误报回流</h2>
+                </div>
+                <p class="section-note">把真实违规反馈、待确认误报和历史误报分开看，先处理回流，再决定补规则还是沉淀样本。</p>
+              </div>
+              <section id="sample-library-reflow-panel" class="admin-panel-block sample-library-reflow-panel">
+                <div class="meta-row">
+                  <span class="meta-pill feedback-priority-pill">待优先处理</span>
+                  <span class="helper-text">优先看未确认误报、未沉淀规则的反馈，以及最新进入回流的记录。</span>
+                </div>
+                <div class="admin-panel-block">
+                  <div class="tab-panel-head">
+                    <strong>待优先处理</strong>
+                    <span>把最该先处理的违规反馈和待确认误报放在最上面。</span>
+                  </div>
+                  <div id="feedback-priority-list" class="admin-list"></div>
+                </div>
+                <div class="admin-panel-block">
+                  <div class="tab-panel-head">
+                    <strong>违规反馈</strong>
+                    <span>查看全部真实违规反馈、误报状态和命中摘要。</span>
+                  </div>
+                  <div id="feedback-log-list" class="admin-list"></div>
+                  <div id="feedback-log-secondary-list" class="admin-list"></div>
+                </div>
+                <div class="admin-panel-block">
+                  <div class="item-actions">
+                    <button
+                      type="button"
+                      id="false-positive-preview-open-button"
+                      class="button button-ghost button-small"
+                      data-action="open-false-positive-list-modal"
+                      hidden
+                    >
+                      查看全部误报案例
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </article>
+
+            <article class="panel data-panel panel-sticky support-samples-card">
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">学习样本</p>
-                  <h2>反馈与样本</h2>
+                  <h2>学习样本 / 好样本沉淀</h2>
                 </div>
-                <p class="section-note">日常只处理回流、好样本和发布结果；需要补规则或做阶段检查时，再展开下面的维护区。</p>
+                <p class="section-note">处理完回流后，再集中维护记录列表、好样本沉淀和发布结果；低频维护继续收在下面单独展开。</p>
               </div>
-              <!-- Tab 分组：词库/日志 ｜ 样本/画像 用分隔符隔开 -->
-              <div class="tab-strip" role="tablist" aria-label="数据维护分区">
-                <button type="button" class="tab-button" data-tab-group="data-maintenance" data-tab-target="sample-library-pane">学习样本</button>
-              </div>
-              <div class="tab-panels">
-                <section class="tab-panel" id="sample-library-pane" data-tab-group="data-maintenance">
-                  <div class="tab-panel-head">
-                    <strong>学习样本</strong>
-                    <span>统一沉淀好样本、误判样本和发布结果，减少并列入口。</span>
-                  </div>
-                  <section id="sample-library-daily-panel" class="admin-panel-block sample-library-daily-panel">
-                    <section id="sample-library-reflow-panel" class="admin-panel-block sample-library-reflow-panel">
-                      <div class="tab-panel-head">
-                        <strong>回流待处理区</strong>
-                        <span>把真实违规反馈和误报案例收在这里处理，再决定补规则还是沉淀成学习样本。</span>
-                      </div>
-                      <div class="meta-row">
-                        <span class="meta-pill feedback-priority-pill">待优先处理</span>
-                        <span class="helper-text">优先看未确认误报、未沉淀规则的反馈，以及最新进入回流的记录。</span>
-                      </div>
-                      <div class="admin-panel-block">
-                        <div class="tab-panel-head">
-                          <strong>待优先处理</strong>
-                          <span>把最该先处理的违规反馈和待确认误报放在最上面。</span>
-                        </div>
-                        <div id="feedback-priority-list" class="admin-list"></div>
-                      </div>
-                      <div class="admin-panel-block">
-                        <div class="tab-panel-head">
-                          <strong>违规反馈</strong>
-                          <span>查看全部真实违规反馈、误报状态和命中摘要。</span>
-                        </div>
-                        <div id="feedback-log-list" class="admin-list"></div>
-                        <div id="feedback-log-secondary-list" class="admin-list"></div>
-                      </div>
-                      <div class="admin-panel-block">
-                        <div class="tab-panel-head">
-                          <strong>误报案例</strong>
-                          <span>先确认待观察误报，再查看已沉淀的历史案例。</span>
-                        </div>
-                        <div class="item-actions">
-                          <button
-                            type="button"
-                            id="false-positive-preview-open-button"
-                            class="button button-ghost button-small"
-                            data-action="open-false-positive-list-modal"
-                            hidden
-                          >
-                            查看全部误报案例
-                          </button>
-                        </div>
-                        <p id="false-positive-summary" class="helper-text muted">当前没有误报样本</p>
-                        <div id="false-positive-log-list" class="admin-list" hidden></div>
-                      </div>
-                    </section>
+              <section id="sample-library-pane" class="sample-library-pane">
                     <div class="tab-panel-head">
                       <strong>日常记录</strong>
                       <span>处理完回流后，再集中维护记录列表、基础内容、参考属性和生命周期回填。</span>
                     </div>
+                    <section id="sample-library-daily-panel" class="admin-panel-block sample-library-daily-panel">
                 <article class="result-card-shell sample-library-flow-guide">
-                    <strong>生效流转说明</strong>
+                  <strong>生效流转说明</strong>
                   <ol class="sample-library-flow-list">
                     <li>只保存基础内容：先进入学习样本记录列表，用于去重、归档和后续补全。</li>
                     <li id="sample-library-flow-reference-threshold">启用参考属性并达到数据门槛。</li>
@@ -533,47 +559,9 @@
                     <li>仅保存到学习样本：不会直接进入内容检测规则；检测仍主要依赖词库、白名单和误报回流。</li>
                   </ol>
                 </article>
-                <section id="sample-library-account-planner-panel" class="result-card-shell sample-library-account-planner">
-                  <div class="tab-panel-head">
-                    <strong>账号级复盘与下一篇建议</strong>
-                    <span>结合样本记录库和手工导入的外部样本，直接产出可回填到生成工作台的下一篇 Planner 卡片。</span>
-                  </div>
-                  <div class="item-actions">
-                    <button
-                      type="button"
-                      class="button button-ghost"
-                      id="sample-library-external-samples-button"
-                      aria-controls="sample-library-external-samples-modal"
-                      aria-expanded="false"
-                    >
-                      管理外部参考样本
-                    </button>
-                    <button
-                      type="button"
-                      class="button button-alt"
-                      id="sample-library-account-planner-run"
-                    >
-                      运行账号级复盘
-                    </button>
-                    <input
-                      id="sample-library-account-planner-import-input"
-                      type="file"
-                      accept=".md,.markdown,text/markdown,.csv,text/csv"
-                      multiple
-                      hidden
-                    />
-                  </div>
-                  <p id="sample-library-account-planner-import-summary" class="helper-text">
-                    可选：导入 Markdown / CSV 外部样本，补充账号外部对照。
-                  </p>
-                  <div class="sample-library-account-planner-workspace">
-                    <section id="sample-library-account-planner-result" class="result-card muted">等待运行账号级复盘</section>
-                    <aside id="sample-library-account-planner-detail"></aside>
-                  </div>
-                </section>
                 <div class="sample-library-toolbar">
                   <div class="sample-library-toolbar-filters">
-                    <label>
+                    <!-- <label>
                       <span>筛选</span>
                       <select id="sample-library-filter">
                         <option value="all">全部</option>
@@ -584,7 +572,7 @@
                         <option value="reference">已成参考</option>
                         <option value="published">已跟踪发布</option>
                       </select>
-                    </label>
+                    </label> -->
                     <label>
                       <span>合集</span>
                       <select id="sample-library-collection-filter">
@@ -647,6 +635,7 @@
                     <div id="sample-library-record-list" class="admin-list"></div>
                   </aside>
                 </div>
+                    </section>
               </section>
               <details id="sample-library-advanced-panel" class="admin-panel-block admin-accordion sample-library-advanced-panel">
                 <summary class="system-calibration-summary">
@@ -739,13 +728,12 @@
                       </details>
                     </div>
                   </details>
-                </section>
-                
-              </div>
             </article>
           </section>
         </div>
-      </details>
+      </section>
+        </aside>
+      </section>
     </main>
     <div id="sample-library-modal" class="sample-library-modal" hidden>
       <button

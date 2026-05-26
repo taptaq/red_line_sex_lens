@@ -126,8 +126,8 @@ test("publish prediction evidence prefers matched historical records over generi
       relatedRecords: [
         {
           id: "record-good",
-          title: "为什么结束后会失落",
-          summary: "高表现样本，同样命中空虚和羞耻感。",
+          title: "怎么表达拒绝又不伤人",
+          summary: "高表现样本，同样命中边界表达和沟通压力。",
           reasons: ["标签重合 2 项", "标题短语命中 1 项"]
         }
       ]

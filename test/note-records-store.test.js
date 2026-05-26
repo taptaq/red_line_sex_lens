@@ -491,6 +491,31 @@ test("note records preserve prediction evidence fields through normalization and
   assert.equal(merged.calibration.prediction.evidenceSummary, "与 2 条历史样本相似");
 });
 
+test("note records normalize and preserve planner summary fields", () => {
+  const record = buildNoteRecord({
+    note: { title: "复盘摘要样本", body: "正文" },
+    calibration: {
+      plannerSummary: {
+        summary: "这篇主要在解释边界表达为什么不等于冷淡。",
+        keyPoints: ["情绪解释", "正常化安抚"],
+        riskBoundary: ["避免病理化"],
+        suggestedTopic: "怎么把边界说清楚？",
+        provider: "deepseek",
+        model: "deepseek-v4-flash",
+        createdAt: "2026-05-26T10:00:00.000Z"
+      }
+    }
+  });
+
+  assert.equal(record.calibration.plannerSummary.summary, "这篇主要在解释边界表达为什么不等于冷淡。");
+  assert.deepEqual(record.calibration.plannerSummary.keyPoints, ["情绪解释", "正常化安抚"]);
+  assert.deepEqual(record.calibration.plannerSummary.riskBoundary, ["避免病理化"]);
+  assert.equal(record.calibration.plannerSummary.suggestedTopic, "怎么把边界说清楚？");
+  assert.equal(record.calibration.plannerSummary.provider, "deepseek");
+  assert.equal(record.calibration.plannerSummary.model, "deepseek-v4-flash");
+  assert.equal(record.calibration.plannerSummary.createdAt, "2026-05-26T10:00:00.000Z");
+});
+
 test("dedupeNoteRecords picks a deterministic id for duplicate records with different source ids", () => {
   const leftFirst = dedupeNoteRecords([
     migrateSuccessSampleToNoteRecord({

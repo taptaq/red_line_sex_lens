@@ -9,9 +9,11 @@ import {
   loadNoteRecords,
   loadSummary,
   readImportFile,
+  saveNoteRecords,
   saveMemoryCards,
   upsertFeedbackEntries
 } from "./data-store.js";
+import { backfillPlannerSummaries } from "./account-planner.js";
 import { runFeedbackHarness } from "./evals/feedback-harness.js";
 import {
   createReviewCandidates,
@@ -165,6 +167,49 @@ async function runSummary() {
   console.log(JSON.stringify(summary, null, 2));
 }
 
+async function runPlannerSummaryBackfill(args) {
+  const records = await loadNoteRecords();
+  const result = await backfillPlannerSummaries({
+    records
+  });
+  await saveNoteRecords(result.items);
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        total: result.items.length,
+        updated: result.updatedCount
+      },
+      null,
+      2
+    )
+  );
+}
+
+async function runPlannerSummaryCheck(args) {
+  const records = await loadNoteRecords();
+  const missing = records.filter((record) => {
+    const summary = record?.calibration?.plannerSummary?.summary;
+    return !String(summary || "").trim();
+  });
+
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        total: records.length,
+        missing: missing.length,
+        sample: missing.slice(0, 10).map((record) => ({
+          id: record.id,
+          title: record.note?.title || ""
+        }))
+      },
+      null,
+      2
+    )
+  );
+}
+
 async function runEvalFeedback(args) {
   const filePath = args.file
     ? path.resolve(args.file)
@@ -249,6 +294,16 @@ async function main() {
 
   if (command === "summary") {
     await runSummary();
+    return;
+  }
+
+  if (command === "planner:backfill-summaries") {
+    await runPlannerSummaryBackfill(args);
+    return;
+  }
+
+  if (command === "planner:check-summaries") {
+    await runPlannerSummaryCheck(args);
     return;
   }
 

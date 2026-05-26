@@ -5,16 +5,16 @@ import { rankRelevantHistoricalRecords } from "../src/relevant-records.js";
 
 test("rankRelevantHistoricalRecords prefers records sharing tags and collection type", () => {
   const ranked = rankRelevantHistoricalRecords({
-    title: "自慰后空虚是不是异常",
-    body: "正文里提到空虚和羞耻感",
+    title: "边界感是不是冷淡",
+    body: "正文里提到边界和沟通压力",
     tags: ["身体探索", "情绪反应"],
     collectionType: "科普",
     records: [
       {
         id: "record-good",
         note: {
-          title: "为什么结束后会失落",
-          body: "也提到空虚和羞耻感",
+          title: "怎么表达拒绝又不伤人",
+          body: "也提到边界和沟通压力",
           tags: ["身体探索", "情绪反应"],
           collectionType: "科普"
         },

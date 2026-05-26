@@ -70,6 +70,10 @@ function getRewriteKimiModel() {
   return String(process.env.KIMI_TEXT_MODEL || "kimi-k2.6").trim();
 }
 
+function getFeedbackKimiModel() {
+  return String(process.env.KIMI_TEXT_MODEL || "kimi-k2.6").trim();
+}
+
 function getRewriteQwenModel() {
   return String(process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus").trim();
 }
@@ -233,7 +237,8 @@ export function buildFeedbackModelSelectionOptionsPayload() {
         provider: "",
         label: "默认自动 / 当前视觉识别模型"
       },
-      buildProviderOption("glm", providerDisplayLabel("glm"), getSemanticGlmModel())
+      buildProviderOption("glm", providerDisplayLabel("glm"), getSemanticGlmModel()),
+      buildProviderOption("kimi", providerDisplayLabel("kimi"), "", getFeedbackKimiModel())
     ],
     feedbackSuggestion: [
       {
@@ -242,6 +247,7 @@ export function buildFeedbackModelSelectionOptionsPayload() {
         label: "默认自动 / 顺序尝试候选补充模型"
       },
       buildProviderOption("glm", providerDisplayLabel("glm"), getGlmTextModelCandidates()[0] || getRewriteGlmModel()),
+      buildProviderOption("kimi", providerDisplayLabel("kimi"), "", getFeedbackKimiModel()),
       buildProviderOption("qwen", providerDisplayLabel("qwen"), getQwenDmxapiModel(), getRewriteQwenModel(), {
         primarySourceLabel: "DMXAPI",
         fallbackSourceLabel: "官方"

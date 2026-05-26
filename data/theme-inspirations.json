@@ -2,15 +2,15 @@
   "items": [
     {
       "themeId": "theme-1-angle-1",
-      "themeTitle": "从激素波动讲",
-      "hookAngle": "很多人以为空虚就是异常，其实很常见。",
+      "themeTitle": "从表达方式讲",
+      "hookAngle": "很多人把边界误解成冷淡，其实是在保护关系。",
       "whyNow": "高表现内容反复命中这个问题。",
       "discussionSignal": "容易引发“我是不是不正常”的讨论。",
       "sourceSignals": [
         "命中 1 条高表现内容"
       ],
       "expandAngles": [
-        "从羞耻感讲"
+        "从关系安全感讲"
       ],
       "boundaryNotes": [
         "避免病理化表达"
@@ -20,25 +20,25 @@
         "身体探索",
         "情绪反应"
       ],
-      "prefillBriefing": "写一篇轻松科普，解释自慰后空虚为什么不一定异常。 本次重点角度：从激素波动讲",
+      "prefillBriefing": "写一篇轻松科普，解释边界感为什么不一定异常。 本次重点角度：从表达方式讲",
       "prefillTopic": "",
       "prefillConstraints": "",
-      "prefillReferenceTitle": "从激素波动讲",
-      "prefillMaterialText": "关键点：常见、正常、可自我接纳。\n重点角度：从激素波动讲",
+      "prefillReferenceTitle": "从表达方式讲",
+      "prefillMaterialText": "关键点：先共情、再说明边界、最后给替代沟通方式。\n重点角度：从表达方式讲",
       "prefillCollectionType": "科普",
       "prefillTone": "温和"
     },
     {
       "themeId": "theme-1-angle-2",
-      "themeTitle": "从羞耻感讲",
-      "hookAngle": "很多人以为空虚就是异常，其实很常见。",
+      "themeTitle": "从关系安全感讲",
+      "hookAngle": "很多人把边界误解成冷淡，其实是在保护关系。",
       "whyNow": "高表现内容反复命中这个问题。",
       "discussionSignal": "容易引发“我是不是不正常”的讨论。",
       "sourceSignals": [
         "命中 1 条高表现内容"
       ],
       "expandAngles": [
-        "从激素波动讲"
+        "从表达方式讲"
       ],
       "boundaryNotes": [
         "避免病理化表达"
@@ -48,16 +48,16 @@
         "身体探索",
         "情绪反应"
       ],
-      "prefillBriefing": "写一篇轻松科普，解释自慰后空虚为什么不一定异常。 本次重点角度：从羞耻感讲",
+      "prefillBriefing": "写一篇轻松科普，解释边界感为什么不一定异常。 本次重点角度：从关系安全感讲",
       "prefillTopic": "",
       "prefillConstraints": "",
-      "prefillReferenceTitle": "从羞耻感讲",
-      "prefillMaterialText": "关键点：常见、正常、可自我接纳。\n重点角度：从羞耻感讲",
+      "prefillReferenceTitle": "从关系安全感讲",
+      "prefillMaterialText": "关键点：先共情、再说明边界、最后给替代沟通方式。\n重点角度：从关系安全感讲",
       "prefillCollectionType": "科普",
       "prefillTone": "温和"
     }
   ],
-  "generatedAt": "2026-05-21T05:48:57.208Z",
+  "generatedAt": "2026-05-26T08:36:48.783Z",
   "sourceFingerprint": "record-high-performing",
   "sourceRecordIds": [
     "record-high-performing"

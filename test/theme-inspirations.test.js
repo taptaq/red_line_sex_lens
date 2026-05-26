@@ -14,7 +14,7 @@ test("collectThemeInspirationSourceRecords keeps only high-performing published 
   const items = collectThemeInspirationSourceRecords([
     {
       id: "keep-1",
-      note: { title: "自慰后空虚", body: "正文 A", tags: ["身体探索"] },
+      note: { title: "边界感", body: "正文 A", tags: ["身体探索"] },
       publish: { status: "published_passed", metrics: { likes: 60, favorites: 30, comments: 12, views: 3500, shares: 25 } }
     },
     {
@@ -31,12 +31,12 @@ test("buildThemeInspirationClusters groups records by shared topic signals", () 
   const clusters = buildThemeInspirationClusters([
     {
       id: "a",
-      note: { title: "自慰后空虚是不是异常", body: "空虚 失落 正常性", tags: ["身体探索", "情绪反应"], collectionType: "科普" },
+      note: { title: "边界感是不是冷淡", body: "边界表达 关系沟通", tags: ["边界表达", "关系沟通"], collectionType: "科普" },
       publish: { status: "published_passed", metrics: { likes: 60, favorites: 30, comments: 12, views: 3500, shares: 25 } }
     },
     {
       id: "b",
-      note: { title: "为什么结束后会失落", body: "自慰后情绪 失落 空虚", tags: ["身体探索"], collectionType: "科普" },
+      note: { title: "怎么表达拒绝又不伤人", body: "边界表达 关系沟通 安全感", tags: ["边界表达", "关系沟通"], collectionType: "科普" },
       publish: { status: "positive_performance", metrics: { likes: 90, favorites: 40, comments: 20, views: 5000, shares: 35 } }
     }
   ]);
@@ -70,17 +70,17 @@ test("buildThemeInspirationClusters merges connected records even when the bridg
   const clusters = buildThemeInspirationClusters([
     {
       id: "a",
-      note: { title: "自慰后空虚是不是异常", body: "空虚 失落 正常性", tags: ["身体探索"], collectionType: "科普" },
+      note: { title: "边界感是不是冷淡", body: "边界表达 关系沟通", tags: ["边界表达", "关系沟通"], collectionType: "科普" },
       publish: { status: "published_passed", metrics: { likes: 60, favorites: 30, comments: 12, views: 3500, shares: 25 } }
     },
     {
       id: "c",
-      note: { title: "高潮之后想哭正常吗", body: "情绪波动 羞耻感 恢复", tags: ["情绪反应"], collectionType: "科普" },
+      note: { title: "表达边界后还会内疚正常吗", body: "关系沟通 情绪反应 恢复", tags: ["关系沟通", "情绪反应"], collectionType: "科普" },
       publish: { status: "positive_performance", metrics: { likes: 55, favorites: 28, comments: 16, views: 3300, shares: 26 } }
     },
     {
       id: "b",
-      note: { title: "为什么结束后会失落", body: "自慰后情绪 失落 空虚 羞耻感", tags: ["身体探索", "情绪反应"], collectionType: "科普" },
+      note: { title: "怎么表达拒绝又不伤人", body: "边界表达 关系沟通 情绪反应", tags: ["边界表达", "关系沟通", "情绪反应"], collectionType: "科普" },
       publish: { status: "positive_performance", metrics: { likes: 90, favorites: 40, comments: 20, views: 5000, shares: 35 } }
     }
   ]);
@@ -92,26 +92,26 @@ test("buildThemeInspirationClusters merges connected records even when the bridg
 test("normalizeThemeInspirationItems keeps display fields and prefill fields", () => {
   const items = normalizeThemeInspirationItems([
     {
-      themeTitle: "自慰后空虚并不一定异常",
+      themeTitle: "边界感不是冷淡",
       hookAngle: "很多人以为这是问题，其实很常见。",
       whyNow: "这个主题兼具反差和科普价值。",
       discussionSignal: "多个高表现内容都反复命中。",
       sourceSignals: ["命中 2 条高表现内容"],
-      expandAngles: ["从激素变化讲", "从羞耻感讲"],
+      expandAngles: ["从表达方式讲", "从关系安全感讲"],
       boundaryNotes: ["避免病理化表达"],
       confidenceScore: 0.92,
       tags: ["身体探索", "情绪反应"],
-      prefillBriefing: "写一篇轻松科普，解释自慰后空虚为什么不一定异常。",
-      prefillTopic: "自慰后空虚是不是异常",
+      prefillBriefing: "写一篇轻松科普，解释边界感为什么不一定异常。",
+      prefillTopic: "边界感是不是冷淡",
       prefillConstraints: "避免病理化，不做医疗诊断。",
-      prefillReferenceTitle: "为什么结束后会突然很空？",
-      prefillMaterialText: "关键点：常见、正常、可自我接纳。"
+      prefillReferenceTitle: "怎么表达拒绝又不伤人？",
+      prefillMaterialText: "关键点：先共情、再说明边界、最后给替代沟通方式。"
     }
   ]);
 
   assert.equal(items.length, 1);
-  assert.equal(items[0].themeTitle, "自慰后空虚并不一定异常");
-  assert.equal(items[0].prefillTopic, "自慰后空虚是不是异常");
+  assert.equal(items[0].themeTitle, "边界感不是冷淡");
+  assert.equal(items[0].prefillTopic, "边界感是不是冷淡");
 });
 
 test("normalizeThemeInspirationItems coerces invalid confidenceScore values to zero", () => {
@@ -147,25 +147,25 @@ test("normalizeThemeInspirationItems drops generic or duplicate theme cards", ()
       prefillTopic: "身体探索"
     },
     {
-      themeTitle: "自慰后空虚并不一定异常",
+      themeTitle: "边界感不是冷淡",
       hookAngle: "很多人以为这是问题，其实很常见。",
       whyNow: "这个主题兼具反差和科普价值。",
       discussionSignal: "多个高表现内容都反复命中。",
-      prefillBriefing: "写一篇轻松科普，解释自慰后空虚为什么不一定异常。",
-      prefillTopic: "自慰后空虚是不是异常"
+      prefillBriefing: "写一篇轻松科普，解释边界感为什么不一定异常。",
+      prefillTopic: "边界感是不是冷淡"
     },
     {
-      themeTitle: "自慰后空虚并不一定异常",
+      themeTitle: "边界感不是冷淡",
       hookAngle: "很多人以为这是问题，其实很常见。",
       whyNow: "这个主题兼具反差和科普价值。",
       discussionSignal: "多个高表现内容都反复命中。",
-      prefillBriefing: "写一篇轻松科普，解释自慰后空虚为什么不一定异常。",
-      prefillTopic: "自慰后空虚是不是异常"
+      prefillBriefing: "写一篇轻松科普，解释边界感为什么不一定异常。",
+      prefillTopic: "边界感是不是冷淡"
     }
   ]);
 
   assert.equal(items.length, 1);
-  assert.equal(items[0].themeTitle, "自慰后空虚并不一定异常");
+  assert.equal(items[0].themeTitle, "边界感不是冷淡");
 });
 
 test("summarizeThemeInspirationClusters turns a cluster into a normalized inspiration card", async () => {
@@ -173,8 +173,8 @@ test("summarizeThemeInspirationClusters turns a cluster into a normalized inspir
     {
       id: "a",
       note: {
-        title: "自慰后空虚是不是异常",
-        body: "很多人结束后会有短暂空虚和失落，这不一定意味着异常。",
+        title: "边界感是不是冷淡",
+        body: "很多人表达拒绝时会担心关系变差，这并不等于做错了。",
         tags: ["身体探索", "情绪反应"],
         collectionType: "科普"
       },
@@ -183,8 +183,8 @@ test("summarizeThemeInspirationClusters turns a cluster into a normalized inspir
     {
       id: "b",
       note: {
-        title: "为什么结束后会失落",
-        body: "自慰后情绪、羞耻感和激素波动可能都会影响感受。",
+        title: "怎么表达拒绝又不伤人",
+        body: "表达边界时的语气、顺序和安全感都会影响对方感受。",
         tags: ["身体探索", "情绪反应"],
         collectionType: "科普"
       },
@@ -204,18 +204,18 @@ test("summarizeThemeInspirationClusters turns a cluster into a normalized inspir
     summarizeJson: async () => ({
       items: [
         {
-          themeTitle: "自慰后空虚并不一定异常",
-          hookAngle: "很多人以为空虚就是出问题，其实常见。",
+          themeTitle: "边界感不是冷淡",
+          hookAngle: "很多人把边界误解成疏远，其实很常见。",
           whyNow: "高表现内容反复命中这个问题。",
           discussionSignal: "容易引发“我是不是不正常”的讨论。",
           sourceSignals: ["命中 2 条高表现内容"],
-          expandAngles: ["从激素波动讲", "从羞耻感讲"],
+          expandAngles: ["从表达方式讲", "从关系安全感讲"],
           boundaryNotes: ["避免病理化表达"],
           confidenceScore: 0.93,
           tags: ["身体探索", "情绪反应"],
-          prefillBriefing: "写一篇轻松科普，解释自慰后空虚为什么不一定异常。",
-          prefillReferenceTitle: "为什么结束后会突然很空？",
-          prefillMaterialText: "关键点：常见、正常、可自我接纳。"
+          prefillBriefing: "写一篇轻松科普，解释边界感为什么不一定异常。",
+          prefillReferenceTitle: "怎么表达拒绝又不伤人？",
+          prefillMaterialText: "关键点：先共情、再说明边界、最后给替代沟通方式。"
         }
       ]
     })
@@ -224,10 +224,10 @@ test("summarizeThemeInspirationClusters turns a cluster into a normalized inspir
   assert.equal(result.items.length, 2);
   assert.deepEqual(
     result.items.map((item) => item.themeTitle),
-    ["从激素波动讲", "从羞耻感讲"]
+    ["从表达方式讲", "从关系安全感讲"]
   );
-  assert.equal(result.items[0].sourceThemeTitle, "自慰后空虚并不一定异常");
-  assert.equal(result.items[0].prefillReferenceTitle, "从激素波动讲");
+  assert.equal(result.items[0].sourceThemeTitle, "边界感不是冷淡");
+  assert.equal(result.items[0].prefillReferenceTitle, "从表达方式讲");
   assert.equal(result.diagnostics.rawModelTextLength, 0);
   assert.deepEqual(result.modelTrace.attemptedRoutes, []);
 });
@@ -237,8 +237,8 @@ test("summarizeThemeInspirationClusters accepts top-level array payloads from th
     {
       id: "a",
       note: {
-        title: "自慰后空虚是不是异常",
-        body: "很多人结束后会有短暂空虚和失落，这不一定意味着异常。",
+        title: "边界感是不是冷淡",
+        body: "很多人表达拒绝时会担心关系变差，这并不等于做错了。",
         tags: ["身体探索", "情绪反应"],
         collectionType: "科普"
       },
@@ -247,8 +247,8 @@ test("summarizeThemeInspirationClusters accepts top-level array payloads from th
     {
       id: "b",
       note: {
-        title: "为什么结束后会失落",
-        body: "自慰后情绪、羞耻感和激素波动可能都会影响感受。",
+        title: "怎么表达拒绝又不伤人",
+        body: "表达边界时的语气、顺序和安全感都会影响对方感受。",
         tags: ["身体探索", "情绪反应"],
         collectionType: "科普"
       },
@@ -260,18 +260,18 @@ test("summarizeThemeInspirationClusters accepts top-level array payloads from th
     clusters,
     summarizeJson: async () => [
       {
-        themeTitle: "自慰后空虚并不一定异常",
-        hookAngle: "很多人以为空虚就是出问题，其实常见。",
+        themeTitle: "边界感不是冷淡",
+        hookAngle: "很多人把边界误解成疏远，其实很常见。",
         whyNow: "高表现内容反复命中这个问题。",
         discussionSignal: "容易引发“我是不是不正常”的讨论。",
         sourceSignals: ["命中 2 条高表现内容"],
-        expandAngles: ["从激素波动讲", "从羞耻感讲"],
+        expandAngles: ["从表达方式讲", "从关系安全感讲"],
         boundaryNotes: ["避免病理化表达"],
         confidenceScore: 0.93,
         tags: ["身体探索", "情绪反应"],
-        prefillBriefing: "写一篇轻松科普，解释自慰后空虚为什么不一定异常。",
-        prefillReferenceTitle: "为什么结束后会突然很空？",
-        prefillMaterialText: "关键点：常见、正常、可自我接纳。"
+        prefillBriefing: "写一篇轻松科普，解释边界感为什么不一定异常。",
+        prefillReferenceTitle: "怎么表达拒绝又不伤人？",
+        prefillMaterialText: "关键点：先共情、再说明边界、最后给替代沟通方式。"
       }
     ]
   });
@@ -279,7 +279,7 @@ test("summarizeThemeInspirationClusters accepts top-level array payloads from th
   assert.equal(result.items.length, 2);
   assert.deepEqual(
     result.items.map((item) => item.themeTitle),
-    ["从激素波动讲", "从羞耻感讲"]
+    ["从表达方式讲", "从关系安全感讲"]
   );
 });
 
@@ -288,7 +288,7 @@ test("mergeThemeInspirationItems prepends new deduped cards ahead of cached ones
     cachedItems: [
       {
         themeId: "old-1",
-        themeTitle: "从羞耻感讲",
+        themeTitle: "从关系安全感讲",
         prefillBriefing: "写一篇从羞耻感角度展开的轻松科普。",
         confidenceScore: 0.82
       },
@@ -308,7 +308,7 @@ test("mergeThemeInspirationItems prepends new deduped cards ahead of cached ones
       },
       {
         themeId: "new-2",
-        themeTitle: "从羞耻感讲",
+        themeTitle: "从关系安全感讲",
         prefillBriefing: "写一篇从羞耻感角度展开的轻松科普。",
         confidenceScore: 0.95
       }
@@ -317,7 +317,7 @@ test("mergeThemeInspirationItems prepends new deduped cards ahead of cached ones
 
   assert.deepEqual(
     merged.map((item) => item.themeTitle),
-    ["从新手试错讲", "从羞耻感讲", "从沟通边界讲"]
+    ["从新手试错讲", "从关系安全感讲", "从沟通边界讲"]
   );
   assert.equal(merged[1].themeId, "new-2");
   assert.equal(merged[1].confidenceScore, 0.95);
@@ -333,8 +333,8 @@ test("theme inspiration summarize messages can include compact relevant record e
         records: [
           {
             note: {
-              title: "自慰后空虚是不是异常",
-              body: "很多人结束后会有短暂空虚和失落，这不一定意味着异常。",
+              title: "边界感是不是冷淡",
+              body: "很多人表达拒绝时会担心关系变差，这并不等于做错了。",
               tags: ["身体探索", "情绪反应"]
             },
             publish: { metrics: { likes: 60 } }
@@ -346,8 +346,8 @@ test("theme inspiration summarize messages can include compact relevant record e
     relevantRecords: [
       {
         id: "record-1",
-        title: "为什么结束后会失落",
-        summary: "高表现样本，同样命中空虚和羞耻感。",
+        title: "怎么表达拒绝又不伤人",
+        summary: "高表现样本，同样命中边界表达和沟通压力。",
         reasons: ["标签重合 2 项", "标题短语命中 1 项"]
       }
     ]
@@ -355,7 +355,7 @@ test("theme inspiration summarize messages can include compact relevant record e
 
   const combined = messages.map((item) => item.content).join("\n");
   assert.match(combined, /相关历史证据/);
-  assert.match(combined, /为什么结束后会失落/);
-  assert.match(combined, /高表现样本，同样命中空虚和羞耻感/);
+  assert.match(combined, /怎么表达拒绝又不伤人/);
+  assert.match(combined, /高表现样本，同样命中边界表达和沟通压力/);
   assert.match(combined, /标签重合 2 项/);
 });

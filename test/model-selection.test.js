@@ -168,6 +168,8 @@ test("feedback model selection payload exposes screenshot and suggestion selecto
   assert.equal(payload.feedbackScreenshot[0]?.value, "auto");
   assert.equal(payload.feedbackSuggestion[0]?.value, "auto");
   assert.match(screenshotValues.join(","), /glm/);
+  assert.match(screenshotValues.join(","), /kimi/);
+  assert.match(suggestionValues.join(","), /kimi/);
   assert.match(suggestionValues.join(","), /qwen/);
   assert.doesNotMatch(suggestionValues.join(","), /mimo/);
 
@@ -185,12 +187,12 @@ test("normalizeFeedbackModelSelectionState keeps defaults and supported feedback
 
   assert.deepEqual(
     normalizeFeedbackModelSelectionState({
-      feedbackScreenshot: "glm",
-      feedbackSuggestion: "deepseek"
+      feedbackScreenshot: "kimi",
+      feedbackSuggestion: "kimi"
     }),
     {
-      feedbackScreenshot: "glm",
-      feedbackSuggestion: "deepseek"
+      feedbackScreenshot: "kimi",
+      feedbackSuggestion: "kimi"
     }
   );
 

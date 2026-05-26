@@ -37,6 +37,14 @@ const feedbackProviderConfigs = [
     models: feedbackModelCandidates
   },
   {
+    provider: "kimi",
+    label: "Kimi",
+    envKey: "KIMI_API_KEY",
+    endpoint: getKimiEndpoint(),
+    models: [getDefaultKimiTextModel()],
+    routeMode: "official_only"
+  },
+  {
     provider: "qwen",
     label: "通义千问",
     envKey: "DMXAPI_API_KEY",
@@ -1985,17 +1993,27 @@ export async function screenshotFileToDataUrl(filePath) {
 
 export async function recognizeFeedbackScreenshot({ imageDataUrl, mimeType, fileName = "", modelSelection = "auto" }) {
   const provider = String(modelSelection || "").trim().toLowerCase();
-  const providerLabelText = provider === "glm" || provider === "auto" || !provider ? "智谱 GLM" : "智谱 GLM";
+  const useKimi = provider === "kimi";
+  const providerConfig = useKimi
+    ? {
+        provider: "kimi",
+        label: "Kimi",
+        envKey: "KIMI_API_KEY",
+        endpoint: getKimiEndpoint(),
+        routeMode: "official_only"
+      }
+    : {
+        provider: "glm",
+        label: "智谱 GLM",
+        envKey: "GLM_API_KEY",
+        endpoint: glmEndpoint
+      };
+  const selectedModel = useKimi ? getDefaultKimiTextModel() : defaultVisionModel;
   const { parsed, model } = await callChatJson({
-    providerConfig: {
-      provider: "glm",
-      label: providerLabelText,
-      envKey: "GLM_API_KEY",
-      endpoint: glmEndpoint
-    },
-    model: defaultVisionModel,
+    providerConfig,
+    model: selectedModel,
     temperature: 0.1,
-    missingKeyMessage: "截图识别缺少 GLM_API_KEY 环境变量。",
+    missingKeyMessage: useKimi ? "截图识别缺少 KIMI_API_KEY 环境变量。" : "截图识别缺少 GLM_API_KEY 环境变量。",
     scene: "feedback_screenshot",
     messages: [
       {
@@ -2041,10 +2059,10 @@ export async function recognizeFeedbackScreenshot({ imageDataUrl, mimeType, file
   return normalizeRecognitionResult(
     {
       ...parsed,
-      model: parsed.model || model || defaultVisionModel,
+      model: parsed.model || model || selectedModel,
       sourceFileName: fileName
     },
-    model || defaultVisionModel
+    model || selectedModel
   );
 }
 

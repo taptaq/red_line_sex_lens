@@ -28,6 +28,11 @@ let themeInspirationsCache = {
   mtimeMs: null,
   value: null
 };
+let accountPlannerSummaryCache = {
+  path: "",
+  mtimeMs: null,
+  value: null
+};
 let externalReferenceSamplesCache = {
   path: "",
   mtimeMs: null,
@@ -530,6 +535,61 @@ export async function saveThemeInspirations(value) {
   const stat = await fs.stat(paths.themeInspirations);
   themeInspirationsCache = {
     path: paths.themeInspirations,
+    mtimeMs: stat.mtimeMs,
+    value: normalized
+  };
+  return normalized;
+}
+
+export async function loadAccountPlannerSummary() {
+  const configuredPath = paths.accountPlannerSummary;
+
+  if (await fileExists(configuredPath)) {
+    const stat = await fs.stat(configuredPath);
+
+    if (
+      accountPlannerSummaryCache.path === configuredPath &&
+      accountPlannerSummaryCache.mtimeMs === stat.mtimeMs &&
+      accountPlannerSummaryCache.value &&
+      typeof accountPlannerSummaryCache.value === "object"
+    ) {
+      return accountPlannerSummaryCache.value;
+    }
+
+    const value = await readJson(configuredPath, {});
+    const normalized = value && typeof value === "object" ? value : {};
+    accountPlannerSummaryCache = {
+      path: configuredPath,
+      mtimeMs: stat.mtimeMs,
+      value: normalized
+    };
+    return normalized;
+  }
+
+  if (
+    accountPlannerSummaryCache.path === configuredPath &&
+    accountPlannerSummaryCache.mtimeMs === null &&
+    accountPlannerSummaryCache.value &&
+    typeof accountPlannerSummaryCache.value === "object"
+  ) {
+    return accountPlannerSummaryCache.value;
+  }
+
+  const fallback = {};
+  accountPlannerSummaryCache = {
+    path: configuredPath,
+    mtimeMs: null,
+    value: fallback
+  };
+  return fallback;
+}
+
+export async function saveAccountPlannerSummary(value) {
+  const normalized = value && typeof value === "object" ? value : {};
+  await writeJson(paths.accountPlannerSummary, normalized);
+  const stat = await fs.stat(paths.accountPlannerSummary);
+  accountPlannerSummaryCache = {
+    path: paths.accountPlannerSummary,
     mtimeMs: stat.mtimeMs,
     value: normalized
   };

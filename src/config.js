@@ -20,6 +20,7 @@ export const paths = {
   collectionTypes: path.join(dataDir, "collection-types.json"),
   noteLifecycle: path.join(dataDir, "note-lifecycle.json"),
   noteRecords: path.join(dataDir, "note-records.json"),
+  accountPlannerSummary: path.join(dataDir, "account-planner-summary.json"),
   themeInspirations: path.join(dataDir, "theme-inspirations.json"),
   externalReferenceSamples: path.join(dataDir, "external-reference-samples.json"),
   analyzeTagOptions: path.join(dataDir, "analyze-tag-options.json"),

@@ -18,6 +18,7 @@ import {
 import { analyzePost } from "./analyzer.js";
 import {
   loadAnalyzeTagOptions,
+  loadAccountPlannerSummary,
   loadCollectionTypes,
   loadExternalReferenceSamples,
   loadFalsePositiveLog,
@@ -31,6 +32,7 @@ import {
   loadStyleProfile,
   loadThemeInspirations,
   saveAnalyzeTagOptions,
+  saveAccountPlannerSummary,
   saveExternalReferenceSamples,
   saveFalsePositiveLog,
   saveNoteRecords,
@@ -1469,18 +1471,41 @@ async function handleRequest(request, response) {
       externalSamples,
       summarize: payload?.mockAccountPlannerSummary
         ? async () => payload.mockAccountPlannerSummary
-        : null
+        : undefined
+    });
+    const persisted = await saveAccountPlannerSummary({
+      summary: result.summary,
+      cards: result.cards,
+      modelTrace: result.modelTrace,
+      generatedAt: new Date().toISOString(),
+      localRecordCount: localRecords.length,
+      externalSampleCount: externalSamples.length
     });
 
     return sendJson(response, 200, {
       ok: true,
-      summary: result.summary,
-      cards: result.cards,
-      modelTrace: result.modelTrace,
+      summary: persisted.summary,
+      cards: persisted.cards,
+      modelTrace: persisted.modelTrace,
       diagnostics: {
         localRecordCount: localRecords.length,
         externalSampleCount: externalSamples.length,
-        cardCount: result.cards.length
+        cardCount: persisted.cards.length
+      }
+    });
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/sample-library/account-planner/analyze") {
+    const cached = await loadAccountPlannerSummary();
+    return sendJson(response, 200, {
+      ok: true,
+      summary: cached.summary || null,
+      cards: Array.isArray(cached.cards) ? cached.cards : [],
+      modelTrace: cached.modelTrace || null,
+      diagnostics: {
+        localRecordCount: Number(cached.localRecordCount || 0),
+        externalSampleCount: Number(cached.externalSampleCount || 0),
+        cardCount: Array.isArray(cached.cards) ? cached.cards.length : 0
       }
     });
   }

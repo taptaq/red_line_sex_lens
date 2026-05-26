@@ -546,8 +546,7 @@ function syncAdminDataLoadingUI() {
   const loadingTargets = [
     "review-queue",
     "feedback-priority-list",
-    "feedback-log-secondary-list",
-    "false-positive-log-list"
+    "feedback-log-secondary-list"
   ];
 
   loadingTargets.forEach((id) => {
@@ -557,12 +556,6 @@ function syncAdminDataLoadingUI() {
       node.dataset.loading = isRefreshing ? "true" : "";
     }
   });
-
-  const summaryNode = byId("false-positive-summary");
-
-  if (summaryNode) {
-    summaryNode.dataset.loading = isRefreshing ? "true" : "";
-  }
 
   const styleProfileButton = byId("generation-style-profile-button");
 
@@ -943,7 +936,6 @@ const sampleLibraryAccountPlannerAnalyzeApi = "/api/sample-library/account-plann
 const innerSpaceTermsApi = "/api/admin/inner-space-terms";
 const styleProfileAdminApi = "/api/admin/style-profile";
 const generationThemeInspirationsApi = "/api/generate-theme-inspirations";
-const SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT = 3;
 let generationReferenceSearchRequestSequence = 0;
 let generationThemeInspirationRequestSequence = 0;
 
@@ -2828,22 +2820,19 @@ function getManualReviewRetroReminderQueueItems(records = []) {
     });
 }
 
-function renderQueue(items) {
-  const node = byId("review-queue");
-
-  if (!node) {
-    return;
-  }
-
-  if (isAdminDataInitialLoading()) {
-    node.innerHTML = buildAdminDataLoadingBlockMarkup("加载中...", { count: 2, isRefreshing: false });
-    return;
-  }
-
+function getReviewQueueDisplayState(items = []) {
   const retroReminderItems = getManualReviewRetroReminderQueueItems(appState.sampleLibraryRecords || []);
   const reviewItems = Array.isArray(items) ? items : [];
 
-  node.innerHTML = retroReminderItems.length || reviewItems.length
+  return {
+    retroReminderItems,
+    reviewItems,
+    totalCount: retroReminderItems.length + reviewItems.length
+  };
+}
+
+function buildReviewQueueDetailedMarkup({ retroReminderItems = [], reviewItems = [] } = {}) {
+  return retroReminderItems.length || reviewItems.length
     ? `${retroReminderItems
         .map(
           (item) => `
@@ -2948,6 +2937,84 @@ function renderQueue(items) {
         )
         .join("")}`
     : '<div class="result-card muted">当前没有待复核候选词</div>';
+}
+
+function buildReviewQueueModalMarkup(items = []) {
+  const { retroReminderItems, reviewItems, totalCount } = getReviewQueueDisplayState(items);
+
+  return `
+    <div class="sample-library-modal-stack">
+      <section class="sample-library-modal-section">
+        <div class="sample-library-modal-section-head">
+          <strong>人工复核与发布后复盘</strong>
+          <p>${escapeHtml(`当前共 ${totalCount} 项待处理，其中候选词 / 语境 ${reviewItems.length} 项，T+7 终局复盘提醒 ${retroReminderItems.length} 项。`)}</p>
+        </div>
+        <div class="admin-list">
+          ${buildReviewQueueDetailedMarkup({ retroReminderItems, reviewItems })}
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function renderReviewQueueModal(items = []) {
+  renderSampleLibraryModal({
+    title: "人工复核队列",
+    subtitle: "统一处理候选词 / 语境复核，以及到期的发布后复盘提醒。",
+    body: buildReviewQueueModalMarkup(items),
+    hideSaveButton: true,
+    cancelLabel: "关闭"
+  });
+}
+
+function openReviewQueueModal() {
+  appState.sampleLibraryModal = {
+    kind: "review-queue-list"
+  };
+
+  renderReviewQueueModal(appState.adminData.reviewQueue || []);
+}
+
+function renderQueue(items) {
+  const node = byId("review-queue");
+
+  if (!node) {
+    return;
+  }
+
+  if (isAdminDataInitialLoading()) {
+    node.innerHTML = buildAdminDataLoadingBlockMarkup("加载中...", { count: 1, isRefreshing: false });
+    return;
+  }
+
+  const { retroReminderItems, reviewItems, totalCount } = getReviewQueueDisplayState(items);
+
+  node.innerHTML = `
+    <article class="review-queue-entry-card">
+      <div class="review-queue-entry-head">
+        <p>候选词 / 语境复核、白名单预演和到期复盘都收进弹窗里处理，主页面只保留一个入口。</p>
+      </div>
+      <div class="review-queue-entry-metrics">
+        <span class="meta-pill">共 ${escapeHtml(String(totalCount))} 项</span>
+        <span class="meta-pill">规则复核 ${escapeHtml(String(reviewItems.length))} 项</span>
+        <span class="meta-pill">T+7 复盘 ${escapeHtml(String(retroReminderItems.length))} 项</span>
+      </div>
+      <div class="item-actions">
+        <button
+          type="button"
+          class="button"
+          id="review-queue-open-button"
+          data-action="open-review-queue-modal"
+        >
+          打开复核队列
+        </button>
+      </div>
+    </article>
+  `;
+
+  if (appState.sampleLibraryModal?.kind === "review-queue-list" && byId("sample-library-modal")?.hidden === false) {
+    renderReviewQueueModal(items);
+  }
 }
 
 function renderScreenshotRecognition(recognition, screenshot) {
@@ -3134,40 +3201,27 @@ function buildFalsePositiveSummaryText({ pendingItems, historyItems }) {
   const historyCount = Array.isArray(historyItems) ? historyItems.length : 0;
 
   if (pendingCount === 0 && historyCount === 0) {
-    return "当前没有误报样本";
+    return "暂无误报样本";
   }
 
   if (pendingCount === 0) {
-    return `当前没有待确认误报，已沉淀 ${historyCount} 条历史案例。`;
+    return `待确认 0 条，历史案例 ${historyCount} 条。`;
   }
 
   if (historyCount === 0) {
-    return `当前有 ${pendingCount} 条待确认误报，暂时还没有已沉淀历史案例。`;
+    return `待确认 ${pendingCount} 条，历史案例 0 条。`;
   }
 
-  return `当前有 ${pendingCount} 条待确认误报，已沉淀 ${historyCount} 条历史案例。`;
+  return `待确认 ${pendingCount} 条，历史案例 ${historyCount} 条。`;
 }
 
 function renderFalsePositiveLog(items) {
   appState.falsePositiveLog = Array.isArray(items) ? items : [];
-  const { pendingItems, historyItems } = getSortedFalsePositiveGroups(appState.falsePositiveLog);
   const previewButton = byId("false-positive-preview-open-button");
-  const summaryNode = byId("false-positive-summary");
-  const logListNode = byId("false-positive-log-list");
 
   if (isAdminDataInitialLoading()) {
     if (previewButton) {
       previewButton.hidden = true;
-    }
-
-    if (summaryNode) {
-      summaryNode.textContent = "加载中...";
-      summaryNode.classList.toggle("muted", true);
-    }
-
-    if (logListNode) {
-      logListNode.hidden = false;
-      logListNode.innerHTML = buildAdminDataLoadingBlockMarkup("加载中...", { count: 2, isRefreshing: false });
     }
 
     if (appState.sampleLibraryModal?.kind === "false-positive-list" && byId("sample-library-modal")?.hidden === false) {
@@ -3178,42 +3232,6 @@ function renderFalsePositiveLog(items) {
 
   if (previewButton) {
     previewButton.hidden = appState.falsePositiveLog.length === 0;
-  }
-
-  if (summaryNode) {
-    summaryNode.textContent = buildFalsePositiveSummaryText({ pendingItems, historyItems });
-    summaryNode.classList.toggle("muted", appState.falsePositiveLog.length === 0);
-  }
-
-  if (logListNode) {
-    logListNode.hidden = appState.falsePositiveLog.length > 0;
-    logListNode.innerHTML = appState.falsePositiveLog.length
-      ? renderFalsePositiveLogView(appState.falsePositiveLog, {
-          escapeHtml,
-          verdictLabel,
-          compactText,
-          formatDate,
-          getSortedFalsePositiveGroups,
-          falsePositiveStatusLabel,
-          falsePositiveSourceLabel: (source = "") => (source === "false_positive_reflow" ? "误报回流" : String(source || "").trim()),
-          falsePositiveAuditLabel: (audit = {}) => {
-            const label = String(audit?.label || "").trim();
-            const signal = String(audit?.signal || "").trim();
-            let signalLabel = "";
-
-            if (signal === "strict_pending") signalLabel = "偏严待确认";
-            if (signal === "strict_confirmed") signalLabel = "偏严已确认";
-            if (signal === "not_enough_evidence") signalLabel = "证据不足";
-
-            if (label && signalLabel) {
-              return `${label} / ${signalLabel}`;
-            }
-
-            return label || signalLabel || "未生成审核结论";
-          },
-          buildLongTextDetails
-        })
-      : '<div class="result-card muted">当前没有误报样本</div>';
   }
 
   if (appState.sampleLibraryModal?.kind === "false-positive-list" && byId("sample-library-modal")?.hidden === false) {
@@ -3807,16 +3825,18 @@ function buildSampleLibraryRecordCardMarkup(item = {}, { action = "", actionId =
   });
 }
 
-function getSampleLibraryRecordPreviewItems(items = []) {
-  const normalizedItems = Array.isArray(items) ? items : [];
-  return normalizedItems.slice(0, SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT);
+function sampleLibraryRecordListSummaryText(count, filterLabel, collectionLabel) {
+  if (!count) {
+    return "暂无样本记录";
+  }
+
+  return `${count} 条记录 · ${filterLabel} · ${collectionLabel}`;
 }
 
 function renderSampleLibraryList(items = []) {
   const listNode = byId("sample-library-record-list");
   const countNode = byId("sample-library-list-count");
   const previewOpenButton = byId("sample-library-record-preview-open-button");
-  const previewItems = getSampleLibraryRecordPreviewItems(items);
 
   if (!listNode) {
     return;
@@ -3831,24 +3851,24 @@ function renderSampleLibraryList(items = []) {
       previewOpenButton.hidden = true;
     }
 
-    listNode.innerHTML = buildAdminDataLoadingBlockMarkup("加载中...", { count: 2, isRefreshing: false });
+    listNode.innerHTML = "";
     return;
   }
 
+  const filterLabel = sampleLibraryFilterLabel(appState.sampleLibraryFilter);
+  const collectionLabel = sampleLibraryCollectionFilterLabel(appState.sampleLibraryCollectionFilter);
+
   if (countNode) {
-    countNode.textContent = `${items.length} 条 · ${sampleLibraryFilterLabel(appState.sampleLibraryFilter)} · ${sampleLibraryCollectionFilterLabel(
-      appState.sampleLibraryCollectionFilter
-    )}`;
+    countNode.textContent = `${items.length} 条 · ${filterLabel} · ${collectionLabel}`;
   }
 
   if (previewOpenButton) {
     previewOpenButton.hidden = items.length === 0;
   }
 
-  listNode.innerHTML = buildSampleLibraryRecordListMarkupView(previewItems, {
-    buildSampleLibraryRecordCardMarkup,
-    selectedSampleLibraryRecordId: appState.selectedSampleLibraryRecordId
-  });
+  listNode.innerHTML = `<div class="result-card muted">${escapeHtml(
+    sampleLibraryRecordListSummaryText(items.length, filterLabel, collectionLabel)
+  )}</div>`;
 }
 
 function buildSampleLibraryRecordListModalMarkup(items = []) {
@@ -4934,7 +4954,7 @@ async function saveFeedbackFalsePositiveModal() {
   await refreshAll();
   ensureSupportWorkspaceOpen();
   revealSampleLibraryReflowPane();
-  byId("false-positive-summary")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  byId("sample-library-reflow-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function buildAnalyzePayloadFromSampleLibraryRecord(record = {}) {
@@ -5251,7 +5271,8 @@ async function refreshAll() {
     apiJson("/api/summary"),
     apiJson(collectionTypesApi),
     refreshAdminDataState(),
-    refreshSampleLibraryWorkspace()
+    refreshSampleLibraryWorkspace(),
+    refreshSampleLibraryAccountPlannerState()
   ]);
   appState.collectionTypeOptions = Array.isArray(collectionTypePayload.options) ? collectionTypePayload.options : [];
   appState.summaryData = summary && typeof summary === "object" ? summary : {};
@@ -5624,6 +5645,28 @@ function syncSampleLibraryAccountPlannerPanel() {
   }
 
   renderSampleLibraryAccountPlannerResult();
+}
+
+async function refreshSampleLibraryAccountPlannerState() {
+  try {
+    const payload = await apiJson(sampleLibraryAccountPlannerAnalyzeApi);
+    appState.sampleLibraryAccountPlanner = {
+      ...appState.sampleLibraryAccountPlanner,
+      loading: false,
+      message: "",
+      summary: payload?.summary || null,
+      cards: Array.isArray(payload?.cards) ? payload.cards : [],
+      selectedPlanId: String(payload?.cards?.[0]?.planId || appState.sampleLibraryAccountPlanner?.selectedPlanId || "")
+    };
+  } catch {
+    appState.sampleLibraryAccountPlanner = {
+      ...appState.sampleLibraryAccountPlanner,
+      loading: false
+    };
+  }
+
+  syncSampleLibraryAccountPlannerPanel();
+  return appState.sampleLibraryAccountPlanner;
 }
 
 async function refreshExternalReferenceSamples({ openModal = false, message = "" } = {}) {
@@ -6210,6 +6253,56 @@ async function parseSampleLibraryAccountPlannerFiles(files = []) {
   });
 }
 
+function buildSampleLibraryAccountPlannerAnalyzePayload({ records = [], externalSamples = [] } = {}) {
+  const normalizedRecords = (Array.isArray(records) ? records : []).map((record) => ({
+    id: String(record?.id || "").trim(),
+    note: {
+      title: String(record?.note?.title || "").trim(),
+      tags: Array.isArray(record?.note?.tags) ? record.note.tags : [],
+      collectionType: String(record?.note?.collectionType || "").trim()
+    },
+    publish: {
+      status: String(record?.publish?.status || "").trim(),
+      publishedAt: String(record?.publish?.publishedAt || "").trim(),
+      metrics: record?.publish?.metrics && typeof record.publish.metrics === "object" ? { ...record.publish.metrics } : {}
+    },
+    reference: record?.reference && typeof record.reference === "object" ? { ...record.reference } : {},
+    calibration: {
+      plannerSummary:
+        record?.calibration?.plannerSummary && typeof record.calibration.plannerSummary === "object"
+          ? { ...record.calibration.plannerSummary }
+          : {},
+      retro:
+        record?.calibration?.retro && typeof record.calibration.retro === "object"
+          ? { ...record.calibration.retro }
+          : {}
+    }
+  }));
+
+  const payload = {
+    records: normalizedRecords
+  };
+
+  if (Array.isArray(externalSamples) && externalSamples.length) {
+    payload.externalSamples = externalSamples.map((sample) => ({
+      id: String(sample?.id || "").trim(),
+      title: String(sample?.title || "").trim(),
+      body: String(sample?.body || "")
+        .trim()
+        .slice(0, 180),
+      tags: Array.isArray(sample?.tags) ? sample.tags : [],
+      collectionType: String(sample?.collectionType || "").trim(),
+      publish: {
+        status: String(sample?.publish?.status || "").trim(),
+        publishedAt: String(sample?.publish?.publishedAt || "").trim(),
+        metrics: sample?.publish?.metrics && typeof sample.publish.metrics === "object" ? { ...sample.publish.metrics } : {}
+      }
+    }));
+  }
+
+  return payload;
+}
+
 async function runSampleLibraryAccountPlannerAnalysis() {
   const runButton = byId("sample-library-account-planner-run");
   const filteredRecords = filterSampleLibraryRecords(appState.sampleLibraryRecords);
@@ -6234,12 +6327,12 @@ async function runSampleLibraryAccountPlannerAnalysis() {
   try {
     const response = await apiJson(sampleLibraryAccountPlannerAnalyzeApi, {
       method: "POST",
-      body: JSON.stringify({
-        records: filteredRecords,
-        ...(Array.isArray(appState.externalReferenceSamples) && appState.externalReferenceSamples.length
-          ? { externalSamples: appState.externalReferenceSamples }
-          : {})
-      })
+      body: JSON.stringify(
+        buildSampleLibraryAccountPlannerAnalyzePayload({
+          records: filteredRecords,
+          externalSamples: appState.externalReferenceSamples
+        })
+      )
     });
 
     appState.sampleLibraryAccountPlanner = {
@@ -7611,7 +7704,7 @@ function revealNoteLifecyclePane() {
 async function handleSummaryAction(action) {
   if (action === "open-review-queue") {
     ensureSupportWorkspaceOpen();
-    byId("review-queue")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    openReviewQueueModal();
     return;
   }
 
@@ -7774,21 +7867,21 @@ async function savePlatformOutcomeFromCurrent({
 }
 
 const analyzeForm = byId("analyze-form");
-analyzeForm.addEventListener("input", syncAnalyzeActions);
-analyzeForm.addEventListener("change", syncAnalyzeActions);
+analyzeForm?.addEventListener("input", syncAnalyzeActions);
+analyzeForm?.addEventListener("change", syncAnalyzeActions);
 initializeAnalyzeTagPicker();
-byId("feedback-form").addEventListener("input", syncFeedbackActions);
-byId("feedback-form").addEventListener("change", syncFeedbackActions);
-byId("generation-workbench-form").addEventListener("input", syncGenerationActions);
-byId("generation-workbench-form").addEventListener("change", syncGenerationActions);
-byId("generation-workbench-form").addEventListener("change", syncGenerationModeFields);
+byId("feedback-form")?.addEventListener("input", syncFeedbackActions);
+byId("feedback-form")?.addEventListener("change", syncFeedbackActions);
+byId("generation-workbench-form")?.addEventListener("input", syncGenerationActions);
+byId("generation-workbench-form")?.addEventListener("change", syncGenerationActions);
+byId("generation-workbench-form")?.addEventListener("change", syncGenerationModeFields);
 byId("generation-reference-image-input")?.addEventListener("change", (event) => {
   handleGenerationReferenceImageSelection(event).catch(() => {});
 });
 byId("generation-reference-text-input")?.addEventListener("change", (event) => {
   handleGenerationReferenceTextSelection(event).catch(() => {});
 });
-byId("generation-briefing-improve").addEventListener("click", improveGenerationBriefingFromCurrentInput);
+byId("generation-briefing-improve")?.addEventListener("click", improveGenerationBriefingFromCurrentInput);
 byId("generation-reference-search-button")?.addEventListener("click", () => {
   openGenerationReferenceSearchModal().catch(() => {});
 });
@@ -9802,11 +9895,11 @@ byId("sample-library-pools-modal-content")?.addEventListener("input", (event) =>
   }
 });
 
-byId("rewrite-model-selection").addEventListener("change", () => {
+byId("rewrite-model-selection")?.addEventListener("change", () => {
   syncCrossReviewModelSelectionRules();
 });
 
-byId("sample-library-filter").addEventListener("change", (event) => {
+byId("sample-library-filter")?.addEventListener("change", (event) => {
   appState.sampleLibraryFilter = String(event.currentTarget.value || "all");
   renderSampleLibraryWorkspace();
 });
@@ -9823,7 +9916,7 @@ byId("sample-library-account-planner-run")?.addEventListener("click", async () =
   await runSampleLibraryAccountPlannerAnalysis();
 });
 
-byId("sample-library-collection-filter").addEventListener("change", (event) => {
+byId("sample-library-collection-filter")?.addEventListener("change", (event) => {
   appState.sampleLibraryCollectionFilter = String(event.currentTarget.value || "all");
   renderSampleLibraryWorkspace();
 });
@@ -10394,6 +10487,12 @@ document.addEventListener("click", async (event) => {
 
   if (action === "open-false-positive-list-modal") {
     openFalsePositiveListModal();
+    return;
+  }
+
+  if (action === "open-review-queue-modal") {
+    ensureSupportWorkspaceOpen();
+    openReviewQueueModal();
     return;
   }
 

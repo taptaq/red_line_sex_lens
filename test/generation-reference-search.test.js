@@ -51,21 +51,21 @@ test("buildGenerationReferenceMaterialSearchPrompt includes current brief contex
 test("buildGenerationReferenceSearchQueries splits the brief into multiple search intents", () => {
   const queries = buildGenerationReferenceSearchQueries({
     brief: {
-      briefing: "写本文自责（身体探索）后产生定伤、失落、空虚等情绪的正常性，帮助读者理解这是一种常见且正常的心理反应",
+      briefing: "写表达拒绝后总担心伤人的常见心理反应，帮助读者理解边界感不等于冷淡",
       collectionType: "科普",
       constraints: "语气自然，补足心理和安全边界"
     },
     draft: {
-      title: "为什么结束后会突然很空？"
+      title: "怎么表达拒绝又不伤人？"
     }
   });
 
   assert.ok(Array.isArray(queries));
   assert.ok(queries.length >= 4);
   assert.ok(queries.length <= 8);
-  assert.match(queries[0], /本文自责|身体探索/);
+  assert.match(queries[0], /表达拒绝|边界感/);
   assert.ok(
-    queries.some((query) => /情绪|心理反应|失落|空虚/.test(query)),
+    queries.some((query) => /情绪|心理反应|边界|冷淡/.test(query)),
     "expected one query to target emotional or psychological context"
   );
   assert.ok(
@@ -1454,10 +1454,10 @@ test("generateReferenceMaterials expands Tencent fallback queries to improve res
   try {
     const result = await generateReferenceMaterials({
       brief: {
-        briefing: "写本文自责（身体探索）后产生定伤、失落、空虚等情绪的正常性"
+        briefing: "写表达拒绝后总担心伤人的常见心理反应"
       },
       draft: {
-        title: "为什么结束后会突然很空？"
+        title: "怎么表达拒绝又不伤人？"
       },
       generateJson: undefined,
       fetchImpl

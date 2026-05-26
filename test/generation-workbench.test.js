@@ -143,7 +143,7 @@ test("buildGenerationMessages can include compact scoped record context without 
   const messages = buildGenerationMessages({
     mode: "from_scratch",
     brief: {
-      briefing: "写自慰后空虚是不是异常，轻松一点",
+      briefing: "写边界感是不是冷淡，轻松一点",
       collectionType: "科普"
     },
     referenceSamples: [],
@@ -152,8 +152,8 @@ test("buildGenerationMessages can include compact scoped record context without 
         relevantRecords: [
           {
             id: "record-1",
-            title: "为什么结束后会失落",
-            summary: "高表现样本，同样命中空虚和羞耻感。",
+            title: "怎么表达拒绝又不伤人",
+            summary: "高表现样本，同样命中边界表达和沟通压力。",
             reasons: ["标签重合 2 项", "标题短语命中 1 项"]
           }
         ]
@@ -163,8 +163,8 @@ test("buildGenerationMessages can include compact scoped record context without 
 
   const combined = messages.map((item) => item.content).join("\n");
   assert.match(combined, /相关历史样本/);
-  assert.match(combined, /为什么结束后会失落/);
-  assert.match(combined, /高表现样本，同样命中空虚和羞耻感/);
+  assert.match(combined, /怎么表达拒绝又不伤人/);
+  assert.match(combined, /高表现样本，同样命中边界表达和沟通压力/);
 });
 
 test("buildGenerationMessages packs shared memory guidance without leaking raw violation text", () => {

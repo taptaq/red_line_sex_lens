@@ -26,20 +26,69 @@ function normalizeMetrics(metrics = {}) {
 function normalizeSourceSample(item = {}, { sourceType = "local" } = {}) {
   const note = item?.note && typeof item.note === "object" ? item.note : item;
   const publish = item?.publish && typeof item.publish === "object" ? item.publish : item?.publish || {};
+  const reference = item?.reference && typeof item.reference === "object" ? item.reference : item?.reference || {};
+  const plannerSummary =
+    item?.calibration?.plannerSummary && typeof item.calibration.plannerSummary === "object"
+      ? item.calibration.plannerSummary
+      : {};
 
   return {
     sourceType,
     id: normalizeString(item?.id || `${sourceType}-${normalizeString(note?.title).slice(0, 12)}`),
     title: normalizeString(note?.title || item?.title),
-    body: normalizeString(note?.body || item?.body),
+    body: normalizeString(note?.body || item?.body || plannerSummary.summary),
     tags: uniqueStrings(note?.tags || item?.tags || []),
     collectionType: normalizeString(note?.collectionType || item?.collectionType) || "科普",
     publish: {
       status: normalizeString(publish.status || item?.publishStatus) || "not_published",
-      metrics: normalizeMetrics(publish.metrics || item?.metrics || item)
+      metrics: normalizeMetrics(publish.metrics || item?.metrics || item),
+      publishedAt: normalizeString(publish.publishedAt || item?.publishedAt)
+    },
+    reference: {
+      enabled: reference.enabled === true,
+      tier: normalizeString(reference.tier)
+    },
+    plannerSummary: {
+      summary: normalizeString(plannerSummary.summary),
+      keyPoints: uniqueStrings(plannerSummary.keyPoints || []),
+      riskBoundary: uniqueStrings(plannerSummary.riskBoundary || []),
+      suggestedTopic: normalizeString(plannerSummary.suggestedTopic),
+      provider: normalizeString(plannerSummary.provider),
+      model: normalizeString(plannerSummary.model),
+      createdAt: normalizeString(plannerSummary.createdAt)
     },
     retro: item?.calibration?.retro && typeof item.calibration.retro === "object" ? item.calibration.retro : {}
   };
+}
+
+function derivePublishRecencyLabel(sample = {}) {
+  const publishedAt = normalizeString(sample?.publish?.publishedAt);
+
+  if (!publishedAt) {
+    return "";
+  }
+
+  const timestamp = Date.parse(publishedAt);
+
+  if (!Number.isFinite(timestamp)) {
+    return "";
+  }
+
+  const ageDays = Math.max(0, Math.floor((Date.now() - timestamp) / 86400000));
+
+  if (ageDays <= 7) {
+    return "近 7 天";
+  }
+
+  if (ageDays <= 30) {
+    return "近 30 天";
+  }
+
+  if (ageDays <= 90) {
+    return "近 90 天";
+  }
+
+  return "90 天前";
 }
 
 function scoreSample(sample = {}) {
@@ -87,27 +136,64 @@ function buildTopicLabel(sample = {}) {
   return normalizeString(sample.title).slice(0, 12) || "当前有效方向";
 }
 
+function normalizePlannerTopicKey(value = "") {
+  const normalized = normalizeString(value)
+    .replace(/[路线方向内容话题]+$/g, "")
+    .replace(/愉悦/g, "悦己")
+    .replace(/自慰/g, "悦己");
+
+  return normalized || "当前有效方向";
+}
+
+function buildFallbackTopicQuestion(topicLabel = "", sample = {}) {
+  const normalizedTopic = normalizePlannerTopicKey(topicLabel);
+  const title = normalizeString(sample.title);
+  const body = normalizeString(sample.body);
+  const combined = `${title}\n${body}`;
+
+  if (/突然很空|放空|失落|空虚/.test(combined)) {
+    return `为什么${normalizedTopic}之后会突然很空？`;
+  }
+
+  if (/是不是|正常吗|会不会/.test(combined)) {
+    return `${normalizedTopic}之后这种反应正常吗？`;
+  }
+
+  if (/新手|第一次/.test(combined)) {
+    return `第一次${normalizedTopic}后该怎么判断自己的状态？`;
+  }
+
+  return `${normalizedTopic}之后的反应，到底该怎么理解？`;
+}
+
+function buildFallbackWhyThisWorks(topicLabel = "", sample = {}) {
+  const normalizedTopic = normalizePlannerTopicKey(topicLabel);
+  const sourceLabel = sample.sourceType === "local" ? "账号本地高表现记录" : "外部参考样本";
+  return `这条建议来自${sourceLabel}，更适合继续细化“${normalizedTopic}之后会发生什么”这一类具体问题。`;
+}
+
 function buildPlannerCardFromSample(sample = {}, { index = 0, sourceSignals = [] } = {}) {
   const topicLabel = buildTopicLabel(sample);
-  const titleSeed = normalizeString(sample.title) || `${topicLabel}路线`;
   const bodyExcerpt = normalizeString(sample.body).slice(0, 120);
   const boundaryNotes =
     sample.sourceType === "local" && sample?.retro?.ruleImprovementCandidate
       ? [normalizeString(sample.retro.ruleImprovementCandidate)]
       : ["避免病理化", "不做医疗诊断"];
+  const concreteQuestion = buildFallbackTopicQuestion(topicLabel, sample);
+  const normalizedTopic = normalizePlannerTopicKey(topicLabel);
 
   return {
     planId: `plan-${index + 1}`,
-    planTitle: `继续放大${topicLabel}路线`,
+    planTitle: concreteQuestion,
     estimatedValue: deriveEstimatedValue(sample),
-    whyThisWorks: `这条建议来自${sample.sourceType === "local" ? "账号本地高表现记录" : "外部参考样本"}，当前更适合继续做${topicLabel}这条线。`,
+    whyThisWorks: buildFallbackWhyThisWorks(topicLabel, sample),
     titleFormula: "反常识提问 + 解释原因 + 安抚落点",
     bodyStructure: ["先抛一个常见误解", "用轻科普解释原因", "给出可执行的安抚或判断边界"],
     riskBoundary: uniqueStrings(boundaryNotes),
     sourceSignals: uniqueStrings(sourceSignals),
     tags: sample.tags.slice(0, 3),
-    prefillBriefing: `写一篇${sample.collectionType || "科普"}向内容，围绕“${titleSeed}”展开，重点解释原因并给出温和结论。`,
-    prefillReferenceTitle: titleSeed,
+    prefillBriefing: `写一篇${sample.collectionType || "科普"}向内容，围绕“${concreteQuestion}”展开，重点解释原因、正常化常见反应，并补上${normalizedTopic}相关边界提醒。`,
+    prefillReferenceTitle: concreteQuestion,
     prefillMaterialText: uniqueStrings([
       bodyExcerpt ? `参考摘要：${bodyExcerpt}` : "",
       "结构重点：反常识提问 -> 解释原因 -> 安抚落点"
@@ -120,10 +206,10 @@ function buildPlannerCardFromSample(sample = {}, { index = 0, sourceSignals = []
 function buildFallbackAccountPlannerSummary({ localRecords = [], externalSamples = [] } = {}) {
   const normalizedLocal = localRecords
     .map((item) => normalizeSourceSample(item, { sourceType: "local" }))
-    .filter((item) => item.title && item.body);
+    .filter((item) => item.title && (item.body || item.plannerSummary.summary));
   const normalizedExternal = externalSamples
     .map((item) => normalizeSourceSample(item, { sourceType: "external" }))
-    .filter((item) => item.title && item.body);
+    .filter((item) => item.title && (item.body || item.plannerSummary.summary));
 
   const highLocal = normalizedLocal
     .filter((item) => ["published_passed", "positive_performance"].includes(item.publish.status))
@@ -136,10 +222,24 @@ function buildFallbackAccountPlannerSummary({ localRecords = [], externalSamples
   const externalTopics = uniqueStrings(highExternal.slice(0, 2).map((item) => buildTopicLabel(item)));
   const gaps = externalTopics.length
     ? [`可补充的外部参考方向：${externalTopics.join("、")}`]
-    : ["外部参考样本还不够多，建议继续补充对照内容。"];
+    : ["当前暂无稳定高表现样本，已自动退到已发布内容的观察型建议；若后续补充外部对照，可继续验证选题边界。"]; 
 
-  const seedSamples = [...highLocal.slice(0, 2), ...highExternal.slice(0, 2)].slice(0, 5);
-  const cards = seedSamples.map((item, index) =>
+  const seedSamples = [...highLocal.slice(0, 3), ...highExternal.slice(0, 2)];
+  const dedupedSeedSamples = [];
+  const seenTopicKeys = new Set();
+
+  for (const item of seedSamples) {
+    const topicKey = normalizePlannerTopicKey(buildTopicLabel(item));
+
+    if (seenTopicKeys.has(topicKey)) {
+      continue;
+    }
+
+    seenTopicKeys.add(topicKey);
+    dedupedSeedSamples.push(item);
+  }
+
+  const cards = dedupedSeedSamples.map((item, index) =>
     buildPlannerCardFromSample(item, {
       index,
       sourceSignals: uniqueStrings([
@@ -156,7 +256,7 @@ function buildFallbackAccountPlannerSummary({ localRecords = [], externalSamples
       gaps,
       nextMove: cards[0]
         ? `先从“${cards[0].planTitle}”开始，再观察这个角度能否稳定承接最近的高表现信号。`
-        : "当前样本不足，建议先补充近 10-30 篇内容和外部对照样本。"
+        : "当前暂无稳定高表现样本，建议先继续发布并观察最近内容表现，系统会基于已发布样本持续生成观察型建议。"
     },
     cards,
     modelTrace: {
@@ -238,15 +338,33 @@ function extractJsonBlock(text = "") {
 }
 
 function buildAccountPlannerSummarizeMessages({ localSamples = [], externalSamples = [], fallback = null } = {}) {
-  const localSummary = localSamples.slice(0, 10).map((sample) => ({
+  const prioritizedLocalSamples = [...localSamples]
+    .sort((left, right) => {
+      const leftReference = left?.reference?.enabled === true ? 1 : 0;
+      const rightReference = right?.reference?.enabled === true ? 1 : 0;
+
+      if (leftReference !== rightReference) {
+        return rightReference - leftReference;
+      }
+
+      return compareSamplesByScore(left, right);
+    })
+    .slice(0, 10);
+
+  const localSummary = prioritizedLocalSamples.map((sample) => ({
     id: sample.id,
     title: sample.title,
     collectionType: sample.collectionType,
     tags: sample.tags,
     publishStatus: sample.publish.status,
     metrics: sample.publish.metrics,
+    publishedAt: sample.publish.publishedAt || "",
+    publishRecencyLabel: derivePublishRecencyLabel(sample),
+    referenceEnabled: sample.reference?.enabled === true,
+    referenceTier: sample.reference?.tier || "",
+    plannerSummary: sample.plannerSummary || null,
     retro: sample.retro,
-    body: sample.body.slice(0, 220)
+    body: sample.plannerSummary?.summary || sample.body.slice(0, 220)
   }));
   const externalSummary = externalSamples.slice(0, 10).map((sample) => ({
     id: sample.id,
@@ -313,6 +431,121 @@ function buildAccountPlannerSummarizeMessages({ localSamples = [], externalSampl
   ];
 }
 
+function buildPlannerSummaryMessages(sample = {}) {
+  return [
+    {
+      role: "system",
+      content: [
+        "你是学习样本复盘摘要助手。",
+        "你的任务是把单篇笔记压缩成适合账号级复盘使用的结构化摘要。",
+        "只提炼选题、情绪/主题重点、边界提醒，不要复述整篇。",
+        "只返回 JSON。"
+      ].join("\n")
+    },
+    {
+      role: "user",
+      content: [
+        "请基于下面这篇学习样本，输出一个结构化复盘摘要。",
+        "",
+        JSON.stringify(
+          {
+            title: sample.title,
+            collectionType: sample.collectionType,
+            tags: sample.tags,
+            publishStatus: sample.publish?.status || "",
+            metrics: sample.publish?.metrics || {},
+            referenceEnabled: sample.reference?.enabled === true,
+            referenceTier: sample.reference?.tier || "",
+            retro: sample.retro || {},
+            body: sample.body || ""
+          },
+          null,
+          2
+        ),
+        "",
+        "输出格式：",
+        "{",
+        '  "summary": "100-180 字内概括这篇内容的核心问题与结论",',
+        '  "keyPoints": ["要点 1", "要点 2"],',
+        '  "riskBoundary": ["边界提醒 1"],',
+        '  "suggestedTopic": "适合下一步复盘继续观察的题目"',
+        "}"
+      ].join("\n")
+    }
+  ];
+}
+
+function normalizePlannerSummary(summary = {}) {
+  return {
+    summary: normalizeString(summary.summary),
+    keyPoints: uniqueStrings(summary.keyPoints || []),
+    riskBoundary: uniqueStrings(summary.riskBoundary || []),
+    suggestedTopic: normalizeString(summary.suggestedTopic),
+    provider: normalizeString(summary.provider),
+    model: normalizeString(summary.model),
+    createdAt: normalizeString(summary.createdAt) || new Date().toISOString()
+  };
+}
+
+export async function summarizePlannerRecord(record = {}, { modelSelection = "auto" } = {}) {
+  const sample = normalizeSourceSample(record, { sourceType: "local" });
+  const provider = "deepseek";
+  const model = String(process.env.DEEPSEEK_FEEDBACK_MODEL || "deepseek-v4-flash").trim();
+
+  const result = await callRoutedTextProviderJson({
+    provider,
+    model,
+    temperature: 0.4,
+    maxTokens: 1200,
+    messages: buildPlannerSummaryMessages(sample),
+    missingKeyMessage: `学习样本摘要缺少 ${provider} 可用密钥。`,
+    scene: "generation",
+    selection: modelSelection,
+    fallbackParser: extractJsonBlock
+  });
+
+  return normalizePlannerSummary({
+    ...result.parsed,
+    provider,
+    model: result.model || model,
+    createdAt: new Date().toISOString()
+  });
+}
+
+export async function backfillPlannerSummaries({
+  records = [],
+  summarizeRecord = summarizePlannerRecord,
+  modelSelection = "auto"
+} = {}) {
+  const normalizedRecords = Array.isArray(records) ? records : [];
+  const items = [];
+  let updatedCount = 0;
+
+  for (const record of normalizedRecords) {
+    const existing = record?.calibration?.plannerSummary;
+
+    if (existing && typeof existing === "object" && normalizeString(existing.summary)) {
+      items.push(record);
+      continue;
+    }
+
+    const plannerSummary = normalizePlannerSummary(await summarizeRecord(record, { modelSelection }));
+    items.push({
+      ...record,
+      calibration: {
+        ...(record?.calibration && typeof record.calibration === "object" ? record.calibration : {}),
+        plannerSummary
+      }
+    });
+    updatedCount += 1;
+  }
+
+  return {
+    items,
+    updatedCount
+  };
+}
+
 async function summarizeAccountPlannerJsonWithModel({
   localRecords = [],
   externalSamples = [],
@@ -334,7 +567,7 @@ async function summarizeAccountPlannerJsonWithModel({
     provider,
     model,
     temperature: 0.5,
-    maxTokens: 2600,
+    maxTokens: 5200,
     messages: buildAccountPlannerSummarizeMessages({
       localSamples: normalizedLocal,
       externalSamples: normalizedExternal,
@@ -362,7 +595,13 @@ export async function summarizeAccountPlanner({
   summarize = summarizeAccountPlannerJsonWithModel,
   modelSelection = "auto"
 } = {}) {
-  const fallback = buildFallbackAccountPlannerSummary({ localRecords, externalSamples });
+  const filteredLocalRecords = (Array.isArray(localRecords) ? localRecords : []).filter((item) => {
+    const normalized = normalizeSourceSample(item, { sourceType: "local" });
+    return normalized.reference.enabled === true || normalized.publish.status === "positive_performance";
+  });
+
+  const effectiveLocalRecords = filteredLocalRecords.length ? filteredLocalRecords : localRecords;
+  const fallback = buildFallbackAccountPlannerSummary({ localRecords: effectiveLocalRecords, externalSamples });
   const normalizedFallback = normalizeAccountPlannerSummary(fallback);
 
   if (typeof summarize !== "function") {
@@ -370,7 +609,7 @@ export async function summarizeAccountPlanner({
   }
 
   const custom = await summarize({
-    localRecords,
+    localRecords: effectiveLocalRecords,
     externalSamples,
     fallback: normalizedFallback,
     modelSelection

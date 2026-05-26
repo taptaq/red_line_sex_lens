@@ -194,8 +194,8 @@ test("generation endpoint attaches scoped context with compact relevant records"
       source: "manual",
       stage: "published_reference",
       note: {
-        title: "为什么结束后会失落",
-        body: "很多人结束后会有短暂空虚和失落，这不一定意味着异常。".repeat(10),
+        title: "怎么表达拒绝又不伤人",
+        body: "很多人表达拒绝时会担心关系变差，这并不等于做错了。".repeat(10),
         tags: ["身体探索", "情绪反应"],
         collectionType: "科普"
       },
@@ -216,7 +216,7 @@ test("generation endpoint attaches scoped context with compact relevant records"
       mode: "from_scratch",
       collectionType: "科普",
       brief: {
-        briefing: "写自慰后空虚是不是异常，轻松一点",
+        briefing: "写边界感是不是冷淡，轻松一点",
         collectionType: "科普"
       },
       draft: {
@@ -488,7 +488,7 @@ test("account planner analyze endpoint returns planner cards with prefills from 
         {
           id: "record-1",
           note: {
-            title: "为什么结束后会突然很空？",
+            title: "怎么表达拒绝又不伤人？",
             body: "最近高表现内容更偏轻科普和情绪解释。",
             tags: ["情绪反应", "身体探索"],
             collectionType: "科普"
@@ -540,8 +540,8 @@ test("account planner analyze endpoint returns planner cards with prefills from 
             riskBoundary: ["避免病理化", "不做医疗诊断"],
             sourceSignals: ["本地高表现记录 1 条", "外部对照样本 1 条"],
             tags: ["情绪反应", "身体探索"],
-            prefillBriefing: "写一篇轻松科普，解释为什么结束后突然空虚并不一定异常。",
-            prefillReferenceTitle: "为什么结束后会突然很空？",
+            prefillBriefing: "写一篇轻松科普，解释边界感为什么不等于冷淡。",
+            prefillReferenceTitle: "怎么表达拒绝又不伤人？",
             prefillMaterialText: "结构重点：反常识提问 -> 情绪解释 -> 正常化安抚。",
             prefillCollectionType: "科普",
             prefillTone: "温和"
@@ -555,7 +555,7 @@ test("account planner analyze endpoint returns planner cards with prefills from 
     assert.deepEqual(result.summary.strengths, ["轻科普 + 情绪解释更稳定"]);
     assert.equal(result.cards.length, 1);
     assert.equal(result.cards[0].planTitle, "把高表现的情绪解释路线继续做深");
-    assert.equal(result.cards[0].prefillBriefing, "写一篇轻松科普，解释为什么结束后突然空虚并不一定异常。");
+    assert.equal(result.cards[0].prefillBriefing, "写一篇轻松科普，解释边界感为什么不等于冷淡。");
     assert.deepEqual(result.modelTrace, {
       provider: "",
       model: "",
@@ -578,7 +578,7 @@ test("account planner analyze endpoint keeps model summary but falls back to pla
         {
           id: "record-1",
           note: {
-            title: "为什么结束后会突然很空？",
+            title: "怎么表达拒绝又不伤人？",
             body: "最近高表现内容更偏轻科普和情绪解释。",
             tags: ["情绪反应", "身体探索"],
             collectionType: "科普"
@@ -614,7 +614,7 @@ test("account planner analyze endpoint keeps model summary but falls back to pla
     assert.equal(result.ok, true);
     assert.deepEqual(result.summary.strengths, ["模型判断：情绪解释路线最稳"]);
     assert.equal(result.cards.length > 0, true);
-    assert.match(result.cards[0].prefillBriefing, /为什么结束后会突然很空/);
+    assert.match(result.cards[0].prefillBriefing, /边界|情绪反应|怎么理解/);
     assert.deepEqual(result.modelTrace, {
       provider: "mock",
       model: "mock-account-planner",
@@ -622,6 +622,62 @@ test("account planner analyze endpoint keeps model summary but falls back to pla
       routeLabel: "Mock Route",
       attemptedRoutes: ["mock-route"]
     });
+  });
+});
+
+test("account planner analyze endpoint still returns fallback cards when only published-passed samples are available", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const result = await invokeRoute("POST", "/api/sample-library/account-planner/analyze", {
+      records: [
+        {
+          id: "record-1",
+          note: {
+            title: "表达边界后是不是会显得很冷淡？",
+            body: "最近几篇都在试关系沟通和边界表达，虽然没有明显爆发，但互动方向比较稳定。",
+            tags: ["关系沟通", "边界表达"],
+            collectionType: "科普"
+          },
+          publish: {
+            status: "published_passed",
+            publishedAt: "2026-05-24T08:00:00.000Z",
+            metrics: {
+              likes: 22,
+              favorites: 9,
+              comments: 6,
+              views: 1800,
+              shares: 2
+            }
+          },
+          calibration: {
+            plannerSummary: {
+              summary: "这篇主要在解释边界表达不等于冷淡，适合继续观察关系沟通方向。",
+              keyPoints: ["边界表达", "关系沟通"],
+              suggestedTopic: "怎么把拒绝说清楚又不伤人？"
+            }
+          }
+        }
+      ],
+      externalSamples: [],
+      mockAccountPlannerSummary: {
+        summary: {
+          strengths: ["近期已发布样本开始集中到关系沟通方向。"],
+          gaps: ["暂时还没有稳定高表现样本，建议继续小步验证。"],
+          nextMove: "先围绕边界表达继续做一轮观察型选题。"
+        },
+        cards: [],
+        provider: "mock",
+        model: "mock-account-planner",
+        route: "mock-route",
+        routeLabel: "Mock Route",
+        attemptedRoutes: ["mock-route"]
+      }
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.equal(result.cards.length > 0, true);
+    assert.equal(result.diagnostics.cardCount > 0, true);
+    assert.match(result.cards[0].prefillBriefing, /关系沟通|边界表达|怎么理解/);
   });
 });
 
@@ -644,20 +700,20 @@ test("theme inspiration endpoint returns normalized cards from high-performing p
     const result = await invokeRoute("POST", "/api/generate-theme-inspirations", {
       mockThemeInspirations: [
         {
-          themeTitle: "自慰后空虚并不一定异常",
+          themeTitle: "边界感不是冷淡",
           hookAngle: "很多人以为这是问题，其实很常见。",
           whyNow: "这个主题兼具反差和科普价值。",
           discussionSignal: "多个高表现内容都反复命中。",
           sourceSignals: ["命中 2 条高表现内容"],
-          expandAngles: ["从激素变化讲", "从羞耻感讲"],
+          expandAngles: ["从表达方式讲", "从关系安全感讲"],
           boundaryNotes: ["避免病理化表达"],
           confidenceScore: 0.92,
           tags: ["身体探索", "情绪反应"],
-          prefillBriefing: "写一篇轻松科普，解释自慰后空虚为什么不一定异常。",
-          prefillTopic: "自慰后空虚是不是异常",
+          prefillBriefing: "写一篇轻松科普，解释边界感为什么不一定异常。",
+          prefillTopic: "边界感是不是冷淡",
           prefillConstraints: "避免病理化，不做医疗诊断。",
-          prefillReferenceTitle: "为什么结束后会突然很空？",
-          prefillMaterialText: "关键点：常见、正常、可自我接纳。"
+          prefillReferenceTitle: "怎么表达拒绝又不伤人？",
+          prefillMaterialText: "关键点：先共情、再说明边界、最后给替代沟通方式。"
         }
       ]
     });
@@ -667,9 +723,9 @@ test("theme inspiration endpoint returns normalized cards from high-performing p
     assert.equal(result.items.length, 2);
     assert.deepEqual(
       result.items.map((item) => item.themeTitle),
-      ["从激素变化讲", "从羞耻感讲"]
+      ["从表达方式讲", "从关系安全感讲"]
     );
-    assert.equal(result.items[0].sourceThemeTitle, "自慰后空虚并不一定异常");
+    assert.equal(result.items[0].sourceThemeTitle, "边界感不是冷淡");
     assert.deepEqual(result.modelTrace, {
       provider: "mock",
       model: "mock-theme-inspirations",
@@ -701,8 +757,8 @@ test("theme inspiration endpoint returns a stable contract from existing high-pe
         source: "manual",
         stage: "published_reference",
         note: {
-          title: "自慰后空虚是不是异常",
-          body: "不少人结束后会短暂失落或空虚，这并不一定意味着异常。",
+          title: "边界感是不是冷淡",
+          body: "不少人表达拒绝时会担心关系变差，这并不等于做错了。",
           tags: ["身体探索", "情绪反应"],
           collectionType: "科普"
         },
@@ -744,18 +800,18 @@ test("theme inspiration endpoint returns a stable contract from existing high-pe
     mockThemeInspirationSummary: {
       items: [
         {
-          themeTitle: "自慰后空虚并不一定异常",
-          hookAngle: "很多人以为空虚就是异常，其实很常见。",
+          themeTitle: "边界感不是冷淡",
+          hookAngle: "很多人把边界误解成冷淡，其实是在保护关系。",
           whyNow: "高表现内容反复命中这个问题。",
           discussionSignal: "容易引发“我是不是不正常”的讨论。",
           sourceSignals: ["命中 1 条高表现内容"],
-          expandAngles: ["从激素波动讲", "从羞耻感讲"],
+          expandAngles: ["从表达方式讲", "从关系安全感讲"],
           boundaryNotes: ["避免病理化表达"],
           confidenceScore: 0.93,
           tags: ["身体探索", "情绪反应"],
-          prefillBriefing: "写一篇轻松科普，解释自慰后空虚为什么不一定异常。",
-          prefillReferenceTitle: "为什么结束后会突然很空？",
-          prefillMaterialText: "关键点：常见、正常、可自我接纳。"
+          prefillBriefing: "写一篇轻松科普，解释边界感为什么不一定异常。",
+          prefillReferenceTitle: "怎么表达拒绝又不伤人？",
+          prefillMaterialText: "关键点：先共情、再说明边界、最后给替代沟通方式。"
         }
       ],
       provider: "mock",
@@ -775,7 +831,7 @@ test("theme inspiration endpoint returns a stable contract from existing high-pe
   assert.equal(result.diagnostics.normalizedThemeItemCount, 2);
   assert.deepEqual(
     result.items.map((item) => item.themeTitle),
-    ["从激素波动讲", "从羞耻感讲"]
+    ["从表达方式讲", "从关系安全感讲"]
   );
   assert.deepEqual(result.modelTrace, {
     provider: "mock",
@@ -809,8 +865,8 @@ test("theme inspiration endpoint surfaces summarizer diagnostics when no usable 
         source: "manual",
         stage: "published_reference",
         note: {
-          title: "自慰后空虚是不是异常",
-          body: "不少人结束后会短暂失落或空虚，这并不一定意味着异常。",
+          title: "边界感是不是冷淡",
+          body: "不少人表达拒绝时会担心关系变差，这并不等于做错了。",
           tags: ["身体探索", "情绪反应"],
           collectionType: "科普"
         },
@@ -884,8 +940,8 @@ test("theme inspiration endpoint persists cached inspirations and prepends new r
         source: "manual",
         stage: "published_reference",
         note: {
-          title: "自慰后空虚是不是异常",
-          body: "不少人结束后会短暂失落或空虚，这并不一定意味着异常。",
+          title: "边界感是不是冷淡",
+          body: "不少人表达拒绝时会担心关系变差，这并不等于做错了。",
           tags: ["身体探索", "情绪反应"],
           collectionType: "科普"
         },
@@ -909,7 +965,7 @@ test("theme inspiration endpoint persists cached inspirations and prepends new r
       items: [
         {
           themeId: "cached-1",
-          themeTitle: "从羞耻感讲",
+          themeTitle: "从关系安全感讲",
           hookAngle: "很多人不是欲望太强，而是羞耻感太重。",
           whyNow: "旧缓存",
           discussionSignal: "旧缓存",
@@ -919,7 +975,7 @@ test("theme inspiration endpoint persists cached inspirations and prepends new r
           confidenceScore: 0.82,
           tags: ["身体探索", "情绪反应"],
           prefillBriefing: "写一篇从羞耻感角度展开的轻松科普。",
-          prefillReferenceTitle: "从羞耻感讲",
+          prefillReferenceTitle: "从关系安全感讲",
           prefillMaterialText: "旧缓存内容",
           prefillCollectionType: "科普",
           prefillTone: "温和"
@@ -934,25 +990,25 @@ test("theme inspiration endpoint persists cached inspirations and prepends new r
 
   const cachedResult = await invokeRoute("POST", "/api/generate-theme-inspirations", {});
   assert.equal(cachedResult.status, 200);
-  assert.deepEqual(cachedResult.items.map((item) => item.themeTitle), ["从羞耻感讲"]);
+  assert.deepEqual(cachedResult.items.map((item) => item.themeTitle), ["从关系安全感讲"]);
 
   const refreshedResult = await invokeRoute("POST", "/api/generate-theme-inspirations", {
     refresh: true,
     mockThemeInspirationSummary: {
       items: [
         {
-          themeTitle: "自慰后空虚并不一定异常",
-          hookAngle: "很多人以为空虚就是异常，其实很常见。",
+          themeTitle: "边界感不是冷淡",
+          hookAngle: "很多人把边界误解成冷淡，其实是在保护关系。",
           whyNow: "高表现内容反复命中这个问题。",
           discussionSignal: "容易引发“我是不是不正常”的讨论。",
           sourceSignals: ["命中 1 条高表现内容"],
-          expandAngles: ["从新手试错讲", "从羞耻感讲"],
+          expandAngles: ["从新手试错讲", "从关系安全感讲"],
           boundaryNotes: ["避免病理化表达"],
           confidenceScore: 0.93,
           tags: ["身体探索", "情绪反应"],
-          prefillBriefing: "写一篇轻松科普，解释自慰后空虚为什么不一定异常。",
-          prefillReferenceTitle: "为什么结束后会突然很空？",
-          prefillMaterialText: "关键点：常见、正常、可自我接纳。"
+          prefillBriefing: "写一篇轻松科普，解释边界感为什么不一定异常。",
+          prefillReferenceTitle: "怎么表达拒绝又不伤人？",
+          prefillMaterialText: "关键点：先共情、再说明边界、最后给替代沟通方式。"
         }
       ],
       provider: "mock",
@@ -966,13 +1022,13 @@ test("theme inspiration endpoint persists cached inspirations and prepends new r
   assert.equal(refreshedResult.status, 200);
   assert.deepEqual(
     refreshedResult.items.map((item) => item.themeTitle),
-    ["从新手试错讲", "从羞耻感讲"]
+    ["从新手试错讲", "从关系安全感讲"]
   );
 
   const persisted = JSON.parse(await fs.readFile(paths.themeInspirations, "utf8"));
   assert.deepEqual(
     persisted.items.map((item) => item.themeTitle),
-    ["从新手试错讲", "从羞耻感讲"]
+    ["从新手试错讲", "从关系安全感讲"]
   );
   assert.equal(Array.isArray(persisted.sourceRecordIds), true);
 });
@@ -1025,7 +1081,7 @@ test("theme inspiration endpoint reuses cached inspirations even when source fin
       items: [
         {
           themeId: "cached-1",
-          themeTitle: "从羞耻感讲",
+          themeTitle: "从关系安全感讲",
           hookAngle: "很多人不是欲望太强，而是羞耻感太重。",
           whyNow: "旧缓存",
           discussionSignal: "旧缓存",
@@ -1035,7 +1091,7 @@ test("theme inspiration endpoint reuses cached inspirations even when source fin
           confidenceScore: 0.82,
           tags: ["身体探索", "情绪反应"],
           prefillBriefing: "写一篇从羞耻感角度展开的轻松科普。",
-          prefillReferenceTitle: "从羞耻感讲",
+          prefillReferenceTitle: "从关系安全感讲",
           prefillMaterialText: "旧缓存内容",
           prefillCollectionType: "科普",
           prefillTone: "温和"
@@ -1053,7 +1109,7 @@ test("theme inspiration endpoint reuses cached inspirations even when source fin
   const result = await invokeRoute("POST", "/api/generate-theme-inspirations", {});
 
   assert.equal(result.status, 200);
-  assert.deepEqual(result.items.map((item) => item.themeTitle), ["从羞耻感讲"]);
+  assert.deepEqual(result.items.map((item) => item.themeTitle), ["从关系安全感讲"]);
   assert.equal(result.diagnostics.sourceRecordCount, 1);
   assert.equal(result.diagnostics.clusterCount, 1);
 });
@@ -1081,8 +1137,8 @@ test("theme inspiration endpoint keeps existing cache file when refresh produces
         source: "manual",
         stage: "published_reference",
         note: {
-          title: "自慰后空虚是不是异常",
-          body: "不少人结束后会短暂失落或空虚，这并不一定意味着异常。",
+          title: "边界感是不是冷淡",
+          body: "不少人表达拒绝时会担心关系变差，这并不等于做错了。",
           tags: ["身体探索", "情绪反应"],
           collectionType: "科普"
         },
@@ -1106,7 +1162,7 @@ test("theme inspiration endpoint keeps existing cache file when refresh produces
       items: [
         {
           themeId: "cached-1",
-          themeTitle: "从羞耻感讲",
+          themeTitle: "从关系安全感讲",
           hookAngle: "很多人不是欲望太强，而是羞耻感太重。",
           whyNow: "旧缓存",
           discussionSignal: "旧缓存",
@@ -1116,7 +1172,7 @@ test("theme inspiration endpoint keeps existing cache file when refresh produces
           confidenceScore: 0.82,
           tags: ["身体探索", "情绪反应"],
           prefillBriefing: "写一篇从羞耻感角度展开的轻松科普。",
-          prefillReferenceTitle: "从羞耻感讲",
+          prefillReferenceTitle: "从关系安全感讲",
           prefillMaterialText: "旧缓存内容",
           prefillCollectionType: "科普",
           prefillTone: "温和"
@@ -1149,7 +1205,7 @@ test("theme inspiration endpoint keeps existing cache file when refresh produces
   const persisted = JSON.parse(await fs.readFile(paths.themeInspirations, "utf8"));
   assert.deepEqual(
     persisted.items.map((item) => item.themeTitle),
-    ["从羞耻感讲"]
+    ["从关系安全感讲"]
   );
   assert.equal(persisted.generatedAt, "2026-05-19T12:00:00.000Z");
 });

@@ -364,7 +364,24 @@ function mergeCalibration(left = {}, right = {}) {
       : normalizedLeft.prediction,
     retro: hasMeaningfulCalibrationBranch(normalizedRight.retro)
       ? mergeRetroCalibration(normalizedLeft.retro, normalizedRight.retro)
-      : normalizedLeft.retro
+      : normalizedLeft.retro,
+    plannerSummary: hasMeaningfulCalibrationBranch(normalizedRight.plannerSummary)
+      ? {
+          summary: preferCalibrationString(normalizedLeft.plannerSummary.summary, normalizedRight.plannerSummary.summary),
+          keyPoints: preferCalibrationList(normalizedLeft.plannerSummary.keyPoints, normalizedRight.plannerSummary.keyPoints),
+          riskBoundary: preferCalibrationList(
+            normalizedLeft.plannerSummary.riskBoundary,
+            normalizedRight.plannerSummary.riskBoundary
+          ),
+          suggestedTopic: preferCalibrationString(
+            normalizedLeft.plannerSummary.suggestedTopic,
+            normalizedRight.plannerSummary.suggestedTopic
+          ),
+          provider: preferCalibrationString(normalizedLeft.plannerSummary.provider, normalizedRight.plannerSummary.provider),
+          model: preferCalibrationString(normalizedLeft.plannerSummary.model, normalizedRight.plannerSummary.model),
+          createdAt: preferCalibrationString(normalizedLeft.plannerSummary.createdAt, normalizedRight.plannerSummary.createdAt)
+        }
+      : normalizedLeft.plannerSummary
   };
 }
 
@@ -431,6 +448,8 @@ function normalizeSnapshots(snapshots = {}) {
 function normalizeCalibration(calibration = {}) {
   const prediction = calibration.prediction && typeof calibration.prediction === "object" ? calibration.prediction : {};
   const retro = calibration.retro && typeof calibration.retro === "object" ? calibration.retro : {};
+  const plannerSummary =
+    calibration.plannerSummary && typeof calibration.plannerSummary === "object" ? calibration.plannerSummary : {};
 
   return {
     prediction: {
@@ -457,6 +476,15 @@ function normalizeCalibration(calibration = {}) {
       ruleImprovementCandidate: normalizeString(retro.ruleImprovementCandidate),
       notes: normalizeString(retro.notes),
       reviewedAt: normalizeString(retro.reviewedAt)
+    },
+    plannerSummary: {
+      summary: normalizeString(plannerSummary.summary),
+      keyPoints: normalizeSignalList(plannerSummary.keyPoints),
+      riskBoundary: normalizeSignalList(plannerSummary.riskBoundary),
+      suggestedTopic: normalizeString(plannerSummary.suggestedTopic),
+      provider: normalizeString(plannerSummary.provider),
+      model: normalizeString(plannerSummary.model),
+      createdAt: normalizeString(plannerSummary.createdAt)
     }
   };
 }

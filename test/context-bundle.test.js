@@ -7,8 +7,8 @@ test("buildScopedContextBundle returns compressed relevant record summaries", ()
   const bundle = buildScopedContextBundle({
     taskType: "publish_prediction",
     current: {
-      title: "自慰后空虚是不是异常",
-      body: "正文里提到空虚和羞耻感",
+      title: "边界感是不是冷淡",
+      body: "正文里提到边界和沟通压力",
       tags: ["身体探索", "情绪反应"],
       collectionType: "科普"
     },
@@ -16,8 +16,8 @@ test("buildScopedContextBundle returns compressed relevant record summaries", ()
       {
         id: "record-1",
         note: {
-          title: "为什么结束后会失落",
-          body: "很多人结束后会有短暂空虚和失落，这不一定意味着异常。".repeat(8),
+          title: "怎么表达拒绝又不伤人",
+          body: "很多人表达拒绝时会担心关系变差，这并不等于做错了。".repeat(8),
           tags: ["身体探索", "情绪反应"],
           collectionType: "科普"
         },

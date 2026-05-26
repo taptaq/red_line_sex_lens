@@ -96,7 +96,6 @@ function extractSourceBetween(source, startMarker, endMarker) {
 test("frontend exposes a list-first sample library workspace with one primary create action", async () => {
   const { indexHtml, appJs, styles, styleProfileViewJs, sampleLibraryCalibrationViewJs, sampleLibraryRecordViewJs, sampleLibrarySectionsViewJs, sampleLibraryFormHelpersJs } = await readFrontendFiles();
 
-  assert.match(indexHtml, /data-tab-target="sample-library-pane"/);
   assert.match(indexHtml, /id="sample-library-pane"/);
   assert.doesNotMatch(indexHtml, /data-tab-target="feedback-center-pane"/);
   assert.doesNotMatch(indexHtml, /data-tab-target="custom-lexicon-pane"[^>]*>自定义词库</);
@@ -176,7 +175,10 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(indexHtml, /系统校准/);
   assert.match(indexHtml, /id="support-workspace-panel"/);
   assert.doesNotMatch(indexHtml, /低频维护与人工复核/);
-  assert.doesNotMatch(indexHtml, /<details id="support-workspace-panel"[^>]*\sopen[>\s]/);
+  assert.doesNotMatch(indexHtml, /<details id="support-workspace-panel"/);
+  assert.doesNotMatch(indexHtml, /class="support-workspace-summary"/);
+  assert.match(indexHtml, /class="[^"]*\bsupport-feedback-card\b[^"]*"/);
+  assert.match(indexHtml, /class="[^"]*\bsupport-samples-card\b[^"]*"/);
   assert.match(sampleLibraryPaneHtml, /class="[^"]*\bsample-library-workspace\b[^"]*"/);
   assert.match(sampleLibraryWorkspaceHtml, /id="sample-library-record-list"/);
   assert.match(sampleLibraryWorkspaceHtml, /class="[^"]*\bsample-library-record-list\b[^"]*"/);
@@ -201,17 +203,6 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(indexHtml, /data-sample-pool-tab="reference"/);
   assert.match(indexHtml, /data-sample-pool-tab="regular"/);
   assert.match(indexHtml, /data-sample-pool-tab="negative"/);
-  assert.match(sampleLibraryPaneHtml, /id="sample-library-daily-panel"/);
-  assert.match(sampleLibraryPaneHtml, /id="sample-library-reflow-panel"/);
-  assert.match(sampleLibraryPaneHtml, /回流待处理区/);
-  assert.match(sampleLibraryPaneHtml, /待优先处理/);
-  assert.match(sampleLibraryPaneHtml, /违规反馈/);
-  assert.match(sampleLibraryPaneHtml, /误报案例/);
-  assert.match(sampleLibraryPaneHtml, /id="feedback-priority-list"/);
-  assert.match(sampleLibraryPaneHtml, /id="feedback-log-secondary-list"/);
-  assert.match(sampleLibraryPaneHtml, /id="false-positive-summary"/);
-  assert.doesNotMatch(sampleLibraryPaneHtml, /id="false-positive-pending-list"/);
-  assert.doesNotMatch(sampleLibraryPaneHtml, /id="false-positive-history-list"/);
   assert.match(sampleLibraryPaneHtml, /日常记录/);
   assert.match(sampleLibraryPaneHtml, /生效流转说明/);
   assert.match(sampleLibraryPaneHtml, /只保存基础内容：先进入学习样本记录列表/);
@@ -341,7 +332,7 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.doesNotMatch(appJs, /if \(action === "open-seed-lexicon"\)/);
   assert.match(appJs, /if \(summaryAction\)/);
   assert.match(appJs, /await handleSummaryAction\(summaryAction\.dataset\.summaryAction\)/);
-  assert.match(appJs, /ensureSupportWorkspaceOpen\(\);[\s\S]*byId\("review-queue"\)\?\.scrollIntoView/);
+  assert.match(appJs, /if \(action === "open-review-queue"\)\s*\{[\s\S]*ensureSupportWorkspaceOpen\(\);[\s\S]*openReviewQueueModal\(\)/);
   assert.match(appJs, /revealSampleLibraryReflowPane\(\)/);
   assert.match(appJs, /openSampleLibraryCreateModal\(\)/);
   assert.match(appJs, /if \(action === "open-style-profile-modal"\)/);
@@ -464,7 +455,7 @@ test("sample library list and summary area show loading placeholders before firs
   const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
   const renderSampleLibraryListSource = extractSourceBetween(
     appJs,
-    "function renderSampleLibraryList(",
+    "function sampleLibraryRecordListSummaryText(",
     "function buildSampleLibraryRecordListModalMarkup("
   );
 
@@ -485,30 +476,25 @@ test("sample library list and summary area show loading placeholders before firs
   const renderSampleLibraryListWithState = new Function(
     "byId",
     "appState",
-    "getSampleLibraryRecordPreviewItems",
     "sampleLibraryFilterLabel",
     "sampleLibraryCollectionFilterLabel",
-    "buildSampleLibraryRecordCardMarkup",
     "isSampleLibraryInitialLoading",
-    "buildAdminDataLoadingBlockMarkup",
+    "sampleLibraryRecordListSummaryText",
     `${renderSampleLibraryListSource}; return renderSampleLibraryList;`
   )(
     (id) => nodes[id] || null,
     appState,
-    (items) => items.slice(0, 3),
     () => "全部记录",
     () => "全部合集",
-    () => "",
     () => appState.sampleLibraryLoading.phase === "initial",
-    (_message, { count = 2 } = {}) => `<div class="loading-block">加载中 ${count}</div>`
+    (count, filterLabel, collectionLabel) => `${count} 条 · ${filterLabel} · ${collectionLabel}`
   );
 
   renderSampleLibraryListWithState([]);
 
   assert.equal(nodes["sample-library-list-count"].textContent, "加载中...");
   assert.equal(nodes["sample-library-record-preview-open-button"].hidden, true);
-  assert.match(nodes["sample-library-record-list"].innerHTML, /加载中/);
-  assert.doesNotMatch(nodes["sample-library-record-list"].innerHTML, /当前没有样本记录/);
+  assert.equal(nodes["sample-library-record-list"].innerHTML, "");
 
   assert.match(appJs, /const hasExistingSampleLibraryRecords = appState\.sampleLibraryRecords\.length > 0/);
   assert.match(appJs, /const phase = hasExistingSampleLibraryRecords \? "refresh" : "initial";/);
@@ -600,11 +586,6 @@ test("refreshAll clears admin loading state before re-rendering admin sections",
 test("sample library workspace exposes record preview and full-list modal controls", async () => {
   const { indexHtml, appJs, sampleLibraryModalViewJs } = await readFrontendFiles();
   const sampleLibraryPaneHtml = extractElementInnerHtml(indexHtml, 'id="sample-library-pane"');
-  const previewHelperSource = extractSourceBetween(
-    appJs,
-    "function getSampleLibraryRecordPreviewItems(",
-    "function renderSampleLibraryList("
-  );
   const sortHelperSource = extractSourceBetween(
     appJs,
     "function sortSampleLibraryRecordsByPublishedAtDesc(",
@@ -629,8 +610,8 @@ test("sample library workspace exposes record preview and full-list modal contro
   assert.match(sampleLibraryPaneHtml, /id="sample-library-record-list"/);
   assert.match(sampleLibraryPaneHtml, /id="sample-library-record-preview-open-button"/);
   assert.match(sampleLibraryPaneHtml, /查看全部记录列表/);
-  assert.match(appJs, /const SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT = 3/);
-  assert.match(appJs, /function\s+getSampleLibraryRecordPreviewItems\s*\(/);
+  assert.doesNotMatch(appJs, /const SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT = 3/);
+  assert.doesNotMatch(appJs, /function\s+getSampleLibraryRecordPreviewItems\s*\(/);
   assert.doesNotMatch(appJs, /function\s+openSampleLibraryRecordListModal\s*\(/);
   assert.match(sampleLibraryModalViewJs, /function\s+buildSampleLibraryRecordListModalMarkup\s*\(/);
   assert.match(appJs, /previewOpenButton\.hidden = items\.length === 0/);
@@ -665,20 +646,6 @@ test("sample library workspace exposes record preview and full-list modal contro
   ]);
 
   assert.deepEqual(filteredItems.map((item) => item.id), ["record-2", "record-3", "record-4", "record-1"]);
-
-  const getSampleLibraryRecordPreviewItems = new Function(
-    "appState",
-    "SAMPLE_LIBRARY_RECORD_PREVIEW_LIMIT",
-    `${previewHelperSource}; return getSampleLibraryRecordPreviewItems;`
-  )({ selectedSampleLibraryRecordId: "record-1" }, 3);
-
-  const previewItems = getSampleLibraryRecordPreviewItems(filteredItems);
-
-  assert.deepEqual(
-    previewItems.map((item) => item.id),
-    ["record-2", "record-3", "record-4"],
-    "expected preview to keep the first three publish-time-desc records"
-  );
 
   const focusCalls = [];
   const focusSampleLibraryRecordFromModal = new Function(
@@ -1388,7 +1355,8 @@ test("frontend labels review-queue promotion actions as whitelist or violation l
   const { indexHtml, appJs } = await readFrontendFiles();
 
   assert.match(indexHtml, /候选词 \/ 语境人工复核队列/);
-  assert.match(indexHtml, /加入白名单、加入违规词库或删除/);
+  assert.match(indexHtml, /主页面只保留入口摘要/);
+  assert.match(appJs, /打开人工复核队列/);
   assert.match(appJs, /白名单生效预演/);
   assert.match(appJs, /违规词库生效预演/);
   assert.match(appJs, /建议加入宽松白名单/);
@@ -1398,9 +1366,13 @@ test("frontend labels review-queue promotion actions as whitelist or violation l
 });
 
 test("frontend also surfaces T+7 retro reminders in the manual review queue area", async () => {
-  const { appJs, styles } = await readFrontendFiles();
+  const { indexHtml, appJs, styles } = await readFrontendFiles();
 
+  assert.match(indexHtml, /id="review-queue"/);
   assert.match(appJs, /function\s+getManualReviewRetroReminderQueueItems\s*\(/);
+  assert.match(appJs, /function\s+openReviewQueueModal\s*\(/);
+  assert.match(appJs, /function\s+buildReviewQueueModalMarkup\s*\(/);
+  assert.match(appJs, /kind:\s*"review-queue-list"/);
   assert.match(appJs, /2026-05-11/);
   assert.match(appJs, /const retroReminderItems = getManualReviewRetroReminderQueueItems\(/);
   assert.match(appJs, /T\+7 终局复盘提醒/);
@@ -1412,16 +1384,13 @@ test("frontend also surfaces T+7 retro reminders in the manual review queue area
   );
   assert.match(
     styles,
-    /\.queue-panel\s*\{[\s\S]*?min-height:\s*980px;[\s\S]*?height:\s*100%;[\s\S]*?display:\s*flex;[\s\S]*?flex-direction:\s*column;[\s\S]*?\}/
+    /\.review-queue-entry-card\s*\{/
   );
   assert.match(
     styles,
-    /\.queue-panel \.queue\s*\{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?min-height:\s*0;[\s\S]*?height:\s*100%;[\s\S]*?overflow:\s*auto;[\s\S]*?\}/
+    /\.review-queue-entry-metrics\s*\{/
   );
-  assert.match(
-    styles,
-    /@media \(max-width:\s*900px\)\s*\{[\s\S]*?\.queue-panel \.queue\s*\{[\s\S]*?min-height:\s*0;[\s\S]*?max-height:\s*70vh;[\s\S]*?\}/
-  );
+  assert.doesNotMatch(styles, /\.queue-panel\s*\{[\s\S]*?min-height:\s*980px/);
   assert.match(
     styles,
     /@media \(max-width:\s*1240px\)\s*\{[\s\S]*?\.workspace-main,\s*\.workspace-support\s*\{[\s\S]*?grid-template-columns:\s*1fr;[\s\S]*?\}[\s\S]*?\.panel-sticky\s*\{[\s\S]*?position:\s*static;[\s\S]*?\}[\s\S]*?\}/
@@ -3775,19 +3744,19 @@ test("theme inspiration modal helpers keep existing briefing and reference title
   const cards = [
     {
       themeId: "theme-1",
-      themeTitle: "自慰后空虚并不一定异常",
+      themeTitle: "边界感不是冷淡",
       hookAngle: "很多人以为这是问题，其实很常见。",
       whyNow: "这个主题兼具反差和科普价值。",
       discussionSignal: "多个高表现内容都反复命中。",
       sourceSignals: ["命中 2 条高表现内容"],
-      expandAngles: ["从激素变化讲", "从羞耻感讲"],
+      expandAngles: ["从表达方式讲", "从关系安全感讲"],
       boundaryNotes: ["避免病理化表达"],
       tags: ["身体探索", "情绪反应"],
-      prefillBriefing: "写一篇轻松科普，解释自慰后空虚为什么不一定异常。",
-      prefillTopic: "自慰后空虚是不是异常",
+      prefillBriefing: "写一篇轻松科普，解释边界感为什么不一定异常。",
+      prefillTopic: "边界感是不是冷淡",
       prefillConstraints: "避免病理化，不做医疗诊断。",
-      prefillReferenceTitle: "为什么结束后会突然很空？",
-      prefillMaterialText: "关键点：常见、正常、可自我接纳。",
+      prefillReferenceTitle: "怎么表达拒绝又不伤人？",
+      prefillMaterialText: "关键点：先共情、再说明边界、最后给替代沟通方式。",
       prefillCollectionType: "科普"
     },
     {
@@ -3997,7 +3966,7 @@ return {
   );
   assert.equal(appState.generationThemeInspiration.loading, false);
   assert.equal(appState.generationThemeInspiration.selectedThemeId, "theme-1");
-  assert.match(contentNode.innerHTML, /自慰后空虚并不一定异常/);
+  assert.match(contentNode.innerHTML, /边界感不是冷淡/);
   assert.match(contentNode.innerHTML, /data-action="select-generation-theme-inspiration"/);
   assert.match(detailNode.innerHTML, /data-action="apply-generation-theme-inspiration"/);
   assert.match(detailNode.innerHTML, /很多人以为这是问题，其实很常见/);
@@ -4022,7 +3991,7 @@ return {
 
   assert.equal(appState.generationThemeInspiration.selectedThemeId, "theme-9");
   assert.match(contentNode.innerHTML, /最新灵感卡/);
-  assert.doesNotMatch(contentNode.innerHTML, /自慰后空虚并不一定异常/);
+  assert.doesNotMatch(contentNode.innerHTML, /边界感不是冷淡/);
 
   helpers.applyGenerationThemeInspirationPrefill(cards[0]);
 
@@ -4030,7 +3999,7 @@ return {
   assert.equal(generationFields.referenceTitle.value, "已有参考标题");
   assert.equal(generationFields.collectionType.value, "科普");
   assert.equal(generationFields.tagReferences.value, "身体探索, 情绪反应");
-  assert.equal(generationFields.materialText.value, "已有素材\n\n关键点：常见、正常、可自我接纳。");
+  assert.equal(generationFields.materialText.value, "已有素材\n\n关键点：先共情、再说明边界、最后给替代沟通方式。");
   assert.equal(appState.generationThemeInspiration.open, false);
   assert.equal(modalNode.hidden, true);
   assert.match(generationHintNode.textContent, /已将主题灵感填入生成表单/);
@@ -4057,18 +4026,18 @@ test("theme inspiration modal reopens existing cached items without auto-request
       items: [
         {
           themeId: "theme-1",
-          themeTitle: "从激素波动讲",
-          sourceThemeTitle: "自慰后空虚并不一定异常",
-          hookAngle: "很多人以为空虚就是异常，其实常见。",
+          themeTitle: "从表达方式讲",
+          sourceThemeTitle: "边界感不是冷淡",
+          hookAngle: "很多人把边界误解成疏远，其实很常见。",
           whyNow: "这个角度更容易拉出反差。",
           discussionSignal: "高表现内容里反复命中。",
           sourceSignals: ["命中 2 条高表现内容"],
-          expandAngles: ["从羞耻感讲"],
+          expandAngles: ["从关系安全感讲"],
           boundaryNotes: ["避免病理化表达"],
           tags: ["身体探索", "情绪反应"],
-          prefillBriefing: "写一篇轻松科普，解释自慰后空虚为什么不一定异常。",
-          prefillReferenceTitle: "为什么结束后会突然很空？",
-          prefillMaterialText: "关键点：常见、正常、可自我接纳。"
+          prefillBriefing: "写一篇轻松科普，解释边界感为什么不等于冷淡。",
+          prefillReferenceTitle: "怎么表达拒绝又不伤人？",
+          prefillMaterialText: "关键点：先共情、再说明边界、最后给替代沟通方式。"
         }
       ],
       selectedThemeId: "theme-1",
@@ -4155,7 +4124,7 @@ return {
   assert.equal(requests.length, 0);
   assert.equal(appState.generationThemeInspiration.open, true);
   assert.equal(modalNode.hidden, false);
-  assert.match(contentNode.innerHTML, /从激素波动讲/);
+  assert.match(contentNode.innerHTML, /从表达方式讲/);
 });
 
 test("theme inspiration modal uses non-refresh auto-load first and explicit refresh afterwards", async () => {
@@ -4245,18 +4214,18 @@ return {
         items: [
           {
             themeId: "theme-1",
-            themeTitle: "从激素波动讲",
-            sourceThemeTitle: "自慰后空虚并不一定异常",
-            hookAngle: "很多人以为空虚就是异常，其实常见。",
+            themeTitle: "从表达方式讲",
+            sourceThemeTitle: "边界感不是冷淡",
+            hookAngle: "很多人把边界误解成疏远，其实很常见。",
             whyNow: "这个角度更容易拉出反差。",
             discussionSignal: "高表现内容里反复命中。",
             sourceSignals: ["命中 2 条高表现内容"],
-            expandAngles: ["从羞耻感讲"],
+            expandAngles: ["从关系安全感讲"],
             boundaryNotes: ["避免病理化表达"],
             tags: ["身体探索", "情绪反应"],
-            prefillBriefing: "写一篇轻松科普，解释自慰后空虚为什么不一定异常。",
-            prefillReferenceTitle: "为什么结束后会突然很空？",
-            prefillMaterialText: "关键点：常见、正常、可自我接纳。"
+            prefillBriefing: "写一篇轻松科普，解释边界感为什么不等于冷淡。",
+            prefillReferenceTitle: "怎么表达拒绝又不伤人？",
+            prefillMaterialText: "关键点：先共情、再说明边界、最后给替代沟通方式。"
           }
         ]
       };

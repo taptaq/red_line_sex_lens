@@ -203,28 +203,28 @@ test("admin page exposes false positive maintenance inside the sample library pa
   assert.match(indexHtml, /id="feedback-advanced-panel"/);
   assert.match(indexHtml, /快速回流/);
   assert.match(indexHtml, /高级识别/);
-  assert.match(indexHtml, /data-tab-target="sample-library-pane"/);
+  assert.match(indexHtml, /id="sample-library-pane"/);
   assert.doesNotMatch(indexHtml, /data-tab-target="feedback-center-pane"/);
   assert.doesNotMatch(indexHtml, /data-tab-target="false-positive-log-pane"[^>]*>误报样本</);
   assert.doesNotMatch(indexHtml, /data-tab-target="feedback-log-pane"[^>]*>反馈日志</);
   assert.doesNotMatch(indexHtml, /id="feedback-center-pane"/);
   assert.match(indexHtml, /id="sample-library-pane"/);
   assert.match(indexHtml, /id="sample-library-reflow-panel"/);
-  assert.match(indexHtml, /回流待处理区/);
+  assert.match(indexHtml, /违规反馈 \/ 误报回流/);
   assert.match(indexHtml, /违规反馈/);
-  assert.match(indexHtml, /误报案例/);
+  assert.doesNotMatch(indexHtml, /<strong>误报案例<\/strong>/);
   assert.match(indexHtml, /待优先处理/);
   assert.match(indexHtml, /feedback-priority-pill/);
   assert.match(indexHtml, /id="feedback-priority-list"/);
   assert.match(indexHtml, /id="feedback-log-secondary-list"/);
-  assert.match(indexHtml, /id="false-positive-summary"/);
   assert.doesNotMatch(indexHtml, /id="false-positive-pending-list"/);
   assert.doesNotMatch(indexHtml, /id="false-positive-history-list"/);
   assert.match(indexHtml, /id="feedback-log-list"/);
-  assert.match(indexHtml, /id="false-positive-log-list"/);
+  assert.doesNotMatch(indexHtml, /id="false-positive-summary"/);
+  assert.doesNotMatch(indexHtml, /id="false-positive-log-list"/);
   assert.doesNotMatch(indexHtml, /id="rules-maintenance-shortcuts"/);
   assert.match(indexHtml, /扩展维护/);
-  assert.match(appJs, /renderFalsePositiveLog|false-positive-log-list/);
+  assert.match(appJs, /renderFalsePositiveLog/);
   assert.match(appJs, /renderFeedbackLog|feedback-log-list/);
   assert.match(appJs, /renderFeedbackLogView/);
   assert.match(appJs, /false_positive_reflow/);
@@ -250,7 +250,7 @@ test("admin page exposes false positive maintenance inside the sample library pa
   assert.match(appJs, /先人工判断|renderFeedbackLogView/);
   assert.match(appJs, /feedback-priority-list/);
   assert.match(appJs, /feedback-log-secondary-list/);
-  assert.match(appJs, /false-positive-summary/);
+  assert.doesNotMatch(appJs, /false-positive-summary/);
 });
 
 test("sample library reflow area exposes false positive summary and modal launch controls", async () => {
@@ -259,13 +259,11 @@ test("sample library reflow area exposes false positive summary and modal launch
     fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8")
   ]);
 
-  assert.match(indexHtml, /id="false-positive-summary"/);
   assert.match(indexHtml, /id="false-positive-preview-open-button"/);
   assert.match(indexHtml, /查看全部误报案例/);
   assert.doesNotMatch(indexHtml, /id="false-positive-pending-list"/);
   assert.doesNotMatch(indexHtml, /id="false-positive-history-list"/);
   assert.match(appJs, /function\s+buildFalsePositiveSummaryText\s*\(/);
-  assert.match(appJs, /summaryNode\.textContent = buildFalsePositiveSummaryText\(\{ pendingItems, historyItems \}\)/);
   assert.match(appJs, /previewButton\.hidden = appState\.falsePositiveLog\.length === 0/);
   assert.match(appJs, /function\s+openFalsePositiveListModal\s*\(/);
   assert.match(appJs, /function\s+buildFalsePositiveListModalMarkup\s*\(/);
@@ -310,15 +308,15 @@ test("false positive homepage summary runtime updates summary text button visibi
 
   assert.equal(
     buildFalsePositiveSummaryText({ pendingItems: [], historyItems: [] }),
-    "当前没有误报样本"
+    "暂无误报样本"
   );
   assert.equal(
     buildFalsePositiveSummaryText({ pendingItems: [{ id: "fp-1" }, { id: "fp-2" }], historyItems: [] }),
-    "当前有 2 条待确认误报，暂时还没有已沉淀历史案例。"
+    "待确认 2 条，历史案例 0 条。"
   );
   assert.equal(
     buildFalsePositiveSummaryText({ pendingItems: [{ id: "fp-1" }], historyItems: [{ id: "fp-2" }, { id: "fp-3" }] }),
-    "当前有 1 条待确认误报，已沉淀 2 条历史案例。"
+    "待确认 1 条，历史案例 2 条。"
   );
 
   const appState = {
@@ -333,16 +331,6 @@ test("false positive homepage summary runtime updates summary text button visibi
   };
   const nodes = {
     "false-positive-preview-open-button": { hidden: true },
-    "false-positive-summary": {
-      textContent: "",
-      classList: {
-        states: new Map(),
-        toggle(name, value) {
-          this.states.set(name, Boolean(value));
-        }
-      }
-    },
-    "false-positive-log-list": { hidden: true, innerHTML: "" },
     "sample-library-modal": { hidden: false }
   };
   const modalRenderCalls = [];
@@ -389,11 +377,7 @@ test("false positive homepage summary runtime updates summary text button visibi
   );
 
   renderFalsePositiveLog([]);
-  assert.equal(nodes["false-positive-summary"].textContent, "加载中...");
-  assert.equal(nodes["false-positive-summary"].classList.states.get("muted"), true);
   assert.equal(nodes["false-positive-preview-open-button"].hidden, true);
-  assert.equal(nodes["false-positive-log-list"].hidden, false);
-  assert.match(nodes["false-positive-log-list"].innerHTML, /加载中/);
   assert.equal(modalRenderCalls.length, 1);
 
   appState.adminDataLoading.phase = "idle";
@@ -402,11 +386,7 @@ test("false positive homepage summary runtime updates summary text button visibi
     { id: "fp-1", status: "platform_passed_pending" },
     { id: "fp-2", status: "platform_passed_confirmed" }
   ]);
-  assert.equal(nodes["false-positive-summary"].textContent, "当前有 1 条待确认误报，已沉淀 1 条历史案例。");
-  assert.equal(nodes["false-positive-summary"].classList.states.get("muted"), false);
   assert.equal(nodes["false-positive-preview-open-button"].hidden, false);
-  assert.equal(nodes["false-positive-log-list"].hidden, true);
-  assert.equal(nodes["false-positive-log-list"].innerHTML, "");
   assert.equal(modalRenderCalls.length, 2);
 });
 
@@ -427,7 +407,7 @@ test("recording a false positive sample refreshes the sample library reflow area
   assert.match(appJs, /renderFalsePositiveLog\(response\.items \|\| \[\]\)/);
   assert.match(appJs, /ensureSupportWorkspaceOpen\(\)/);
   assert.match(appJs, /activateTab\("data-maintenance", "sample-library-pane"\)/);
-  assert.match(appJs, /false-positive-summary"\)\?\.scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
+  assert.match(appJs, /sample-library-reflow-panel"\)\?\.scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
 });
 
 test("feedback rule-review action now opens a confirmation modal before jumping into rules maintenance", async () => {

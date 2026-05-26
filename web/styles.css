@@ -341,17 +341,86 @@ label span,
 }
 
 .workspace-main {
+  grid-template-columns: minmax(0, 1.34fr) minmax(340px, 0.66fr);
+  align-items: start;
+}
+
+.dashboard-grid,
+.dashboard-secondary-grid {
+  display: grid;
+  gap: 1.45rem;
+}
+
+.dashboard-secondary-grid {
+  grid-template-columns: 1fr;
+  align-items: start;
+  align-content: start;
+  margin: 0;
+}
+
+.dashboard-sidebar,
+.dashboard-main-card,
+.dashboard-side-card,
+.dashboard-planner-card,
+.dashboard-assets-card {
+  min-width: 0;
+}
+
+.dashboard-main-card {
+  min-height: 0;
+}
+
+.dashboard-side-card {
+  position: relative;
+  top: auto;
+}
+
+.dashboard-planner-card {
+  overflow: hidden;
+}
+
+.dashboard-planner-card::after {
+  content: "";
+  position: absolute;
+  inset: auto -8rem -11rem auto;
+  width: 24rem;
+  height: 24rem;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.52), transparent 54%),
+    conic-gradient(from 150deg, rgba(100, 113, 91, 0.16), rgba(199, 154, 69, 0.12), rgba(184, 93, 61, 0.08), rgba(100, 113, 91, 0.16));
+  pointer-events: none;
+}
+
+.dashboard-planner-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.dashboard-assets-card {
+  margin: 0;
+}
+
+.workspace-support {
   grid-template-columns: 1fr;
   align-items: start;
 }
 
-.workspace-support {
-  grid-template-columns: minmax(420px, 0.96fr) minmax(520px, 1.12fr);
-  align-items: stretch;
-}
-
 .workspace-support > * {
   min-width: 0;
+  align-self: start;
+}
+
+.support-review-card .section-heading h2,
+.support-feedback-card .section-heading h2 {
+  font-size: clamp(1.3rem, 1.8vw, 1.8rem);
+  line-height: 1.2;
+  max-width: none;
+}
+
+.support-review-card .section-note,
+.support-feedback-card .section-note {
+  max-width: 64ch;
 }
 
 .support-workspace-panel {
@@ -359,17 +428,13 @@ label span,
   overflow: hidden;
 }
 
-.support-workspace-summary {
-  list-style: none;
+.support-workspace-panel.dashboard-assets-card {
+  margin: 0;
 }
 
-.support-workspace-summary .section-heading {
+.support-workspace-panel > .section-heading {
   margin-bottom: 0;
   padding-right: 2.5rem;
-}
-
-.support-workspace-summary::-webkit-details-marker {
-  display: none;
 }
 
 .support-workspace-panel .admin-accordion-body {
@@ -382,6 +447,8 @@ label span,
 }
 
 .sample-library-reflow-panel {
+  display: grid;
+  gap: 1rem;
   padding: 1.15rem;
   border: 1px solid rgba(54, 43, 31, 0.12);
   border-radius: 24px;
@@ -390,8 +457,32 @@ label span,
     radial-gradient(circle at top right, rgba(184, 93, 61, 0.08), transparent 18rem);
 }
 
+.support-feedback-card .sample-library-reflow-panel {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.support-feedback-card .sample-library-reflow-panel > .admin-panel-block {
+  padding: 1rem 1.05rem;
+  border: 1px solid rgba(54, 43, 31, 0.1);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 247, 0.82), rgba(255, 247, 236, 0.72));
+}
+
+.support-feedback-card .sample-library-reflow-panel > .meta-row {
+  margin-bottom: 0.1rem;
+}
+
 .sample-library-advanced-panel {
   margin-top: 1rem;
+}
+
+.sample-library-pane {
+  display: grid;
+  gap: 1rem;
 }
 
 .panel-sticky {
@@ -1057,18 +1148,36 @@ li + li {
 }
 
 .queue-panel {
-  min-height: 980px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  gap: 1rem;
 }
 
-.queue-panel .queue {
-  flex: 1 1 auto;
-  min-height: 0;
-  height: 100%;
-  overflow: auto;
-  padding-right: 0.2rem;
+.review-queue-entry-card {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem 1.05rem;
+  border-radius: 24px;
+  border: 1px solid rgba(54, 43, 31, 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 251, 244, 0.76), rgba(248, 238, 222, 0.56)),
+    radial-gradient(circle at top right, rgba(184, 93, 61, 0.06), transparent 16rem);
+}
+
+.review-queue-entry-head {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.review-queue-entry-head p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.review-queue-entry-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
 }
 
 .queue-item {
@@ -2869,6 +2978,10 @@ body.modal-open {
   align-items: start;
 }
 
+.dashboard-planner-card .sample-library-account-planner-workspace {
+  grid-template-columns: 1fr;
+}
+
 .sample-library-account-planner-card-list {
   display: grid;
   gap: 0.85rem;
@@ -4138,8 +4251,22 @@ body.modal-open {
     grid-template-columns: 1fr;
   }
 
+  .dashboard-grid,
+  .dashboard-secondary-grid {
+    grid-template-columns: 1fr;
+  }
+
   .panel-sticky {
     position: static;
+  }
+
+  .dashboard-side-card {
+    position: static;
+  }
+
+  .support-review-card .section-heading h2,
+  .support-feedback-card .section-heading h2 {
+    max-width: none;
   }
 }
 
@@ -4184,15 +4311,6 @@ body.modal-open {
 
   .panel-sticky {
     position: static;
-  }
-
-  .queue-panel {
-    min-height: auto;
-  }
-
-  .queue-panel .queue {
-    min-height: 0;
-    max-height: 70vh;
   }
 
   .false-positive-admin-actions {
