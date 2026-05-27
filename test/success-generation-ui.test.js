@@ -3747,6 +3747,8 @@ test("frontend exposes a draft inbox grid inside the main workbench footer area 
   assert.match(appJs, /addDraftIdeaFromThemeInspirationCard/);
   assert.match(appJs, /addDraftIdeaFromGenerationCandidate/);
   assert.match(appJs, /loadDraftIdeaIntoGenerationForm/);
+  assert.match(appJs, /activateTab\("main-workbench",\s*"generation-workbench-pane"\)/);
+  assert.match(appJs, /scrollIntoView\(\{\s*behavior:\s*"smooth"/);
   assert.match(appJs, /draftIdeasStatusView/);
   assert.match(appJs, /draftIdeasSortOrder/);
 });

@@ -6027,6 +6027,8 @@ function loadDraftIdeaIntoGenerationForm(id = "") {
     joinCSV(uniqueStrings([...splitCSV(tagReferencesField?.value || ""), ...(item.tags || [])]))
   );
 
+  activateTab("main-workbench", "generation-workbench-pane");
+  byId("generation-workbench-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
   syncGenerationModeFields();
   syncGenerationActions();
   setActionGateHint("generation-action-hint", "已将草稿区选题载入生成工作台。");
