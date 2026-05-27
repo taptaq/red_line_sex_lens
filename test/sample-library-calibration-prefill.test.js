@@ -141,6 +141,25 @@ test("publish prediction evidence prefers matched historical records over generi
   assert.match(prediction.evidenceSignals.join("；"), /标签重合 2 项/);
 });
 
+test("publish prediction evidence still produces reviewable fallback signals when only basic rule evidence exists", () => {
+  const prediction = buildSampleLibraryCalibrationPrediction(
+    {
+      kind: "record-analysis",
+      summary: "当前预填来源：这条记录的已保存检测结果。",
+      analysis: {
+        finalVerdict: "observe",
+        score: 80
+      },
+      rewrite: null,
+      relatedRecords: []
+    },
+    { semantic: "glm-5.1", rewrite: "kimi-k2.6" }
+  );
+
+  assert.match(prediction.evidenceSignals.join("；"), /检测结论：观察通过/);
+  assert.match(prediction.evidenceSignals.join("；"), /规则分：80/);
+});
+
 test("prefill source surfaces a record-specific requirement when only a saved rewrite snapshot exists", () => {
   const source = resolveSampleLibraryCalibrationPrefillSource({
     latestAnalyzePayload: null,

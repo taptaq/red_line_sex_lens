@@ -191,9 +191,11 @@ function buildCalibrationPredictionEvidence({ source = {}, analysis = null, rewr
       title: `检测结论：${verdictLabel(verdict)}`
     });
     evidenceSignals.push(`检测结论：${verdictLabel(verdict)}`);
+    evidenceSignals.push(`检测级别：${verdictLabel(verdict)}`);
 
     if (Number.isFinite(score)) {
       evidenceSignals.push(`规则分：${Math.round(score)}`);
+      evidenceSignals.push(`分数参考：${Math.round(score)}`);
     }
 
     if (semanticSummary) {

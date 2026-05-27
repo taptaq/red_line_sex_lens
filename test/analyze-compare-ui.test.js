@@ -112,3 +112,16 @@ test("analyze compare labels prefer readable model names over raw selection fall
   assert.match(appJs, /payload\.name = `模型对比检测 \/ \$\{compareLabel\}`;/);
   assert.doesNotMatch(appJs, /payload\.name = `模型对比检测 \/ \$\{compareContext\.item\?\.label \|\| compareContext\.item\?\.selection \|\| "未命名模型"\}`;/);
 });
+
+test("analyze compare cards distinguish timeout and other provider failures instead of showing one generic 未返回 state", async () => {
+  const { appJs } = await readFrontendFiles();
+
+  assert.match(appJs, /describeAnalyzeCompareSemanticState/);
+  assert.match(appJs, /statusLabel:\s*"超时"/);
+  assert.match(appJs, /statusLabel:\s*"缺少密钥"/);
+  assert.match(appJs, /statusLabel:\s*"返回格式异常"/);
+  assert.match(appJs, /statusLabel:\s*"请求失败"/);
+  assert.match(appJs, /const semanticVerdict = semantic\?\.verdict \? verdictLabel\(semantic\.verdict\) : semanticState\.semanticVerdictLabel \|\| "未启用\/未返回"/);
+  assert.match(appJs, /失败原因：/);
+  assert.match(appJs, /const failureDetailMarkup = !semantic && failureMessage/);
+});

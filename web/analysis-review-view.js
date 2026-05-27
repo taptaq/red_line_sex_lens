@@ -753,9 +753,60 @@ export function buildAnalyzeCompareBasisOptionLabel(item = {}, helpers = {}) {
   const mergedAnalysis = item?.mergedAnalysis && typeof item.mergedAnalysis === "object" ? item.mergedAnalysis : {};
   const semanticReview = item?.semanticReview && typeof item.semanticReview === "object" ? item.semanticReview : {};
   const verdict = verdictLabel(mergedAnalysis.finalVerdict || mergedAnalysis.verdict || "pass");
-  const status = semanticReview.status === "ok" ? "已完成" : semanticReview.status === "skipped" ? "已跳过" : "未返回";
+  const status = describeAnalyzeCompareSemanticState(semanticReview).statusLabel;
 
   return `${label} · ${verdict} · ${status}`;
+}
+
+function describeAnalyzeCompareSemanticState(semanticReview = {}) {
+  const failureMessage = String(semanticReview.message || "").trim();
+
+  if (semanticReview.status === "ok") {
+    return {
+      statusLabel: "已完成",
+      semanticVerdictLabel: ""
+    };
+  }
+
+  if (semanticReview.status === "skipped") {
+    return {
+      statusLabel: "已跳过",
+      semanticVerdictLabel: "已跳过"
+    };
+  }
+
+  if (/超时/.test(failureMessage)) {
+    return {
+      statusLabel: "超时",
+      semanticVerdictLabel: "超时"
+    };
+  }
+
+  if (/缺少 .*密钥|缺少 .*API_KEY/i.test(failureMessage)) {
+    return {
+      statusLabel: "缺少密钥",
+      semanticVerdictLabel: "缺少密钥"
+    };
+  }
+
+  if (/不是有效 JSON|格式异常/.test(failureMessage)) {
+    return {
+      statusLabel: "返回格式异常",
+      semanticVerdictLabel: "返回格式异常"
+    };
+  }
+
+  if (/请求失败/.test(failureMessage)) {
+    return {
+      statusLabel: "请求失败",
+      semanticVerdictLabel: "请求失败"
+    };
+  }
+
+  return {
+    statusLabel: "未返回",
+    semanticVerdictLabel: "未返回"
+  };
 }
 
 export function buildAnalyzeCompareContentActionsMarkup(result = {}, helpers = {}) {
@@ -858,7 +909,9 @@ export function buildAnalyzeCompareCardMarkup(item = {}, helpers = {}) {
   const attemptedRouteLabels = attemptedRoutes
     .map((attempt) => [attempt.routeLabel || "", providerLabel(attempt.provider), attempt.model || ""].filter(Boolean).join(" / "))
     .filter(Boolean);
-  const statusLabel = semanticReview.status === "ok" ? "已完成" : semanticReview.status === "skipped" ? "已跳过" : "未返回";
+  const semanticState = describeAnalyzeCompareSemanticState(semanticReview);
+  const failureMessage = String(semanticReview.message || "").trim();
+  const statusLabel = semanticState.statusLabel;
   const statusClass = semanticReview.status === "ok" ? "is-ok" : semanticReview.status === "skipped" ? "is-muted" : "is-warn";
   const reasonsMarkup = semantic?.reasons?.length
     ? semantic.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")
@@ -869,7 +922,8 @@ export function buildAnalyzeCompareCardMarkup(item = {}, helpers = {}) {
   const summaryText = semantic?.summary || semanticReview.message || "当前没有返回语义摘要。";
   const suggestionText = semantic?.suggestion || "暂无补充建议";
   const finalVerdict = mergedAnalysis.finalVerdict || mergedAnalysis.verdict || "pass";
-  const semanticVerdict = semantic?.verdict ? verdictLabel(semantic.verdict) : "未启用/未返回";
+  const semanticVerdict = semantic?.verdict ? verdictLabel(semantic.verdict) : semanticState.semanticVerdictLabel || "未启用/未返回";
+  const failureDetailMarkup = !semantic && failureMessage ? `<p class="helper-text">失败原因：${escapeHtml(failureMessage)}</p>` : "";
   const memoryCalibrationSummary = helpers.describeMemoryCalibration ? helpers.describeMemoryCalibration(mergedAnalysis.memoryCalibration) : null;
   const memoryCalibrationMarkup = memoryCalibrationSummary
     ? `
@@ -896,6 +950,7 @@ export function buildAnalyzeCompareCardMarkup(item = {}, helpers = {}) {
         <span class="meta-pill">${escapeHtml(`语义：${semanticVerdict}`)}</span>
         <span class="meta-pill">${escapeHtml(`耗时 ${Math.max(0, Number(item.durationMs || 0))}ms`)}</span>
       </div>
+      ${failureDetailMarkup}
       <div class="analyze-compare-card-grid">
         <section class="analyze-compare-block">
           <span>语义摘要</span>

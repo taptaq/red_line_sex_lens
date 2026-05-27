@@ -1627,6 +1627,24 @@ return {
   assert.match(styles, /\.sample-library-calibration-evidence\b/);
 });
 
+test("frontend derives reviewable fallback signal chips from basic rule evidence when no higher-order historical signals exist", async () => {
+  const { sampleLibraryCalibrationViewJs } = await readFrontendFiles();
+  const signalCategoriesSource =
+    sampleLibraryCalibrationViewJs
+      .match(/export function\s+deriveSampleLibraryCalibrationSignalCategories\s*\([\s\S]*?\n}\n/)?.[0]
+      .replace("export function", "function") || "";
+
+  const { deriveSampleLibraryCalibrationSignalCategories } = new Function(
+    `${signalCategoriesSource}; return { deriveSampleLibraryCalibrationSignalCategories };`
+  )();
+
+  const categories = deriveSampleLibraryCalibrationSignalCategories({
+    evidenceSignals: ["检测结论：观察通过", "规则分：80"]
+  });
+
+  assert.deepEqual(categories, ["规则检测", "分数参考"]);
+});
+
 test("manual-review prediction evidence surfaces a compliance rewrite action", async () => {
   const { appJs, sampleLibraryCalibrationViewJs } = await readFrontendFiles();
   const evidenceHelperSource = extractSourceBetween(

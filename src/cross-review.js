@@ -47,7 +47,7 @@ const providerConfigs = [
     model: process.env.DEEPSEEK_CROSS_REVIEW_MODEL || "deepseek-v4-flash"
   }
 ];
-const providerTimeoutMs = Number(process.env.CROSS_REVIEW_TIMEOUT_MS || 15000);
+const providerTimeoutMs = Number(process.env.CROSS_REVIEW_TIMEOUT_MS || 30000);
 const crossReviewMaxTokens = Number(process.env.CROSS_REVIEW_MAX_TOKENS || 900);
 
 function summarizeAnalysis(analysis = {}) {

@@ -196,6 +196,8 @@ export function deriveSampleLibraryCalibrationSignalCategories(prediction = {}) 
     if (text.includes("互动")) categories.push("互动点明确");
     if (text.includes("风险")) categories.push("风险预判准确");
     if (text.includes("参考样本") || text.includes("样本")) categories.push("参考样本有效");
+    if (text.includes("检测结论") || text.includes("检测级别")) categories.push("规则检测");
+    if (text.includes("规则分") || text.includes("分数参考")) categories.push("分数参考");
   }
 
   return [...new Set(categories)];
