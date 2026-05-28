@@ -30,7 +30,7 @@ const providerConfigs = [
     label: "通义千问",
     envKey: "DMXAPI_API_KEY",
     endpoint: "https://www.dmxapi.cn/v1/chat/completions",
-    model: process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus"
+    model: process.env.QWEN_DMXAPI_MODEL || "qwen3.6-flash"
   },
   {
     provider: "minimax",

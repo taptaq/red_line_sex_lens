@@ -62,6 +62,7 @@ export function renderGenerationThemeInspirationDetail(item = null, helpers = {}
           加入草稿区
         </button>
       </div>
+      <p class="helper-text action-gate-hint" id="generation-theme-inspiration-detail-action-hint" aria-live="polite"></p>
     </section>
   `;
 }

@@ -47,11 +47,11 @@ function getCrossReviewGlmModel() {
 }
 
 function getSemanticQwenModel() {
-  return String(process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus").trim();
+  return String(process.env.QWEN_DMXAPI_MODEL || "qwen3.6-flash").trim();
 }
 
 function getCrossReviewQwenModel() {
-  return String(process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus").trim();
+  return String(process.env.QWEN_DMXAPI_MODEL || "qwen3.6-flash").trim();
 }
 
 function getSemanticDeepSeekModel() {
@@ -75,7 +75,7 @@ function getFeedbackKimiModel() {
 }
 
 function getRewriteQwenModel() {
-  return String(process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus").trim();
+  return String(process.env.QWEN_DMXAPI_MODEL || "qwen3.6-flash").trim();
 }
 
 function getRewriteDeepSeekModel() {

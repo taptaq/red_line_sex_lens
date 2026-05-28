@@ -104,12 +104,13 @@ test("analyze compare modal exposes one shared content action area instead of re
 test("analyze compare shared actions reuse the existing false-positive modal and lifecycle save flows", async () => {
   const { appJs } = await readFrontendFiles();
 
+  assert.match(appJs, /function getActiveAnalyzeCompareBasisSelection\(\)/);
   assert.match(appJs, /compareBasisSelection/);
   assert.match(appJs, /fieldName === "analyzeCompareBasisSelection"/);
   assert.match(appJs, /if \(action === "open-analyze-compare-false-positive"\)/);
   assert.match(appJs, /openFeedbackFalsePositiveModal\(\{/);
   assert.match(appJs, /if \(action === "save-analyze-compare-lifecycle"\)/);
-  assert.match(appJs, /saveLifecycleFromCurrent\("analysis-compare"/);
+  assert.match(appJs, /saveLifecycleFromCurrent\("analysis-compare", activeSelection\)/);
 });
 
 test("analyze compare labels prefer readable model names over raw selection fallbacks", async () => {

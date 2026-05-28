@@ -1015,7 +1015,7 @@ select:focus {
 
 summary.result-heading {
   position: relative;
-  padding: 1rem 3rem 1rem 1.05rem;
+  padding: 1rem 8.2rem 1rem 1.05rem;
   cursor: pointer;
   list-style: none;
 }
@@ -1035,6 +1035,26 @@ summary.result-heading::after {
   color: var(--muted);
   font-size: 0.78rem;
   line-height: 1.4;
+}
+
+.result-clear-button {
+  position: absolute;
+  top: 1rem;
+  right: 4.9rem;
+  padding: 0.16rem 0.55rem;
+  border: 1px solid rgba(54, 43, 31, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.result-clear-button:hover {
+  color: var(--ink-soft);
+  border-color: rgba(54, 43, 31, 0.2);
+  background: rgba(255, 255, 255, 0.96);
 }
 
 .result-disclosure[open] > summary.result-heading::after {

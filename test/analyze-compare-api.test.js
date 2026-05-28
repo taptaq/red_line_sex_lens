@@ -88,7 +88,7 @@ test("analyze compare API returns per-model semantic results plus merged verdict
       });
     }
 
-    if (requestBody.model === (process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus")) {
+    if (requestBody.model === (process.env.QWEN_DMXAPI_MODEL || "qwen3.6-flash")) {
       return createJsonResponse({
         model: requestBody.model,
         choices: [
@@ -174,7 +174,7 @@ test("analyze compare API returns per-model semantic results plus merged verdict
       calls.some(
         (item) =>
           item.url === "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions" &&
-          item.model === (process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus")
+          item.model === (process.env.QWEN_DMXAPI_MODEL || "qwen3.6-flash")
       ),
       false
     );

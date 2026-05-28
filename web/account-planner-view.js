@@ -91,6 +91,7 @@ export function renderSampleLibraryAccountPlannerDetail(card = null, helpers = {
           加入草稿区
         </button>
       </div>
+      <p class="helper-text action-gate-hint" id="sample-library-account-planner-detail-action-hint" aria-live="polite"></p>
     </article>
   `;
 }

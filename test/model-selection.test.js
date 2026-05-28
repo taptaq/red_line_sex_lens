@@ -147,11 +147,11 @@ test("buildModelSelectionOptionsPayload reflects DMXAPI defaults while keeping K
       const semanticMiniMaxOption = payload.semantic.find((item) => item.value === "minimax");
 
       assert.match(String(semanticGlmOption?.label || ""), /DMXAPI glm-5\.1/);
-      assert.match(String(semanticQwenOption?.label || ""), /DMXAPI qwen3\.5-plus/);
+      assert.match(String(semanticQwenOption?.label || ""), /DMXAPI qwen3\.6-flash/);
       assert.match(String(rewriteKimiOption?.label || ""), /kimi-k2\.6/);
       assert.doesNotMatch(String(rewriteKimiOption?.label || ""), /DMXAPI/);
       assert.doesNotMatch(String(rewriteKimiOption?.label || ""), /kimi-k2\.5/);
-      assert.match(String(rewriteQwenOption?.label || ""), /DMXAPI qwen3\.5-plus/);
+      assert.match(String(rewriteQwenOption?.label || ""), /DMXAPI qwen3\.6-flash/);
       assert.match(String(semanticMiniMaxOption?.label || ""), /MiniMax-M2\.5/);
       assert.doesNotMatch(String(semanticMiniMaxOption?.label || ""), /MiniMax-M2\.7/);
     }
@@ -210,14 +210,14 @@ test("normalizeFeedbackModelSelectionState keeps defaults and supported feedback
 
 test("getRewriteSelectionModel resolves deepseek separately from other providers", () => {
   assert.equal(getRewriteSelectionModel("deepseek"), process.env.DEEPSEEK_FEEDBACK_MODEL || "deepseek-v4-flash");
-  assert.equal(getRewriteSelectionModel("qwen"), process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus");
+  assert.equal(getRewriteSelectionModel("qwen"), process.env.QWEN_DMXAPI_MODEL || "qwen3.6-flash");
   assert.equal(getRewriteSelectionModel("gpt-5.4"), "gpt-5.4");
 });
 
 test("filterProviderConfigsBySelection keeps all providers for default modes and narrows to a single provider when selected", () => {
   const providerConfigs = [
     { provider: "glm", model: "glm-4.6v" },
-    { provider: "qwen", model: "qwen3.5-plus" },
+    { provider: "qwen", model: "qwen3.6-flash" },
     { provider: "deepseek", model: "deepseek-v4-flash" }
   ];
 

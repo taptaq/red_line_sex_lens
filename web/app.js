@@ -2744,6 +2744,14 @@ function getAnalyzeCompareSelectionContext(selection = "") {
   return getAnalyzeCompareSelectionContextView(selection, { appState });
 }
 
+function getActiveAnalyzeCompareBasisSelection() {
+  if (appState.sampleLibraryModal?.kind === "analysis-compare") {
+    return String(appState.sampleLibraryModal.compareBasisSelection || "").trim();
+  }
+
+  return "";
+}
+
 function analyzeCompareModelLabel(item = {}) {
   return analyzeCompareModelLabelView(item, { providerLabel });
 }
@@ -5868,7 +5876,7 @@ function applySampleLibraryAccountPlannerCard() {
   const selectedCard = getSelectedSampleLibraryAccountPlannerCard();
 
   if (!selectedCard) {
-    const resultNode = byId("sample-library-account-planner-result");
+    const resultNode = byId("sample-library-account-planner-detail-action-hint");
     if (resultNode) {
       resultNode.textContent = "请先选择一张下一篇建议卡。";
     }
@@ -5888,6 +5896,7 @@ function applySampleLibraryAccountPlannerCard() {
     ...appState.sampleLibraryAccountPlanner,
     message: "已将下一篇建议填入生成工作台，可直接继续生成。"
   };
+  setActionGateHint("sample-library-account-planner-detail-action-hint", appState.sampleLibraryAccountPlanner.message);
   setActionGateHint("generation-action-hint", appState.sampleLibraryAccountPlanner.message);
   syncGenerationActions();
 }
@@ -5948,6 +5957,7 @@ async function addDraftIdeaFromAccountPlannerCard() {
       sourceLabel: "账号复盘卡"
     })
   );
+  setActionGateHint("sample-library-account-planner-detail-action-hint", "已加入草稿区，可稍后继续写。");
   setActionGateHint("generation-action-hint", "已加入草稿区，可稍后继续写。");
 }
 
@@ -5970,6 +5980,7 @@ async function addDraftIdeaFromThemeInspirationCard() {
       sourceLabel: "主题灵感卡"
     })
   );
+  setActionGateHint("generation-theme-inspiration-detail-action-hint", "已加入草稿区，可稍后继续写。");
   setActionGateHint("generation-action-hint", "已加入草稿区，可稍后继续写。");
 }
 
@@ -10315,12 +10326,12 @@ document.addEventListener("click", async (event) => {
     const selectedTheme = selectedThemeId
       ? getSelectedGenerationThemeInspiration()
       : null;
+    const detailHintNode = byId("generation-theme-inspiration-detail-action-hint");
     const resultNode = byId("generation-action-hint");
 
     if (!selectedTheme) {
-      if (resultNode) {
-        resultNode.textContent = "请先选择一张主题灵感卡片。";
-      }
+      detailHintNode && (detailHintNode.textContent = "请先选择一张主题灵感卡片。");
+      resultNode && (resultNode.textContent = "请先选择一张主题灵感卡片。");
       return;
     }
 
@@ -10333,6 +10344,15 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action === "clear-analysis-result") {
+    appState.latestAnalysis = null;
+    appState.latestAnalyzeCompareResult = null;
+    appState.latestAnalysisFalsePositiveSource = null;
+    byId("analysis-result").innerHTML = '<div class="muted">等待检测</div>';
+    byId("cross-review-result").innerHTML = '<div class="muted">等待复判</div>';
+    return;
+  }
+
   if (action === "apply-sample-library-account-planner-card") {
     applySampleLibraryAccountPlannerCard();
     return;
@@ -10340,6 +10360,19 @@ document.addEventListener("click", async (event) => {
 
   if (action === "add-sample-library-account-planner-card-to-draft") {
     await addDraftIdeaFromAccountPlannerCard();
+    return;
+  }
+
+  if (action === "clear-rewrite-result") {
+    appState.latestRewrite = null;
+    byId("rewrite-result").innerHTML = '<div class="muted">等待改写</div>';
+    syncLifecycleResultActions();
+    return;
+  }
+
+  if (action === "clear-cross-review-result") {
+    appState.latestAnalyzeCompareResult = null;
+    byId("cross-review-result").innerHTML = '<div class="muted">等待复判</div>';
     return;
   }
 
@@ -10742,7 +10775,8 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action === "open-analyze-compare-false-positive") {
-    const compareContext = getAnalyzeCompareSelectionContext(button.dataset.selection || "");
+    const activeSelection = getActiveAnalyzeCompareBasisSelection();
+    const compareContext = getAnalyzeCompareSelectionContext(activeSelection);
     const payload = appState.latestAnalyzePayload || {};
     const mergedAnalysis = compareContext.mergedAnalysis || {};
     const compareLabel = button.dataset.modelLabel || analyzeCompareModelLabel(compareContext.item);
@@ -10764,7 +10798,8 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action === "save-analyze-compare-lifecycle") {
-    const requirementMessage = getLifecycleSaveRequirementMessage("analysis-compare", button.dataset.selection || "");
+    const activeSelection = getActiveAnalyzeCompareBasisSelection();
+    const requirementMessage = getLifecycleSaveRequirementMessage("analysis-compare", activeSelection);
 
     if (requirementMessage) {
       setSampleLibraryModalMessage(requirementMessage);
@@ -10774,9 +10809,9 @@ document.addEventListener("click", async (event) => {
     setButtonBusy(button, true, "保存中...");
 
     try {
-      await saveLifecycleFromCurrent("analysis-compare", button.dataset.selection || "");
+      await saveLifecycleFromCurrent("analysis-compare", activeSelection);
       await refreshAll();
-      const savedContext = getAnalyzeCompareSelectionContext(button.dataset.selection || "");
+      const savedContext = getAnalyzeCompareSelectionContext(activeSelection);
       const basisLabel = analyzeCompareModelLabel(savedContext.item);
       setSampleLibraryModalMessage(
         basisLabel

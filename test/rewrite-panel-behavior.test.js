@@ -195,3 +195,17 @@ test("rewrite result panel renders round-by-round retry guidance", async () => {
   assert.match(renderRewriteResultSource, /剩余风险/);
   assert.match(renderRewriteResultSource, /appliedPatches/);
 });
+
+test("result sections expose top-right clear actions for analysis, rewrite, and cross review", async () => {
+  const [indexHtml, appJs] = await Promise.all([
+    fs.readFile(path.join(process.cwd(), "web/index.html"), "utf8"),
+    fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8")
+  ]);
+
+  assert.match(indexHtml, /data-action="clear-analysis-result"/);
+  assert.match(indexHtml, /data-action="clear-rewrite-result"/);
+  assert.match(indexHtml, /data-action="clear-cross-review-result"/);
+  assert.match(appJs, /if \(action === "clear-analysis-result"\)/);
+  assert.match(appJs, /if \(action === "clear-rewrite-result"\)/);
+  assert.match(appJs, /if \(action === "clear-cross-review-result"\)/);
+});

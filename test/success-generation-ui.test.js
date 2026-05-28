@@ -3765,6 +3765,17 @@ test("frontend exposes a draft inbox grid inside the main workbench footer area 
   assert.match(appJs, /draftIdeasSortOrder/);
 });
 
+test("planner and theme inspiration detail actions expose local success and failure hints beside the buttons", async () => {
+  const { appJs, indexHtml } = await readFrontendFiles();
+
+  assert.match(indexHtml, /id="generation-theme-inspiration-modal-detail"/);
+  assert.match(appJs, /sample-library-account-planner-detail-action-hint/);
+  assert.match(appJs, /generation-theme-inspiration-detail-action-hint/);
+  assert.match(appJs, /已将下一篇建议填入生成工作台，可直接继续生成/);
+  assert.match(appJs, /已加入草稿区，可稍后继续写/);
+  assert.match(appJs, /请先选择一张主题灵感卡片/);
+});
+
 test("theme inspiration modal helpers keep existing briefing and reference title, append safe fields, and retain latest refresh only", async () => {
   const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
   const themeInspirationViewJs = await fs.readFile(path.join(process.cwd(), "web/theme-inspiration-view.js"), "utf8");
