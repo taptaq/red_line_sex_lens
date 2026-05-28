@@ -94,6 +94,9 @@ import {
   readSampleLibraryModalCalibrationPayload as readSampleLibraryModalCalibrationPayloadView
 } from "./sample-library-form-helpers.js";
 import {
+  buildPlatformOutcomeActions as buildPlatformOutcomeActionsView,
+  buildPlatformOutcomeModalMarkup as buildPlatformOutcomeModalMarkupView,
+  getPlatformOutcomeOption as getPlatformOutcomeOptionView,
   buildCrossReviewMarkup as buildCrossReviewMarkupView,
   buildAnalyzeCompareSummaryMarkup as buildAnalyzeCompareSummaryMarkupView,
   buildAnalyzeCompareContentActionsMarkup as buildAnalyzeCompareContentActionsMarkupView,
@@ -8910,20 +8913,28 @@ async function runRewriteFromPayload(payload, { pendingMessage = "", errorMessag
   });
 
   appState.latestAnalyzePayload = payload;
-  appState.latestAnalysis = result.analysis;
+  appState.latestAnalysis = result.beforeAnalysis || result.analysis || appState.latestAnalysis;
   appState.latestRewrite = normalizeRewritePayload(result.rewrite);
   appState.latestGeneration = null;
+  try {
+    renderRewriteResult({
+      ...result,
+      rewrite: appState.latestRewrite
+    });
+  } catch (error) {
+    byId("rewrite-result").innerHTML = `
+      <div class="result-card-shell muted">${escapeHtml(error?.message || "改写结果渲染失败")}</div>
+    `;
+    throw error;
+  }
+
   const falsePositiveSources = buildFalsePositiveCaptureSources({
     analyzePayload: appState.latestAnalyzePayload,
-    analysisSnapshot: result.analysis,
+    analysisSnapshot: appState.latestAnalysis,
     rewriteSnapshot: appState.latestRewrite
   });
   appState.latestAnalysisFalsePositiveSource = falsePositiveSources.analysis;
-  renderAnalysis(result.analysis, appState.latestAnalysisFalsePositiveSource);
-  renderRewriteResult({
-    ...result,
-    rewrite: appState.latestRewrite
-  });
+  renderAnalysis(appState.latestAnalysis, appState.latestAnalysisFalsePositiveSource);
 
   return result;
 }
@@ -9067,6 +9078,9 @@ byId("rewrite-button").addEventListener("click", async () => {
       errorMessage: "改写失败"
     });
   } catch (error) {
+    byId("rewrite-result").innerHTML = `
+      <div class="result-card-shell muted">${escapeHtml(error.message || "改写结果渲染失败")}</div>
+    `;
   } finally {
     setButtonBusy(rewriteButton, false);
     syncAnalyzeActions();

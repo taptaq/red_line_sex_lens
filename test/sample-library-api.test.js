@@ -87,6 +87,22 @@ test("draft ideas API supports list create patch delete", async (t) => {
   });
 });
 
+test("rewrite API route returns the fields needed by the rewrite panel without leaking memoryContext", async () => {
+  const serverSource = await fs.readFile(path.join(process.cwd(), "src/server.js"), "utf8");
+
+  assert.match(serverSource, /if \(request\.method === "POST" && url\.pathname === "\/api\/rewrite"\)/);
+  assert.match(serverSource, /beforeAnalysis,/);
+  assert.match(serverSource, /afterAnalysis: rewriteResult\.afterAnalysis,/);
+  assert.match(serverSource, /afterCrossReview: rewriteResult\.afterCrossReview,/);
+  assert.match(serverSource, /rewrite: rewriteResult\.rewrite,/);
+  assert.match(serverSource, /rounds: rewriteResult\.rounds,/);
+  assert.match(serverSource, /rewriteAttempts: rewriteResult\.attempts,/);
+  assert.match(serverSource, /rewriteAccepted: rewriteResult\.accepted,/);
+  assert.match(serverSource, /rewriteStopReason: rewriteResult\.stopReason/);
+  assert.doesNotMatch(serverSource, /memoryContext: rewriteMemoryContext/);
+  assert.doesNotMatch(serverSource, /analysis: beforeAnalysis/);
+});
+
 test("sample library API supports GET POST PATCH for canonical note records", async (t) => {
   await withTempSampleLibraryApi(t, async () => {
     const initial = await invokeRoute("GET", "/api/sample-library");

@@ -37,7 +37,7 @@ test("rewrite prompt requires preserving full body instead of shortening into a 
 
   const userPrompt = String(messages[1]?.content || "");
 
-  assert.ok(rewriteGenerationConfig.baseMaxTokens >= 2200);
+  assert.ok(rewriteGenerationConfig.baseMaxTokens >= 4200);
   assert.match(userPrompt, /不要把正文缩成摘要|不要明显缩短正文篇幅|尽量保留原文的信息量和段落结构/);
   assert.match(userPrompt, /不要写成那种一上来就先说 1、2、3 点的清单腔/);
   assert.match(userPrompt, /少用“首先、其次、最后”这种讲课感很重的连接词/);

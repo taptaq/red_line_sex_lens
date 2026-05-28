@@ -20,7 +20,7 @@
     "provider": "qwen",
     "route": "dmxapi",
     "routeLabel": "DMXAPI",
-    "model": "qwen3.5-plus-2026-02-15",
+    "model": "qwen3.6-flash",
     "status": "error",
     "errorType": "server_error",
     "statusCode": 502,

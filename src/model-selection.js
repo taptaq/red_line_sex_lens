@@ -23,7 +23,7 @@ function getGlmDmxapiModel() {
 }
 
 function getQwenDmxapiModel() {
-  return String(process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus-2026-02-15").trim();
+  return String(process.env.QWEN_DMXAPI_MODEL || "qwen3.6-flash").trim();
 }
 
 function getMiniMaxDmxapiModel() {

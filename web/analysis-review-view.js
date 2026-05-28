@@ -7,6 +7,17 @@ function localEscapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+function localVerdictLabel(value = "") {
+  const normalized = String(value || "").trim();
+
+  if (normalized === "hard_block") return "高风险拦截";
+  if (normalized === "manual_review") return "人工复核";
+  if (normalized === "observe") return "观察通过";
+  if (normalized === "pass") return "通过";
+
+  return normalized || "通过";
+}
+
 export const platformOutcomeOptions = [
   { status: "published_passed", label: "平台通过", note: "平台通过，已记录为可观察样本。" },
   { status: "violation", label: "平台违规", note: "平台反馈违规，已记录为检测校准信号。" },
@@ -617,7 +628,7 @@ export function buildCrossReviewMarkup(review, { embedded = false } = {}, helper
 
 export function buildAnalyzeCompareSummaryMarkup(result = {}, helpers = {}) {
   const escapeHtml = helpers.escapeHtml || localEscapeHtml;
-  const verdictLabel = helpers.verdictLabel || ((value) => String(value || "").trim() || "通过");
+  const verdictLabel = helpers.verdictLabel || localVerdictLabel;
   const formatDate = helpers.formatDate || ((value) => String(value || ""));
   const summary = result?.summary && typeof result.summary === "object" ? result.summary : {};
   const ruleAnalysis = result?.ruleAnalysis && typeof result.ruleAnalysis === "object" ? result.ruleAnalysis : {};
@@ -747,7 +758,7 @@ export function analyzeCompareModelLabel(item = {}, helpers = {}) {
 }
 
 export function buildAnalyzeCompareBasisOptionLabel(item = {}, helpers = {}) {
-  const verdictLabel = helpers.verdictLabel || ((value) => String(value || "").trim() || "通过");
+  const verdictLabel = helpers.verdictLabel || localVerdictLabel;
   const analyzeCompareModelLabelHelper = helpers.analyzeCompareModelLabel || analyzeCompareModelLabel;
   const label = analyzeCompareModelLabelHelper(item, helpers) || "未命名模型";
   const mergedAnalysis = item?.mergedAnalysis && typeof item.mergedAnalysis === "object" ? item.mergedAnalysis : {};
@@ -816,7 +827,7 @@ export function buildAnalyzeCompareContentActionsMarkup(result = {}, helpers = {
   const mergedAnalysis = compareContext.mergedAnalysis || {};
   const analyzeCompareModelLabelHelper = helpers.analyzeCompareModelLabel || analyzeCompareModelLabel;
   const basisLabel = analyzeCompareModelLabelHelper(compareContext.item, helpers);
-  const verdictLabel = helpers.verdictLabel || ((value) => String(value || "").trim() || "通过");
+  const verdictLabel = helpers.verdictLabel || localVerdictLabel;
   const basisText = basisLabel ? `当前内容级保存基于 ${basisLabel} 的合并结论。` : "当前内容级保存将回退到这次检测的基础规则结论。";
   const basisVerdict = mergedAnalysis.finalVerdict || mergedAnalysis.verdict || result?.ruleAnalysis?.verdict || "pass";
   const compareFalsePositiveNotes = [
@@ -892,7 +903,7 @@ export function buildAnalyzeCompareContentActionsMarkup(result = {}, helpers = {
 
 export function buildAnalyzeCompareCardMarkup(item = {}, helpers = {}) {
   const escapeHtml = helpers.escapeHtml || localEscapeHtml;
-  const verdictLabel = helpers.verdictLabel || ((value) => String(value || "").trim() || "通过");
+  const verdictLabel = helpers.verdictLabel || localVerdictLabel;
   const providerLabel = helpers.providerLabel || ((value) => String(value || "").trim() || "未标记模型");
   const renderInfoPills = helpers.renderInfoPills || ((items = [], emptyText = "未提供", extraClass = "") => {
     const tokens = Array.isArray(items) ? items.filter(Boolean) : [];

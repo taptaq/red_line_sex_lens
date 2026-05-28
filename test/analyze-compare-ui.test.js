@@ -73,6 +73,16 @@ test("analyze compare summary shows disagreement state with clear wording instea
   assert.match(appJs, /最终结论一致|存在不同最终结论/);
 });
 
+test("analyze compare views localize raw verdict enums into Chinese labels", async () => {
+  const { appJs } = await readFrontendFiles();
+
+  assert.match(appJs, /function localVerdictLabel/);
+  assert.match(appJs, /normalized === "observe"\) return "观察通过"/);
+  assert.match(appJs, /normalized === "manual_review"\) return "人工复核"/);
+  assert.match(appJs, /normalized === "pass"\) return "通过"/);
+  assert.match(appJs, /normalized === "hard_block"\) return "高风险拦截"/);
+});
+
 test("analyze compare modal exposes one shared content action area instead of repeating content actions on each model card", async () => {
   const { appJs } = await readFrontendFiles();
   const cardFunction = appJs.match(/function buildAnalyzeCompareCardMarkup[\s\S]*?\n}\n/)?.[0] || "";

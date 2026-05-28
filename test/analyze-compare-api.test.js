@@ -169,7 +169,7 @@ test("analyze compare API returns per-model semantic results plus merged verdict
       calledModels.includes(process.env.GLM_SEMANTIC_MODEL || process.env.GLM_CROSS_REVIEW_MODEL || process.env.GLM_TEXT_MODEL || "glm-4.6v"),
       true
     );
-    assert.equal(calledModels.includes(process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus-2026-02-15"), true);
+    assert.equal(calledModels.includes(process.env.QWEN_DMXAPI_MODEL || "qwen3.6-flash"), true);
     assert.equal(
       calls.some(
         (item) =>

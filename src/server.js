@@ -1035,9 +1035,7 @@ async function handleRequest(request, response) {
 
     return sendJson(response, 200, {
       ok: true,
-      analysis: beforeAnalysis,
       beforeAnalysis,
-      memoryContext: rewriteMemoryContext,
       afterAnalysis: rewriteResult.afterAnalysis,
       afterCrossReview: rewriteResult.afterCrossReview,
       rewrite: rewriteResult.rewrite,

@@ -1337,6 +1337,18 @@ test("frontend keeps publish prediction prefill conservative while reusing the s
   assert.match(appJs, /setSampleLibraryCalibrationPrefillMessage\(prediction\.successMessage \|\| prefillSource\.successMessage \|\| "已预填预判字段。"\)/);
 });
 
+test("runRewriteFromPayload reuses beforeAnalysis when the rewrite API omits the legacy analysis field", async () => {
+  const { appJs } = await readFrontendFiles();
+
+  assert.match(appJs, /appState\.latestAnalysis = result\.beforeAnalysis \|\| result\.analysis \|\| appState\.latestAnalysis/);
+  assert.match(appJs, /try \{\s*renderRewriteResult\(\{/);
+  assert.match(appJs, /renderRewriteResult\(\{[\s\S]*?\}\);\s*\} catch[\s\S]*?const falsePositiveSources = buildFalsePositiveCaptureSources/);
+  assert.match(appJs, /analysisSnapshot: appState\.latestAnalysis/);
+  assert.match(appJs, /renderAnalysis\(appState\.latestAnalysis,/);
+  assert.match(appJs, /改写结果渲染失败/);
+  assert.match(appJs, /error\.message \|\| "改写结果渲染失败"/);
+});
+
 test("frontend exposes a calibration review queue with quick jumps back to sample detail", async () => {
   const { indexHtml, appJs, styles } = await readFrontendFiles();
 

@@ -18,10 +18,10 @@ const defaultVisionModel = process.env.GLM_VISION_MODEL || "glm-4.6v";
 const defaultTextModel = process.env.GLM_TEXT_MODEL || "glm-4.6v";
 const defaultKimiTextModel = "kimi-k2.6";
 const defaultFeedbackModel = process.env.GLM_FEEDBACK_MODEL || defaultTextModel || "glm-4.6v";
-const defaultQwenFeedbackModel = process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus-2026-02-15";
+const defaultQwenFeedbackModel = process.env.QWEN_DMXAPI_MODEL || "qwen3.6-flash";
 const defaultMiniMaxDmxapiModel = process.env.MINIMAX_DMXAPI_MODEL || "MiniMax-M2.5";
 const defaultGlmDmxapiModel = process.env.GLM_DMXAPI_MODEL || "glm-5.1";
-const defaultQwenDmxapiModel = process.env.QWEN_DMXAPI_MODEL || "qwen3.5-plus-2026-02-15";
+const defaultQwenDmxapiModel = process.env.QWEN_DMXAPI_MODEL || "qwen3.6-flash";
 const defaultDeepSeekFeedbackModel = process.env.DEEPSEEK_FEEDBACK_MODEL || "deepseek-v4-flash";
 const humanizerPassEnabled = process.env.HUMANIZER_PASS_ENABLED !== "false";
 const feedbackModelCandidates = [defaultFeedbackModel, "glm-4.6-flashX"].filter(
@@ -63,7 +63,7 @@ const feedbackProviderConfigs = [
 ];
 
 export const rewriteGenerationConfig = {
-  baseMaxTokens: Number(process.env.REWRITE_MAX_TOKENS || 3200),
+  baseMaxTokens: Number(process.env.REWRITE_MAX_TOKENS || 4200),
   patchMaxTokens: Number(process.env.REWRITE_PATCH_MAX_TOKENS || 1400),
   humanizerMaxTokens: Number(process.env.REWRITE_HUMANIZER_MAX_TOKENS || 3000),
   maxAttempts: Number(process.env.REWRITE_MAX_ATTEMPTS || 3),
@@ -91,7 +91,7 @@ function getDefaultKimiTextModel() {
 }
 
 function getDefaultQwenDmxapiModel() {
-  return String(process.env.QWEN_DMXAPI_MODEL || defaultQwenDmxapiModel || "qwen3.5-plus-2026-02-15").trim();
+  return String(process.env.QWEN_DMXAPI_MODEL || defaultQwenDmxapiModel || "qwen3.6-flash").trim();
 }
 
 function getDefaultMiniMaxDmxapiModel() {
@@ -1233,6 +1233,9 @@ function buildRoutedRequestBodies({ model, temperature, maxTokens, messages, res
     max_tokens: maxTokens,
     messages
   };
+  if (shouldOmitTemperatureForDirectChat({ provider: useDmxapi ? "dmxapi_text" : "", model })) {
+    delete baseRequestBody.temperature;
+  }
   const normalizedResponseFormat =
     responseFormat && typeof responseFormat === "object" ? responseFormat : responseFormat ? { type: responseFormat } : null;
 
@@ -1278,10 +1281,21 @@ function normalizeTemperatureForRoutedProvider({ provider = "", temperature = 0.
   const normalizedProvider = String(provider || "").trim().toLowerCase();
 
   if (normalizedProvider === "kimi" && !useDmxapi) {
-    return Math.min(Number(temperature) || 0.2, 0.6);
+    return 0.6;
   }
 
   return temperature;
+}
+
+function shouldOmitTemperatureForDirectChat({ provider = "", model = "" } = {}) {
+  const normalizedProvider = String(provider || "").trim().toLowerCase();
+  const normalizedModel = String(model || "").trim().toLowerCase();
+
+  if (normalizedProvider !== "dmxapi_text") {
+    return false;
+  }
+
+  return /^(claude-|gpt-|gemini-|grok-)/.test(normalizedModel);
 }
 
 function parseJsonChatResult({ data, candidate, fallbackParser, providerLabel }) {
@@ -1838,6 +1852,9 @@ async function callChatJson({
       max_tokens: maxTokens,
       messages
     };
+    if (shouldOmitTemperatureForDirectChat({ provider: providerConfig?.provider, model: candidate })) {
+      delete baseRequestBody.temperature;
+    }
     const requestBodies = responseFormat
       ? [
           {

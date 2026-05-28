@@ -48,7 +48,7 @@ test("suggestFeedbackCandidates uses DMXAPI Qwen first when available", async ()
       DEEPSEEK_API_KEY: "",
       DMXAPI_API_KEY: "dmxapi-test",
       QWEN_FEEDBACK_MODEL: "qwen-plus",
-      QWEN_DMXAPI_MODEL: "qwen3.5-plus-2026-02-15"
+      QWEN_DMXAPI_MODEL: "qwen3.6-flash"
     },
     async () => {
       const calls = [];
@@ -56,7 +56,7 @@ test("suggestFeedbackCandidates uses DMXAPI Qwen first when available", async ()
       globalThis.fetch = async (url) => {
         calls.push(String(url));
         return createJsonResponse(200, {
-          model: "qwen3.5-plus-2026-02-15",
+          model: "qwen3.6-flash",
           choices: [
             {
               message: {
@@ -81,7 +81,7 @@ test("suggestFeedbackCandidates uses DMXAPI Qwen first when available", async ()
         });
 
         assert.equal(result.provider, "qwen");
-        assert.equal(result.model, "qwen3.5-plus-2026-02-15");
+        assert.equal(result.model, "qwen3.6-flash");
         assert.deepEqual(result.suspiciousPhrases, ["边界短语"]);
         assert.deepEqual(calls, ["https://www.dmxapi.cn/v1/chat/completions"]);
       } finally {
@@ -99,7 +99,7 @@ test("suggestFeedbackCandidates respects an explicit qwen selection", async () =
       DEEPSEEK_API_KEY: "deepseek-test",
       DMXAPI_API_KEY: "dmxapi-test",
       QWEN_FEEDBACK_MODEL: "qwen-plus",
-      QWEN_DMXAPI_MODEL: "qwen3.5-plus-2026-02-15"
+      QWEN_DMXAPI_MODEL: "qwen3.6-flash"
     },
     async () => {
       const calls = [];
@@ -108,7 +108,7 @@ test("suggestFeedbackCandidates respects an explicit qwen selection", async () =
         const body = JSON.parse(String(options.body || "{}"));
         calls.push({ url: String(url), model: body.model });
         return createJsonResponse(200, {
-          model: "qwen3.5-plus-2026-02-15",
+          model: "qwen3.6-flash",
           choices: [
             {
               message: {
@@ -134,7 +134,7 @@ test("suggestFeedbackCandidates respects an explicit qwen selection", async () =
         });
 
         assert.equal(result.provider, "qwen");
-        assert.deepEqual(calls, [{ url: "https://www.dmxapi.cn/v1/chat/completions", model: "qwen3.5-plus-2026-02-15" }]);
+        assert.deepEqual(calls, [{ url: "https://www.dmxapi.cn/v1/chat/completions", model: "qwen3.6-flash" }]);
       } finally {
         globalThis.fetch = originalFetch;
       }
@@ -505,6 +505,172 @@ test("callRoutedTextProviderJson caps Kimi official temperature at 0.6 when call
         });
 
         assert.equal(calls[0].temperature, 0.6);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    }
+  );
+});
+
+test("callRoutedTextProviderJson pins Kimi official temperature to 0.6 even when caller passes a lower value", async () => {
+  await withEnv(
+    {
+      DMXAPI_API_KEY: "dmxapi-test",
+      KIMI_API_KEY: "kimi-test",
+      KIMI_BASE_URL: "https://api.moonshot.cn/v1/chat/completions",
+      KIMI_TEXT_MODEL: "kimi-k2.6"
+    },
+    async () => {
+      const calls = [];
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async (url, options = {}) => {
+        const body = JSON.parse(String(options.body || "{}"));
+        calls.push({ url: String(url), model: body.model, temperature: body.temperature });
+
+        return createJsonResponse(200, {
+          model: "kimi-k2.6",
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  verdict: "pass",
+                  confidence: 0.8
+                })
+              }
+            }
+          ]
+        });
+      };
+
+      try {
+        const { callRoutedTextProviderJson } = await importFresh("../src/glm.js");
+        await callRoutedTextProviderJson({
+          provider: "kimi",
+          model: "kimi-k2.6",
+          messages: [{ role: "user", content: "hello" }],
+          temperature: 0.5,
+          timeoutMs: 1000
+        });
+
+        assert.equal(calls[0].temperature, 0.6);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    }
+  );
+});
+
+test("rewritePostForCompliance omits temperature for standalone DMXAPI Claude selections that reject the parameter", async () => {
+  await withEnv(
+    {
+      REWRITE_PROVIDER: "glm",
+      DMXAPI_API_KEY: "dmxapi-test",
+      GLM_API_KEY: "",
+      KIMI_API_KEY: "",
+      DEEPSEEK_API_KEY: ""
+    },
+    async () => {
+      const calls = [];
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async (url, options = {}) => {
+        const body = JSON.parse(String(options.body || "{}"));
+        calls.push({ url: String(url), model: body.model, hasTemperature: Object.prototype.hasOwnProperty.call(body, "temperature") });
+
+        return createJsonResponse(200, {
+          model: "claude-sonnet-4-6-ssvip",
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  title: "改写标题",
+                  body: "改写正文",
+                  coverText: "改写封面",
+                  tags: ["科普", "沟通"],
+                  rewriteNotes: "去掉了更直白的刺激描述",
+                  safetyNotes: "避免教程化表达"
+                })
+              }
+            }
+          ]
+        });
+      };
+
+      try {
+        const { rewritePostForCompliance } = await importFresh("../src/glm.js");
+        const result = await rewritePostForCompliance({
+          input: {
+            title: "原标题",
+            body: "原正文",
+            coverText: "原封面",
+            tags: ["科普"]
+          },
+          analysis: {
+            verdict: "manual_review",
+            finalVerdict: "manual_review",
+            score: 42,
+            suggestions: ["再收一点表达"]
+          },
+          modelSelection: "claude-sonnet-4-6-ssvip"
+        });
+
+        assert.equal(result.title, "改写标题");
+        assert.equal(calls.length >= 1, true);
+        assert.equal(calls.every((item) => item.url === "https://www.dmxapi.cn/v1/chat/completions"), true);
+        assert.equal(calls.every((item) => item.model === "claude-sonnet-4-6-ssvip"), true);
+        assert.equal(calls.every((item) => item.hasTemperature === false), true);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    }
+  );
+});
+
+test("rewritePostForCompliance repairs lightly broken DMXAPI Claude rewrite JSON payloads", async () => {
+  await withEnv(
+    {
+      REWRITE_PROVIDER: "glm",
+      DMXAPI_API_KEY: "dmxapi-test",
+      GLM_API_KEY: "",
+      KIMI_API_KEY: "",
+      DEEPSEEK_API_KEY: ""
+    },
+    async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async () =>
+        createJsonResponse(200, {
+          model: "claude-sonnet-4-6-ssvip",
+          choices: [
+            {
+              message: {
+                content:
+                  '`json { "title": "👩 聊聊女性身心解压与身体关怀的健康科学", "body": "今天不聊高深理论，先从大家第一次选装备时最容易踩的坑聊起。\\n\\n很多人第一次选装备，全凭一腔热血和网页上的加粗大字。", "coverText": "新手第一件装备就选错了？", "tags": ["科普", "沟通"], "rewriteNotes": "改成了更偏教育和健康沟通的表达", "safetyNotes": "避免具体动作教程化描述" }'
+              }
+            }
+          ]
+        });
+
+      try {
+        const { rewritePostForCompliance } = await importFresh("../src/glm.js");
+        const result = await rewritePostForCompliance({
+          input: {
+            title: "原标题",
+            body: "原正文",
+            coverText: "原封面",
+            tags: ["科普"]
+          },
+          analysis: {
+            verdict: "manual_review",
+            finalVerdict: "manual_review",
+            score: 42,
+            suggestions: ["再收一点表达"]
+          },
+          modelSelection: "claude-sonnet-4-6-ssvip"
+        });
+
+        assert.equal(result.title, "👩 聊聊女性身心解压与身体关怀的健康科学");
+        assert.match(result.body, /今天不聊高深理论/);
+        assert.equal(result.coverText, "新手第一件装备就选错了？");
+        assert.deepEqual(result.tags, ["科普", "沟通"]);
       } finally {
         globalThis.fetch = originalFetch;
       }

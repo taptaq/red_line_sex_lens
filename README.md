@@ -11,16 +11,18 @@
 
 ## 当前产品结构
 
-当前版本已经收敛成 3 条主路径：
+当前版本的主界面已经收敛成 4 个高频工作面：
 
-1. `主工作台`
+1. `内容工作台`
    内容检测、合规改写、生成新内容。
-2. `回流中心`
-   处理真实违规反馈与误报案例。
-3. `样本库`
-   沉淀样本、补参考属性、回填生命周期。
+2. `反馈回流`
+   快速记录真实违规反馈，需要时再展开截图识别与候选补充。
+3. `学习样本 / 误判与好样本回流`
+   统一承接人工复核、误报回流、样本记录、生命周期和系统校准。
+4. `草稿区`
+   把账号复盘卡、主题灵感卡、生成候选稿一键收成待写选题，再回填到生成工作台。
 
-低频能力例如人工复核、规则维护、基准评测、模型看板，仍然保留，但已经下沉到折叠区或系统校准区，不再和主路径并列抢注意力。
+低频能力例如词库维护、人工复核明细、基准评测、模型看板，都还保留，但已经下沉到折叠区、弹窗或系统校准区，不再和主任务并排抢注意力。
 
 ## 当前能力
 
@@ -29,10 +31,12 @@
 - 多模型交叉复判：支持 GLM、Qwen、MiniMax、DeepSeek 等 provider 参与复核。
 - 合规改写：根据检测结果进行多轮改写，尽量保留原文信息量和表达风格。
 - 生成新内容：支持从零起稿或基于草稿优化，并推荐更稳的一版。
-- 工作流助手：根据当前内容状态、回流积压和样本库卡点，推荐下一步动作。
 - 违规原因回流：记录平台处罚原因，自动生成候选词和候选语境，进入人工复核。
 - 误报样本回流：记录平台实际放行样本，用于后续降权提示和白名单候选。
 - 样本库沉淀：统一管理样本记录、参考属性、生命周期和风格画像。
+- 账号级复盘：优先基于参考样本、效果好样本与外部样本，生成下一篇 Planner 卡。
+- 主题灵感：从高表现样本提炼切入角度，并可直接回填到生成工作台。
+- 草稿区：把复盘卡、灵感卡和生成候选稿收成可排序、可筛选的待写选题池。
 - 笔记生命周期：记录检测、改写、生成稿到发布结果的闭环表现。
 - 样本权重体系：按成功等级、确认强度、发布表现和时间新鲜度计算参考权重。
 - 规则变更预演：候选词库或白名单生效前，先模拟会影响哪些历史样本。
@@ -55,9 +59,7 @@ npm run server
 
 1. `顶部任务卡`
    显示当前待处理复核、待回流反馈、待补全样本、待确认画像、生命周期记录，并支持直接跳转到对应区域。
-2. `工作流助手`
-   根据当前输入、检测状态、回流积压和样本卡点，推荐下一步。
-3. `主工作台`
+2. `主工作台`
    用 tab 切换 `内容检测` 与 `生成新内容` 两种主模式。
 
 `内容检测` 仍按三步推进：
@@ -75,21 +77,25 @@ npm run server
 - 支持基于草稿优化。
 - 支持选择当前风格画像与合集类型。
 - 生成多个候选稿后给出推荐结果。
+- 支持打开 `主题灵感` 弹窗拿切入角度。
+- 支持把复盘卡 / 灵感卡 / 生成候选稿加入 `草稿区`，再一键载入回生成工作台。
 
 旧文档里提到的 `自进化成稿工作台`，现在已经并入主工作台的 `生成新内容` 模式。
 
-低频维护区统一收在 `低频维护与人工复核` 中：
+主工作台下方现在还有一块独立的 `草稿区`：
 
-- `人工复核队列`
-  人工确认候选词、语境规则或白名单候选。
-- `回流中心`
-  统一处理 `违规反馈` 和 `误报案例`，并突出 `待优先处理` 项。
-- `样本库`
-  统一承接样本记录、参考属性、生命周期和风格画像。
-- `规则维护`
-  自定义词库和种子词库已经降级到折叠区。
-- `系统校准`
-  基准评测、模型看板、历史回放验证和批量复盘队列都已经降级到样本库里的系统校准区。
+- 默认按 `待写 / 已使用` 两个视图切换。
+- 支持按 `最近加入 / 最早加入` 排序。
+- 点 `载入生成工作台` 会自动切到 `生成新内容` tab 并滚动到对应区域。
+
+样本与回流区域当前按真实工作流拆成三块：
+
+- `人工复核`
+  主页面只保留轻量入口，完整操作在弹窗里完成。
+- `回流反馈`
+  统一处理待优先反馈、违规反馈和误报案例。
+- `学习样本 / 好样本沉淀`
+  维护样本记录、参考属性、生命周期、账号级复盘与系统校准。
 
 样本库当前已经改成步骤式维护：
 
@@ -115,6 +121,10 @@ npm run server
 
 ```text
 data/
+  account-planner-summary.json  账号级复盘的最近一次聚合结果
+  analyze-tag-options.json      分析台自定义标签选项
+  draft-ideas.json              草稿区待写选题池
+  external-reference-samples.json 外部参考样本
   lexicon.seed.json          平台与通用规则的初始词库
   lexicon.custom.json        账号专属词库
   whitelist.json             宽松白名单 / 反例语境
@@ -127,20 +137,28 @@ data/
   note-lifecycle.json        兼容旧路径，迁移后不再作为主数据源
   model-performance.json     模型调用表现日志
   style-profile.json         风格画像
+  theme-inspirations.json    主题灵感缓存
   evals/
     review-benchmark.json    基准评测样本集（默认不预置演示样本）
 src/
+  account-planner.js         账号级复盘与 Planner 建议
+  account-planner-import.js  外部样本导入解析
   analyzer.js                本地规则检测引擎
   semantic-review.js         语义复判
   cross-review.js            多模型交叉复判
+  draft-ideas.js             草稿区数据结构
   glm.js                     模型调用与 DMXAPI / 官方路由
   generation-workbench.js    生成工作台
   server.js                  本地网页服务
   cli.js                     命令行入口
+  theme-inspirations.js      主题灵感提炼
 web/
+  account-planner-view.js    账号级复盘视图
+  draft-ideas-view.js        草稿区视图
   index.html                 本地工作台页面
   app.js                     前端交互逻辑
   styles.css                 前端样式
+  theme-inspiration-view.js  主题灵感视图
 ```
 
 ## 快速命令
@@ -211,6 +229,18 @@ npm run eval:rewrite-pairs
 npm run eval:review-benchmark
 ```
 
+检查当前 note records 是否都已具备账号复盘摘要：
+
+```bash
+node src/cli.js planner:check-summaries
+```
+
+批量回填缺失的账号复盘摘要：
+
+```bash
+node src/cli.js planner:backfill-summaries
+```
+
 ## AI 记忆共享层
 
 第一版 AI 记忆保留现有 JSON 事实层，在 `data/memory/` 下维护本地检索文档、记忆卡片与索引元数据。
@@ -251,12 +281,14 @@ export DMXAPI_API_KEY="你的 DMXAPI 密钥"
 
 当前文本 provider 的默认路由规则：
 
-- `glm / kimi / qwen / deepseek` 文本 helper 默认按 `DMXAPI -> 官方接口` 顺序调用。
-- `minimax` 当前是 `DMXAPI-only` provider。
-- 官方 `deepseek` 仍单独展示，默认模型为 `deepseek-v4-flash`。
-- 如果没有设置 `DMXAPI_API_KEY`，会自动跳过 DMXAPI，直接走各 provider 官方接口。
-- DMXAPI 文本请求使用非流式模式，不设置 `stream: true`。
+- `glm` 改写 / 生成 / 语义链路默认优先 `DMXAPI`，失败后再回退官方。
+- `kimi` 作为改写 / 生成 provider 时默认走官方接口。
+- `qwen`、`minimax` 和独立 `DMXAPI` 文本模型（如 `gemini-3.5-flash`、`gpt-5.4`、`claude-sonnet-4-6-ssvip`、`grok-4.2-nothinking`）走 DMXAPI。
+- `deepseek` 当前默认走官方接口。
+- DMXAPI 文本请求使用非流式模式。
 - 语义复判默认超时为 `60000ms`，可用 `SEMANTIC_REVIEW_TIMEOUT_MS` 覆盖。
+- 全部模型对比检测（cross review）默认超时为 `30000ms`，可用 `CROSS_REVIEW_TIMEOUT_MS` 覆盖。
+- 改写主轮次默认 `REWRITE_MAX_TOKENS=4200`。
 
 常用模型覆盖：
 
@@ -266,9 +298,8 @@ export GLM_TEXT_MODEL="glm-4.6v"
 export GLM_CROSS_REVIEW_MODEL="glm-4-flash"
 export GLM_DMXAPI_MODEL="glm-5.1"
 
-export KIMI_DMXAPI_MODEL="kimi-k2.6"
 export QWEN_DMXAPI_MODEL="qwen3.5-plus-2026-02-15"
-export MINIMAX_DMXAPI_MODEL="MiniMax-M2.7"
+export MINIMAX_DMXAPI_MODEL="MiniMax-M2.5"
 
 export QWEN_FEEDBACK_MODEL="qwen-plus"
 export QWEN_CROSS_REVIEW_MODEL="qwen-plus"
@@ -327,6 +358,14 @@ export KIMI_TEXT_MODEL="kimi-k2.6"
 样本库详情已经改成步骤流；保存上一步后，页面会自动推进到下一步。
 
 系统会为样本计算 `sampleWeight`，后续检测、风格画像和生成参考都会优先使用高权重样本。
+
+账号级复盘当前的输入优先级是：
+
+- `参考样本`
+- `效果好样本`（`publish.status = positive_performance`）
+- `外部参考样本`
+
+如果近期没有稳定高表现样本，系统会自动退到 `已发布内容的观察型建议`，而不是直接不给结果。
 
 参考样本分三档：
 

@@ -16,6 +16,14 @@ test("rewrite result panel no longer renders the false positive capture block", 
   assert.doesNotMatch(renderRewriteResultSource, /记录为误报样本/);
 });
 
+test("app wiring imports platform outcome helpers used by the rewrite panel", async () => {
+  const appSource = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
+
+  assert.match(appSource, /buildPlatformOutcomeActions as buildPlatformOutcomeActionsView/);
+  assert.match(appSource, /buildPlatformOutcomeModalMarkup as buildPlatformOutcomeModalMarkupView/);
+  assert.match(appSource, /getPlatformOutcomeOption as getPlatformOutcomeOptionView/);
+});
+
 test("rewrite and cross review panels explain model responsibilities clearly", async () => {
   const source = await fs.readFile(path.join(process.cwd(), "web/analysis-review-view.js"), "utf8");
   const rewriteStart = source.indexOf("function renderRewriteResult(");
