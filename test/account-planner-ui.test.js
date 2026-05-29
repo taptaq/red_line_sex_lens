@@ -9,6 +9,7 @@ import {
   renderSampleLibraryAccountPlannerResult
 } from "../web/account-planner-view.js";
 import { backfillPlannerSummaries, summarizeAccountPlanner } from "../src/account-planner.js";
+import { buildXhsAccountDiagnosisModalMarkup } from "../web/xhs-account-diagnosis-view.js";
 
 function extractSourceBetween(source, startMarker, endMarker) {
   const startIndex = source.indexOf(startMarker);
@@ -36,23 +37,117 @@ test("sample library exposes account planner panel and app wiring", async () => 
   assert.match(indexHtml, /id="sample-library-account-planner-import-input"/);
   assert.match(indexHtml, /id="sample-library-account-planner-run"/);
   assert.match(indexHtml, /id="sample-library-account-planner-result"/);
+  assert.match(indexHtml, /id="xhs-account-diagnosis-panel"/);
+  assert.match(indexHtml, /id="xhs-account-diagnosis-run"/);
+  assert.match(indexHtml, /id="xhs-account-diagnosis-red-id"/);
+  assert.match(indexHtml, /id="xhs-account-diagnosis-red-ids"/);
+  assert.match(indexHtml, /id="xhs-account-diagnosis-open-latest"/);
+  assert.doesNotMatch(indexHtml, /id="xhs-account-diagnosis-result"/);
   assert.match(indexHtml, /id="sample-library-external-samples-modal"/);
   assert.match(indexHtml, /id="sample-library-external-samples-modal-content"/);
   assert.match(indexHtml, /优先参考样本、效果好样本与外部样本/);
   assert.match(indexHtml, /参考样本用于长期参考，效果好样本表示发布结果已回填为“效果好”/);
   assert.match(appJs, /sampleLibraryAccountPlannerParseApi/);
   assert.match(appJs, /sampleLibraryAccountPlannerAnalyzeApi/);
+  assert.match(appJs, /xhsAccountDiagnosisApi/);
+  assert.match(appJs, /runXhsAccountDiagnosisAnalysis/);
+  assert.match(appJs, /refreshXhsAccountDiagnosisState/);
+  assert.match(appJs, /openXhsAccountDiagnosisModal/);
+  assert.match(appJs, /followSimilarXhsAccountDiagnosis/);
   assert.match(appJs, /sampleLibraryExternalSamplesApi/);
+  assert.match(appJs, /from "\.\/xhs-account-diagnosis-view\.js"/);
   assert.match(appJs, /from "\.\/account-planner-view\.js"/);
   assert.match(styles, /\.sample-library-account-planner\b/);
   assert.match(styles, /\.sample-library-external-samples-modal\b/);
   assert.match(styles, /\.sample-library-account-planner-card\b/);
+  assert.match(styles, /\.xhs-account-diagnosis\b/);
+  assert.match(styles, /\.xhs-account-diagnosis-modal-stack\b/);
   assert.doesNotMatch(accountPlannerSource, /外部参考样本还不够多，建议继续补充对照内容/);
   assert.match(accountPlannerSource, /maxTokens:\s*5200/);
   assert.match(serverSource, /summarize:\s*payload\?\.mockAccountPlannerSummary\s*\?\s*async\s*\(\)\s*=>\s*payload\.mockAccountPlannerSummary\s*:\s*undefined/);
   assert.match(configSource, /accountPlannerSummary:\s*path\.join\(dataDir,\s*"account-planner-summary\.json"\)/);
+  assert.match(configSource, /xhsAccountDiagnosis:\s*path\.join\(dataDir,\s*"xhs-account-diagnosis\.json"\)/);
+  assert.match(dataStoreSource, /export async function loadXhsAccountDiagnosis\(/);
+  assert.match(dataStoreSource, /export async function saveXhsAccountDiagnosis\(/);
   assert.match(dataStoreSource, /export async function loadAccountPlannerSummary\(/);
   assert.match(dataStoreSource, /export async function saveAccountPlannerSummary\(/);
+});
+
+test("buildXhsAccountDiagnosisModalMarkup renders overview, diagnosis summary, and similar accounts", () => {
+  const markup = buildXhsAccountDiagnosisModalMarkup(
+    {
+      result: {
+        account: {
+          nickname: "测试号",
+          redId: "26112666886",
+          desc: "主页简介",
+          metrics: {
+            fans: 12000,
+            liked: 217035,
+            collected: 24745,
+            noteCountThirty: 12,
+            interactiveCountThirty: 133547
+          }
+        },
+        diagnosis: {
+          score: 78,
+          summary: "近30天互动强，适合继续放大稳定选题。",
+          strengths: ["互动规模稳定"],
+          risks: ["封面风格还不够统一"],
+          nextActions: ["先继续放大高互动选题"]
+        },
+        similarAccounts: {
+          peer: [{ redId: "peer-1", nickname: "同阶号", fans: 10000, interactiveCountThirty: 3000, reason: "同阶参考" }],
+          benchmark: [{ redId: "benchmark-1", nickname: "高阶号", fans: 45000, interactiveCountThirty: 9000, reason: "高阶参考" }]
+        }
+      }
+    },
+    {
+      escapeHtml(value) {
+        return String(value || "");
+      }
+    }
+  );
+
+  assert.match(markup, /测试号/);
+  assert.match(markup, /78/);
+  assert.match(markup, /近30天互动强/);
+  assert.match(markup, /同阶号/);
+  assert.match(markup, /高阶号/);
+  assert.match(markup, /同阶参考/);
+  assert.match(markup, /继续分析/);
+});
+
+test("buildXhsAccountDiagnosisModalMarkup can render empty-state fallback", () => {
+  const markup = buildXhsAccountDiagnosisModalMarkup(null, {
+    escapeHtml(value) {
+      return String(value || "");
+    }
+  });
+
+  assert.match(markup, /还没有可展示的账号诊断结果/);
+});
+
+test("buildXhsAccountDiagnosisModalMarkup formats subscription timestamps for display", () => {
+  const markup = buildXhsAccountDiagnosisModalMarkup(
+    {
+      result: null,
+      subscription: {
+        status: "scheduled",
+        scheduledAt: "2026-05-29T14:49:33.752Z",
+        retryCount: 0,
+        nextRetryAt: ""
+      }
+    },
+    {
+      escapeHtml(value) {
+        return String(value || "");
+      }
+    }
+  );
+
+  assert.match(markup, /2026-05-29 \d{2}:\d{2}/);
+  assert.doesNotMatch(markup, /T14:49:33\.752Z/);
 });
 
 test("getSelectedSampleLibraryAccountPlannerCard prefers explicit selection and falls back to first card", () => {

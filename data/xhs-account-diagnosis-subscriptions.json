@@ -1,0 +1,16 @@
+{
+  "items": [
+    {
+      "id": "xhs-diagnosis-4344616558-2026-05-29T15:15:14.357Z",
+      "redId": "4344616558",
+      "nickname": "六层楼",
+      "status": "scheduled",
+      "scheduledAt": "2026-05-29T15:15:14.357Z",
+      "createdAt": "2026-05-29T14:45:14.357Z",
+      "updatedAt": "2026-05-29T14:45:14.357Z",
+      "lastAttemptAt": "",
+      "lastCompletedAt": "",
+      "lastError": ""
+    }
+  ]
+}

@@ -3080,6 +3080,28 @@ body.modal-open {
   gap: 1rem;
 }
 
+.xhs-account-diagnosis {
+  display: grid;
+  gap: 1rem;
+}
+
+.xhs-account-diagnosis-modal-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.xhs-account-diagnosis .result-card-shell,
+.xhs-account-diagnosis .sample-library-account-planner-card,
+.xhs-account-diagnosis-modal-stack .result-card-shell,
+.xhs-account-diagnosis-modal-stack .sample-library-account-planner-card {
+  border-radius: 22px;
+}
+
+.xhs-account-diagnosis-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
 .sample-library-account-planner-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);

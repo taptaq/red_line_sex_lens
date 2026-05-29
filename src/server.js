@@ -19,6 +19,8 @@ import { analyzePost } from "./analyzer.js";
 import {
   loadAnalyzeTagOptions,
   loadAccountPlannerSummary,
+  loadXhsAccountDiagnosis,
+  loadXhsAccountDiagnosisSubscriptions,
   loadCollectionTypes,
   loadDraftIdeas,
   loadExternalReferenceSamples,
@@ -34,6 +36,7 @@ import {
   loadThemeInspirations,
   saveAnalyzeTagOptions,
   saveAccountPlannerSummary,
+  saveXhsAccountDiagnosis,
   saveDraftIdeas,
   saveExternalReferenceSamples,
   saveFalsePositiveLog,
@@ -85,6 +88,9 @@ import {
 } from "./theme-inspirations.js";
 import { parseAccountPlannerImportFiles } from "./account-planner-import.js";
 import { summarizeAccountPlanner } from "./account-planner.js";
+import { summarizeXhsAccountDiagnosis } from "./xhs-account-diagnosis.js";
+import { saveXhsAccountDiagnosisReportArtifacts, saveXhsMultiAccountDiagnosisReportArtifacts } from "./xhs-account-diagnosis-report.js";
+import { createXhsAccountDiagnosisSubscriptionScheduler } from "./xhs-account-diagnosis-subscriptions.js";
 import { recognizeFeedbackScreenshot, rewritePostForCompliance, suggestFeedbackCandidates, summarizeGenerationReferenceImage } from "./glm.js";
 import { summarizeGenerationReferenceAssets } from "./generation-reference-assets.js";
 import { mergeRuleAndSemanticAnalysis, runSemanticReview, runSemanticReviewComparison } from "./semantic-review.js";
@@ -512,9 +518,30 @@ function withErrorHandling(handler) {
     } catch (error) {
       sendJson(response, Number(error?.statusCode) || 500, {
         ok: false,
-        error: error instanceof Error ? error.message : "Unknown server error"
+        error: error instanceof Error ? error.message : "Unknown server error",
+        errorCode: typeof error?.code === "string" ? error.code : ""
       });
     }
+  };
+}
+
+const xhsAccountDiagnosisSubscriptionScheduler = createXhsAccountDiagnosisSubscriptionScheduler();
+
+function pickLatestXhsAccountDiagnosisSubscription(store = {}) {
+  const items = Array.isArray(store?.items) ? store.items : [];
+  return (
+    [...items].sort((left, right) => {
+      const leftTime = Date.parse(left?.updatedAt || left?.createdAt || "") || 0;
+      const rightTime = Date.parse(right?.updatedAt || right?.createdAt || "") || 0;
+      return rightTime - leftTime;
+    })[0] || null
+  );
+}
+
+function buildXhsAccountDiagnosisReportPayload() {
+  return {
+    htmlPath: "/api/xhs/account-diagnosis/report",
+    reportDataPath: "/api/xhs/account-diagnosis/report-data"
   };
 }
 
@@ -1498,6 +1525,115 @@ async function handleRequest(request, response) {
     });
   }
 
+  if (request.method === "POST" && url.pathname === "/api/xhs/account-diagnosis") {
+    const payload = await readBody(request, { maxBytes: 256 * 1024 });
+    const redId = String(payload?.redId || "").trim();
+    const redIds = Array.isArray(payload?.redIds) ? payload.redIds.map((item) => String(item || "").trim()).filter(Boolean) : [];
+
+    if (!redId && redIds.length < 2) {
+      return sendJson(response, 400, {
+        ok: false,
+        error: "请先提供小红书号。"
+      });
+    }
+
+    const generatedAt = new Date().toISOString();
+
+    if (redIds.length >= 2) {
+      const multiResult =
+        payload?.mockXhsAccountDiagnosis && typeof payload.mockXhsAccountDiagnosis === "object"
+          ? payload.mockXhsAccountDiagnosis
+          : {
+              mode: "multi",
+              accounts: await Promise.all(redIds.map((id) => summarizeXhsAccountDiagnosis({ redId: id })))
+            };
+      const comparison = multiResult.comparison || null;
+      const accounts = Array.isArray(multiResult.accounts) ? multiResult.accounts : [];
+      await saveXhsMultiAccountDiagnosisReportArtifacts(accounts, { generatedAt, comparison });
+      const persisted = await saveXhsAccountDiagnosis({
+        result: {
+          mode: "multi",
+          accounts,
+          comparison: comparison || null
+        },
+        redId: redIds.join(","),
+        generatedAt
+      });
+
+      return sendJson(response, 200, {
+        ok: true,
+        mode: "multi",
+        result: persisted.result,
+        generatedAt: persisted.generatedAt || "",
+        report: buildXhsAccountDiagnosisReportPayload()
+      });
+    }
+
+    const result =
+      payload?.mockXhsAccountDiagnosis && typeof payload.mockXhsAccountDiagnosis === "object"
+        ? payload.mockXhsAccountDiagnosis
+        : await summarizeXhsAccountDiagnosis({ redId });
+    await saveXhsAccountDiagnosisReportArtifacts(result, { generatedAt });
+    const persisted = await saveXhsAccountDiagnosis({
+      result,
+      redId,
+      generatedAt
+    });
+
+    return sendJson(response, 200, {
+      ok: true,
+      account: persisted.result?.account || null,
+      diagnosis: persisted.result?.diagnosis || null,
+      similarAccounts: persisted.result?.similarAccounts || { peer: [], benchmark: [] },
+      generatedAt: persisted.generatedAt || "",
+      report: buildXhsAccountDiagnosisReportPayload()
+    });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/xhs/account-diagnosis/subscribe") {
+    const payload = await readBody(request, { maxBytes: 128 * 1024 });
+    const redId = String(payload?.redId || "").trim();
+    const nickname = String(payload?.nickname || "").trim();
+
+    if (!redId) {
+      return sendJson(response, 400, {
+        ok: false,
+        error: "请先提供需要补采的小红书号。"
+      });
+    }
+
+    const subscription = await xhsAccountDiagnosisSubscriptionScheduler.subscribe({
+      redId,
+      nickname
+    });
+
+    return sendJson(response, 200, {
+      ok: true,
+      subscription
+    });
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/xhs/account-diagnosis") {
+    const cached = await loadXhsAccountDiagnosis();
+    const subscriptions = await loadXhsAccountDiagnosisSubscriptions();
+    return sendJson(response, 200, {
+      ok: true,
+      result: cached?.result || null,
+      redId: String(cached?.redId || "").trim(),
+      generatedAt: String(cached?.generatedAt || "").trim(),
+      subscription: pickLatestXhsAccountDiagnosisSubscription(subscriptions),
+      report: buildXhsAccountDiagnosisReportPayload()
+    });
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/xhs/account-diagnosis/report") {
+    return sendFile(response, paths.xhsAccountDiagnosisReportHtml, "text/html; charset=utf-8");
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/xhs/account-diagnosis/report-data") {
+    return sendFile(response, paths.xhsAccountDiagnosisReportData, "application/json; charset=utf-8");
+  }
+
   if (request.method === "GET" && url.pathname === "/api/sample-library/account-planner/analyze") {
     const cached = await loadAccountPlannerSummary();
     return sendJson(response, 200, {
@@ -1819,9 +1955,16 @@ const server = http.createServer(safeHandleRequest);
 const isDirectExecution = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isDirectExecution) {
-  server.listen(port, host, () => {
-    console.log(`Server running at http://${host}:${port}`);
-  });
+  xhsAccountDiagnosisSubscriptionScheduler
+    .restore()
+    .catch((error) => {
+      console.error("Failed to restore XHS diagnosis subscriptions:", error?.message || error);
+    })
+    .finally(() => {
+      server.listen(port, host, () => {
+        console.log(`Server running at http://${host}:${port}`);
+      });
+    });
 }
 
 export { server };

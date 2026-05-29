@@ -34,6 +34,16 @@ let accountPlannerSummaryCache = {
   mtimeMs: null,
   value: null
 };
+let xhsAccountDiagnosisCache = {
+  path: "",
+  mtimeMs: null,
+  value: null
+};
+let xhsAccountDiagnosisSubscriptionsCache = {
+  path: "",
+  mtimeMs: null,
+  value: null
+};
 let draftIdeasCache = {
   path: "",
   mtimeMs: null,
@@ -596,6 +606,135 @@ export async function saveAccountPlannerSummary(value) {
   const stat = await fs.stat(paths.accountPlannerSummary);
   accountPlannerSummaryCache = {
     path: paths.accountPlannerSummary,
+    mtimeMs: stat.mtimeMs,
+    value: normalized
+  };
+  return normalized;
+}
+
+export async function loadXhsAccountDiagnosis() {
+  const configuredPath = paths.xhsAccountDiagnosis;
+
+  if (await fileExists(configuredPath)) {
+    const stat = await fs.stat(configuredPath);
+
+    if (
+      xhsAccountDiagnosisCache.path === configuredPath &&
+      xhsAccountDiagnosisCache.mtimeMs === stat.mtimeMs &&
+      xhsAccountDiagnosisCache.value &&
+      typeof xhsAccountDiagnosisCache.value === "object"
+    ) {
+      return xhsAccountDiagnosisCache.value;
+    }
+
+    const value = await readJson(configuredPath, {});
+    const normalized = value && typeof value === "object" ? value : {};
+    xhsAccountDiagnosisCache = {
+      path: configuredPath,
+      mtimeMs: stat.mtimeMs,
+      value: normalized
+    };
+    return normalized;
+  }
+
+  if (
+    xhsAccountDiagnosisCache.path === configuredPath &&
+    xhsAccountDiagnosisCache.mtimeMs === null &&
+    xhsAccountDiagnosisCache.value &&
+    typeof xhsAccountDiagnosisCache.value === "object"
+  ) {
+    return xhsAccountDiagnosisCache.value;
+  }
+
+  const fallback = {};
+  xhsAccountDiagnosisCache = {
+    path: configuredPath,
+    mtimeMs: null,
+    value: fallback
+  };
+  return fallback;
+}
+
+export async function saveXhsAccountDiagnosis(value) {
+  const normalized = value && typeof value === "object" ? value : {};
+  await writeJson(paths.xhsAccountDiagnosis, normalized);
+  const stat = await fs.stat(paths.xhsAccountDiagnosis);
+  xhsAccountDiagnosisCache = {
+    path: paths.xhsAccountDiagnosis,
+    mtimeMs: stat.mtimeMs,
+    value: normalized
+  };
+  return normalized;
+}
+
+function normalizeXhsAccountDiagnosisSubscriptionsStore(value = {}) {
+  const items = Array.isArray(value?.items) ? value.items : [];
+  return {
+    items: items
+      .map((item) => ({
+        id: normalizeString(item?.id),
+        redId: normalizeString(item?.redId),
+        nickname: normalizeString(item?.nickname),
+        status: normalizeString(item?.status) || "scheduled",
+        scheduledAt: normalizeString(item?.scheduledAt),
+        createdAt: normalizeString(item?.createdAt),
+        updatedAt: normalizeString(item?.updatedAt),
+        lastAttemptAt: normalizeString(item?.lastAttemptAt),
+        lastCompletedAt: normalizeString(item?.lastCompletedAt),
+        lastError: normalizeString(item?.lastError)
+      }))
+      .filter((item) => item.id && item.redId)
+  };
+}
+
+export async function loadXhsAccountDiagnosisSubscriptions() {
+  const configuredPath = paths.xhsAccountDiagnosisSubscriptions;
+
+  if (await fileExists(configuredPath)) {
+    const stat = await fs.stat(configuredPath);
+
+    if (
+      xhsAccountDiagnosisSubscriptionsCache.path === configuredPath &&
+      xhsAccountDiagnosisSubscriptionsCache.mtimeMs === stat.mtimeMs &&
+      xhsAccountDiagnosisSubscriptionsCache.value &&
+      typeof xhsAccountDiagnosisSubscriptionsCache.value === "object"
+    ) {
+      return xhsAccountDiagnosisSubscriptionsCache.value;
+    }
+
+    const value = normalizeXhsAccountDiagnosisSubscriptionsStore(await readJson(configuredPath, { items: [] }));
+    xhsAccountDiagnosisSubscriptionsCache = {
+      path: configuredPath,
+      mtimeMs: stat.mtimeMs,
+      value
+    };
+    return value;
+  }
+
+  if (
+    xhsAccountDiagnosisSubscriptionsCache.path === configuredPath &&
+    xhsAccountDiagnosisSubscriptionsCache.mtimeMs === null &&
+    xhsAccountDiagnosisSubscriptionsCache.value &&
+    typeof xhsAccountDiagnosisSubscriptionsCache.value === "object"
+  ) {
+    return xhsAccountDiagnosisSubscriptionsCache.value;
+  }
+
+  const fallback = { items: [] };
+  xhsAccountDiagnosisSubscriptionsCache = {
+    path: configuredPath,
+    mtimeMs: null,
+    value: fallback
+  };
+  return fallback;
+}
+
+export async function saveXhsAccountDiagnosisSubscriptions(value) {
+  const normalized = normalizeXhsAccountDiagnosisSubscriptionsStore(value);
+  await writeJson(paths.xhsAccountDiagnosisSubscriptions, normalized);
+  const stat = await fs.stat(paths.xhsAccountDiagnosisSubscriptions);
+  xhsAccountDiagnosisSubscriptionsCache = {
+    path: paths.xhsAccountDiagnosisSubscriptions,
     mtimeMs: stat.mtimeMs,
     value: normalized
   };

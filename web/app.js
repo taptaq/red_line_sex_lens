@@ -46,6 +46,7 @@ import {
   renderSampleLibraryAccountPlannerResult as renderSampleLibraryAccountPlannerResultView,
   renderSampleLibraryExternalSamplesModal as renderSampleLibraryExternalSamplesModalView
 } from "./account-planner-view.js";
+import { buildXhsAccountDiagnosisModalMarkup as buildXhsAccountDiagnosisModalMarkupView } from "./xhs-account-diagnosis-view.js";
 import { renderDraftIdeasList as renderDraftIdeasListView } from "./draft-ideas-view.js";
 import {
   buildSampleLibraryRecordCardMarkup as buildSampleLibraryRecordCardMarkupView,
@@ -859,6 +860,17 @@ const appState = {
     cards: [],
     selectedPlanId: ""
   },
+  xhsAccountDiagnosis: {
+    loading: false,
+    message: "",
+    result: null,
+    generatedAt: "",
+    currentRunResult: null,
+    currentRunGeneratedAt: "",
+    subscription: null,
+    canSubscribe: false,
+    report: null
+  },
   draftIdeas: {
     loading: false,
     message: "",
@@ -944,6 +956,7 @@ const sampleLibraryCalibrationReplayApi = "/api/sample-library/calibration-repla
 const sampleLibraryExternalSamplesApi = "/api/sample-library/external-reference-samples";
 const sampleLibraryAccountPlannerParseApi = "/api/sample-library/account-planner/parse";
 const sampleLibraryAccountPlannerAnalyzeApi = "/api/sample-library/account-planner/analyze";
+const xhsAccountDiagnosisApi = "/api/xhs/account-diagnosis";
 const draftIdeasApi = "/api/draft-ideas";
 const innerSpaceTermsApi = "/api/admin/inner-space-terms";
 const styleProfileAdminApi = "/api/admin/style-profile";
@@ -1095,6 +1108,61 @@ function setSampleLibraryModalMessage(message = "") {
   if (resultNode) {
     resultNode.textContent = String(message || "").trim();
   }
+}
+
+function formatUiDateTime(value = "") {
+  const text = String(value || "").trim();
+
+  if (!text) {
+    return "";
+  }
+
+  const timestamp = Date.parse(text);
+
+  if (!Number.isFinite(timestamp)) {
+    return text;
+  }
+
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
+function openXhsAccountDiagnosisModal({ message = "", useLatestStoredResult = true } = {}) {
+  appState.sampleLibraryModal = {
+    kind: "xhs-account-diagnosis"
+  };
+
+  const result = useLatestStoredResult ? appState.xhsAccountDiagnosis?.result || null : appState.xhsAccountDiagnosis?.currentRunResult || null;
+  const generatedAt = useLatestStoredResult
+    ? appState.xhsAccountDiagnosis?.generatedAt || ""
+    : appState.xhsAccountDiagnosis?.currentRunGeneratedAt || "";
+
+  renderSampleLibraryModal({
+    title: "小红书账号现状与对标账号",
+    subtitle: generatedAt ? `展示当前分析结果 · ${formatUiDateTime(generatedAt)}` : "展示当前分析结果。",
+    body: buildXhsAccountDiagnosisModalMarkupView(
+      {
+        result,
+        subscription: appState.xhsAccountDiagnosis?.subscription || null,
+        message,
+        canSubscribe: appState.xhsAccountDiagnosis?.canSubscribe === true,
+        report: appState.xhsAccountDiagnosis?.report || null
+      },
+      {
+        escapeHtml
+      }
+    ),
+    hideSaveButton: true,
+    hideCancelButton: true,
+    cancelLabel: "关闭"
+  });
+  setSampleLibraryModalMessage("");
 }
 
 function setSampleLibraryPoolsModalOpen(isOpen) {
@@ -1839,7 +1907,17 @@ async function readJson(response) {
   }
 
   if (!response.ok) {
-    throw new Error(payload?.error || "请求失败");
+    const errorMessage =
+      payload?.error ||
+      payload?.message ||
+      (payload && typeof payload === "object" ? JSON.stringify(payload) : "") ||
+      raw ||
+      "请求失败";
+    const error = new Error(errorMessage);
+    if (typeof payload?.errorCode === "string" && payload.errorCode.trim()) {
+      error.code = payload.errorCode.trim();
+    }
+    throw error;
   }
 
   return payload;
@@ -5293,6 +5371,8 @@ async function refreshAll() {
   const summaryPhase = hasExistingSummary ? "refresh" : "initial";
   const refreshAccountPlannerSafely =
     typeof refreshSampleLibraryAccountPlannerState === "function" ? refreshSampleLibraryAccountPlannerState : async () => {};
+  const refreshXhsAccountDiagnosisSafely =
+    typeof refreshXhsAccountDiagnosisState === "function" ? refreshXhsAccountDiagnosisState : async () => {};
   const refreshDraftIdeasSafely = typeof refreshDraftIdeas === "function" ? refreshDraftIdeas : async () => {};
 
   setSummaryLoadingState(summaryPhase);
@@ -5307,6 +5387,7 @@ async function refreshAll() {
     refreshAdminDataState(),
     refreshSampleLibraryWorkspace(),
     refreshAccountPlannerSafely(),
+    refreshXhsAccountDiagnosisSafely(),
     refreshDraftIdeasSafely()
   ]);
   appState.collectionTypeOptions = Array.isArray(collectionTypePayload.options) ? collectionTypePayload.options : [];
@@ -5708,6 +5789,15 @@ function syncSampleLibraryAccountPlannerPanel() {
   renderSampleLibraryAccountPlannerResult();
 }
 
+function syncXhsAccountDiagnosisPanel() {
+  const latestButton = byId("xhs-account-diagnosis-open-latest");
+
+  if (latestButton) {
+    latestButton.disabled = !appState.xhsAccountDiagnosis?.result;
+    latestButton.title = appState.xhsAccountDiagnosis?.result ? "" : "还没有已保存的分析结果";
+  }
+}
+
 async function refreshDraftIdeas() {
   try {
     const payload = await apiJson(draftIdeasApi);
@@ -5747,6 +5837,32 @@ async function refreshSampleLibraryAccountPlannerState() {
 
   syncSampleLibraryAccountPlannerPanel();
   return appState.sampleLibraryAccountPlanner;
+}
+
+async function refreshXhsAccountDiagnosisState() {
+  try {
+    const payload = await apiJson(xhsAccountDiagnosisApi);
+    appState.xhsAccountDiagnosis = {
+      ...appState.xhsAccountDiagnosis,
+      loading: false,
+      message: "",
+      currentRunResult: null,
+      currentRunGeneratedAt: "",
+      result: payload?.result || null,
+      generatedAt: String(payload?.generatedAt || "").trim(),
+      subscription: payload?.subscription && typeof payload.subscription === "object" ? payload.subscription : null,
+      canSubscribe: false,
+      report: payload?.report && typeof payload.report === "object" ? payload.report : null
+    };
+  } catch {
+    appState.xhsAccountDiagnosis = {
+      ...appState.xhsAccountDiagnosis,
+      loading: false
+    };
+  }
+
+  syncXhsAccountDiagnosisPanel();
+  return appState.xhsAccountDiagnosis;
 }
 
 async function refreshExternalReferenceSamples({ openModal = false, message = "" } = {}) {
@@ -6612,6 +6728,129 @@ async function runSampleLibraryAccountPlannerAnalysis() {
     setButtonBusy(runButton, false);
     syncSampleLibraryAccountPlannerPanel();
   }
+}
+
+function buildXhsAccountDiagnosisRequestPayload({ forcedRedId = "" } = {}) {
+  const singleRedId = String(forcedRedId || byId("xhs-account-diagnosis-red-id")?.value || "").trim();
+  const multipleRedIds = String(byId("xhs-account-diagnosis-red-ids")?.value || "")
+    .split(/[，,\s]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (multipleRedIds.length >= 2 && !forcedRedId) {
+    return {
+      redIds: multipleRedIds
+    };
+  }
+
+  return {
+    redId: singleRedId
+  };
+}
+
+async function runXhsAccountDiagnosisAnalysis({ forcedRedId = "" } = {}) {
+  const runButton = byId("xhs-account-diagnosis-run");
+  const payload = buildXhsAccountDiagnosisRequestPayload({ forcedRedId });
+  const redId = String(payload?.redId || "").trim();
+  const redIds = Array.isArray(payload?.redIds) ? payload.redIds : [];
+
+  if (!redId && redIds.length < 2) {
+    openXhsAccountDiagnosisModal({ message: "请先填写小红书号，或输入至少 2 个小红书号做对比。" });
+    return;
+  }
+
+  appState.xhsAccountDiagnosis = {
+    ...appState.xhsAccountDiagnosis,
+    loading: true,
+    message: "",
+    canSubscribe: false
+  };
+  setButtonBusy(runButton, true, "分析中...");
+
+  try {
+    const response = await apiJson(xhsAccountDiagnosisApi, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+
+    appState.xhsAccountDiagnosis = {
+      ...appState.xhsAccountDiagnosis,
+      loading: false,
+      message: "",
+      currentRunResult:
+        response?.mode === "multi"
+          ? response?.result || null
+          : {
+              account: response.account || null,
+              diagnosis: response.diagnosis || null,
+              similarAccounts: response.similarAccounts || { peer: [], benchmark: [] }
+            },
+      currentRunGeneratedAt: String(response.generatedAt || "").trim(),
+      result:
+        response?.mode === "multi"
+          ? response?.result || null
+          : {
+              account: response.account || null,
+              diagnosis: response.diagnosis || null,
+              similarAccounts: response.similarAccounts || { peer: [], benchmark: [] }
+            },
+      generatedAt: String(response.generatedAt || "").trim(),
+      canSubscribe: false,
+      report: response?.report && typeof response.report === "object" ? response.report : null
+    };
+    syncXhsAccountDiagnosisPanel();
+    openXhsAccountDiagnosisModal({ useLatestStoredResult: false });
+  } catch (error) {
+    await refreshXhsAccountDiagnosisState();
+    appState.xhsAccountDiagnosis = {
+      ...appState.xhsAccountDiagnosis,
+      loading: false,
+      message: error?.message || "账号诊断失败",
+      currentRunResult: null,
+      currentRunGeneratedAt: "",
+      canSubscribe: error?.code === "XHS_ACCOUNT_NOT_FOUND"
+    };
+    syncXhsAccountDiagnosisPanel();
+    openXhsAccountDiagnosisModal({ message: appState.xhsAccountDiagnosis.message, useLatestStoredResult: false });
+  } finally {
+    setButtonBusy(runButton, false);
+  }
+}
+
+async function followSimilarXhsAccountDiagnosis(redId = "") {
+  const normalizedId = String(redId || "").trim();
+
+  if (!normalizedId) {
+    return;
+  }
+
+  writeGenerationFieldValue(byId("xhs-account-diagnosis-red-id"), normalizedId);
+  await runXhsAccountDiagnosisAnalysis({ forcedRedId: normalizedId });
+}
+
+async function subscribeXhsAccountDiagnosisSync() {
+  const redId =
+    String(byId("xhs-account-diagnosis-red-id")?.value || "").trim() ||
+    String(appState.xhsAccountDiagnosis?.result?.account?.redId || "").trim();
+  const nickname = String(appState.xhsAccountDiagnosis?.result?.account?.nickname || "").trim();
+
+  if (!redId) {
+    openXhsAccountDiagnosisModal({ message: "当前没有可订阅补采的小红书号。" });
+    return;
+  }
+
+  const response = await apiJson(`${xhsAccountDiagnosisApi}/subscribe`, {
+    method: "POST",
+    body: JSON.stringify({ redId, nickname })
+  });
+
+  appState.xhsAccountDiagnosis = {
+    ...appState.xhsAccountDiagnosis,
+    subscription: response?.subscription || null,
+    canSubscribe: false
+  };
+  syncXhsAccountDiagnosisPanel();
+  openXhsAccountDiagnosisModal({ message: "已订阅补采，系统会在 30 分钟后自动重查并更新最近报告。" });
 }
 
 function readSampleLibraryImportDraftReference(item = {}) {
@@ -10183,6 +10422,18 @@ byId("sample-library-account-planner-run")?.addEventListener("click", async () =
   await runSampleLibraryAccountPlannerAnalysis();
 });
 
+byId("xhs-account-diagnosis-run")?.addEventListener("click", async () => {
+  await runXhsAccountDiagnosisAnalysis();
+});
+
+byId("xhs-account-diagnosis-open-latest")?.addEventListener("click", async () => {
+  await refreshXhsAccountDiagnosisState();
+  openXhsAccountDiagnosisModal({
+    message: appState.xhsAccountDiagnosis?.result ? "" : "还没有已保存的账号诊断结果。",
+    useLatestStoredResult: true
+  });
+});
+
 byId("sample-library-collection-filter")?.addEventListener("change", (event) => {
   appState.sampleLibraryCollectionFilter = String(event.currentTarget.value || "all");
   renderSampleLibraryWorkspace();
@@ -10617,6 +10868,16 @@ document.addEventListener("click", async (event) => {
 
   if (action === "close-sample-library-modal") {
     requestCloseSampleLibraryRecordInlineEditorModal();
+    return;
+  }
+
+  if (action === "subscribe-xhs-account-diagnosis-sync") {
+    await subscribeXhsAccountDiagnosisSync();
+    return;
+  }
+
+  if (action === "follow-similar-xhs-account-diagnosis") {
+    await followSimilarXhsAccountDiagnosis(button.dataset.redId || "");
     return;
   }
 

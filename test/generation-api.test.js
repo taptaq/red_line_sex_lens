@@ -18,6 +18,10 @@ async function withTempGenerationData(t, run) {
     successSamples: paths.successSamples,
     styleProfile: paths.styleProfile,
     themeInspirations: paths.themeInspirations,
+    xhsAccountDiagnosis: paths.xhsAccountDiagnosis,
+    xhsAccountDiagnosisSubscriptions: paths.xhsAccountDiagnosisSubscriptions,
+    xhsAccountDiagnosisReportData: paths.xhsAccountDiagnosisReportData,
+    xhsAccountDiagnosisReportHtml: paths.xhsAccountDiagnosisReportHtml,
     externalReferenceSamples: paths.externalReferenceSamples,
     memoryRoot: paths.memoryRoot,
     memoryDocuments: paths.memoryDocuments,
@@ -29,6 +33,10 @@ async function withTempGenerationData(t, run) {
   paths.successSamples = path.join(tempDir, "success-samples.json");
   paths.styleProfile = path.join(tempDir, "style-profile.json");
   paths.themeInspirations = path.join(tempDir, "theme-inspirations.json");
+  paths.xhsAccountDiagnosis = path.join(tempDir, "xhs-account-diagnosis.json");
+  paths.xhsAccountDiagnosisSubscriptions = path.join(tempDir, "xhs-account-diagnosis-subscriptions.json");
+  paths.xhsAccountDiagnosisReportData = path.join(tempDir, "xhs-account-diagnosis-report-data.json");
+  paths.xhsAccountDiagnosisReportHtml = path.join(tempDir, "xhs-account-diagnosis-report.html");
   paths.externalReferenceSamples = path.join(tempDir, "external-reference-samples.json");
   paths.memoryRoot = path.join(tempDir, "memory");
   paths.memoryDocuments = path.join(paths.memoryRoot, "documents.jsonl");
@@ -678,6 +686,141 @@ test("account planner analyze endpoint still returns fallback cards when only pu
     assert.equal(result.cards.length > 0, true);
     assert.equal(result.diagnostics.cardCount > 0, true);
     assert.match(result.cards[0].prefillBriefing, /关系沟通|边界表达|怎么理解/);
+  });
+});
+
+test("xhs account diagnosis endpoint returns normalized diagnosis and similar accounts", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const result = await invokeRoute("POST", "/api/xhs/account-diagnosis", {
+      redId: "26112666886",
+      mockXhsAccountDiagnosis: {
+        account: {
+          redId: "26112666886",
+          nickname: "测试号",
+          desc: "主页简介",
+          metrics: {
+            fans: 12000,
+            liked: 217035,
+            collected: 24745,
+            noteCountThirty: 12,
+            interactiveCountThirty: 133547
+          }
+        },
+        diagnosis: {
+          score: 78,
+          summary: "近30天互动强，适合继续放大稳定选题。",
+          strengths: ["互动规模稳定", "近30天有持续更新"],
+          risks: ["封面风格还不够统一"],
+          nextActions: ["先继续放大高互动选题", "补一个同阶对标观察位"]
+        },
+        similarAccounts: {
+          peer: [{ redId: "peer-1", nickname: "同阶号" }],
+          benchmark: [{ redId: "benchmark-1", nickname: "高阶号" }]
+        }
+      }
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.equal(result.account.nickname, "测试号");
+    assert.equal(result.diagnosis.score, 78);
+    assert.match(result.diagnosis.summary, /近30天互动强/);
+    assert.equal(result.similarAccounts.peer.length, 1);
+    assert.equal(result.similarAccounts.benchmark.length, 1);
+    assert.equal(typeof result.report?.htmlPath, "string");
+    assert.equal(typeof result.report?.reportDataPath, "string");
+
+    const loaded = await invokeRoute("GET", "/api/xhs/account-diagnosis");
+    assert.equal(loaded.status, 200);
+    assert.equal(loaded.ok, true);
+    assert.equal(loaded.result.account.nickname, "测试号");
+    assert.equal(loaded.result.diagnosis.score, 78);
+    assert.equal(typeof loaded.report?.htmlPath, "string");
+    assert.equal(typeof loaded.report?.reportDataPath, "string");
+
+    const reportHtml = await invokeRouteRaw("GET", "/api/xhs/account-diagnosis/report");
+    assert.equal(reportHtml.status, 200);
+    assert.match(reportHtml.body, /账号诊断报告|测试号/);
+  });
+});
+
+test("xhs account diagnosis subscription endpoint persists a retry task", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const result = await invokeRoute("POST", "/api/xhs/account-diagnosis/subscribe", {
+      redId: "4344616558",
+      nickname: "内太空的X"
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.equal(result.subscription.redId, "4344616558");
+    assert.equal(result.subscription.status, "scheduled");
+
+    const loaded = await invokeRoute("GET", "/api/xhs/account-diagnosis");
+    assert.equal(loaded.status, 200);
+    assert.equal(loaded.ok, true);
+    assert.equal(loaded.subscription.redId, "4344616558");
+    assert.equal(loaded.subscription.status, "scheduled");
+  });
+});
+
+test("xhs account diagnosis endpoint supports multi-account comparison", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const result = await invokeRoute("POST", "/api/xhs/account-diagnosis", {
+      redIds: ["id-1", "id-2"],
+      mockXhsAccountDiagnosis: {
+        mode: "multi",
+        accounts: [
+          {
+            account: {
+              redId: "id-1",
+              nickname: "账号A",
+              desc: "A简介",
+              metrics: { fans: 12000, liked: 50000, collected: 8000, noteCountThirty: 10, interactiveCountThirty: 15000 }
+            },
+            diagnosis: {
+              score: 76,
+              summary: "A 账号更稳。",
+              strengths: ["更新稳定"],
+              risks: ["封面还可以再统一"],
+              nextActions: ["继续放大A的稳定切口"]
+            },
+            similarAccounts: { peer: [], benchmark: [] }
+          },
+          {
+            account: {
+              redId: "id-2",
+              nickname: "账号B",
+              desc: "B简介",
+              metrics: { fans: 8000, liked: 22000, collected: 4000, noteCountThirty: 6, interactiveCountThirty: 7000 }
+            },
+            diagnosis: {
+              score: 62,
+              summary: "B 账号还在补稳定性。",
+              strengths: ["有初步内容信号"],
+              risks: ["近30天样本偏少"],
+              nextActions: ["先把更新节奏稳定下来"]
+            },
+            similarAccounts: { peer: [], benchmark: [] }
+          }
+        ],
+        comparison: {
+          核心差异: [{ 账号名: "账号A", 内容: "A更新更稳定" }, { 账号名: "账号B", 内容: "B还在起量" }],
+          共同问题: ["都还可以继续强化封面和标题一致性"],
+          发展建议: [{ 账号名: "账号A", 内容: "继续做强优势" }, { 账号名: "账号B", 内容: "先补节奏" }]
+        }
+      }
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.equal(result.mode, "multi");
+    assert.equal(result.result.accounts.length, 2);
+    assert.match(result.result.comparison.共同问题[0], /封面/);
+
+    const reportHtml = await invokeRouteRaw("GET", "/api/xhs/account-diagnosis/report");
+    assert.equal(reportHtml.status, 200);
+    assert.match(reportHtml.body, /多账号对比诊断报告|账号A/);
   });
 });
 
@@ -1454,4 +1597,32 @@ async function invokeRoute(method, pathname, body = null) {
     status: response.status,
     ...(response.body ? JSON.parse(response.body) : {})
   };
+}
+
+async function invokeRouteRaw(method, pathname, body = null) {
+  const request = new EventEmitter();
+  request.method = method;
+  request.url = pathname;
+  request.headers = { host: "127.0.0.1" };
+
+  const response = {
+    status: 0,
+    headers: {},
+    body: "",
+    writeHead(statusCode, headers = {}) {
+      this.status = statusCode;
+      this.headers = headers;
+    },
+    end(chunk = "") {
+      this.body += Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk || "");
+    }
+  };
+
+  queueMicrotask(() => {
+    if (body !== null) request.emit("data", Buffer.from(JSON.stringify(body)));
+    request.emit("end");
+  });
+
+  await safeHandleRequest(request, response);
+  return response;
 }

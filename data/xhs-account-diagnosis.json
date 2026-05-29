@@ -1,0 +1,484 @@
+{
+  "result": {
+    "account": {
+      "redId": "855409667",
+      "nickname": "六层楼",
+      "desc": "您所发的私信咨询有可能会打码处理后公开回复，以此帮助更多有类似处境的人，望知晓。\n\n我是六层楼，我爱这个世界。",
+      "avatar": "",
+      "userAttribute": "头部kol",
+      "level": "金冠薯",
+      "topAges": "25-34",
+      "topProvinces": "广东",
+      "url": "https://www.xiaohongshu.com/user/profile/5f3b8c2800000000010032eb",
+      "fansGender": {
+        "male_ratio": 0.04976580636537481,
+        "female_ratio": 0.9502341936346252
+      },
+      "metrics": {
+        "fans": 860743,
+        "liked": 2741800,
+        "collected": 607369,
+        "totalWork": 1289,
+        "noteCountThirty": 17,
+        "interactiveCountThirty": 73463,
+        "recentIndex": 762.27
+      },
+      "works": [
+        {
+          "id": "6a17c19900000000370349ce",
+          "title": "无论是否婚育，这都是女性一生之痛！",
+          "likedCount": 811,
+          "collectedCount": 257,
+          "workUrl": "https://www.xiaohongshu.com/explore/6a17c19900000000370349ce"
+        },
+        {
+          "id": "6a179c29000000003700c33a",
+          "title": "老娘绝不能掉进同一个坑！",
+          "likedCount": 1445,
+          "collectedCount": 180,
+          "workUrl": "https://www.xiaohongshu.com/explore/6a179c29000000003700c33a"
+        },
+        {
+          "id": "6a144558000000003502500b",
+          "title": "运动真的是经期禁忌吗？",
+          "likedCount": 2003,
+          "collectedCount": 305,
+          "workUrl": "https://www.xiaohongshu.com/explore/6a144558000000003502500b"
+        },
+        {
+          "id": "6a0ee69d0000000038022cd2",
+          "title": "卵巢没电了，怎么办？",
+          "likedCount": 2567,
+          "collectedCount": 1884,
+          "workUrl": "https://www.xiaohongshu.com/explore/6a0ee69d0000000038022cd2"
+        }
+      ],
+      "_raw": {
+        "accountAvgList": [
+          {
+            "fansType": "0-5K",
+            "name": "总点赞数中位数",
+            "value": "362.61"
+          },
+          {
+            "fansType": "0-5K",
+            "name": "总收藏数中位数",
+            "value": "117.75"
+          },
+          {
+            "fansType": "0-5K",
+            "name": "近30天发作品数中位数",
+            "value": "3.00"
+          },
+          {
+            "fansType": "0-5K",
+            "name": "近30天作品互动量中位数",
+            "value": "71.65"
+          },
+          {
+            "fansType": "0-5K",
+            "name": "作品总数中位数",
+            "value": "16.73"
+          },
+          {
+            "fansType": "5K-5w",
+            "name": "作品总数中位数",
+            "value": "120.30"
+          },
+          {
+            "fansType": "5K-5w",
+            "name": "总点赞数中位数",
+            "value": "41604.23"
+          },
+          {
+            "fansType": "5K-5w",
+            "name": "总收藏数中位数",
+            "value": "16201.18"
+          },
+          {
+            "fansType": "5K-5w",
+            "name": "近30天发作品数中位数",
+            "value": "6.00"
+          },
+          {
+            "fansType": "5K-5w",
+            "name": "近30天作品互动量中位数",
+            "value": "483.50"
+          },
+          {
+            "fansType": "5w-50w",
+            "name": "作品总数中位数",
+            "value": "245.56"
+          },
+          {
+            "fansType": "5w-50w",
+            "name": "近30天作品互动量中位数",
+            "value": "3797.60"
+          },
+          {
+            "fansType": "5w-50w",
+            "name": "近30天发作品数中位数",
+            "value": "7.00"
+          },
+          {
+            "fansType": "5w-50w",
+            "name": "总收藏数中位数",
+            "value": "148994.22"
+          },
+          {
+            "fansType": "5w-50w",
+            "name": "总点赞数中位数",
+            "value": "398278.10"
+          },
+          {
+            "fansType": ">50w",
+            "name": "作品总数中位数",
+            "value": "428.73"
+          },
+          {
+            "fansType": ">50w",
+            "name": "总点赞数中位数",
+            "value": "4371187.20"
+          },
+          {
+            "fansType": ">50w",
+            "name": "总收藏数中位数",
+            "value": "1295796.82"
+          },
+          {
+            "fansType": ">50w",
+            "name": "近30天发作品数中位数",
+            "value": "7.00"
+          },
+          {
+            "fansType": ">50w",
+            "name": "近30天作品互动量中位数",
+            "value": "33700.54"
+          }
+        ],
+        "accountExcellentList": [
+          {
+            "fansType": "0-5K",
+            "name": "总点赞数中位数",
+            "value": "31087.00"
+          },
+          {
+            "fansType": "0-5K",
+            "name": "总收藏数中位数",
+            "value": "7368.00"
+          },
+          {
+            "fansType": "0-5K",
+            "name": "近30天发作品数中位数",
+            "value": "12.00"
+          },
+          {
+            "fansType": "0-5K",
+            "name": "近30天作品互动量中位数",
+            "value": "38878.00"
+          },
+          {
+            "fansType": "0-5K",
+            "name": "作品总数中位数",
+            "value": "23.00"
+          },
+          {
+            "fansType": "5K-5w",
+            "name": "作品总数中位数",
+            "value": "136.50"
+          },
+          {
+            "fansType": "5K-5w",
+            "name": "总点赞数中位数",
+            "value": "329082.00"
+          },
+          {
+            "fansType": "5K-5w",
+            "name": "总收藏数中位数",
+            "value": "82391.50"
+          },
+          {
+            "fansType": "5K-5w",
+            "name": "近30天发作品数中位数",
+            "value": "24.00"
+          },
+          {
+            "fansType": "5K-5w",
+            "name": "近30天作品互动量中位数",
+            "value": "124263.00"
+          },
+          {
+            "fansType": "5w-50w",
+            "name": "作品总数中位数",
+            "value": "284.50"
+          },
+          {
+            "fansType": "5w-50w",
+            "name": "近30天作品互动量中位数",
+            "value": "254721.50"
+          },
+          {
+            "fansType": "5w-50w",
+            "name": "近30天发作品数中位数",
+            "value": "19.00"
+          },
+          {
+            "fansType": "5w-50w",
+            "name": "总收藏数中位数",
+            "value": "481938.50"
+          },
+          {
+            "fansType": "5w-50w",
+            "name": "总点赞数中位数",
+            "value": "2381874.00"
+          },
+          {
+            "fansType": ">50w",
+            "name": "作品总数中位数",
+            "value": "485.50"
+          },
+          {
+            "fansType": ">50w",
+            "name": "总点赞数中位数",
+            "value": "7763569.00"
+          },
+          {
+            "fansType": ">50w",
+            "name": "总收藏数中位数",
+            "value": "1654083.00"
+          },
+          {
+            "fansType": ">50w",
+            "name": "近30天发作品数中位数",
+            "value": "12.00"
+          },
+          {
+            "fansType": ">50w",
+            "name": "近30天作品互动量中位数",
+            "value": "251250.50"
+          }
+        ],
+        "avatar": null,
+        "collected": 607369,
+        "desc": "您所发的私信咨询有可能会打码处理后公开回复，以此帮助更多有类似处境的人，望知晓。\n\n我是六层楼，我爱这个世界。",
+        "fans": 860743,
+        "fansGender": {
+          "male_ratio": 0.04976580636537481,
+          "female_ratio": 0.9502341936346252
+        },
+        "gmtCreate": "2026-05-13 09:44:50",
+        "interactiveCountThirty": 73463,
+        "level": "金冠薯",
+        "liked": 2741800,
+        "nickname": "六层楼",
+        "noteCountThirty": 17,
+        "recentIndex": 762.27,
+        "redId": "855409667",
+        "similarAccounts": [
+          {
+            "avatar": null,
+            "collected": 13649613,
+            "fans": 1971289,
+            "fansGender": {
+              "male_ratio": 0.1664451093466793,
+              "female_ratio": 0.8335548906533207
+            },
+            "interactiveCountThirty": 241185,
+            "level": 0,
+            "liked": 16733102,
+            "nickname": "复旦博士Dr.Lim",
+            "noteCountThirty": 19,
+            "recentIndex": 903,
+            "redId": "4259763711",
+            "topAges": "25-34",
+            "topProvinces": "广东",
+            "totalWork": 550,
+            "url": "https://www.xiaohongshu.com/user/profile/6188c711000000001000c969",
+            "userAttribute": "头部kol"
+          },
+          {
+            "avatar": null,
+            "collected": 1792325,
+            "fans": 705619,
+            "fansGender": {
+              "male_ratio": 0.13860333333333333,
+              "female_ratio": 0.8613966666666666
+            },
+            "interactiveCountThirty": 530051,
+            "level": 0,
+            "liked": 2890708,
+            "nickname": "浙大邵逸夫医院骨科徐文斌",
+            "noteCountThirty": 31,
+            "recentIndex": 889.01,
+            "redId": "776959671",
+            "topAges": "25-34",
+            "topProvinces": "广东",
+            "totalWork": 821,
+            "url": "https://www.xiaohongshu.com/user/profile/5d18291d000000001102711f",
+            "userAttribute": "头部kol"
+          },
+          {
+            "avatar": null,
+            "collected": 6319260,
+            "fans": 2357486,
+            "fansGender": {
+              "male_ratio": 0.12102144700725144,
+              "female_ratio": 0.8789785529927485
+            },
+            "interactiveCountThirty": 325514,
+            "level": 0,
+            "liked": 15323712,
+            "nickname": "医路向前巍子",
+            "noteCountThirty": 28,
+            "recentIndex": 863.88,
+            "redId": "443410199",
+            "topAges": "35-44",
+            "topProvinces": "广东",
+            "totalWork": 2621,
+            "url": "https://www.xiaohongshu.com/user/profile/5e11deca0000000001003a75",
+            "userAttribute": "头部kol"
+          },
+          {
+            "avatar": null,
+            "collected": 3104390,
+            "fans": 515888,
+            "fansGender": {
+              "male_ratio": 0.19596343633716223,
+              "female_ratio": 0.8040365636628377
+            },
+            "interactiveCountThirty": 91916,
+            "level": 0,
+            "liked": 4221662,
+            "nickname": "Angel的博士妈妈杨琴",
+            "noteCountThirty": 12,
+            "recentIndex": 809.39,
+            "redId": "5405751798",
+            "topAges": "<18",
+            "topProvinces": "广东",
+            "totalWork": 273,
+            "url": "https://www.xiaohongshu.com/user/profile/637710940000000024017bad",
+            "userAttribute": "头部kol"
+          },
+          {
+            "avatar": null,
+            "collected": 758372,
+            "fans": 803070,
+            "fansGender": {
+              "male_ratio": 0.29222801685901806,
+              "female_ratio": 0.707771983140982
+            },
+            "interactiveCountThirty": 98747,
+            "level": 0,
+            "liked": 1704732,
+            "nickname": "尹烨",
+            "noteCountThirty": 65,
+            "recentIndex": 809.12,
+            "redId": "1155523636",
+            "topAges": "35-44",
+            "topProvinces": "广东",
+            "totalWork": 2569,
+            "url": "https://www.xiaohongshu.com/user/profile/60c9a4c9000000000100b2ac",
+            "userAttribute": "头部kol"
+          },
+          {
+            "avatar": null,
+            "collected": 1771618,
+            "fans": 980813,
+            "fansGender": {
+              "male_ratio": 0.1596770587443287,
+              "female_ratio": 0.8403229412556713
+            },
+            "interactiveCountThirty": 109754,
+            "level": 0,
+            "liked": 3237369,
+            "nickname": "Jojo医生",
+            "noteCountThirty": 25,
+            "recentIndex": 767.4,
+            "redId": "jojosunyi",
+            "topAges": "35-44",
+            "topProvinces": "广东",
+            "totalWork": 2236,
+            "url": "https://www.xiaohongshu.com/user/profile/5655a2c6f53ee02cea96fb0f",
+            "userAttribute": "头部kol"
+          }
+        ],
+        "topAges": "25-34",
+        "topProvinces": "广东",
+        "totalWork": 1289,
+        "url": "https://www.xiaohongshu.com/user/profile/5f3b8c2800000000010032eb",
+        "userAttribute": "头部kol",
+        "works": [
+          {
+            "collectedCount": 257,
+            "cover": "http://sns-img-hw.xhscdn.net/spectrum/1040g0k0320mrcruflk005nprhgk08cnbfcohkjo?imageView2/2/w/1080/format/webp",
+            "createTime": "2026-05-28 12:16:25",
+            "desc": null,
+            "id": "6a17c19900000000370349ce",
+            "interactiveCount": 1094,
+            "likedCount": 811,
+            "sharedCount": 115,
+            "title": "无论是否婚育，这都是女性一生之痛！",
+            "workUrl": "https://www.xiaohongshu.com/explore/6a17c19900000000370349ce"
+          },
+          {
+            "collectedCount": 180,
+            "cover": "http://sns-img-hw.xhscdn.net/1040g2sg320mnso1u5me05nprhgk08cnb3eq4alg?imageView2/2/w/1080/format/webp",
+            "createTime": "2026-05-28 09:36:41",
+            "desc": "私信里总有姑娘来分享自己经历了一段很糟的关系，虽然最终离开了，但始终觉得自己「脏了」、「污染了」、「没人要了」……甚至希望让我发出来，让大家骂骂她，仿佛只有这样她才能跟过去的自己和解。\n\t\n其实，我每次看到都很心疼，同时也会觉得这样的认知模型是相对封闭的，终究还是把自己当做了一个只会损耗、无法更新的物品。\n\t\n我们是人，是有着复杂的自我修复和自我成长系统的人。所以，咱们可以把那段糟糕的关系，看作一场旷日持久的高烧。\n\t\n那些名叫打压、否定、无视、伤害、嘲讽、批判、暴力……的病原体入侵，让你鼻涕横流、眼泪决堤、腰酸背痛、心力交瘁、自我怀疑、动弹不得——但必须要说，这个时候你还没有被打倒，你的情感免疫系统在拼命抵抗，同时还在给你释放信号！\n\t\n让你注意到你正在经历一场高烧，但正如我们过去所经历的高烧，终究会退。\n\t\n退烧之后，你觉得自己千疮百孔，疲惫不堪，但这是刚刚打完一场硬仗所留下的痕迹，而不是污点，更不代表着我们以后只能生活在这片废墟之上，因为废墟底下，总会有新的东西长出来。\n\t\n我们的大脑和身体会让我们记住这场高烧，并最终让它变成一剂「情感疫苗」。\n\t\n就像身体得过病，就会产生抗体，这段经历也会让我们心里长出针对这种情感病毒的完整免疫系统。\n\t\n之后的每一天，只要再遇到任何一点点隐隐的打压、熟悉的否定、摧毁式的批判，包括暴力来临前的一个眼神……你的「情感抗体」瞬间就能识别，警报拉响，划定边界，转身离开，老娘绝不允许自己被同一种病毒拖垮两次。\n\t\n所以这场高烧没有白烧，你变得更加成熟果敢忠于自己，也可以精准识别健康的关系，同时也会让那些企图在亲密关系里伤害你的人发现：你不好惹。\n\t\n好了，以上是我挤在地铁上不吐不快，仅供参考。\n\t\n我是六层楼，我爱这个世界。\n\t\n#女性健康 #女性 #女性成长 #健康科普 #女性智慧",
+            "id": "6a179c29000000003700c33a",
+            "interactiveCount": 1680,
+            "likedCount": 1445,
+            "sharedCount": 65,
+            "title": "老娘绝不能掉进同一个坑！",
+            "workUrl": "https://www.xiaohongshu.com/explore/6a179c29000000003700c33a"
+          },
+          {
+            "collectedCount": 305,
+            "cover": "http://sns-img-hw.xhscdn.net/spectrum/1040g34o320jf8vqtli105nprhgk08cnbe3de14o?imageView2/2/w/1080/format/webp",
+            "createTime": "2026-05-25 22:35:44",
+            "desc": "我猜每个人都有自己的答案，但从一些已有的研究看，月经确实会影响女性运动员的运动成绩，有负面影响的同时，但也有运动员反馈自己个人最好成绩是在经期实现的，而这些差异对普通人来说意味着什么呢？经期运动到底有利还是有弊？经期运动是否有特殊的注意事项？我们这期就来聊聊这件事～\n\t\n我是六层楼，我爱这个世界。\n#不怕大动作  #薇尔卫生巾  #薇尔   #人体曲线剪裁   #动态贴合  #立体剪裁  #月色坦荡",
+            "id": "6a144558000000003502500b",
+            "interactiveCount": 2453,
+            "likedCount": 2003,
+            "sharedCount": 90,
+            "title": "运动真的是经期禁忌吗？",
+            "workUrl": "https://www.xiaohongshu.com/explore/6a144558000000003502500b"
+          },
+          {
+            "collectedCount": 1884,
+            "cover": "http://sns-img-hw.xhscdn.net/spectrum/1040g0k0320e65iafli005nprhgk08cnb9vrqvvg?imageView2/2/w/1080/format/webp",
+            "createTime": "2026-05-22 20:03:43",
+            "desc": "卵巢没电了，怎么办？\n不知道你们有没有试过，在目前任何一个社交平台上，但凡是有搜索框的，你只要输入「卵巢」两个字，下面自动联想的前三名必然有一个是：卵巢早衰！\n\t\n甚至很多时候都是排在第一位，其实我特别能理解，毕竟我就是做这个的，我知道卵巢对人体的重要性，同时我也知道大家特别害怕，很多事情，自己还没有想好呢，卵巢就快没电了，不得不仓促做选择，甚至更害怕别等到自己终于做了选择，却发现卵巢早就没电了……所以，近些年，很多人都去查各种项目，比如AMH之类的，目的就是想看看自己的卵巢还剩多少电量，留给自己的时间，还有多久？\n\t\n但这件事情听上去好被动啊，好像在等待宣判，难道只能这样吗？\n\t\n不是的！这事儿啊，今天咱们就好好盘一盘。\n\t\n我是六层楼，我爱这个世界。\n#卵巢早衰  #辅酶Q10  #女性健康  #法尔诺德辅酶q10 ",
+            "id": "6a0ee69d0000000038022cd2",
+            "interactiveCount": 4751,
+            "likedCount": 2567,
+            "sharedCount": 406,
+            "title": "卵巢没电了，怎么办？",
+            "workUrl": "https://www.xiaohongshu.com/explore/6a0ee69d0000000038022cd2"
+          }
+        ]
+      }
+    },
+    "diagnosis": {
+      "score": 85,
+      "summary": "六层楼 当前已经有比较完整的账号信号。近30天发了 17 篇内容，近30天互动约 7.3w，收藏率大约 22% 。当前还可以继续补对标样本。",
+      "strengths": [
+        "近30天互动规模稳定",
+        "近30天更新频率不错",
+        "收藏意愿不弱，内容有留存价值"
+      ],
+      "risks": [
+        "近30天互动和粉丝规模相比还不算突出"
+      ],
+      "nextActions": [
+        "先放大最近互动更好的内容角度"
+      ]
+    },
+    "similarAccounts": {
+      "peer": [],
+      "benchmark": []
+    }
+  },
+  "redId": "855409667",
+  "generatedAt": "2026-05-29T14:08:21.616Z"
+}
