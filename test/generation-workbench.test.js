@@ -92,6 +92,9 @@ test("buildGenerationMessages includes mode, style profile, success samples, and
   assert.match(combined, /不要写成那种一上来就先说 1、2、3 点的清单腔/);
   assert.match(combined, /少用“首先、其次、最后”这种讲课感很重的连接词/);
   assert.match(combined, /像在和人聊天、分享、吐槽、安慰/);
+  assert.match(combined, /不要堆“赋能、闭环.*生态.*抓手.*底层逻辑.*路径.*矩阵”这类 AI 常用词/);
+  assert.match(combined, /不要写假大空结尾，也不要为了显得深刻去拔高意义/);
+  assert.match(combined, /同一个概念尽量用同一套叫法，不要来回(?:换|切)近义词制造机器感/);
   assert.match(combined, /适当加 emoji/);
   assert.match(combined, /正文至少包含 3 个 emoji/);
   assert.match(combined, /内太空/);

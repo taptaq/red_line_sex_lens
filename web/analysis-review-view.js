@@ -432,6 +432,10 @@ export function renderRewriteResult(result, helpers = {}) {
           <span>风险分</span>
           <strong>${escapeHtml(String(before.score ?? 0))} -> ${escapeHtml(String(after.score ?? 0))}</strong>
         </article>
+        <article class="rewrite-meta-card">
+          <span>活人感</span>
+          <strong>${escapeHtml(String(rewrite.humanizer?.total ?? "-"))} / 50</strong>
+        </article>
       </div>
     </div>
     <div class="model-scope-banner model-scope-banner-rewrite">
@@ -461,6 +465,7 @@ export function renderRewriteResult(result, helpers = {}) {
     </div>
     <p class="helper-text">改写说明：${escapeHtml(rewrite.rewriteNotes || "未提供")}</p>
     <p class="helper-text">人工留意：${escapeHtml(rewrite.safetyNotes || "暂无")}</p>
+    <p class="helper-text">去 AI 痕迹：${escapeHtml((rewrite.humanizer?.issues || []).slice(0, 3).join("；") || "当前活人感信号稳定。")}</p>
     <p class="helper-text">改写后语义摘要：${escapeHtml(
       after.semanticReview?.status === "ok" ? after.semanticReview.review?.summary || "未提供" : after.semanticReview?.message || "未返回"
     )}</p>

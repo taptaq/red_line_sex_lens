@@ -2,6 +2,16 @@ import { analyzePost } from "./analyzer.js";
 import { runCrossModelReview } from "./cross-review.js";
 import { deriveFailureReasonTags } from "./feedback.js";
 import { callRoutedTextProviderJson, rewritePostForCompliance } from "./glm.js";
+import { evaluateHumanizerSignals } from "./humanizer-score.js";
+
+const humanizerStyleRules = [
+  "不要堆“赋能、闭环、生态、抓手、底层逻辑、路径、矩阵”这类 AI 常用词，能直接说人话就直接说。",
+  "不要写假大空结尾，也不要为了显得深刻去拔高意义；把重点落回真实场景、具体情绪和明确判断。",
+  "不要强行写成整齐的三段式、模板段或工整排比，宁可有点自然起伏，也不要像自动生成。",
+  "同一个概念尽量用同一套叫法，不要来回切近义词制造机器感。",
+  "不要为了增加活人感而硬编故事、经历或假设性例子；没有就沿用当前素材。"
+];
+const humanizerAcceptanceThreshold = 35;
 import { formatInnerSpaceTermsPrompt } from "./inner-space-terms.js";
 import { getRewriteProviderSelection, getRewriteSelectionModel } from "./model-selection.js";
 import { ensureArray } from "./normalizer.js";
@@ -714,6 +724,7 @@ export function buildGenerationMessages({
         terminologyPrompt ? "" : "",
         "写的时候尽量像在和人聊天、分享、吐槽、安慰，不要端着，也不要像写讲义。",
         "不要写成那种一上来就先说 1、2、3 点的清单腔，也少用“首先、其次、最后”这种讲课感很重的连接词。",
+        ...humanizerStyleRules,
         "标题还是要吸睛、带一点高反差，让人想点开，但别油、别夸张、别低俗。",
         "封面文案比标题更短一点，像顺手丢出来的钩子，和标题别只是重复复述。",
         "正文一定要分段，读起来顺，不要一整段铺到底；语气就像真人在说话，用大白话，有人味。",
@@ -1759,7 +1770,9 @@ function rankScoredCandidate(item) {
 
   return {
     riskScore,
-    total: Math.round(riskScore * 0.5 + item.style.score * 0.3 + item.completeness.score * 0.2 - variantPenalty)
+    total: Math.round(
+      riskScore * 0.42 + item.style.score * 0.26 + item.completeness.score * 0.18 + (item.humanizer.total * 2) * 0.14 - variantPenalty
+    )
   };
 }
 
@@ -1864,6 +1877,8 @@ export async function scoreGenerationCandidates({
     const repair = {
       attempted: false,
       applied: false,
+      humanizerAttempted: false,
+      humanizerApplied: false,
       reason: "",
       reasonTags: [],
       error: "",
@@ -1928,9 +1943,67 @@ export async function scoreGenerationCandidates({
       }
     }
 
+    let humanizer = evaluateHumanizerSignals(finalDraft);
+
+    if (
+      repairCandidate &&
+      isAcceptedVerdict(mergedAnalysis.finalVerdict || mergedAnalysis.verdict) &&
+      humanizer.total < humanizerAcceptanceThreshold
+    ) {
+      repair.humanizerAttempted = true;
+
+      try {
+        const rewrite = await repairCandidate({
+          candidate: finalDraft,
+          analysis: mergedAnalysis,
+          crossReview,
+          modelSelection: modelSelection.rewrite,
+          innerSpaceTerms
+        });
+        const nextDraft = {
+          ...normalizeGenerationCandidate(
+            mergeGenerationRepairDraft(finalDraft, rewrite, candidate),
+            variants.indexOf(candidate.variant),
+            { lengthMode: brief.lengthMode }
+          ),
+          repairedFromCandidateId: candidate.id
+        };
+
+        if (!looksLikeLeakedRepairPrompt(nextDraft)) {
+          const nextAnalysis = await analyzeCandidate(nextDraft);
+          const nextSemanticReview = await semanticReviewCandidate({
+            input: nextDraft,
+            analysis: nextAnalysis,
+            modelSelection: modelSelection.semantic
+          });
+          const nextMergedAnalysis = {
+            ...nextAnalysis,
+            semanticReview: nextSemanticReview
+          };
+          const nextCrossReview = await crossReviewCandidate({
+            input: nextDraft,
+            analysis: nextMergedAnalysis,
+            modelSelection: modelSelection.crossReview
+          });
+          const nextHumanizer = evaluateHumanizerSignals(nextDraft);
+
+          if (
+            isAcceptedVerdict(nextMergedAnalysis.finalVerdict || nextMergedAnalysis.verdict) &&
+            nextHumanizer.total > humanizer.total
+          ) {
+            finalDraft = nextDraft;
+            mergedAnalysis = nextMergedAnalysis;
+            crossReview = nextCrossReview;
+            humanizer = nextHumanizer;
+            repair.humanizerApplied = true;
+          }
+        }
+      } catch {}
+    }
+
     const style = scoreContentAgainstStyleProfile(finalDraft, styleProfile);
     const completeness = scoreCompleteness(finalDraft, brief);
-    const scores = rankScoredCandidate({ analysis: mergedAnalysis, style, completeness });
+    const scores = rankScoredCandidate({ analysis: mergedAnalysis, style, completeness, humanizer });
     const blockerReasons = collectGenerationBlockerReasons(mergedAnalysis, crossReview);
 
     scoredCandidates.push({
@@ -1942,6 +2015,7 @@ export async function scoreGenerationCandidates({
       repair,
       style,
       completeness,
+      humanizer,
       scores
     });
   }

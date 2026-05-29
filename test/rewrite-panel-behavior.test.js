@@ -35,6 +35,8 @@ test("rewrite and cross review panels explain model responsibilities clearly", a
   assert.match(renderRewriteResultSource, /改写模型来源/);
   assert.match(renderRewriteResultSource, /model-scope-banner-rewrite/);
   assert.match(renderRewriteResultSource, /本区只展示改写模型/);
+  assert.match(renderRewriteResultSource, /活人感/);
+  assert.match(renderRewriteResultSource, /去 AI 痕迹/);
   assert.match(buildCrossReviewMarkupSource, /当前交叉复判会自动避开已选改写模型/);
   assert.match(buildCrossReviewMarkupSource, /model-scope-banner-review/);
   assert.match(buildCrossReviewMarkupSource, /不与改写模型重复/);

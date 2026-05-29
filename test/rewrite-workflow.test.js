@@ -42,6 +42,9 @@ test("rewrite prompt requires preserving full body instead of shortening into a 
   assert.match(userPrompt, /不要写成那种一上来就先说 1、2、3 点的清单腔/);
   assert.match(userPrompt, /少用“首先、其次、最后”这种讲课感很重的连接词/);
   assert.match(userPrompt, /更像朋友之间顺手聊经验、讲感受、做观察/);
+  assert.match(userPrompt, /不要堆“赋能、闭环.*底层逻辑.*路径.*矩阵”这类 AI 常用词/);
+  assert.match(userPrompt, /不要写假大空总结，也不要为了显得深刻去拔高意义/);
+  assert.match(userPrompt, /不要为了增加活人感而编造新的经历、例子或细节/);
   assert.match(userPrompt, /内太空术语参考/);
   assert.match(userPrompt, /轨道对接/);
   assert.match(userPrompt, /性行为/);

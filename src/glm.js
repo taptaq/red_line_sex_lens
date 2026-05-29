@@ -9,6 +9,7 @@ import {
   getRewriteSelectionModel
 } from "./model-selection.js";
 import { formatInnerSpaceTermsPrompt } from "./inner-space-terms.js";
+import { evaluateHumanizerSignals } from "./humanizer-score.js";
 import { buildXhsHumanizerSystemRules, buildXhsHumanizerUserRequirements } from "./xhs-humanizer-rules.js";
 
 const glmEndpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
@@ -60,6 +61,14 @@ const feedbackProviderConfigs = [
     models: [defaultDeepSeekFeedbackModel],
     routeMode: "official_only"
   }
+];
+
+const humanizerStyleRules = [
+  "不要堆“赋能、闭环、生态、抓手、底层逻辑、路径、矩阵”这类 AI 常用词，能直接说人话就直接说。",
+  "不要写假大空总结，也不要为了显得深刻去拔高意义；把话落回真实场景、具体感受和明确判断。",
+  "不要写成整齐的模板段落，不要强行三段式，也不要把一句话拆成看似完整但没信息量的排比。",
+  "同一个概念尽量用同一套叫法，不要来回换近义词制造机器感。",
+  "不要为了增加活人感而编造新的经历、例子或细节；原文没有的，就不要硬补。"
 ];
 
 export const rewriteGenerationConfig = {
@@ -867,6 +876,7 @@ export function buildRewriteMessages({ input = {}, analysis = {}, semantic = nul
         "如果原文有三段，改写后也尽量保持接近的段落数量和呼吸感。",
         "语气要自然、幽默风趣、说人话，有真实分享感，更像朋友之间顺手聊经验、讲感受、做观察，不要像上课、培训或公号文章。",
         "不要写成那种一上来就先说 1、2、3 点的清单腔，也少用“首先、其次、最后”这种讲课感很重的连接词。",
+        ...humanizerStyleRules,
         "tags 给 0-5 个更稳妥、但仍然贴近原内容风格的标签。",
         "输出格式：",
         "{",
@@ -1017,6 +1027,7 @@ export function buildHumanizerMessages({ input = {}, analysis = {}, semantic = n
         "请把下面已经合规改写过的版本，再做一轮人味化处理。",
         "要求：",
         ...userRequirements,
+        ...humanizerStyleRules,
         "输出格式：",
         "{",
         '  "title": "润色后的标题",',
@@ -2679,7 +2690,10 @@ export async function rewritePostForCompliance({ input = {}, analysis = {}, mode
   const baseRewrite = usePatchMode ? applyRewritePatchPlan({ input, rewrite: normalizedRewrite }) : normalizedRewrite;
 
   if (!humanizerPassEnabled || usePatchMode) {
-    return baseRewrite;
+    return {
+      ...baseRewrite,
+      humanizer: evaluateHumanizerSignals(baseRewrite)
+    };
   }
 
   try {
@@ -2716,9 +2730,21 @@ export async function rewritePostForCompliance({ input = {}, analysis = {}, mode
       tags: humanizedRewrite.tags.length ? humanizedRewrite.tags : baseRewrite.tags,
       rewriteNotes: humanizedRewrite.rewriteNotes || baseRewrite.rewriteNotes,
       safetyNotes: humanizedRewrite.safetyNotes || baseRewrite.safetyNotes,
-      humanized: true
+      humanized: true,
+      humanizer: evaluateHumanizerSignals({
+        title: humanizedRewrite.title || baseRewrite.title,
+        body:
+          !humanizedRewrite.body || shouldPreferBaseRewriteBody(baseRewrite.body, humanizedRewrite.body)
+            ? baseRewrite.body
+            : humanizedRewrite.body,
+        coverText: humanizedRewrite.coverText || baseRewrite.coverText,
+        tags: humanizedRewrite.tags.length ? humanizedRewrite.tags : baseRewrite.tags
+      })
     };
   } catch {
-    return baseRewrite;
+    return {
+      ...baseRewrite,
+      humanizer: evaluateHumanizerSignals(baseRewrite)
+    };
   }
 }

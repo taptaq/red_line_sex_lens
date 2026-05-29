@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "skills": {
+    "humanizer-zh": {
+      "name": "humanizer-zh",
+      "version": "1.0.0",
+      "source": "redskill",
+      "install_dir": "/Users/taptaq/Documents/Original Heart Road/project/red_line_sex_lens/skills/humanizer-zh",
+      "installed_at": "1779968273623",
+      "sha256": "29f4696ca37ac28adf4f6c20e440c81ec91b836a1420bc0e3d196e04398efb8d"
+    }
+  }
+}

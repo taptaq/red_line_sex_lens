@@ -5129,6 +5129,7 @@ function renderGenerationResult(result = {}) {
           ${repair.attempted ? `<span class="meta-pill">${escapeHtml(repair.applied ? "修复后评分" : "修复未完成")}</span>` : ""}
           <span class="meta-pill">综合分 ${escapeHtml(String(displayItem.scores?.total ?? 0))}</span>
           <span class="meta-pill">风格分 ${escapeHtml(String(displayItem.style?.score ?? 0))}</span>
+          <span class="meta-pill">活人感 ${escapeHtml(String(displayItem.humanizer?.total ?? 0))} / 50</span>
           <span class="meta-pill">${escapeHtml(verdictLabel(displayItem.analysis?.finalVerdict || displayItem.analysis?.verdict || "pass"))}</span>
         </div>
         <strong>${escapeHtml(finalDraft.title || "未生成标题")}</strong>
@@ -5138,6 +5139,7 @@ function renderGenerationResult(result = {}) {
         ${repairMarkup}
         ${referenceWarningsMarkup}
         ${blockerReasonsMarkup}
+        <p class="helper-text">${escapeHtml((displayItem.humanizer?.issues || []).slice(0, 3).join("；") || "当前去 AI 痕迹表现稳定。")}</p>
         <p class="helper-text">${escapeHtml(finalDraft.generationNotes || displayItem.generationNotes || "暂无生成说明")}</p>
         <p class="helper-text">${escapeHtml(finalDraft.safetyNotes || displayItem.safetyNotes || "暂无安全注意点")}</p>
         <div class="generation-cover-image-prompt-block">

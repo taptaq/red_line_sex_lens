@@ -26,6 +26,7 @@ test("scoreGenerationCandidates recommends the safest on-style candidate", async
   assert.equal(result.recommendedCandidateId, "candidate-safe");
   assert.equal(result.scoredCandidates[0].id, "candidate-safe");
   assert.ok(result.scoredCandidates[0].scores.total > result.scoredCandidates[1].scores.total);
+  assert.equal(typeof result.scoredCandidates[0].humanizer?.total, "number");
   assert.match(result.recommendationReason, /合规风险更低/);
 });
 
@@ -143,6 +144,101 @@ test("scoreGenerationCandidates prefers safe or natural variants over expressive
   assert.equal(result.recommendedCandidateId, "candidate-safe");
   assert.equal(result.scoredCandidates[0].id, "candidate-safe");
   assert.equal(result.scoredCandidates[1].id, "candidate-expressive");
+});
+
+test("scoreGenerationCandidates lowers recommendation priority for AI-sounding drafts even when risk is equal", async () => {
+  const result = await scoreGenerationCandidates({
+    candidates: [
+      {
+        id: "candidate-human",
+        variant: "safe",
+        title: "第一次选装备，怎么和自己的身体好好沟通？",
+        body: "我第一次选的时候真的是靠运气。后来慢慢发现，先搞清自己的感受，再看功能差异，会比一股脑下单稳很多。".repeat(4),
+        coverText: "别急着下单，先搞清这件事",
+        tags: ["沟通", "科普"]
+      },
+      {
+        id: "candidate-slop",
+        variant: "safe",
+        title: "创新驱动与生态升级路径探索",
+        body: "首先，我们要从更宏观层面看这件事的底层逻辑。其次，这个方案能够赋能用户，形成闭环，沉淀长期势能。最后，总的来说，这标志着一个全新的升级方向。".repeat(4),
+        coverText: "高质量发展路径",
+        tags: ["沟通", "科普"]
+      }
+    ],
+    styleProfile: {
+      status: "active",
+      preferredTags: ["沟通", "科普"],
+      tone: "温和克制"
+    },
+    brief: { topic: "沟通" },
+    analyzeCandidate: async () => ({ verdict: "pass", finalVerdict: "pass", score: 0, suggestions: [] }),
+    semanticReviewCandidate: async () => ({ status: "unavailable", message: "测试不调用模型" }),
+    crossReviewCandidate: async () => ({
+      aggregate: {
+        recommendedVerdict: "pass",
+        analysisVerdict: "pass",
+        reasons: []
+      }
+    })
+  });
+
+  const human = result.scoredCandidates.find((item) => item.id === "candidate-human");
+  const slop = result.scoredCandidates.find((item) => item.id === "candidate-slop");
+
+  assert.ok(human.humanizer.total > slop.humanizer.total);
+  assert.equal(result.recommendedCandidateId, "candidate-human");
+});
+
+test("scoreGenerationCandidates runs one extra humanizer-style repair pass for accepted but AI-sounding drafts", async () => {
+  let repairCalls = 0;
+
+  const result = await scoreGenerationCandidates({
+    candidates: [
+      {
+        id: "candidate-slop-pass",
+        variant: "safe",
+        title: "创新驱动与生态升级路径探索",
+        body: "首先，我们要从更宏观层面看这件事的底层逻辑。其次，这个方案能够赋能用户，形成闭环，沉淀长期势能。最后，总的来说，这标志着一个全新的升级方向。".repeat(4),
+        coverText: "高质量发展路径",
+        tags: ["沟通", "科普"]
+      }
+    ],
+    styleProfile: {
+      status: "active",
+      preferredTags: ["沟通", "科普"],
+      tone: "温和克制"
+    },
+    brief: { topic: "沟通" },
+    analyzeCandidate: async (candidate) =>
+      candidate.title.includes("第一次选装备")
+        ? { verdict: "pass", finalVerdict: "pass", score: 0, suggestions: [] }
+        : { verdict: "pass", finalVerdict: "pass", score: 0, suggestions: [] },
+    semanticReviewCandidate: async () => ({ status: "unavailable", message: "测试不调用模型" }),
+    crossReviewCandidate: async () => ({
+      aggregate: {
+        recommendedVerdict: "pass",
+        analysisVerdict: "pass",
+        reasons: []
+      }
+    }),
+    repairCandidate: async () => {
+      repairCalls += 1;
+      return {
+        title: "第一次选装备，怎么和自己的身体好好沟通？",
+        body: "我第一次选的时候真的是靠运气。后来慢慢发现，先搞清自己的感受，再看功能差异，会比一股脑下单稳很多。".repeat(4),
+        coverText: "别急着下单，先搞清这件事",
+        tags: ["沟通", "科普"],
+        rewriteNotes: "把模板化表达改成更贴近真人分享的说法"
+      };
+    }
+  });
+
+  assert.equal(repairCalls, 1);
+  assert.equal(result.scoredCandidates[0].repair.humanizerAttempted, true);
+  assert.equal(result.scoredCandidates[0].repair.humanizerApplied, true);
+  assert.match(result.scoredCandidates[0].finalDraft.title, /第一次选装备/);
+  assert.ok(result.scoredCandidates[0].humanizer.total >= 35);
 });
 
 test("scoreGenerationCandidates never recommends a hard block candidate over an accepted one", async () => {
