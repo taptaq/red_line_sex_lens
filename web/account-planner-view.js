@@ -118,7 +118,7 @@ export function renderSampleLibraryAccountPlannerResult(state = {}, helpers = {}
       ? `模型总结：${[modelTrace.provider, modelTrace.model].filter(Boolean).join(" / ")}${
           modelTrace.routeLabel ? ` · ${modelTrace.routeLabel}` : ""
         }`
-      : "分析来源：本地兜底";
+      : "";
 
   if (!cards.length) {
     const message = String(state.message || "").trim() || "先导入外部样本并运行复盘，这里会出现 3-5 张下一篇建议卡。";

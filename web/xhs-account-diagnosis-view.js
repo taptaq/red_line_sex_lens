@@ -64,6 +64,68 @@ function renderAccountList(items = [], escapeHtml = (value) => String(value || "
   `;
 }
 
+function renderSimilarFollowups(items = [], escapeHtml = (value) => String(value || "")) {
+  const rows = Array.isArray(items) ? items.filter(Boolean) : [];
+
+  if (!rows.length) {
+    return "";
+  }
+
+  return `
+    <section class="sample-library-account-planner-card">
+      <strong>自动延伸分析</strong>
+      <div class="xhs-account-diagnosis-list">
+        ${rows
+          .map(
+            (item) => `
+              <article class="sample-library-account-planner-card">
+                <strong>${escapeHtml(item?.account?.nickname || item?.account?.redId || "未命名账号")}</strong>
+                <p>小红书号 ${escapeHtml(item?.account?.redId || "-")}</p>
+                <p>${escapeHtml(item?.diagnosis?.summary || "暂无延伸分析摘要。")}</p>
+              </article>
+            `
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderMatchedSignalSection(title = "", items = [], escapeHtml = (value) => String(value || "")) {
+  const rows = Array.isArray(items) ? items.filter(Boolean) : [];
+
+  if (!rows.length) {
+    return "";
+  }
+
+  return `
+    <section class="sample-library-account-planner-card">
+      <strong>${escapeHtml(title)}</strong>
+      <div class="xhs-account-diagnosis-list">
+        ${rows
+          .map(
+            (item) => `
+              <article class="sample-library-account-planner-card">
+                <strong>${escapeHtml(item.title || "未命名样本")}</strong>
+                <p>${escapeHtml(item.author || "未知作者")} · ${escapeHtml(item.track || "")} · ${escapeHtml(item.accountTier || "")}</p>
+                <p>${escapeHtml(item.analysis?.whySelected || item.analysis?.reuseHint || "可作为同类爆款参考。")}</p>
+                <div class="item-actions">
+                  <button type="button" class="button button-ghost button-small" data-action="save-xhs-matched-signal-external-sample" data-signal-id="${escapeHtml(item.id || "")}">
+                    加入外部参考样本
+                  </button>
+                  <button type="button" class="button button-ghost button-small" data-action="save-xhs-matched-signal-draft-idea" data-signal-id="${escapeHtml(item.id || "")}">
+                    生成灵感草稿
+                  </button>
+                </div>
+              </article>
+            `
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
 function buildSubscriptionStatusMarkup(subscription = null, escapeHtml = (value) => String(value || "")) {
   if (!subscription || typeof subscription !== "object") {
     return "";
@@ -94,6 +156,10 @@ function buildReportActionsMarkup(report = null, escapeHtml = (value) => String(
     return "";
   }
 
+  if (!report.resultAvailable) {
+    return "";
+  }
+
   const htmlPath = String(report.htmlPath || "").trim();
   const reportDataPath = String(report.reportDataPath || "").trim();
 
@@ -103,6 +169,7 @@ function buildReportActionsMarkup(report = null, escapeHtml = (value) => String(
 
   return `
     <div class="item-actions">
+      <button type="button" class="button button-ghost" data-action="refresh-xhs-matched-signals">刷新同类爆文信号</button>
       ${htmlPath ? `<a class="button button-ghost" href="${escapeHtml(htmlPath)}" target="_blank" rel="noreferrer">查看 HTML 报告</a>` : ""}
       ${reportDataPath ? `<a class="button button-ghost" href="${escapeHtml(reportDataPath)}" target="_blank" rel="noreferrer">查看报告 JSON</a>` : ""}
     </div>
@@ -136,6 +203,8 @@ export function buildXhsAccountDiagnosisModalMarkup(state = {}, helpers = {}) {
   const account = result.account && typeof result.account === "object" ? result.account : {};
   const diagnosis = result.diagnosis && typeof result.diagnosis === "object" ? result.diagnosis : {};
   const similarAccounts = result.similarAccounts && typeof result.similarAccounts === "object" ? result.similarAccounts : {};
+  const matchedSignals = result.matchedSignals && typeof result.matchedSignals === "object" ? result.matchedSignals : {};
+  const similarFollowups = Array.isArray(result.similarFollowups) ? result.similarFollowups : [];
   const strengths = Array.isArray(diagnosis.strengths) ? diagnosis.strengths : [];
   const risks = Array.isArray(diagnosis.risks) ? diagnosis.risks : [];
   const nextActions = Array.isArray(diagnosis.nextActions) ? diagnosis.nextActions : [];
@@ -195,6 +264,10 @@ export function buildXhsAccountDiagnosisModalMarkup(state = {}, helpers = {}) {
         <strong>高阶标杆</strong>
         ${renderAccountList(similarAccounts.benchmark, escapeHtml)}
       </section>
+      ${renderMatchedSignalSection("同类今日起量", matchedSignals.dailyTop, escapeHtml)}
+      ${renderMatchedSignalSection("同类七日稳定", matchedSignals.weeklyTop, escapeHtml)}
+      ${renderMatchedSignalSection("同类低粉可复制", matchedSignals.lowTop, escapeHtml)}
+      ${renderSimilarFollowups(similarFollowups, escapeHtml)}
     </div>
   `;
 }

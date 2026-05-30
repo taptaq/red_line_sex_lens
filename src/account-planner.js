@@ -601,35 +601,21 @@ export async function summarizeAccountPlanner({
   });
 
   const effectiveLocalRecords = filteredLocalRecords.length ? filteredLocalRecords : localRecords;
-  const fallback = buildFallbackAccountPlannerSummary({ localRecords: effectiveLocalRecords, externalSamples });
-  const normalizedFallback = normalizeAccountPlannerSummary(fallback);
-
   if (typeof summarize !== "function") {
-    return normalizedFallback;
+    throw new Error("账号级复盘当前不可用：缺少可用的总结器。");
   }
 
   const custom = await summarize({
     localRecords: effectiveLocalRecords,
     externalSamples,
-    fallback: normalizedFallback,
+    fallback: normalizeAccountPlannerSummary(buildFallbackAccountPlannerSummary({ localRecords: effectiveLocalRecords, externalSamples })),
     modelSelection
   });
   const normalizedCustom = normalizeAccountPlannerSummary(custom);
 
-  return {
-    summary: {
-      strengths: normalizedCustom.summary.strengths.length ? normalizedCustom.summary.strengths : normalizedFallback.summary.strengths,
-      gaps: normalizedCustom.summary.gaps.length ? normalizedCustom.summary.gaps : normalizedFallback.summary.gaps,
-      nextMove: normalizedCustom.summary.nextMove || normalizedFallback.summary.nextMove
-    },
-    cards: normalizedCustom.cards.length ? normalizedCustom.cards : normalizedFallback.cards,
-    modelTrace:
-      normalizedCustom.modelTrace.provider ||
-      normalizedCustom.modelTrace.model ||
-      normalizedCustom.modelTrace.route ||
-      normalizedCustom.modelTrace.routeLabel ||
-      normalizedCustom.modelTrace.attemptedRoutes.length
-        ? normalizedCustom.modelTrace
-        : normalizedFallback.modelTrace
-  };
+  if (!normalizedCustom.summary.nextMove || !normalizedCustom.cards.length) {
+    throw new Error("账号级复盘生成失败：模型没有返回可用的复盘卡，请直接查看报错并重试。");
+  }
+
+  return normalizedCustom;
 }

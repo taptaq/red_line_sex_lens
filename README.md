@@ -35,13 +35,13 @@
 - 误报样本回流：记录平台实际放行样本，用于后续降权提示和白名单候选。
 - 样本库沉淀：统一管理样本记录、参考属性、生命周期和风格画像。
 - 账号级复盘：优先基于参考样本、效果好样本与外部样本，生成下一篇 Planner 卡。
+- 小红书账号诊断：查询单账号或多账号数据，补充同阶对标、同类爆文信号与 30 分钟后自动补采。
 - 主题灵感：从高表现样本提炼切入角度，并可直接回填到生成工作台。
 - 草稿区：把复盘卡、灵感卡和生成候选稿收成可排序、可筛选的待写选题池。
 - 笔记生命周期：记录检测、改写、生成稿到发布结果的闭环表现。
 - 样本权重体系：按成功等级、确认强度、发布表现和时间新鲜度计算参考权重。
 - 规则变更预演：候选词库或白名单生效前，先模拟会影响哪些历史样本。
-- 基准评测：手动维护 benchmark 样本，并直接运行回归评测。
-- 模型表现看板：记录模型调用成功率、超时率、JSON 错误率和平均耗时。
+- 内太空术语工作区：维护赛道术语、别名、合集适配与提示文案，给改写与生成链路补充稳定上下文。
 
 ## 页面工作流
 
@@ -97,6 +97,13 @@ npm run server
 - `学习样本 / 好样本沉淀`
   维护样本记录、参考属性、生命周期、账号级复盘与系统校准。
 
+样本区旁边现在还单独保留了一块 `账号诊断`：
+
+- 支持单账号诊断与多账号对比。
+- 支持查看最近一次缓存结果与本地 HTML / JSON 报告。
+- 单账号结果会额外补充 `同类今日起量 / 同类七日稳定 / 同类低粉可复制` 三类匹配信号。
+- 当 Redfox 侧数据还不完整时，可以发起一次 `30 分钟后自动重查` 的补采订阅。
+
 样本库当前已经改成步骤式维护：
 
 1. `基础内容`
@@ -130,16 +137,18 @@ data/
   whitelist.json             宽松白名单 / 反例语境
   feedback.log.json          违规反馈回流日志
   false-positive-log.json    误报样本日志
+  inner-space-terms.json     内太空术语与别名配置
   review-queue.json          待人工复核候选项
   rewrite-pairs.json         改写前后样本
   note-records.json          样本记录、参考属性与生命周期的统一主存储
   success-samples.json       兼容旧路径，迁移后不再作为主数据源
   note-lifecycle.json        兼容旧路径，迁移后不再作为主数据源
-  model-performance.json     模型调用表现日志
   style-profile.json         风格画像
   theme-inspirations.json    主题灵感缓存
-  evals/
-    review-benchmark.json    基准评测样本集（默认不预置演示样本）
+  xhs-account-diagnosis.json 最近一次账号诊断结果缓存
+  xhs-account-diagnosis-subscriptions.json 账号诊断补采订阅
+  xhs-account-diagnosis-report-data.json    最近一次账号诊断 JSON 报告
+  xhs-account-diagnosis-report.html         最近一次账号诊断 HTML 报告
 src/
   account-planner.js         账号级复盘与 Planner 建议
   account-planner-import.js  外部样本导入解析
@@ -149,9 +158,12 @@ src/
   draft-ideas.js             草稿区数据结构
   glm.js                     模型调用与 DMXAPI / 官方路由
   generation-workbench.js    生成工作台
+  inner-space-terms.js       赛道术语过滤与提示拼装
   server.js                  本地网页服务
   cli.js                     命令行入口
   theme-inspirations.js      主题灵感提炼
+  xhs-account-diagnosis.js   小红书账号诊断聚合
+  xhs-account-diagnosis-subscriptions.js 账号诊断补采调度
 web/
   account-planner-view.js    账号级复盘视图
   draft-ideas-view.js        草稿区视图
@@ -159,6 +171,7 @@ web/
   app.js                     前端交互逻辑
   styles.css                 前端样式
   theme-inspiration-view.js  主题灵感视图
+  xhs-account-diagnosis-view.js 账号诊断视图
 ```
 
 ## 快速命令
@@ -223,12 +236,6 @@ npm run eval:feedback
 npm run eval:rewrite-pairs
 ```
 
-运行基准评测：
-
-```bash
-npm run eval:review-benchmark
-```
-
 检查当前 note records 是否都已具备账号复盘摘要：
 
 ```bash
@@ -290,6 +297,12 @@ export DMXAPI_API_KEY="你的 DMXAPI 密钥"
 - 全部模型对比检测（cross review）默认超时为 `30000ms`，可用 `CROSS_REVIEW_TIMEOUT_MS` 覆盖。
 - 改写主轮次默认 `REWRITE_MAX_TOKENS=4200`。
 
+如果要启用账号诊断：
+
+```bash
+export REDFOX_API_KEY="你的 Redfox 密钥"
+```
+
 常用模型覆盖：
 
 ```bash
@@ -347,7 +360,7 @@ export KIMI_TEXT_MODEL="kimi-k2.6"
 
 样本库用于让系统学习“安全且有效”的表达方式。
 
-当前页面里的 `参考样本` 与 `生命周期` 已统一落到 `data/note-records.json`。为了兼容已有 API 和功能，系统仍会提供 `success-samples` 与 `note-lifecycle` 两种视图，但它们不再是彼此独立的主存储。
+当前页面里的 `参考样本` 与 `生命周期` 已统一落到 `data/note-records.json`。为了兼容已有数据结构，系统内部仍会生成 `success-samples` 与 `note-lifecycle` 两种视图，但它们只是从 `note-records` 派生出来的兼容视图，不再是独立 API 主入口。
 
 一条样本记录现在通常按这条链路补完：
 
@@ -391,6 +404,8 @@ export KIMI_TEXT_MODEL="kimi-k2.6"
 
 在 `样本库 > 风格画像` 区域，可以从高权重参考样本生成画像草稿。画像默认偏自动沉淀，只有需要校准时再人工确认或编辑。
 
+为了避免把测试/占位内容污染正式样本，当前测试约定也已经统一到临时 `note-records.json` 上；真实业务数据只应该由页面操作、导入流程或正式 API 写入。
+
 风格画像支持版本管理：
 
 - 每个画像可以设置主题，例如亲密关系科普、经验分享、产品软植入。
@@ -421,6 +436,26 @@ export KIMI_TEXT_MODEL="kimi-k2.6"
 - 已发布通过或表现好的最终推荐稿会按权重进入下一次生成参考，形成“生成 -> 发布反馈 -> 再生成”的闭环。
 - 同一标题的笔记重复保存会覆盖原记录，避免同一篇内容多条展示。
 
+## 账号诊断
+
+账号诊断会把 Redfox 账号数据、本地对标整理和同类爆文信号放到同一个结果面板里。
+
+当前支持：
+
+- 单账号诊断：返回账号基础信息、近 30 天核心指标、优势 / 风险 / 下一步动作。
+- 多账号对比：一次输入多个小红书号，生成并排对比结果。
+- 同类信号补充：对单账号结果补充 `dailyTop / weeklyTop / lowTop` 三类匹配样本。
+- 自动补采：如果首次结果不完整，可以订阅一次 30 分钟后的自动重查。
+- 报告落盘：最近一次结果会同步写入 HTML 报告和 JSON 报告，方便回看或继续处理。
+
+相关接口：
+
+- `POST /api/xhs/account-diagnosis`
+- `POST /api/xhs/account-diagnosis/subscribe`
+- `GET /api/xhs/account-diagnosis`
+- `GET /api/xhs/account-diagnosis/report`
+- `GET /api/xhs/account-diagnosis/report-data`
+
 ## 规则变更预演
 
 复核队列里的候选词、语境规则和白名单候选，会在确认前展示影响预演。
@@ -442,22 +477,6 @@ export KIMI_TEXT_MODEL="kimi-k2.6"
 - 是否存在“可能误杀”或“可能放宽过头”的提醒。
 
 预演只用于辅助人工确认，不会直接修改词库或白名单。
-
-## 模型表现看板
-
-模型表现看板会记录文本模型调用表现，帮助后续判断哪个模型更稳。
-
-当前记录字段包括：
-
-- 调用场景：语义复判、交叉复判、生成、改写、反馈建议、截图识别等。
-- provider / route / model：区分 DMXAPI 和官方路由。
-- 调用状态：成功或失败。
-- 错误类型：超时、JSON 错误、限流、权限、服务端错误等。
-- 平均耗时和最近错误。
-
-看板会按场景生成稳定模型建议，并在主检测台的语义复判、改写、交叉复判下拉区展示。当前只做观察统计和推荐提示，不会自动改变模型默认顺序。
-
-当前它已经降级到 `样本库 > 系统校准` 中，属于后台观察能力，不是日常主路径的一部分。
 
 ## 违规截图回流
 
@@ -507,7 +526,6 @@ node --test
 - 误报样本 upsert 与白名单候选
 - 样本权重计算与排序
 - 规则变更预演
-- 模型表现统计
 - 样本库、风格画像与权重排序
 - 样本库步骤流与卡点提示
 - 回流中心优先级提示
@@ -515,6 +533,8 @@ node --test
 - 生成候选稿评分
 - 生成候选稿单次自动修复
 - 改写多轮重试
+- 账号诊断、补采订阅与报告落盘
+- 测试环境下 `note-records` 等路径隔离，避免示例数据写回真实 `data/*.json`
 
 ## 公开规则来源
 

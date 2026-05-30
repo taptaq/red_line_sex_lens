@@ -73,6 +73,18 @@ test("sample library exposes account planner panel and app wiring", async () => 
   assert.match(dataStoreSource, /export async function saveAccountPlannerSummary\(/);
 });
 
+test("summarizeAccountPlanner throws when summarize handler is missing", async () => {
+  await assert.rejects(
+    () =>
+      summarizeAccountPlanner({
+        localRecords: [],
+        externalSamples: [],
+        summarize: null
+      }),
+    /账号级复盘当前不可用/
+  );
+});
+
 test("buildXhsAccountDiagnosisModalMarkup renders overview, diagnosis summary, and similar accounts", () => {
   const markup = buildXhsAccountDiagnosisModalMarkup(
     {
@@ -99,7 +111,43 @@ test("buildXhsAccountDiagnosisModalMarkup renders overview, diagnosis summary, a
         similarAccounts: {
           peer: [{ redId: "peer-1", nickname: "同阶号", fans: 10000, interactiveCountThirty: 3000, reason: "同阶参考" }],
           benchmark: [{ redId: "benchmark-1", nickname: "高阶号", fans: 45000, interactiveCountThirty: 9000, reason: "高阶参考" }]
-        }
+        },
+        matchedSignals: {
+          dailyTop: [
+            {
+              id: "daily-1",
+              sourceType: "daily_top",
+              title: "同类今日起量样本",
+              body: "同类今日正文",
+              author: "作者A",
+              authorRedId: "author-a",
+              accountTier: "尾部KOL",
+              track: "星座情感",
+              tags: ["关系沟通"],
+              publish: { status: "positive_performance", publishedAt: "2026-05-30", metrics: { likes: 900, favorites: 200, comments: 50, views: 9000, shares: 30 } },
+              analysis: { whySelected: "今天起量快", reuseHint: "适合借题切入" }
+            }
+          ],
+          weeklyTop: [],
+          lowTop: []
+        },
+        similarFollowups: [
+          {
+            account: {
+              nickname: "相似账号1",
+              redId: "peer-1",
+              desc: "相似账号简介1",
+              metrics: { fans: 9000, liked: 60000, collected: 8000, noteCountThirty: 8, interactiveCountThirty: 12000 }
+            },
+            diagnosis: {
+              score: 70,
+              summary: "相似账号1 的节奏更稳。",
+              strengths: ["更新稳定"],
+              risks: ["封面还能更统一"],
+              nextActions: ["继续观察标题结构"]
+            }
+          }
+        ]
       }
     },
     {
@@ -116,16 +164,59 @@ test("buildXhsAccountDiagnosisModalMarkup renders overview, diagnosis summary, a
   assert.match(markup, /高阶号/);
   assert.match(markup, /同阶参考/);
   assert.match(markup, /继续分析/);
+  assert.match(markup, /自动延伸分析/);
+  assert.match(markup, /相似账号1/);
+  assert.match(markup, /同类今日起量/);
+  assert.match(markup, /同类今日起量样本/);
+  assert.match(markup, /加入外部参考样本/);
+  assert.match(markup, /生成灵感草稿/);
 });
 
 test("buildXhsAccountDiagnosisModalMarkup can render empty-state fallback", () => {
-  const markup = buildXhsAccountDiagnosisModalMarkup(null, {
-    escapeHtml(value) {
-      return String(value || "");
+  const markup = buildXhsAccountDiagnosisModalMarkup(
+    {
+      result: null,
+      report: {
+        resultAvailable: false,
+        htmlPath: "/api/xhs/account-diagnosis/report",
+        reportDataPath: "/api/xhs/account-diagnosis/report-data"
+      }
+    },
+    {
+      escapeHtml(value) {
+        return String(value || "");
+      }
     }
-  });
+  );
 
   assert.match(markup, /还没有可展示的账号诊断结果/);
+  assert.doesNotMatch(markup, /查看 HTML 报告/);
+  assert.doesNotMatch(markup, /查看报告 JSON/);
+});
+
+test("buildXhsAccountDiagnosisModalMarkup only shows report actions when result exists", () => {
+  const markup = buildXhsAccountDiagnosisModalMarkup(
+    {
+      result: {
+        account: { nickname: "测试号", redId: "1", desc: "", metrics: {} },
+        diagnosis: { score: 10, summary: "摘要", strengths: [], risks: [], nextActions: [] },
+        similarAccounts: { peer: [], benchmark: [] }
+      },
+      report: {
+        resultAvailable: true,
+        htmlPath: "/api/xhs/account-diagnosis/report",
+        reportDataPath: "/api/xhs/account-diagnosis/report-data"
+      }
+    },
+    {
+      escapeHtml(value) {
+        return String(value || "");
+      }
+    }
+  );
+
+  assert.match(markup, /查看 HTML 报告/);
+  assert.match(markup, /查看报告 JSON/);
 });
 
 test("buildXhsAccountDiagnosisModalMarkup formats subscription timestamps for display", () => {
@@ -274,7 +365,7 @@ test("renderSampleLibraryAccountPlannerResult shows model trace when available",
   assert.match(nodes["sample-library-account-planner-detail"].innerHTML, /继续放大情绪解释路线/);
 });
 
-test("renderSampleLibraryAccountPlannerResult marks local fallback analysis when model trace is absent", () => {
+test("renderSampleLibraryAccountPlannerResult hides trace label when model trace is absent", () => {
   const nodes = {
     "sample-library-account-planner-result": { innerHTML: "" },
     "sample-library-account-planner-detail": { innerHTML: "" }
@@ -319,11 +410,11 @@ test("renderSampleLibraryAccountPlannerResult marks local fallback analysis when
     }
   );
 
-  assert.match(nodes["sample-library-account-planner-result"].innerHTML, /分析来源：本地兜底/);
+  assert.doesNotMatch(nodes["sample-library-account-planner-result"].innerHTML, /分析来源：本地兜底/);
   assert.match(nodes["sample-library-account-planner-detail"].innerHTML, /价值 可尝试/);
 });
 
-test("fallback account planner summary produces concrete next-topic cards instead of duplicated route slogans", async () => {
+test("buildFallbackAccountPlannerSummary produces concrete next-topic cards instead of duplicated route slogans", async () => {
   const accountPlannerSource = await fs.readFile(path.join(process.cwd(), "src/account-planner.js"), "utf8");
   const helperSource = extractSourceBetween(
     accountPlannerSource,
@@ -475,7 +566,27 @@ test("summarizeAccountPlanner only sends reference and high-performing local sam
     summarize: async ({ localRecords, externalSamples }) => {
       capturedLocalRecords = localRecords;
       capturedExternalSamples = externalSamples;
-      return { summary: { strengths: [], gaps: [], nextMove: "" }, cards: [], modelTrace: {} };
+      return {
+        summary: { strengths: [], gaps: [], nextMove: "先看参考样本。" },
+        cards: [
+          {
+            planTitle: "下一篇先看参考样本",
+            estimatedValue: "high",
+            whyThisWorks: "用于验证筛选后的输入。",
+            titleFormula: "问题切口 + 解释",
+            bodyStructure: ["先讲问题", "再讲解释"],
+            riskBoundary: ["避免病理化"],
+            sourceSignals: ["测试桩"],
+            tags: ["悦己"],
+            prefillBriefing: "写一篇解释类内容。",
+            prefillReferenceTitle: "下一篇先看参考样本",
+            prefillMaterialText: "测试材料",
+            prefillCollectionType: "科普",
+            prefillTone: "温和"
+          }
+        ],
+        modelTrace: {}
+      };
     }
   });
 
@@ -508,107 +619,128 @@ test("summarizeAccountPlanner passes stored planner summary into the summarizer 
     externalSamples: [],
     summarize: async ({ localRecords }) => {
       capturedLocalRecords = localRecords;
-      return { summary: { strengths: [], gaps: [], nextMove: "" }, cards: [], modelTrace: {} };
+      return {
+        summary: { strengths: [], gaps: [], nextMove: "先看摘要样本。" },
+        cards: [
+          {
+            planTitle: "下一篇先看摘要样本",
+            estimatedValue: "high",
+            whyThisWorks: "用于验证 plannerSummary 已传入模型层。",
+            titleFormula: "问题切口 + 解释",
+            bodyStructure: ["先讲问题", "再讲解释"],
+            riskBoundary: ["避免病理化"],
+            sourceSignals: ["测试桩"],
+            tags: ["悦己"],
+            prefillBriefing: "写一篇解释类内容。",
+            prefillReferenceTitle: "下一篇先看摘要样本",
+            prefillMaterialText: "测试材料",
+            prefillCollectionType: "科普",
+            prefillTone: "温和"
+          }
+        ],
+        modelTrace: {}
+      };
     }
   });
 
   assert.equal(capturedLocalRecords[0].calibration.plannerSummary.summary, "这篇主要解释边界表达是在保护关系。");
 });
 
-test("summarizeAccountPlanner still produces fallback cards from recent published records when no high-performing sample exists", async () => {
-  const result = await summarizeAccountPlanner({
-    localRecords: [
-      {
-        id: "record-passed",
-        note: {
-          title: "表达边界后是不是会显得很冷淡？",
-          body: "最近连续几篇都在试关系沟通和边界表达，虽然还没有高表现，但评论里有稳定互动。",
-          tags: ["关系沟通", "边界表达"],
-          collectionType: "科普"
-        },
-        publish: {
-          status: "published_passed",
-          publishedAt: "2026-05-24T08:00:00.000Z",
-          metrics: { views: 1800, likes: 22, favorites: 9, comments: 6, shares: 2 }
-        },
-        reference: { enabled: false, tier: "" },
-        calibration: {
-          plannerSummary: {
-            summary: "这篇在解释明确表达边界不等于冷淡，适合继续观察沟通类选题。",
-            keyPoints: ["边界表达", "关系沟通"],
-            suggestedTopic: "怎么把拒绝说清楚又不伤人？"
+test("summarizeAccountPlanner throws when model returns no usable cards", async () => {
+  await assert.rejects(
+    () =>
+      summarizeAccountPlanner({
+        localRecords: [
+          {
+            id: "record-passed",
+            note: {
+              title: "表达边界后是不是会显得很冷淡？",
+              body: "最近连续几篇都在试关系沟通和边界表达，虽然还没有高表现，但评论里有稳定互动。",
+              tags: ["关系沟通", "边界表达"],
+              collectionType: "科普"
+            },
+            publish: {
+              status: "published_passed",
+              publishedAt: "2026-05-24T08:00:00.000Z",
+              metrics: { views: 1800, likes: 22, favorites: 9, comments: 6, shares: 2 }
+            },
+            reference: { enabled: false, tier: "" },
+            calibration: {
+              plannerSummary: {
+                summary: "这篇在解释明确表达边界不等于冷淡，适合继续观察沟通类选题。",
+                keyPoints: ["边界表达", "关系沟通"],
+                suggestedTopic: "怎么把拒绝说清楚又不伤人？"
+              }
+            }
           }
-        }
-      }
-    ],
-    externalSamples: [],
-    summarize: async () => ({
-      summary: {
-        strengths: ["暂无近期高表现内容，先观察最近已发布主题。"],
-        gaps: ["当前还缺少稳定爆样本，建议先做小步验证。"],
-        nextMove: "先继续观察最近已发布的关系沟通内容。"
-      },
-      cards: [],
-      modelTrace: {
-        provider: "mock",
-        model: "mock-account-planner",
-        route: "mock-route",
-        routeLabel: "Mock Route",
-        attemptedRoutes: ["mock-route"]
-      }
-    })
-  });
-
-  assert.equal(result.cards.length > 0, true);
-  assert.match(result.cards[0].prefillBriefing, /关系沟通|边界表达|怎么理解/);
-  assert.match(result.summary.gaps.join(" "), /小步验证|观察/);
+        ],
+        externalSamples: [],
+        summarize: async () => ({
+          summary: {
+            strengths: ["暂无近期高表现内容，先观察最近已发布主题。"],
+            gaps: ["当前还缺少稳定爆样本，建议先做小步验证。"],
+            nextMove: "先继续观察最近已发布的关系沟通内容。"
+          },
+          cards: [],
+          modelTrace: {
+            provider: "mock",
+            model: "mock-account-planner",
+            route: "mock-route",
+            routeLabel: "Mock Route",
+            attemptedRoutes: ["mock-route"]
+          }
+        })
+      }),
+    /模型没有返回可用的复盘卡/
+  );
 });
 
-test("summarizeAccountPlanner can still produce cards when the frontend sends planner summaries without raw note bodies", async () => {
-  const result = await summarizeAccountPlanner({
-    localRecords: [
-      {
-        id: "record-passed",
-        note: {
-          title: "表达边界后是不是会显得很冷淡？",
-          tags: ["关系沟通", "边界表达"],
-          collectionType: "科普"
-        },
-        publish: {
-          status: "published_passed",
-          publishedAt: "2026-05-24T08:00:00.000Z",
-          metrics: { views: 1800, likes: 22, favorites: 9, comments: 6, shares: 2 }
-        },
-        reference: { enabled: false, tier: "" },
-        calibration: {
-          plannerSummary: {
-            summary: "这篇在解释明确表达边界不等于冷淡，适合继续观察关系沟通方向。",
-            keyPoints: ["边界表达", "关系沟通"],
-            suggestedTopic: "怎么把拒绝说清楚又不伤人？"
+test("summarizeAccountPlanner throws even when stored planner summaries exist but model returns no cards", async () => {
+  await assert.rejects(
+    () =>
+      summarizeAccountPlanner({
+        localRecords: [
+          {
+            id: "record-passed",
+            note: {
+              title: "表达边界后是不是会显得很冷淡？",
+              tags: ["关系沟通", "边界表达"],
+              collectionType: "科普"
+            },
+            publish: {
+              status: "published_passed",
+              publishedAt: "2026-05-24T08:00:00.000Z",
+              metrics: { views: 1800, likes: 22, favorites: 9, comments: 6, shares: 2 }
+            },
+            reference: { enabled: false, tier: "" },
+            calibration: {
+              plannerSummary: {
+                summary: "这篇在解释明确表达边界不等于冷淡，适合继续观察关系沟通方向。",
+                keyPoints: ["边界表达", "关系沟通"],
+                suggestedTopic: "怎么把拒绝说清楚又不伤人？"
+              }
+            }
           }
-        }
-      }
-    ],
-    externalSamples: [],
-    summarize: async () => ({
-      summary: {
-        strengths: ["近期已发布样本开始集中到关系沟通方向。"],
-        gaps: ["暂时还没有稳定高表现样本，建议继续小步验证。"],
-        nextMove: "先围绕边界表达继续做一轮观察型选题。"
-      },
-      cards: [],
-      modelTrace: {
-        provider: "mock",
-        model: "mock-account-planner",
-        route: "mock-route",
-        routeLabel: "Mock Route",
-        attemptedRoutes: ["mock-route"]
-      }
-    })
-  });
-
-  assert.equal(result.cards.length > 0, true);
-  assert.match(result.cards[0].prefillMaterialText, /参考摘要：这篇在解释明确表达边界不等于冷淡/);
+        ],
+        externalSamples: [],
+        summarize: async () => ({
+          summary: {
+            strengths: ["近期已发布样本开始集中到关系沟通方向。"],
+            gaps: ["暂时还没有稳定高表现样本，建议继续小步验证。"],
+            nextMove: "先围绕边界表达继续做一轮观察型选题。"
+          },
+          cards: [],
+          modelTrace: {
+            provider: "mock",
+            model: "mock-account-planner",
+            route: "mock-route",
+            routeLabel: "Mock Route",
+            attemptedRoutes: ["mock-route"]
+          }
+        })
+      }),
+    /模型没有返回可用的复盘卡/
+  );
 });
 
 test("backfillPlannerSummaries stores generated planner summaries on matching note records", async () => {

@@ -88,9 +88,10 @@ import {
 } from "./theme-inspirations.js";
 import { parseAccountPlannerImportFiles } from "./account-planner-import.js";
 import { summarizeAccountPlanner } from "./account-planner.js";
-import { summarizeXhsAccountDiagnosis } from "./xhs-account-diagnosis.js";
+import { summarizeXhsAccountDiagnosis, summarizeXhsAccountDiagnosisWithSimilarFollowups } from "./xhs-account-diagnosis.js";
 import { saveXhsAccountDiagnosisReportArtifacts, saveXhsMultiAccountDiagnosisReportArtifacts } from "./xhs-account-diagnosis-report.js";
 import { createXhsAccountDiagnosisSubscriptionScheduler } from "./xhs-account-diagnosis-subscriptions.js";
+import { fetchMatchedTopSignals } from "./xhs-top-signals.js";
 import { recognizeFeedbackScreenshot, rewritePostForCompliance, suggestFeedbackCandidates, summarizeGenerationReferenceImage } from "./glm.js";
 import { summarizeGenerationReferenceAssets } from "./generation-reference-assets.js";
 import { mergeRuleAndSemanticAnalysis, runSemanticReview, runSemanticReviewComparison } from "./semantic-review.js";
@@ -538,8 +539,9 @@ function pickLatestXhsAccountDiagnosisSubscription(store = {}) {
   );
 }
 
-function buildXhsAccountDiagnosisReportPayload() {
+function buildXhsAccountDiagnosisReportPayload(resultAvailable = false) {
   return {
+    resultAvailable,
     htmlPath: "/api/xhs/account-diagnosis/report",
     reportDataPath: "/api/xhs/account-diagnosis/report-data"
   };
@@ -1492,6 +1494,21 @@ async function handleRequest(request, response) {
     });
   }
 
+  if (request.method === "POST" && url.pathname === "/api/sample-library/external-reference-samples") {
+    const payload = await readBody(request);
+    const incoming = Array.isArray(payload?.items) ? payload.items : [];
+    const current = await loadExternalReferenceSamples();
+    const next = [...current, ...incoming.map((item) => normalizeExternalReferenceSample(item))];
+    const items = await saveExternalReferenceSamples(next);
+    return sendJson(response, 200, {
+      ok: true,
+      items,
+      diagnostics: {
+        importedCount: incoming.length
+      }
+    });
+  }
+
   if (request.method === "POST" && url.pathname === "/api/sample-library/account-planner/analyze") {
     const payload = await readBody(request, { maxBytes: 5 * 1024 * 1024 });
     const localRecords = Array.isArray(payload?.records) ? payload.records : await loadNoteRecords();
@@ -1565,17 +1582,24 @@ async function handleRequest(request, response) {
         mode: "multi",
         result: persisted.result,
         generatedAt: persisted.generatedAt || "",
-        report: buildXhsAccountDiagnosisReportPayload()
+        report: buildXhsAccountDiagnosisReportPayload(true)
       });
     }
 
     const result =
       payload?.mockXhsAccountDiagnosis && typeof payload.mockXhsAccountDiagnosis === "object"
         ? payload.mockXhsAccountDiagnosis
-        : await summarizeXhsAccountDiagnosis({ redId });
-    await saveXhsAccountDiagnosisReportArtifacts(result, { generatedAt });
+        : await summarizeXhsAccountDiagnosisWithSimilarFollowups({ redId });
+    const finalResult =
+      payload?.mockXhsAccountDiagnosis && typeof payload.mockXhsAccountDiagnosis === "object"
+        ? result
+        : {
+            ...result,
+            matchedSignals: await fetchMatchedTopSignals(result).catch(() => ({ dailyTop: [], weeklyTop: [], lowTop: [] }))
+          };
+    await saveXhsAccountDiagnosisReportArtifacts(finalResult, { generatedAt });
     const persisted = await saveXhsAccountDiagnosis({
-      result,
+      result: finalResult,
       redId,
       generatedAt
     });
@@ -1585,8 +1609,9 @@ async function handleRequest(request, response) {
       account: persisted.result?.account || null,
       diagnosis: persisted.result?.diagnosis || null,
       similarAccounts: persisted.result?.similarAccounts || { peer: [], benchmark: [] },
+      matchedSignals: persisted.result?.matchedSignals || { dailyTop: [], weeklyTop: [], lowTop: [] },
       generatedAt: persisted.generatedAt || "",
-      report: buildXhsAccountDiagnosisReportPayload()
+      report: buildXhsAccountDiagnosisReportPayload(true)
     });
   }
 
@@ -1622,7 +1647,7 @@ async function handleRequest(request, response) {
       redId: String(cached?.redId || "").trim(),
       generatedAt: String(cached?.generatedAt || "").trim(),
       subscription: pickLatestXhsAccountDiagnosisSubscription(subscriptions),
-      report: buildXhsAccountDiagnosisReportPayload()
+      report: buildXhsAccountDiagnosisReportPayload(Boolean(cached?.result))
     });
   }
 

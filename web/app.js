@@ -6125,6 +6125,84 @@ async function addDraftIdeaFromGenerationCandidate(candidateId = "", candidateIn
   setActionGateHint("generation-action-hint", "已加入草稿区，可稍后继续写。");
 }
 
+function findMatchedXhsSignalById(signalId = "") {
+  const result = appState.xhsAccountDiagnosis?.currentRunResult || appState.xhsAccountDiagnosis?.result || {};
+  const matchedSignals = result?.matchedSignals && typeof result.matchedSignals === "object" ? result.matchedSignals : {};
+  const allItems = [
+    ...(Array.isArray(matchedSignals.dailyTop) ? matchedSignals.dailyTop : []),
+    ...(Array.isArray(matchedSignals.weeklyTop) ? matchedSignals.weeklyTop : []),
+    ...(Array.isArray(matchedSignals.lowTop) ? matchedSignals.lowTop : [])
+  ];
+
+  return allItems.find((item) => String(item?.id || "") === String(signalId || "")) || null;
+}
+
+async function addMatchedXhsSignalToExternalSamples(signalId = "") {
+  const signal = findMatchedXhsSignalById(signalId);
+
+  if (!signal) {
+    return;
+  }
+
+  const payload = {
+    items: [
+      {
+        title: signal.title,
+        body: signal.body,
+        tags: signal.tags,
+        collectionType: signal.track || "科普",
+        notes: signal.analysis?.whySelected || "",
+        publish: signal.publish,
+        sourceType: signal.sourceType,
+        author: signal.author,
+        authorRedId: signal.authorRedId
+      }
+    ]
+  };
+
+  const response = await apiJson(sampleLibraryExternalSamplesApi, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+
+  appState.externalReferenceSamples = Array.isArray(response?.items) ? response.items : appState.externalReferenceSamples;
+  setSampleLibraryModalMessage("已加入外部参考样本。");
+}
+
+async function addMatchedXhsSignalToDraftIdeas(signalId = "") {
+  const signal = findMatchedXhsSignalById(signalId);
+
+  if (!signal) {
+    return;
+  }
+
+  await saveDraftIdea(
+    buildDraftIdeaPayload({
+      title: signal.title,
+      briefing: signal.analysis?.reuseHint || signal.analysis?.whySelected || signal.title,
+      collectionType: signal.track || "科普",
+      materialText: signal.body,
+      referenceTitle: signal.title,
+      tags: signal.tags,
+      sourceType: signal.sourceType,
+      sourceLabel: "同类爆款信号"
+    })
+  );
+  setSampleLibraryModalMessage("已生成灵感草稿。");
+}
+
+async function refreshXhsMatchedSignals() {
+  const currentResult = appState.xhsAccountDiagnosis?.currentRunResult || appState.xhsAccountDiagnosis?.result;
+  const redId = String(currentResult?.account?.redId || byId("xhs-account-diagnosis-red-id")?.value || "").trim();
+
+  if (!redId) {
+    openXhsAccountDiagnosisModal({ message: "当前没有可刷新的账号结果。", useLatestStoredResult: false });
+    return;
+  }
+
+  await runXhsAccountDiagnosisAnalysis({ forcedRedId: redId });
+}
+
 function loadDraftIdeaIntoGenerationForm(id = "") {
   const item = (Array.isArray(appState.draftIdeas?.items) ? appState.draftIdeas.items : []).find(
     (entry) => String(entry?.id || "") === String(id || "")
@@ -6829,28 +6907,30 @@ async function followSimilarXhsAccountDiagnosis(redId = "") {
 }
 
 async function subscribeXhsAccountDiagnosisSync() {
-  const redId =
-    String(byId("xhs-account-diagnosis-red-id")?.value || "").trim() ||
-    String(appState.xhsAccountDiagnosis?.result?.account?.redId || "").trim();
-  const nickname = String(appState.xhsAccountDiagnosis?.result?.account?.nickname || "").trim();
+  const redId = String(byId("xhs-account-diagnosis-red-id")?.value || "").trim();
 
   if (!redId) {
-    openXhsAccountDiagnosisModal({ message: "当前没有可订阅补采的小红书号。" });
+    openXhsAccountDiagnosisModal({ message: "请先在输入框里填写当前要补采的小红书号。" });
     return;
   }
 
   const response = await apiJson(`${xhsAccountDiagnosisApi}/subscribe`, {
     method: "POST",
-    body: JSON.stringify({ redId, nickname })
+    body: JSON.stringify({ redId })
   });
 
   appState.xhsAccountDiagnosis = {
     ...appState.xhsAccountDiagnosis,
+    currentRunResult: null,
+    currentRunGeneratedAt: "",
     subscription: response?.subscription || null,
     canSubscribe: false
   };
   syncXhsAccountDiagnosisPanel();
-  openXhsAccountDiagnosisModal({ message: "已订阅补采，系统会在 30 分钟后自动重查并更新最近报告。" });
+  openXhsAccountDiagnosisModal({
+    message: `已订阅补采（小红书号 ${redId}），系统会在 30 分钟后自动重查并更新最近报告。`,
+    useLatestStoredResult: false
+  });
 }
 
 function readSampleLibraryImportDraftReference(item = {}) {
@@ -8382,6 +8462,14 @@ byId("generation-reference-search-button")?.addEventListener("click", () => {
 });
 byId("generation-theme-inspiration-button")?.addEventListener("click", () => {
   openGenerationThemeInspirationModal().catch(() => {});
+});
+
+byId("generation-top-signals-button")?.addEventListener("click", async () => {
+  await refreshXhsAccountDiagnosisState();
+  openXhsAccountDiagnosisModal({
+    message: appState.xhsAccountDiagnosis?.result ? "" : "请先完成一次账号诊断，再查看同类爆文灵感。",
+    useLatestStoredResult: true
+  });
 });
 byId("generation-reference-assets-preview")?.addEventListener("click", (event) => {
   const button = event.target instanceof Element ? event.target.closest("[data-action]") : null;
@@ -10878,6 +10966,21 @@ document.addEventListener("click", async (event) => {
 
   if (action === "follow-similar-xhs-account-diagnosis") {
     await followSimilarXhsAccountDiagnosis(button.dataset.redId || "");
+    return;
+  }
+
+  if (action === "save-xhs-matched-signal-external-sample") {
+    await addMatchedXhsSignalToExternalSamples(button.dataset.signalId || "");
+    return;
+  }
+
+  if (action === "save-xhs-matched-signal-draft-idea") {
+    await addMatchedXhsSignalToDraftIdeas(button.dataset.signalId || "");
+    return;
+  }
+
+  if (action === "refresh-xhs-matched-signals") {
+    await refreshXhsMatchedSignals();
     return;
   }
 

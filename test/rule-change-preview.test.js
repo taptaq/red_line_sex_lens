@@ -11,14 +11,15 @@ import path from "node:path";
 async function withTempPreviewData(t, run) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "rule-preview-"));
   const originals = {
-    seedLexicon: paths.lexiconSeed,
-    customLexicon: paths.lexiconCustom,
+    lexiconSeed: paths.lexiconSeed,
+    lexiconCustom: paths.lexiconCustom,
     feedbackLog: paths.feedbackLog,
     falsePositiveLog: paths.falsePositiveLog,
     reviewQueue: paths.reviewQueue,
     rewritePairs: paths.rewritePairs,
     successSamples: paths.successSamples,
     noteLifecycle: paths.noteLifecycle,
+    noteRecords: paths.noteRecords,
     whitelist: paths.whitelist
   };
 
@@ -30,6 +31,7 @@ async function withTempPreviewData(t, run) {
   paths.rewritePairs = path.join(tempDir, "rewrite-pairs.json");
   paths.successSamples = path.join(tempDir, "success-samples.json");
   paths.noteLifecycle = path.join(tempDir, "note-lifecycle.json");
+  paths.noteRecords = path.join(tempDir, "note-records.json");
   paths.whitelist = path.join(tempDir, "whitelist.json");
 
   await Promise.all([
@@ -40,6 +42,7 @@ async function withTempPreviewData(t, run) {
     fs.writeFile(paths.rewritePairs, "[]\n", "utf8"),
     fs.writeFile(paths.successSamples, "[]\n", "utf8"),
     fs.writeFile(paths.noteLifecycle, "[]\n", "utf8"),
+    fs.writeFile(paths.noteRecords, "[]\n", "utf8"),
     fs.writeFile(paths.whitelist, "[]\n", "utf8")
   ]);
 
@@ -50,6 +53,15 @@ async function withTempPreviewData(t, run) {
 
   return run();
 }
+
+test("preview temp helper tracks lexicon path keys with restorable names", async () => {
+  const source = await fs.readFile(path.join(process.cwd(), "test/rule-change-preview.test.js"), "utf8");
+
+  assert.match(source, /lexiconSeed:\s*paths\.lexiconSeed/);
+  assert.match(source, /lexiconCustom:\s*paths\.lexiconCustom/);
+  assert.doesNotMatch(source, /seedLexicon:\s*paths\.lexiconSeed/);
+  assert.doesNotMatch(source, /customLexicon:\s*paths\.lexiconCustom/);
+});
 
 test("rule preview flags whitelist candidates that would soften violation-like history", () => {
   const preview = buildRuleChangePreview({
@@ -140,8 +152,30 @@ test("admin data enriches review queue items with rule change previews", async (
       "utf8"
     );
     await fs.writeFile(
-      paths.successSamples,
-      `${JSON.stringify([{ id: "success-1", tier: "featured", title: "亲密沟通", body: "稳定过审" }], null, 2)}\n`,
+      paths.noteRecords,
+      `${JSON.stringify(
+        [
+          {
+            id: "success-1",
+            source: "manual",
+            stage: "published_reference",
+            note: {
+              title: "亲密沟通",
+              body: "稳定过审"
+            },
+            publish: {
+              status: "published_passed"
+            },
+            reference: {
+              enabled: true,
+              tier: "featured",
+              selectedBy: "manual"
+            }
+          }
+        ],
+        null,
+        2
+      )}\n`,
       "utf8"
     );
 

@@ -15,6 +15,7 @@ async function withTempGenerationData(t, run) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "generation-api-"));
   const originals = {
     collectionTypes: paths.collectionTypes,
+    noteRecords: paths.noteRecords,
     successSamples: paths.successSamples,
     styleProfile: paths.styleProfile,
     themeInspirations: paths.themeInspirations,
@@ -30,6 +31,7 @@ async function withTempGenerationData(t, run) {
     memoryIndexMeta: paths.memoryIndexMeta
   };
   paths.collectionTypes = path.join(tempDir, "collection-types.json");
+  paths.noteRecords = path.join(tempDir, "note-records.json");
   paths.successSamples = path.join(tempDir, "success-samples.json");
   paths.styleProfile = path.join(tempDir, "style-profile.json");
   paths.themeInspirations = path.join(tempDir, "theme-inspirations.json");
@@ -44,6 +46,7 @@ async function withTempGenerationData(t, run) {
   paths.memoryEmbeddings = path.join(paths.memoryRoot, "embeddings.jsonl");
   paths.memoryIndexMeta = path.join(paths.memoryRoot, "index-meta.json");
   await fs.writeFile(paths.collectionTypes, `${JSON.stringify({ custom: [] }, null, 2)}\n`, "utf8");
+  await fs.writeFile(paths.noteRecords, "[]\n", "utf8");
   await fs.writeFile(
     paths.successSamples,
     `${JSON.stringify([{ id: "sample-1", tier: "featured", title: "参考标题", body: "参考正文", tags: ["沟通"] }], null, 2)}\n`,
@@ -72,6 +75,15 @@ async function withTempGenerationData(t, run) {
 
   return run();
 }
+
+test("withTempGenerationData isolates note records path", async (t) => {
+  const originalNoteRecords = paths.noteRecords;
+
+  await withTempGenerationData(t, async () => {
+    assert.notEqual(paths.noteRecords, originalNoteRecords);
+    assert.match(paths.noteRecords, /generation-api-.*\/note-records\.json$/);
+  });
+});
 
 test("generation endpoint returns candidates with recommendation metadata", async (t) => {
   await withTempGenerationData(t, async () => {
@@ -579,7 +591,7 @@ test("account planner analyze endpoint returns planner cards with prefills from 
   });
 });
 
-test("account planner analyze endpoint keeps model summary but falls back to planner cards when model omits them", async (t) => {
+test("account planner analyze endpoint returns an error when model omits planner cards", async (t) => {
   await withTempGenerationData(t, async () => {
     const result = await invokeRoute("POST", "/api/sample-library/account-planner/analyze", {
       records: [
@@ -618,22 +630,13 @@ test("account planner analyze endpoint keeps model summary but falls back to pla
       }
     });
 
-    assert.equal(result.status, 200);
-    assert.equal(result.ok, true);
-    assert.deepEqual(result.summary.strengths, ["模型判断：情绪解释路线最稳"]);
-    assert.equal(result.cards.length > 0, true);
-    assert.match(result.cards[0].prefillBriefing, /边界|情绪反应|怎么理解/);
-    assert.deepEqual(result.modelTrace, {
-      provider: "mock",
-      model: "mock-account-planner",
-      route: "mock-route",
-      routeLabel: "Mock Route",
-      attemptedRoutes: ["mock-route"]
-    });
+    assert.equal(result.status, 500);
+    assert.equal(result.ok, false);
+    assert.match(result.error || "", /模型没有返回可用的复盘卡/);
   });
 });
 
-test("account planner analyze endpoint still returns fallback cards when only published-passed samples are available", async (t) => {
+test("account planner analyze endpoint returns an error when only published-passed samples are available and model omits cards", async (t) => {
   await withTempGenerationData(t, async () => {
     const result = await invokeRoute("POST", "/api/sample-library/account-planner/analyze", {
       records: [
@@ -681,11 +684,9 @@ test("account planner analyze endpoint still returns fallback cards when only pu
       }
     });
 
-    assert.equal(result.status, 200);
-    assert.equal(result.ok, true);
-    assert.equal(result.cards.length > 0, true);
-    assert.equal(result.diagnostics.cardCount > 0, true);
-    assert.match(result.cards[0].prefillBriefing, /关系沟通|边界表达|怎么理解/);
+    assert.equal(result.status, 500);
+    assert.equal(result.ok, false);
+    assert.match(result.error || "", /模型没有返回可用的复盘卡/);
   });
 });
 
@@ -716,6 +717,25 @@ test("xhs account diagnosis endpoint returns normalized diagnosis and similar ac
         similarAccounts: {
           peer: [{ redId: "peer-1", nickname: "同阶号" }],
           benchmark: [{ redId: "benchmark-1", nickname: "高阶号" }]
+        },
+        matchedSignals: {
+          dailyTop: [
+            {
+              id: "daily-1",
+              sourceType: "daily_top",
+              title: "同类今日起量样本",
+              body: "同类今日正文",
+              author: "作者A",
+              authorRedId: "author-a",
+              accountTier: "尾部KOL",
+              track: "星座情感",
+              tags: ["关系沟通"],
+              publish: { status: "positive_performance", publishedAt: "2026-05-30", metrics: { likes: 900, favorites: 200, comments: 50, views: 9000, shares: 30 } },
+              analysis: { whySelected: "今天起量快", reuseHint: "适合借题切入" }
+            }
+          ],
+          weeklyTop: [],
+          lowTop: []
         }
       }
     });
@@ -727,6 +747,7 @@ test("xhs account diagnosis endpoint returns normalized diagnosis and similar ac
     assert.match(result.diagnosis.summary, /近30天互动强/);
     assert.equal(result.similarAccounts.peer.length, 1);
     assert.equal(result.similarAccounts.benchmark.length, 1);
+    assert.equal(result.matchedSignals.dailyTop.length, 1);
     assert.equal(typeof result.report?.htmlPath, "string");
     assert.equal(typeof result.report?.reportDataPath, "string");
 

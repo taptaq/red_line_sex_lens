@@ -1,55 +1,131 @@
 {
   "summary": {
     "strengths": [
-      "近期已发布样本开始集中到关系沟通方向。"
+      "伪装学大师选题稳定高表现，尤其社死+幽默组合",
+      "悦己/愉悦标签内容互动率高，评论活跃",
+      "深夜话题+大人也要玩玩具标签组合持续吸引流量"
     ],
     "gaps": [
-      "暂时还没有稳定高表现样本，建议继续小步验证。"
+      "身体探索和疗愈指南类内容表现偏弱，浏览量低",
+      "近期内容（2月后）整体数据下滑，缺少爆款",
+      "部分内容评论互动少，需加强引导性提问"
     ],
-    "nextMove": "先围绕边界表达继续做一轮观察型选题。"
+    "nextMove": "优先复用伪装学大师+社死+幽默的成功公式，结合近期热点（如旅行/安检/送礼）制造新爆款"
   },
   "cards": [
     {
       "planId": "plan-1",
-      "planTitle": "关系沟通之后这种反应正常吗？",
-      "estimatedValue": "medium",
-      "whyThisWorks": "这条建议来自账号本地高表现记录，更适合继续细化“关系沟通之后会发生什么”这一类具体问题。",
-      "titleFormula": "反常识提问 + 解释原因 + 安抚落点",
+      "planTitle": "旅行箱里的秘密：如何让朋友以为你带的是筋膜枪？",
+      "estimatedValue": "high",
+      "whyThisWorks": "基于高表现样本'安检指南'和'伪装桌面'，旅行社死话题天然高互动，且暑期旅行季时效性强",
+      "titleFormula": "场景痛点 + 解决方案 + 幽默反差",
       "bodyStructure": [
-        "先抛一个常见误解",
-        "用轻科普解释原因",
-        "给出可执行的安抚或判断边界"
+        "抛出旅行中玩具暴露的社死场景",
+        "列出3-4种伪装技巧（如混入数码配件、选日用品造型）",
+        "用自嘲心态收尾，强调快乐无罪"
       ],
       "riskBoundary": [
-        "避免病理化",
-        "不做医疗诊断"
+        "避免具体品牌或功能描述",
+        "不鼓励违规携带，强调合法合规"
       ],
       "sourceSignals": [
-        "本地高表现记录：表达边界后是不是会显得很冷淡？",
-        "标签信号：关系沟通、边界表达",
-        "浏览 1800"
+        "本地高表现：🆘 别让安检员拿出来!“玩具”隐形携带指南",
+        "本地高表现：光明正大放桌上，让别人猜去！",
+        "标签：社死、愉悦、大人也要玩玩具"
       ],
       "tags": [
-        "关系沟通",
-        "边界表达"
+        "社死",
+        "旅行",
+        "伪装学大师",
+        "愉悦"
       ],
-      "prefillBriefing": "写一篇科普向内容，围绕“关系沟通之后这种反应正常吗？”展开，重点解释原因、正常化常见反应，并补上关系沟通相关边界提醒。",
-      "prefillReferenceTitle": "关系沟通之后这种反应正常吗？",
-      "prefillMaterialText": "参考摘要：最近几篇都在试关系沟通和边界表达，虽然没有明显爆发，但互动方向比较稳定。\n结构重点：反常识提问 -> 解释原因 -> 安抚落点",
-      "prefillCollectionType": "科普",
-      "prefillTone": "温和"
+      "prefillBriefing": "写一篇伪装学大师向内容，围绕旅行箱里如何伪装成人玩具，用幽默自嘲风格提供3-4个实用技巧，强调快乐无罪。",
+      "prefillReferenceTitle": "旅行箱里的秘密：如何让朋友以为你带的是筋膜枪？",
+      "prefillMaterialText": "参考样本：'光明正大放桌上'的伪装创意 + '安检指南'的实用技巧。结构：场景痛点 -> 伪装方案列表 -> 心态建设。",
+      "prefillCollectionType": "伪装学大师",
+      "prefillTone": "幽默"
+    },
+    {
+      "planId": "plan-2",
+      "planTitle": "当闺蜜问我床头柜里是什么，我编了个北欧艺术家的故事",
+      "estimatedValue": "high",
+      "whyThisWorks": "直接复用爆款'死后社死'的床头柜场景，加上'北欧艺术品'的梗（来自低表现样本但可改造），社交场景共鸣强",
+      "titleFormula": "社死场景 + 创意化解 + 互动提问",
+      "bodyStructure": [
+        "描述被朋友发现玩具的尴尬瞬间",
+        "分享3种化解话术（艺术收藏、养生工具、科技新品）",
+        "结尾提问：你被问过最离谱的问题是什么？"
+      ],
+      "riskBoundary": [
+        "避免直接描述玩具功能",
+        "话术需符合社交常识，不鼓励欺骗"
+      ],
+      "sourceSignals": [
+        "本地高表现：如果有天我突然die了,请务必帮我清理一下床头柜💥",
+        "本地样本：🆘 朋友问我：“这是北欧艺术品吗？”",
+        "标签：社死、伪装学大师、送礼"
+      ],
+      "tags": [
+        "社死",
+        "社交",
+        "伪装学大师",
+        "互动"
+      ],
+      "prefillBriefing": "写一篇伪装学大师向内容，围绕被朋友发现玩具后的化解话术，用幽默风格分享3种创意回答，结尾引导评论互动。",
+      "prefillReferenceTitle": "当闺蜜问我床头柜里是什么，我编了个北欧艺术家的故事",
+      "prefillMaterialText": "参考样本：'死后社死'的幽默焦虑 + '北欧艺术品'的梗。结构：尴尬场景 -> 化解话术列表 -> 互动提问。",
+      "prefillCollectionType": "伪装学大师",
+      "prefillTone": "幽默"
+    },
+    {
+      "planId": "plan-3",
+      "planTitle": "独居女孩的快乐清单：那些让我上头的'小废物'",
+      "estimatedValue": "medium",
+      "whyThisWorks": "结合悦己+独居场景，从'玩具'扩展到'小废物'（解压/治愈小物），拓宽选题边界，降低敏感度",
+      "titleFormula": "身份标签 + 快乐清单 + 情绪共鸣",
+      "bodyStructure": [
+        "定义'小废物'：那些没用但快乐的东西",
+        "列举3-4种（如解压玩具、香薰、毛绒玩具等）",
+        "强调独居时自我取悦的重要性"
+      ],
+      "riskBoundary": [
+        "避免直接提及成人玩具，用'小废物'模糊化",
+        "不鼓励过度消费，强调精神价值"
+      ],
+      "sourceSignals": [
+        "本地高表现：悦己、愉悦标签",
+        "本地样本：INFP的快乐，99%都在脑内？",
+        "标签：悦己、独居、治愈"
+      ],
+      "tags": [
+        "悦己",
+        "独居",
+        "治愈",
+        "快乐清单"
+      ],
+      "prefillBriefing": "写一篇疗愈指南向内容，围绕独居女孩的'小废物'快乐清单，用温暖治愈风格分享3-4种解压小物，强调自我取悦。",
+      "prefillReferenceTitle": "独居女孩的快乐清单：那些让我上头的'小废物'",
+      "prefillMaterialText": "参考样本：'INFP的快乐'的情绪共鸣 + '悦己'标签。结构：定义 -> 清单列表 -> 情绪升华。",
+      "prefillCollectionType": "疗愈指南",
+      "prefillTone": "温暖"
     }
   ],
   "modelTrace": {
-    "provider": "mock",
-    "model": "mock-account-planner",
-    "route": "mock-route",
-    "routeLabel": "Mock Route",
+    "provider": "deepseek",
+    "model": "deepseek-v4-flash",
+    "route": "dmxapi",
+    "routeLabel": "DMXAPI",
     "attemptedRoutes": [
-      "mock-route"
+      {
+        "route": "dmxapi",
+        "routeLabel": "DMXAPI",
+        "model": "deepseek-v4-flash",
+        "status": "ok",
+        "message": ""
+      }
     ]
   },
-  "generatedAt": "2026-05-29T15:09:35.353Z",
-  "localRecordCount": 1,
+  "generatedAt": "2026-05-30T14:03:33.573Z",
+  "localRecordCount": 84,
   "externalSampleCount": 0
 }

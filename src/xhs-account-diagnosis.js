@@ -435,3 +435,43 @@ export async function summarizeXhsAccountDiagnosis({
     similarAccounts
   };
 }
+
+export async function summarizeXhsAccountDiagnosisWithSimilarFollowups({
+  redId = "",
+  queryAccount,
+  querySimilar,
+  followupLimit = 3
+} = {}) {
+  const baseResult = await summarizeXhsAccountDiagnosis({
+    redId,
+    queryAccount,
+    querySimilar
+  });
+
+  const candidates = [
+    ...(Array.isArray(baseResult?.similarAccounts?.peer) ? baseResult.similarAccounts.peer : []),
+    ...(Array.isArray(baseResult?.similarAccounts?.benchmark) ? baseResult.similarAccounts.benchmark : [])
+  ]
+    .filter((item) => normalizeString(item?.redId))
+    .slice(0, Math.max(0, Number(followupLimit) || 0));
+
+  const similarFollowups = [];
+
+  for (const item of candidates) {
+    try {
+      const followup = await summarizeXhsAccountDiagnosis({
+        redId: item.redId,
+        queryAccount,
+        querySimilar
+      });
+      similarFollowups.push(followup);
+    } catch {
+      // Keep the main diagnosis usable even if one follow-up account fails.
+    }
+  }
+
+  return {
+    ...baseResult,
+    similarFollowups
+  };
+}

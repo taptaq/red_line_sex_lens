@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { summarizeXhsAccountDiagnosis } from "../src/xhs-account-diagnosis.js";
+import { summarizeXhsAccountDiagnosis, summarizeXhsAccountDiagnosisWithSimilarFollowups } from "../src/xhs-account-diagnosis.js";
 import { runXhsAccountDiagnosisSubscription } from "../src/xhs-account-diagnosis-subscriptions.js";
 
 test("summarizeXhsAccountDiagnosis normalizes Redfox account and similar-account payloads", async () => {
@@ -84,6 +84,80 @@ test("summarizeXhsAccountDiagnosis still works when similar-account lookup fails
   assert.equal(result.account.metrics.fans, 4584);
   assert.equal(result.similarAccounts.peer.length, 1);
   assert.equal(result.similarAccounts.peer[0].nickname, "内嵌相似号");
+});
+
+test("summarizeXhsAccountDiagnosisWithSimilarFollowups automatically analyzes 2-3 similar accounts", async () => {
+  const byId = {
+    "main": {
+      items: [
+        {
+          nickname: "主账号",
+          redId: "main",
+          fans: 12000,
+          desc: "主账号简介",
+          totalWork: 40,
+          liked: 100000,
+          collected: 20000,
+          noteCountThirty: 12,
+          interactiveCountThirty: 25000,
+          works: []
+        }
+      ]
+    },
+    "peer-1": {
+      items: [
+        {
+          nickname: "相似账号1",
+          redId: "peer-1",
+          fans: 9000,
+          desc: "相似1",
+          totalWork: 18,
+          liked: 60000,
+          collected: 8000,
+          noteCountThirty: 8,
+          interactiveCountThirty: 12000,
+          works: []
+        }
+      ]
+    },
+    "peer-2": {
+      items: [
+        {
+          nickname: "相似账号2",
+          redId: "peer-2",
+          fans: 8000,
+          desc: "相似2",
+          totalWork: 12,
+          liked: 30000,
+          collected: 5000,
+          noteCountThirty: 7,
+          interactiveCountThirty: 9000,
+          works: []
+        }
+      ]
+    }
+  };
+
+  const result = await summarizeXhsAccountDiagnosisWithSimilarFollowups({
+    redId: "main",
+    queryAccount: async (id) => byId[id],
+    querySimilar: async (id) =>
+      id === "main"
+        ? {
+            peerAccounts: [
+              { redId: "peer-1", nickname: "相似账号1", fans: 9000, interactiveCountThirty: 12000 },
+              { redId: "peer-2", nickname: "相似账号2", fans: 8000, interactiveCountThirty: 9000 }
+            ],
+            benchmarkAccounts: []
+          }
+        : { peerAccounts: [], benchmarkAccounts: [] }
+  });
+
+  assert.equal(result.account.nickname, "主账号");
+  assert.equal(Array.isArray(result.similarFollowups), true);
+  assert.equal(result.similarFollowups.length, 2);
+  assert.equal(result.similarFollowups[0].account.nickname, "相似账号1");
+  assert.equal(result.similarFollowups[1].account.nickname, "相似账号2");
 });
 
 test("runXhsAccountDiagnosisSubscription schedules a retry when sync fails", async () => {
