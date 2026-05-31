@@ -34,6 +34,11 @@ let accountPlannerSummaryCache = {
   mtimeMs: null,
   value: null
 };
+let xhsTopSignalsBrowserCache = {
+  path: "",
+  mtimeMs: null,
+  value: null
+};
 let xhsAccountDiagnosisCache = {
   path: "",
   mtimeMs: null,
@@ -606,6 +611,87 @@ export async function saveAccountPlannerSummary(value) {
   const stat = await fs.stat(paths.accountPlannerSummary);
   accountPlannerSummaryCache = {
     path: paths.accountPlannerSummary,
+    mtimeMs: stat.mtimeMs,
+    value: normalized
+  };
+  return normalized;
+}
+
+function sanitizeXhsTopSignalsBrowserState(input = {}) {
+  const accountContext = input?.accountContext && typeof input.accountContext === "object" ? input.accountContext : {};
+  const filters = input?.filters && typeof input.filters === "object" ? input.filters : {};
+  const items = input?.items && typeof input.items === "object" ? input.items : {};
+
+  return {
+    accountContext: {
+      redId: normalizeString(accountContext.redId),
+      nickname: normalizeString(accountContext.nickname),
+      derivedTrack: normalizeString(accountContext.derivedTrack),
+      derivedTags: uniqueStrings(accountContext.derivedTags)
+    },
+    filters: {
+      track: normalizeString(filters.track),
+      keyword: normalizeString(filters.keyword),
+      tags: uniqueStrings(filters.tags)
+    },
+    items: {
+      dailyTop: Array.isArray(items.dailyTop) ? items.dailyTop : [],
+      weeklyTop: Array.isArray(items.weeklyTop) ? items.weeklyTop : [],
+      lowTop: Array.isArray(items.lowTop) ? items.lowTop : []
+    },
+    generatedAt: normalizeString(input.generatedAt),
+    resultCount: normalizeNumber(input.resultCount, 0)
+  };
+}
+
+export async function loadXhsTopSignalsBrowser() {
+  const configuredPath = paths.xhsTopSignals;
+
+  if (await fileExists(configuredPath)) {
+    const stat = await fs.stat(configuredPath);
+
+    if (
+      xhsTopSignalsBrowserCache.path === configuredPath &&
+      xhsTopSignalsBrowserCache.mtimeMs === stat.mtimeMs &&
+      xhsTopSignalsBrowserCache.value &&
+      typeof xhsTopSignalsBrowserCache.value === "object"
+    ) {
+      return xhsTopSignalsBrowserCache.value;
+    }
+
+    const normalized = sanitizeXhsTopSignalsBrowserState(await readJson(configuredPath, {}));
+    xhsTopSignalsBrowserCache = {
+      path: configuredPath,
+      mtimeMs: stat.mtimeMs,
+      value: normalized
+    };
+    return normalized;
+  }
+
+  if (
+    xhsTopSignalsBrowserCache.path === configuredPath &&
+    xhsTopSignalsBrowserCache.mtimeMs === null &&
+    xhsTopSignalsBrowserCache.value &&
+    typeof xhsTopSignalsBrowserCache.value === "object"
+  ) {
+    return xhsTopSignalsBrowserCache.value;
+  }
+
+  const fallback = sanitizeXhsTopSignalsBrowserState();
+  xhsTopSignalsBrowserCache = {
+    path: configuredPath,
+    mtimeMs: null,
+    value: fallback
+  };
+  return fallback;
+}
+
+export async function saveXhsTopSignalsBrowser(state = {}) {
+  const normalized = sanitizeXhsTopSignalsBrowserState(state);
+  await writeJson(paths.xhsTopSignals, normalized);
+  const stat = await fs.stat(paths.xhsTopSignals);
+  xhsTopSignalsBrowserCache = {
+    path: paths.xhsTopSignals,
     mtimeMs: stat.mtimeMs,
     value: normalized
   };

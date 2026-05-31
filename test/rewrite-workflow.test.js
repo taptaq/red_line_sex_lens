@@ -50,6 +50,34 @@ test("rewrite prompt requires preserving full body instead of shortening into a 
   assert.match(userPrompt, /性行为/);
 });
 
+test("rewrite prompt applies xiaohongshu style output requirements from rewrite skill", () => {
+  const messages = buildRewriteMessages({
+    input: {
+      title: "原标题",
+      body: "原正文",
+      coverText: "原封面",
+      tags: ["关系沟通"]
+    },
+    analysis: {
+      verdict: "manual_review",
+      finalVerdict: "manual_review",
+      hits: [],
+      suggestions: []
+    },
+    semantic: null
+  });
+
+  const systemPrompt = String(messages[0]?.content || "");
+  const userPrompt = String(messages[1]?.content || "");
+
+  assert.match(systemPrompt, /小红书内容安全团队中的中文合规编辑与改写助手/);
+  assert.match(userPrompt, /必须生成一个有钩子的标题/);
+  assert.match(userPrompt, /至少使用 5 个不重复的 emoji|至少5个不重复的emoji/);
+  assert.match(userPrompt, /标题和正文都要有 emoji/);
+  assert.match(userPrompt, /Tags 的格式|#Keywords|#标签/);
+  assert.match(userPrompt, /tags 给 3-6 个/);
+});
+
 test("rewrite prompt includes retry guidance when a previous round still needs manual review", () => {
   const messages = buildRewriteMessages({
     input: {
@@ -202,6 +230,53 @@ test("patch prompt asks for local patches tied to retry guidance", () => {
   assert.match(userPrompt, /addresses/);
   assert.match(userPrompt, /优先输出局部 patch/);
   assert.match(userPrompt, /去掉疑似导流的话术/);
+});
+
+test("patch and humanizer prompts preserve xiaohongshu title emoji and tags requirements", () => {
+  const patchMessages = buildPatchMessages({
+    input: {
+      title: "原标题",
+      body: "想看的姐妹可以来问我",
+      coverText: "原封面",
+      tags: ["关系沟通"]
+    },
+    analysis: {
+      verdict: "manual_review",
+      finalVerdict: "manual_review",
+      retryGuidance: {
+        attempt: 1,
+        summary: "上一轮仍有导流感",
+        focusPoints: ["去掉疑似导流的话术"]
+      }
+    },
+    semantic: null
+  });
+  const humanizerMessages = buildHumanizerMessages({
+    input: {
+      title: "原始标题",
+      body: "今天随手试了一下这个功能，发现还真有点东西。",
+      coverText: "原始封面",
+      tags: ["关系沟通"]
+    },
+    analysis: {
+      verdict: "observe",
+      finalVerdict: "observe"
+    },
+    baseRewrite: {
+      title: "合规标题",
+      body: "合规正文",
+      coverText: "合规封面",
+      tags: ["关系沟通"]
+    }
+  });
+
+  const patchPrompt = String(patchMessages[1]?.content || "");
+  const humanizerPrompt = String(humanizerMessages[1]?.content || "");
+
+  assert.match(patchPrompt, /至少使用 5 个不重复的 emoji|至少5个不重复的emoji/);
+  assert.match(patchPrompt, /tags 保留或补齐到 3-6 个/);
+  assert.match(humanizerPrompt, /至少使用 5 个不重复的 emoji|至少5个不重复的emoji/);
+  assert.match(humanizerPrompt, /tags 给 3-6 个/);
 });
 
 test("patch prompt includes structured shared memory guidance without leaking raw feedback text", () => {

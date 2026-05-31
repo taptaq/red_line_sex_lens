@@ -21,6 +21,7 @@ export const paths = {
   noteLifecycle: path.join(dataDir, "note-lifecycle.json"),
   noteRecords: path.join(dataDir, "note-records.json"),
   accountPlannerSummary: path.join(dataDir, "account-planner-summary.json"),
+  xhsTopSignals: path.join(dataDir, "xhs-top-signals.json"),
   xhsAccountDiagnosis: path.join(dataDir, "xhs-account-diagnosis.json"),
   xhsAccountDiagnosisSubscriptions: path.join(dataDir, "xhs-account-diagnosis-subscriptions.json"),
   xhsAccountDiagnosisReportData: path.join(dataDir, "xhs-account-diagnosis-report-data.json"),

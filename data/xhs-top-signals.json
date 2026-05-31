@@ -1,0 +1,29 @@
+{
+  "accountContext": {
+    "redId": "26112666886",
+    "nickname": "测试号",
+    "derivedTrack": "情感",
+    "derivedTags": [
+      "关系沟通"
+    ]
+  },
+  "filters": {
+    "track": "情感",
+    "keyword": "边界",
+    "tags": [
+      "关系沟通"
+    ]
+  },
+  "items": {
+    "dailyTop": [
+      {
+        "id": "daily-1",
+        "title": "今日样本"
+      }
+    ],
+    "weeklyTop": [],
+    "lowTop": []
+  },
+  "generatedAt": "2026-05-30T10:00:00.000Z",
+  "resultCount": 1
+}

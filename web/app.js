@@ -112,6 +112,7 @@ import {
   analyzeCompareModelLabel as analyzeCompareModelLabelView,
   buildAnalyzeCompareBasisOptionLabel as buildAnalyzeCompareBasisOptionLabelView
 } from "./analysis-review-view.js";
+import { renderXhsTopSignalsBrowser } from "./xhs-top-signals-view.js";
 
 function byId(id) {
   return document.getElementById(id);
@@ -871,6 +872,22 @@ const appState = {
     canSubscribe: false,
     report: null
   },
+  xhsTopSignals: {
+    loading: false,
+    message: "",
+    redId: "",
+    track: "",
+    keyword: "",
+    tags: "",
+    activeFilter: "daily",
+    items: {
+      dailyTop: [],
+      weeklyTop: [],
+      lowTop: []
+    },
+    generatedAt: "",
+    selectedSignalId: ""
+  },
   draftIdeas: {
     loading: false,
     message: "",
@@ -957,6 +974,7 @@ const sampleLibraryExternalSamplesApi = "/api/sample-library/external-reference-
 const sampleLibraryAccountPlannerParseApi = "/api/sample-library/account-planner/parse";
 const sampleLibraryAccountPlannerAnalyzeApi = "/api/sample-library/account-planner/analyze";
 const xhsAccountDiagnosisApi = "/api/xhs/account-diagnosis";
+const xhsTopSignalsApi = "/api/xhs/top-signals";
 const draftIdeasApi = "/api/draft-ideas";
 const innerSpaceTermsApi = "/api/admin/inner-space-terms";
 const styleProfileAdminApi = "/api/admin/style-profile";
@@ -5177,6 +5195,9 @@ function renderGenerationResult(result = {}) {
   const repair = displayItem?.repair || {};
   const blockerReasonsMarkup = buildGenerationBlockerReasonsMarkup(displayItem);
   const repairSummary = buildGenerationRepairSummary(repair);
+  const hotArticleFormulaMarkup = buildGenerationHotArticleFormulaMarkup(
+    displayItem?.hotArticleFormula || result.hotArticleFormula || {}
+  );
   const referenceWarnings = Array.isArray(result.referenceAssets?.warnings)
     ? result.referenceAssets.warnings.map((item) => String(item || "").trim()).filter(Boolean)
     : [];
@@ -5216,6 +5237,7 @@ function renderGenerationResult(result = {}) {
         <p class="helper-text">标签：${escapeHtml(joinCSV(finalDraft.tags) || "未生成")}</p>
         ${repairMarkup}
         ${referenceWarningsMarkup}
+        ${hotArticleFormulaMarkup}
         ${blockerReasonsMarkup}
         <p class="helper-text">${escapeHtml((displayItem.humanizer?.issues || []).slice(0, 3).join("；") || "当前去 AI 痕迹表现稳定。")}</p>
         <p class="helper-text">${escapeHtml(finalDraft.generationNotes || displayItem.generationNotes || "暂无生成说明")}</p>
@@ -5292,6 +5314,54 @@ function buildGenerationRepairSummary(repair = {}) {
       String(repair?.reason || "").trim() ||
       "本稿已尝试自动修复，但仍需人工确认。"
   };
+}
+
+function buildGenerationHotArticleFormulaMarkup(hotArticleFormula = {}) {
+  const status = String(hotArticleFormula?.status || "").trim();
+
+  if (!status || status === "skipped") {
+    return "";
+  }
+
+  if (status === "error") {
+    return `
+      <div class="generation-blocker-box is-muted">
+        <span>爆款公式来源</span>
+        <p>${escapeHtml(hotArticleFormula.message || "爆文规律暂不可用，本次已按本地样本和风格画像生成。")}</p>
+      </div>
+    `;
+  }
+
+  const references = Array.isArray(hotArticleFormula.references) ? hotArticleFormula.references.slice(0, 3) : [];
+  const referencesMarkup = references.length
+    ? `
+      <ul>
+        ${references
+          .map(
+            (item) => `
+              <li>
+                <a href="${escapeHtml(item.noteLink || "#")}" target="_blank" rel="noreferrer">${escapeHtml(item.title || "未命名爆文")}</a>
+                ${item.authorNickname ? ` - <a href="${escapeHtml(item.authorLink || "#")}" target="_blank" rel="noreferrer">@${escapeHtml(item.authorNickname)}</a>` : ""}
+                <span>互动数据：收藏 ${escapeHtml(String(item.collectedCount || 0))} / 分享 ${escapeHtml(String(item.sharedCount || 0))} / 评论 ${escapeHtml(String(item.commentsCount || 0))} / 点赞 ${escapeHtml(String(item.likedCount || 0))}</span>
+              </li>
+            `
+          )
+          .join("")}
+      </ul>
+    `
+    : "";
+
+  return `
+    <div class="generation-blocker-box">
+      <span>爆款公式来源</span>
+      <p>${escapeHtml(hotArticleFormula.formula || "暂无公式摘要")}</p>
+      <p class="helper-text">关键词：${escapeHtml(hotArticleFormula.keyword || "未识别")} · 样本数：${escapeHtml(String(hotArticleFormula.itemCount || 0))}</p>
+      <p class="helper-text">标题规律：${escapeHtml(joinCSV(hotArticleFormula.titlePatterns) || "暂无")}</p>
+      <p class="helper-text">开头规律：${escapeHtml(joinCSV(hotArticleFormula.openingPatterns) || "暂无")}</p>
+      <p class="helper-text">高频关键词：${escapeHtml(joinCSV(hotArticleFormula.highFrequencyKeywords) || "暂无")}</p>
+      ${referencesMarkup}
+    </div>
+  `;
 }
 
 function buildInnerSpaceTermsListMarkup(items = []) {
@@ -5744,6 +5814,88 @@ function renderDraftIdeasList() {
   });
 }
 
+function normalizeXhsTopSignalsItems(items = {}) {
+  const groupedItems = items && typeof items === "object" ? items : {};
+
+  return {
+    dailyTop: Array.isArray(groupedItems.dailyTop) ? groupedItems.dailyTop : [],
+    weeklyTop: Array.isArray(groupedItems.weeklyTop) ? groupedItems.weeklyTop : [],
+    lowTop: Array.isArray(groupedItems.lowTop) ? groupedItems.lowTop : []
+  };
+}
+
+function getVisibleXhsTopSignalsItems(state = appState.xhsTopSignals) {
+  const normalizedState = state && typeof state === "object" ? state : {};
+  const groupedItems = normalizeXhsTopSignalsItems(normalizedState.items);
+  const activeFilter = String(normalizedState.activeFilter || "daily").trim() || "daily";
+
+  if (activeFilter === "weekly") {
+    return groupedItems.weeklyTop;
+  }
+
+  if (activeFilter === "low") {
+    return groupedItems.lowTop;
+  }
+
+  return groupedItems.dailyTop;
+}
+
+function buildXhsTopSignalsRequestPayload() {
+  return {
+    redId: String(byId("xhs-top-signals-red-id")?.value || appState.xhsTopSignals?.redId || "").trim(),
+    track: String(byId("xhs-top-signals-track")?.value || appState.xhsTopSignals?.track || "").trim(),
+    keyword: String(byId("xhs-top-signals-keyword")?.value || appState.xhsTopSignals?.keyword || "").trim(),
+    tags: splitCSV(byId("xhs-top-signals-tags")?.value || appState.xhsTopSignals?.tags || "")
+  };
+}
+
+function syncXhsTopSignalsPanel() {
+  syncXhsTopSignalsRefreshButton();
+  renderXhsTopSignalsBrowser(
+    {
+      ...(appState.xhsTopSignals || {}),
+      items: normalizeXhsTopSignalsItems(appState.xhsTopSignals?.items)
+    },
+    {
+      byId,
+      escapeHtml
+    }
+  );
+}
+
+function syncXhsTopSignalsRefreshButton() {
+  const state = appState.xhsTopSignals || {};
+  const refreshButton = byId("xhs-top-signals-refresh");
+
+  if (refreshButton) {
+    setButtonBusy(refreshButton, Boolean(state.loading), "刷新中...");
+  }
+}
+
+function syncXhsTopSignalsInputs() {
+  const state = appState.xhsTopSignals || {};
+  const redIdField = byId("xhs-top-signals-red-id");
+  const trackField = byId("xhs-top-signals-track");
+  const keywordField = byId("xhs-top-signals-keyword");
+  const tagsField = byId("xhs-top-signals-tags");
+
+  if (redIdField) {
+    redIdField.value = String(state.redId || "");
+  }
+
+  if (trackField) {
+    trackField.value = String(state.track || "");
+  }
+
+  if (keywordField) {
+    keywordField.value = String(state.keyword || "");
+  }
+
+  if (tagsField) {
+    tagsField.value = String(state.tags || "");
+  }
+}
+
 function setSampleLibraryExternalSamplesModalOpen(isOpen) {
   const modal = byId("sample-library-external-samples-modal");
   const trigger = byId("sample-library-external-samples-button");
@@ -5796,6 +5948,69 @@ function syncXhsAccountDiagnosisPanel() {
     latestButton.disabled = !appState.xhsAccountDiagnosis?.result;
     latestButton.title = appState.xhsAccountDiagnosis?.result ? "" : "还没有已保存的分析结果";
   }
+}
+
+async function refreshXhsTopSignalsState({ useCache = false } = {}) {
+  appState.xhsTopSignals = {
+    ...appState.xhsTopSignals,
+    loading: true,
+    message: ""
+  };
+  syncXhsTopSignalsRefreshButton();
+  renderXhsTopSignalsBrowser(
+    {
+      ...(appState.xhsTopSignals || {}),
+      items: normalizeXhsTopSignalsItems(appState.xhsTopSignals?.items)
+    },
+    {
+      byId,
+      escapeHtml
+    }
+  );
+
+  try {
+    const response = useCache
+      ? await apiJson(xhsTopSignalsApi)
+      : await apiJson(xhsTopSignalsApi, {
+          method: "POST",
+          body: JSON.stringify(buildXhsTopSignalsRequestPayload())
+        });
+    const nextItems = normalizeXhsTopSignalsItems(response?.items);
+    const nextFilter = String(appState.xhsTopSignals?.activeFilter || "daily").trim() || "daily";
+    const visibleItems = getVisibleXhsTopSignalsItems({
+      activeFilter: nextFilter,
+      items: nextItems
+    });
+    const nextSelectedSignalId = visibleItems.find((item) => String(item?.id || "") === String(appState.xhsTopSignals?.selectedSignalId || ""))
+      ? String(appState.xhsTopSignals?.selectedSignalId || "")
+      : String(visibleItems[0]?.id || "");
+
+    appState.xhsTopSignals = {
+      ...appState.xhsTopSignals,
+      loading: false,
+      message:
+        response?.generatedAt
+          ? `已刷新 ${(Number(response?.resultCount) || visibleItems.length || 0)} 条 · ${formatUiDateTime(response.generatedAt)}`
+          : "",
+      redId: String(response?.accountContext?.redId || appState.xhsTopSignals?.redId || "").trim(),
+      track: String(response?.filters?.track || "").trim(),
+      keyword: String(response?.filters?.keyword || "").trim(),
+      tags: Array.isArray(response?.filters?.tags) ? response.filters.tags.join(", ") : "",
+      items: nextItems,
+      generatedAt: String(response?.generatedAt || "").trim(),
+      selectedSignalId: nextSelectedSignalId
+    };
+    syncXhsTopSignalsInputs();
+  } catch (error) {
+    appState.xhsTopSignals = {
+      ...appState.xhsTopSignals,
+      loading: false,
+      message: error?.message || "同类爆文刷新失败"
+    };
+  }
+
+  syncXhsTopSignalsPanel();
+  return appState.xhsTopSignals;
 }
 
 async function refreshDraftIdeas() {
@@ -6048,6 +6263,7 @@ async function saveDraftIdea(payload = {}) {
   });
 
   appState.draftIdeas = {
+    ...appState.draftIdeas,
     loading: false,
     message: "",
     items: Array.isArray(response?.items) ? response.items : []
@@ -6137,6 +6353,25 @@ function findMatchedXhsSignalById(signalId = "") {
   return allItems.find((item) => String(item?.id || "") === String(signalId || "")) || null;
 }
 
+function findXhsTopSignalById(signalId = "") {
+  const visibleItems = getVisibleXhsTopSignalsItems();
+  const explicitSignalId = String(signalId || "").trim();
+  const selectedSignalId = String(appState.xhsTopSignals?.selectedSignalId || "").trim();
+  const explicitMatch = explicitSignalId
+    ? visibleItems.find((item) => String(item?.id || "") === explicitSignalId) || null
+    : null;
+
+  if (explicitMatch) {
+    return explicitMatch;
+  }
+
+  const selectedMatch = selectedSignalId
+    ? visibleItems.find((item) => String(item?.id || "") === selectedSignalId) || null
+    : null;
+
+  return selectedMatch || visibleItems[0] || null;
+}
+
 async function addMatchedXhsSignalToExternalSamples(signalId = "") {
   const signal = findMatchedXhsSignalById(signalId);
 
@@ -6186,6 +6421,62 @@ async function addMatchedXhsSignalToDraftIdeas(signalId = "") {
       tags: signal.tags,
       sourceType: signal.sourceType,
       sourceLabel: "同类爆款信号"
+    })
+  );
+  setSampleLibraryModalMessage("已生成灵感草稿。");
+}
+
+async function addXhsTopSignalToExternalSamples(signalId = "") {
+  const signal = findXhsTopSignalById(signalId);
+
+  if (!signal) {
+    return;
+  }
+
+  const payload = {
+    items: [
+      {
+        title: signal.title,
+        body: signal.body,
+        tags: signal.tags,
+        collectionType: signal.track || "科普",
+        notes: signal.analysis?.whySelected || "",
+        publish: signal.publish,
+        sourceType: signal.sourceType,
+        author: signal.author,
+        authorRedId: signal.authorRedId
+      }
+    ]
+  };
+
+  const response = await apiJson(sampleLibraryExternalSamplesApi, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+
+  appState.externalReferenceSamples = Array.isArray(response?.items) ? response.items : appState.externalReferenceSamples;
+  syncSampleLibraryAccountPlannerPanel();
+  renderSampleLibraryExternalSamplesModal();
+  setSampleLibraryModalMessage("已加入外部参考样本。");
+}
+
+async function addXhsTopSignalToDraftIdeas(signalId = "") {
+  const signal = findXhsTopSignalById(signalId);
+
+  if (!signal) {
+    return;
+  }
+
+  await saveDraftIdea(
+    buildDraftIdeaPayload({
+      title: signal.title,
+      briefing: signal.analysis?.reuseHint || signal.analysis?.whySelected || signal.title,
+      collectionType: signal.track || "科普",
+      materialText: signal.body,
+      referenceTitle: signal.title,
+      tags: signal.tags,
+      sourceType: signal.sourceType,
+      sourceLabel: "同类爆文信号"
     })
   );
   setSampleLibraryModalMessage("已生成灵感草稿。");
@@ -6251,6 +6542,7 @@ async function markDraftIdeaUsed(id = "") {
   });
 
   appState.draftIdeas = {
+    ...appState.draftIdeas,
     loading: false,
     message: "",
     items: Array.isArray(response?.items) ? response.items : []
@@ -6265,6 +6557,7 @@ async function removeDraftIdea(id = "") {
   });
 
   appState.draftIdeas = {
+    ...appState.draftIdeas,
     loading: false,
     message: "",
     items: Array.isArray(response?.items) ? response.items : []
@@ -8463,6 +8756,9 @@ byId("generation-reference-search-button")?.addEventListener("click", () => {
 byId("generation-theme-inspiration-button")?.addEventListener("click", () => {
   openGenerationThemeInspirationModal().catch(() => {});
 });
+byId("xhs-top-signals-refresh")?.addEventListener("click", async () => {
+  await refreshXhsTopSignalsState();
+});
 
 byId("generation-top-signals-button")?.addEventListener("click", async () => {
   await refreshXhsAccountDiagnosisState();
@@ -10539,6 +10835,7 @@ initializeTabs();
 syncReferenceThresholdCopy();
 renderSampleLibraryWorkspace();
 renderDraftIdeasList();
+syncXhsTopSignalsPanel();
 
 document.addEventListener("click", async (event) => {
   const summaryAction = event.target.closest("[data-summary-action]");
@@ -10610,6 +10907,18 @@ document.addEventListener("click", async (event) => {
       selectedPlanId: String(plannerCard.dataset.planId || "")
     };
     syncSampleLibraryAccountPlannerPanel();
+    return;
+  }
+
+  const topSignalsFilter = event.target.closest("[data-xhs-top-signals-filter]");
+
+  if (topSignalsFilter) {
+    appState.xhsTopSignals = {
+      ...appState.xhsTopSignals,
+      activeFilter: String(topSignalsFilter.dataset.xhsTopSignalsFilter || "daily"),
+      selectedSignalId: ""
+    };
+    syncXhsTopSignalsPanel();
     return;
   }
 
@@ -10976,6 +11285,25 @@ document.addEventListener("click", async (event) => {
 
   if (action === "save-xhs-matched-signal-draft-idea") {
     await addMatchedXhsSignalToDraftIdeas(button.dataset.signalId || "");
+    return;
+  }
+
+  if (action === "save-xhs-top-signal-external-sample") {
+    await addXhsTopSignalToExternalSamples(button.dataset.signalId || "");
+    return;
+  }
+
+  if (action === "save-xhs-top-signal-draft-idea") {
+    await addXhsTopSignalToDraftIdeas(button.dataset.signalId || "");
+    return;
+  }
+
+  if (action === "select-xhs-top-signal") {
+    appState.xhsTopSignals = {
+      ...appState.xhsTopSignals,
+      selectedSignalId: String(button.dataset.signalId || "")
+    };
+    syncXhsTopSignalsPanel();
     return;
   }
 
@@ -11411,6 +11739,7 @@ refreshAll().catch((error) => {
   `;
 });
 
+refreshXhsTopSignalsState({ useCache: true }).catch(() => {});
 loadModelSelectionOptions().catch(() => {});
 loadCollectionTypeOptions().catch(() => {});
 

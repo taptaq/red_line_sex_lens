@@ -441,3 +441,53 @@ test("false-positive and whitelist signals do not soften hard-block results", as
     }
   );
 });
+
+test("external prohibited-word severity can raise final verdict", async (t) => {
+  await withTempAnalyzerData(t, {}, async () => {
+    const result = await analyzePost(
+      { title: "标题", body: "正文" },
+      {
+        checkProhibitedWords: async () => ({
+          status: "ok",
+          platform: "xiaohongshu",
+          hitCount: 1,
+          severity: "manual_review",
+          highlightedText: "命中词上下文",
+          suggestions: [{ term: "最", replacement: "更", reason: "极限词" }],
+          optimizedText: "更稳版本",
+          message: "",
+          raw: {}
+        })
+      }
+    );
+
+    assert.equal(result.verdict, "manual_review");
+    assert.equal(result.externalSensitiveWords.raisedVerdict, true);
+    assert.equal(result.analysisCompleteness.isComplete, true);
+  });
+});
+
+test("external prohibited-word failure keeps local analysis but marks result incomplete", async (t) => {
+  await withTempAnalyzerData(t, {}, async () => {
+    const result = await analyzePost(
+      { title: "标题", body: "正文" },
+      {
+        checkProhibitedWords: async () => ({
+          status: "error",
+          platform: "xiaohongshu",
+          hitCount: 0,
+          severity: "unknown",
+          highlightedText: "",
+          suggestions: [],
+          optimizedText: "",
+          message: "外部违禁词检测失败：接口超时",
+          raw: null
+        })
+      }
+    );
+
+    assert.equal(result.analysisCompleteness.isComplete, false);
+    assert.equal(result.externalSensitiveWords.status, "error");
+    assert.match(result.externalSensitiveWords.message, /接口超时/);
+  });
+});

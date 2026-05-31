@@ -530,6 +530,54 @@
           <p class="helper-text">分析完成后将直接弹窗展示；系统会保存最近一次成功分析结果。</p>
         </section>
 
+        </aside>
+      </section>
+
+      <section id="xhs-top-signals-panel" class="panel xhs-top-signals-panel" aria-labelledby="xhs-top-signals-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">独立浏览区</p>
+            <h2 id="xhs-top-signals-title">同类爆文专区</h2>
+          </div>
+          <p class="section-note">单独浏览同赛道信号，不依赖账号诊断弹窗，也不打断内容工作台。</p>
+        </div>
+        <div class="xhs-top-signals-toolbar">
+          <label>
+            <span>小红书号</span>
+            <input id="xhs-top-signals-red-id" name="xhsTopSignalsRedId" placeholder="例如 26112666886" />
+          </label>
+          <label>
+            <span>赛道</span>
+            <input id="xhs-top-signals-track" name="xhsTopSignalsTrack" placeholder="例如 情感" />
+          </label>
+          <label>
+            <span>关键词</span>
+            <input id="xhs-top-signals-keyword" name="xhsTopSignalsKeyword" placeholder="例如 边界感" />
+          </label>
+          <label>
+            <span>标签</span>
+            <input id="xhs-top-signals-tags" name="xhsTopSignalsTags" placeholder="多个标签用逗号分隔" />
+          </label>
+          <div class="xhs-top-signals-toolbar-actions">
+            <button type="button" class="button button-alt" id="xhs-top-signals-refresh">手动刷新</button>
+          </div>
+        </div>
+        <div class="tab-strip xhs-top-signals-filter-strip" role="tablist" aria-label="同类爆文分类">
+          <button type="button" class="tab-button" role="tab" aria-selected="true" data-xhs-top-signals-filter="daily">今日起量</button>
+          <button type="button" class="tab-button" role="tab" aria-selected="false" data-xhs-top-signals-filter="weekly">7日爆文</button>
+          <button type="button" class="tab-button" role="tab" aria-selected="false" data-xhs-top-signals-filter="low">低粉高表现</button>
+        </div>
+        <p id="xhs-top-signals-status" class="helper-text xhs-top-signals-status">等待手动刷新同类爆文信号</p>
+        <div class="xhs-top-signals-browser-layout">
+          <section id="xhs-top-signals-list" class="xhs-top-signals-list">
+            <div class="result-card muted">完成刷新后，这里会展示同类爆文列表。</div>
+          </section>
+          <aside id="xhs-top-signals-detail" class="xhs-top-signals-detail">
+            <div class="result-card muted">选择一条同类爆文后，这里会展开详情和快捷动作。</div>
+          </aside>
+        </div>
+      </section>
+
       <!-- ③ 学习区：回流 / 样本 / 规则 -->
       <section id="support-workspace-panel" class="panel support-workspace-panel dashboard-assets-card">
           <div class="section-heading">

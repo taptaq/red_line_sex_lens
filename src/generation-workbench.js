@@ -650,6 +650,44 @@ function stringifyTemporaryReferenceAssets(referenceAssets = null) {
   return sections.join("\n\n");
 }
 
+function stringifyHotArticleFormula(hotArticleFormula = null) {
+  if (!hotArticleFormula || hotArticleFormula.status !== "ok") {
+    return "";
+  }
+
+  const references = Array.isArray(hotArticleFormula.references)
+    ? hotArticleFormula.references
+        .slice(0, 3)
+        .map((item, index) =>
+          [
+            `${index + 1}. ${String(item.title || "未命名爆文").trim()}`,
+            item.authorNickname ? `作者：${String(item.authorNickname).trim()}` : "",
+            item.noteLink ? `链接：${String(item.noteLink).trim()}` : "",
+            `互动：收藏 ${Number(item.collectedCount || 0)} / 分享 ${Number(item.sharedCount || 0)} / 评论 ${Number(item.commentsCount || 0)} / 点赞 ${Number(item.likedCount || 0)}`
+          ]
+            .filter(Boolean)
+            .join("；")
+        )
+        .join("\n")
+    : "";
+
+  return [
+    "爆款公式来源：",
+    `检索关键词：${String(hotArticleFormula.keyword || "").trim()}`,
+    `参考公式：${String(hotArticleFormula.formula || "").trim()}`,
+    `标题规律：${ensureArray(hotArticleFormula.titlePatterns).join("、")}`,
+    `开头规律：${ensureArray(hotArticleFormula.openingPatterns).join("、")}`,
+    `正文结构：${ensureArray(hotArticleFormula.structurePatterns).join("、")}`,
+    `高频关键词：${ensureArray(hotArticleFormula.highFrequencyKeywords).join("、")}`,
+    `标签策略：${ensureArray(hotArticleFormula.tagStrategies).join("、")}`,
+    `互动话术：${ensureArray(hotArticleFormula.interactionPrompts).join("、")}`,
+    references ? `参考爆文：\n${references}` : "",
+    "使用要求：借结构和规律，不要照抄参考笔记原文；如果与合规、安全边界、用户要求或账号风格冲突，以合规和用户要求为准。"
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 export function buildGenerationMessages({
   mode = "from_scratch",
   brief = {},
@@ -658,7 +696,8 @@ export function buildGenerationMessages({
   referenceSamples = [],
   innerSpaceTerms = [],
   memoryContext = null,
-  referenceAssets = null
+  referenceAssets = null,
+  hotArticleFormula = null
 } = {}) {
   const lengthMode = String(brief.lengthMode || "short").trim() === "long" ? "long" : "short";
   const lengthInstruction =
@@ -668,6 +707,7 @@ export function buildGenerationMessages({
   const terminologyPrompt = formatInnerSpaceTermsPrompt(innerSpaceTerms);
   const sharedMemoryPrompt = stringifySharedMemoryContext(memoryContext);
   const temporaryReferencePrompt = stringifyTemporaryReferenceAssets(referenceAssets);
+  const hotArticleFormulaPrompt = stringifyHotArticleFormula(hotArticleFormula);
   const tagGuidance = buildGenerationTagGuidance({ brief, styleProfile, referenceSamples });
   return [
     {
@@ -717,6 +757,8 @@ export function buildGenerationMessages({
         temporaryReferencePrompt ? "本次临时参考素材：" : "",
         temporaryReferencePrompt,
         temporaryReferencePrompt ? "" : "",
+        hotArticleFormulaPrompt,
+        hotArticleFormulaPrompt ? "" : "",
         sharedMemoryPrompt ? "共享记忆提示：" : "",
         sharedMemoryPrompt,
         sharedMemoryPrompt ? "" : "",
@@ -1636,6 +1678,7 @@ export async function generateNoteCandidates({
   innerSpaceTerms = [],
   memoryContext = null,
   referenceAssets = null,
+  hotArticleFormula = null,
   modelSelection = "auto",
   generateJson = generateJsonWithModel
 } = {}) {
@@ -1647,7 +1690,8 @@ export async function generateNoteCandidates({
     referenceSamples,
     innerSpaceTerms,
     memoryContext,
-    referenceAssets
+    referenceAssets,
+    hotArticleFormula
   });
   const payload = await generateJson({ messages, modelSelection });
   const rawCandidate = extractRawGenerationCandidate(payload);

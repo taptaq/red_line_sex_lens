@@ -2,6 +2,11 @@ function normalizeString(value = "") {
   return String(value || "").trim();
 }
 
+const testOverrides = {
+  fetchJson: null,
+  lookupAccountDiagnosis: null
+};
+
 function normalizeMetric(value) {
   const number = Number(String(value ?? "").trim().replace(/w\+?/i, "0000"));
   return Number.isFinite(number) ? number : 0;
@@ -63,7 +68,43 @@ function buildTrackHint(accountDiagnosis = {}) {
   return matchCategory(text);
 }
 
+function normalizeCategoryInput(value = "") {
+  const normalizedValue = normalizeString(value);
+
+  if (!normalizedValue) {
+    return "";
+  }
+
+  if (Object.prototype.hasOwnProperty.call(CATEGORY_KEYWORDS, normalizedValue)) {
+    return normalizedValue;
+  }
+
+  return matchCategory(normalizedValue);
+}
+
+function deriveTopicFromStandaloneFilters({ track = "", keyword = "", tags = [] } = {}) {
+  const normalizedTrack = normalizeCategoryInput(track);
+
+  if (normalizedTrack) {
+    return normalizedTrack;
+  }
+
+  const normalizedTags = Array.isArray(tags) ? tags.map((item) => normalizeString(item)).filter(Boolean) : [];
+  const tagMatch = normalizedTags.find((item) => matchCategory(item) !== "综合全部");
+
+  if (tagMatch) {
+    return matchCategory(tagMatch);
+  }
+
+  const normalizedKeyword = normalizeString(keyword);
+  return normalizedKeyword ? matchCategory(normalizedKeyword) : "综合全部";
+}
+
 async function fetchJson(url, { headers = {}, params = {} } = {}) {
+  if (typeof testOverrides.fetchJson === "function") {
+    return testOverrides.fetchJson(url, { headers, params });
+  }
+
   const finalUrl = new URL(url);
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null && String(value).trim()) {
@@ -144,13 +185,17 @@ function normalizeSignalItem(item = {}, sourceType = "", category = "") {
   };
 }
 
-export async function fetchMatchedTopSignals(accountDiagnosis = {}, { rankDate = "", maxPerSource = 6 } = {}) {
-  const apiKey = getApiKey();
-  const headers = { "X-API-KEY": apiKey };
-  const accountTier = normalizeTier(accountDiagnosis?.account?.userAttribute || accountDiagnosis?.account?._raw?.userAttribute || "");
-  const allowedTiers = allowedTargetTiers(accountTier);
-  const topic = buildTrackHint(accountDiagnosis);
+function rankSignalItems(items = [], { sourceType = "", topic = "", allowedTiers = new Set(), maxPerSource = 6 } = {}) {
+  return items
+    .map((item) => normalizeSignalItem(item, sourceType, topic))
+    .map((item) => ({ ...item, _matchScore: scoreSignalMatch(item, { allowedTiers, topic }) }))
+    .filter((item) => item._matchScore >= 4)
+    .sort((left, right) => right._matchScore - left._matchScore)
+    .slice(0, maxPerSource)
+    .map(({ _matchScore, ...rest }) => rest);
+}
 
+async function fetchTopSignalsRanked({ headers, rankDate = "", topic = "", allowedTiers, maxPerSource = 6 } = {}) {
   const [dailyPayload, weeklyPayload, lowPayload] = await Promise.all([
     fetchJson("https://redfox.hk/story/api/cozeSkill/getXhsCozeSkillDataOne", {
       headers,
@@ -178,20 +223,116 @@ export async function fetchMatchedTopSignals(accountDiagnosis = {}, { rankDate =
     })
   ]);
 
-  const rankItems = (items = [], sourceType = "") =>
-    items
-      .map((item) => normalizeSignalItem(item, sourceType, topic))
-      .map((item) => ({ ...item, _matchScore: scoreSignalMatch(item, { allowedTiers, topic }) }))
-      .filter((item) => item._matchScore >= 4)
-      .sort((left, right) => right._matchScore - left._matchScore)
-      .slice(0, maxPerSource)
-      .map(({ _matchScore, ...rest }) => rest);
+  return {
+    dailyTop: rankSignalItems(extractArticles(dailyPayload), {
+      sourceType: "daily_top",
+      topic,
+      allowedTiers,
+      maxPerSource
+    }),
+    weeklyTop: rankSignalItems(extractArticles(weeklyPayload), {
+      sourceType: "weekly_top",
+      topic,
+      allowedTiers,
+      maxPerSource
+    }),
+    lowTop: rankSignalItems(extractArticles(lowPayload), {
+      sourceType: "low_top",
+      topic,
+      allowedTiers,
+      maxPerSource
+    })
+  };
+}
+
+async function lookupAccountDiagnosisForTopSignals(redId = "") {
+  if (typeof testOverrides.lookupAccountDiagnosis === "function") {
+    return testOverrides.lookupAccountDiagnosis(normalizeString(redId));
+  }
+
+  const { summarizeXhsAccountDiagnosis } = await import("./xhs-account-diagnosis.js");
+  return summarizeXhsAccountDiagnosis({
+    redId,
+    querySimilar: async () => ({})
+  });
+}
+
+export async function fetchMatchedTopSignals(accountDiagnosis = {}, { rankDate = "", maxPerSource = 6 } = {}) {
+  const apiKey = getApiKey();
+  const headers = { "X-API-KEY": apiKey };
+  const accountTier = normalizeTier(accountDiagnosis?.account?.userAttribute || accountDiagnosis?.account?._raw?.userAttribute || "");
+  const allowedTiers = allowedTargetTiers(accountTier);
+  const topic = buildTrackHint(accountDiagnosis);
 
   return {
     topic,
     accountTier,
-    dailyTop: rankItems(extractArticles(dailyPayload), "daily_top"),
-    weeklyTop: rankItems(extractArticles(weeklyPayload), "weekly_top"),
-    lowTop: rankItems(extractArticles(lowPayload), "low_top")
+    ...(await fetchTopSignalsRanked({ headers, rankDate, topic, allowedTiers, maxPerSource }))
   };
+}
+
+export async function fetchStandaloneTopSignals({ track = "", keyword = "", tags = [], rankDate = "", maxPerSource = 6 } = {}) {
+  const apiKey = getApiKey();
+  const headers = { "X-API-KEY": apiKey };
+  const topic = deriveTopicFromStandaloneFilters({ track, keyword, tags });
+  const allowedTiers = new Set(["素人", "尾部KOL", "腰部KOL", "头部KOL", "品牌/企业", "明星"]);
+
+  return {
+    topic,
+    ...(await fetchTopSignalsRanked({ headers, rankDate, topic, allowedTiers, maxPerSource }))
+  };
+}
+
+export async function buildStandaloneTopSignalsContext({ redId = "", track = "", keyword = "", tags = [] } = {}) {
+  const normalizedRedId = normalizeString(redId);
+  const normalizedTrack = normalizeCategoryInput(track);
+  const normalizedKeyword = normalizeString(keyword);
+  const normalizedTags = Array.isArray(tags) ? tags.map((item) => normalizeString(item)).filter(Boolean) : [];
+  const accountDiagnosis = normalizedRedId ? await lookupAccountDiagnosisForTopSignals(normalizedRedId) : null;
+  const derivedTrack = normalizedTrack || buildTrackHint(accountDiagnosis || {});
+  const derivedTags = normalizedTags.length
+    ? normalizedTags
+    : Array.isArray(accountDiagnosis?.account?._raw?.tags)
+      ? accountDiagnosis.account._raw.tags.map((item) => normalizeString(item)).filter(Boolean)
+      : [];
+
+  const signals = await fetchStandaloneTopSignals({
+    track: derivedTrack,
+    keyword: normalizedKeyword,
+    tags: derivedTags
+  });
+
+  return {
+    accountContext: {
+      redId: normalizedRedId,
+      nickname: normalizeString(accountDiagnosis?.account?.nickname),
+      derivedTrack: normalizeString(signals?.topic || derivedTrack),
+      derivedTags
+    },
+    filters: {
+      track: normalizedTrack,
+      keyword: normalizedKeyword,
+      tags: normalizedTags
+    },
+    items: {
+      dailyTop: Array.isArray(signals?.dailyTop) ? signals.dailyTop : [],
+      weeklyTop: Array.isArray(signals?.weeklyTop) ? signals.weeklyTop : [],
+      lowTop: Array.isArray(signals?.lowTop) ? signals.lowTop : []
+    }
+  };
+}
+
+export function __setXhsTopSignalsTestOverrides(overrides = {}) {
+  if (Object.prototype.hasOwnProperty.call(overrides, "fetchJson")) {
+    testOverrides.fetchJson = typeof overrides.fetchJson === "function" ? overrides.fetchJson : null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(overrides, "lookupAccountDiagnosis")) {
+    testOverrides.lookupAccountDiagnosis = typeof overrides.lookupAccountDiagnosis === "function" ? overrides.lookupAccountDiagnosis : null;
+  }
+}
+
+export function __resetXhsTopSignalsTestOverrides() {
+  testOverrides.fetchJson = null;
+  testOverrides.lookupAccountDiagnosis = null;
 }

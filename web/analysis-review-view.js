@@ -110,6 +110,10 @@ export function renderAnalysis(result, falsePositiveSource = null, helpers = {})
   } = helpers;
 
   const falsePositiveMarkup = falsePositiveSource ? buildFalsePositiveActionMarkup(falsePositiveSource) : "";
+  const externalSensitiveWords =
+    result?.externalSensitiveWords && typeof result.externalSensitiveWords === "object" ? result.externalSensitiveWords : null;
+  const analysisCompleteness =
+    result?.analysisCompleteness && typeof result.analysisCompleteness === "object" ? result.analysisCompleteness : null;
   const hits = result.hits.length
     ? result.hits
         .map(
@@ -197,6 +201,37 @@ export function renderAnalysis(result, falsePositiveSource = null, helpers = {})
       </div>
     `
     : "";
+  const externalSummaryPills = externalSensitiveWords
+    ? [
+        externalSensitiveWords.platform === "xiaohongshu" ? "外部违禁词：小红书" : "",
+        externalSensitiveWords.hitCount > 0 ? `命中 ${externalSensitiveWords.hitCount} 项` : "未命中外部违禁词",
+        externalSensitiveWords.status === "ok" && externalSensitiveWords.severity
+          ? `外部等级 ${escapeHtml(verdictLabel(externalSensitiveWords.severity))}`
+          : "",
+        externalSensitiveWords.raisedVerdict ? "外部检测抬高了结论" : "",
+        analysisCompleteness?.isComplete === false ? "结果不完整" : ""
+      ]
+        .filter(Boolean)
+        .map((item) => `<span class="meta-pill meta-pill-soft">${item}</span>`)
+        .join("")
+    : "";
+  const externalSuggestionsMarkup =
+    externalSensitiveWords?.status === "ok" && Array.isArray(externalSensitiveWords.suggestions) && externalSensitiveWords.suggestions.length
+      ? `<ul>${externalSensitiveWords.suggestions
+          .map(
+            (item) =>
+              `<li><strong>${escapeHtml(item.term || "未命名词")}</strong> -> ${escapeHtml(item.replacement || "未提供替换词")} ${
+                item.reason ? `（${escapeHtml(item.reason)}）` : ""
+              }</li>`
+          )
+          .join("")}</ul>`
+      : externalSensitiveWords?.status === "error"
+        ? `<p class="helper-text">结果不完整：外部违禁词检测失败。${escapeHtml(externalSensitiveWords.message || "")}</p>`
+        : "<p class=\"helper-text\">当前未命中外部违禁词。</p>";
+  const externalOptimizedTextMarkup =
+    externalSensitiveWords?.status === "ok" && String(externalSensitiveWords.optimizedText || "").trim()
+      ? `<div><strong>外部建议优化文案</strong><p>${escapeHtml(externalSensitiveWords.optimizedText)}</p></div>`
+      : "";
   const referenceSampleEvidence = referenceSampleHints
     .map((item) => String(item?.message || item?.title || "").trim())
     .filter(Boolean);
@@ -244,6 +279,21 @@ export function renderAnalysis(result, falsePositiveSource = null, helpers = {})
     <p class="helper-text">规则检测模型：${ruleModelLabel}</p>
     ${memoryCalibrationMarkup}
     ${referenceSampleMarkup}
+    ${
+      externalSensitiveWords
+        ? `
+      <div>
+        <h3>外部违禁词摘要</h3>
+        <div class="meta-row">${externalSummaryPills}</div>
+        ${
+          analysisCompleteness?.isComplete === false
+            ? `<p class="helper-text">结果不完整：外部违禁词检测失败</p>`
+            : ""
+        }
+      </div>
+    `
+        : ""
+    }
     <div class="columns">
       <div>
         <h3>规则命中</h3>
@@ -254,6 +304,17 @@ export function renderAnalysis(result, falsePositiveSource = null, helpers = {})
         <ul>${suggestions}</ul>
       </div>
     </div>
+    ${
+      externalSensitiveWords
+        ? `
+      <div>
+        <h3>外部违禁词命中与建议</h3>
+        ${externalSuggestionsMarkup}
+        ${externalOptimizedTextMarkup}
+      </div>
+    `
+        : ""
+    }
     <div class="columns">
       <div>
         <h3>语义判断</h3>

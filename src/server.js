@@ -21,6 +21,7 @@ import {
   loadAccountPlannerSummary,
   loadXhsAccountDiagnosis,
   loadXhsAccountDiagnosisSubscriptions,
+  loadXhsTopSignalsBrowser,
   loadCollectionTypes,
   loadDraftIdeas,
   loadExternalReferenceSamples,
@@ -37,6 +38,7 @@ import {
   saveAnalyzeTagOptions,
   saveAccountPlannerSummary,
   saveXhsAccountDiagnosis,
+  saveXhsTopSignalsBrowser,
   saveDraftIdeas,
   saveExternalReferenceSamples,
   saveFalsePositiveLog,
@@ -91,7 +93,8 @@ import { summarizeAccountPlanner } from "./account-planner.js";
 import { summarizeXhsAccountDiagnosis, summarizeXhsAccountDiagnosisWithSimilarFollowups } from "./xhs-account-diagnosis.js";
 import { saveXhsAccountDiagnosisReportArtifacts, saveXhsMultiAccountDiagnosisReportArtifacts } from "./xhs-account-diagnosis-report.js";
 import { createXhsAccountDiagnosisSubscriptionScheduler } from "./xhs-account-diagnosis-subscriptions.js";
-import { fetchMatchedTopSignals } from "./xhs-top-signals.js";
+import { buildStandaloneTopSignalsContext, fetchMatchedTopSignals } from "./xhs-top-signals.js";
+import { fetchHotArticleFormula } from "./xhs-hot-articles.js";
 import { recognizeFeedbackScreenshot, rewritePostForCompliance, suggestFeedbackCandidates, summarizeGenerationReferenceImage } from "./glm.js";
 import { summarizeGenerationReferenceAssets } from "./generation-reference-assets.js";
 import { mergeRuleAndSemanticAnalysis, runSemanticReview, runSemanticReviewComparison } from "./semantic-review.js";
@@ -544,6 +547,29 @@ function buildXhsAccountDiagnosisReportPayload(resultAvailable = false) {
     resultAvailable,
     htmlPath: "/api/xhs/account-diagnosis/report",
     reportDataPath: "/api/xhs/account-diagnosis/report-data"
+  };
+}
+
+async function fetchTopSignalsBrowserResult(payload = {}) {
+  const redId = String(payload?.redId || "").trim();
+  const track = String(payload?.track || "").trim();
+  const keyword = String(payload?.keyword || "").trim();
+  const tags = Array.isArray(payload?.tags) ? payload.tags.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  const result = await buildStandaloneTopSignalsContext({ redId, track, keyword, tags });
+  const items = result.items || { dailyTop: [], weeklyTop: [], lowTop: [] };
+  const resultCount = items.dailyTop.length + items.weeklyTop.length + items.lowTop.length;
+
+  return {
+    accountContext: result.accountContext || {
+      redId,
+      nickname: "",
+      derivedTrack: "",
+      derivedTags: []
+    },
+    filters: result.filters || { track: "", keyword: "", tags: [] },
+    items,
+    generatedAt: new Date().toISOString(),
+    resultCount
   };
 }
 
@@ -1137,6 +1163,11 @@ async function handleRequest(request, response) {
         return buildEmptySharedMemoryContext("generation");
       }
     })();
+    const hotArticleFormula =
+      payload?.mockHotArticleFormula && typeof payload.mockHotArticleFormula === "object"
+        ? payload.mockHotArticleFormula
+        : await fetchHotArticleFormula({ brief, draft: payload?.draft });
+    let generationPromptIncludesHotArticleFormula = false;
     const generation = await generateNoteCandidates({
       mode: payload?.mode,
       brief,
@@ -1146,9 +1177,15 @@ async function handleRequest(request, response) {
       innerSpaceTerms,
       memoryContext,
       referenceAssets,
+      hotArticleFormula,
       modelSelection: generationModelSelection,
       generateJson: Array.isArray(payload?.mockCandidates)
-        ? async () => ({ candidates: payload.mockCandidates, provider: "mock", model: "mock-generation" })
+        ? async ({ messages = [] } = {}) => {
+            generationPromptIncludesHotArticleFormula =
+              generationPromptIncludesHotArticleFormula ||
+              messages.some((message) => String(message?.content || "").includes("爆款公式来源"));
+            return { candidates: payload.mockCandidates, provider: "mock", model: "mock-generation" };
+          }
         : undefined
     });
     const scored = await scoreGenerationCandidates({
@@ -1165,8 +1202,10 @@ async function handleRequest(request, response) {
       collectionType,
       memoryContext,
       referenceAssets,
+      hotArticleFormula,
       ...generation,
-      ...scored
+      ...scored,
+      generationPromptIncludesHotArticleFormula
     });
   }
 
@@ -1638,6 +1677,36 @@ async function handleRequest(request, response) {
     });
   }
 
+  if (request.method === "POST" && url.pathname === "/api/xhs/top-signals") {
+    const payload = await readBody(request, { maxBytes: 256 * 1024 });
+    const redId = String(payload?.redId || "").trim();
+    const track = String(payload?.track || "").trim();
+    const keyword = String(payload?.keyword || "").trim();
+    const tags = Array.isArray(payload?.tags) ? payload.tags.map((item) => String(item || "").trim()).filter(Boolean) : [];
+
+    if (!redId && !track && !keyword && tags.length === 0) {
+      return sendJson(response, 400, {
+        ok: false,
+        error: "请先提供账号或至少一项筛选条件。"
+      });
+    }
+
+    const saved = await saveXhsTopSignalsBrowser(
+      await fetchTopSignalsBrowserResult({
+        ...payload,
+        redId,
+        track,
+        keyword,
+        tags
+      })
+    );
+
+    return sendJson(response, 200, {
+      ok: true,
+      ...saved
+    });
+  }
+
   if (request.method === "GET" && url.pathname === "/api/xhs/account-diagnosis") {
     const cached = await loadXhsAccountDiagnosis();
     const subscriptions = await loadXhsAccountDiagnosisSubscriptions();
@@ -1648,6 +1717,14 @@ async function handleRequest(request, response) {
       generatedAt: String(cached?.generatedAt || "").trim(),
       subscription: pickLatestXhsAccountDiagnosisSubscription(subscriptions),
       report: buildXhsAccountDiagnosisReportPayload(Boolean(cached?.result))
+    });
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/xhs/top-signals") {
+    const cached = await loadXhsTopSignalsBrowser();
+    return sendJson(response, 200, {
+      ok: true,
+      ...cached
     });
   }
 

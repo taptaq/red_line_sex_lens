@@ -451,6 +451,14 @@ test("frontend exposes a list-first sample library workspace with one primary cr
   assert.match(refreshAllSource, /if \(summaryPhase === "initial"\) \{\s*renderSummaryLoadingPlaceholders\(\);/);
 });
 
+test("analysis view renders external prohibited-word summary inside the rule detection card", async () => {
+  const { analysisReviewViewJs } = await readFrontendFiles();
+
+  assert.match(analysisReviewViewJs, /外部违禁词摘要/);
+  assert.match(analysisReviewViewJs, /外部违禁词命中与建议/);
+  assert.match(analysisReviewViewJs, /结果不完整：外部违禁词检测失败/);
+});
+
 test("sample library list and summary area show loading placeholders before first data sync", async () => {
   const appJs = await fs.readFile(path.join(process.cwd(), "web/app.js"), "utf8");
   const renderSampleLibraryListSource = extractSourceBetween(

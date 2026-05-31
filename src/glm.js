@@ -71,6 +71,20 @@ const humanizerStyleRules = [
   "不要为了增加活人感而编造新的经历、例子或细节；原文没有的，就不要硬补。"
 ];
 
+const xhsRewriteSkillOutputRequirements = [
+  "必须生成一个有钩子的标题，但不要为了抓眼球写成挑逗、夸大承诺或高风险标题。",
+  "标题和正文都要有 emoji，整篇至少使用 5 个不重复的 emoji；emoji 要贴合语气，不要堆在一起。",
+  "如果正文有多个段落，尽量让每个段落自然带 1 个 emoji，同时保持原文段落结构和信息量。",
+  "末尾必须附加 Tags；Tags 的格式按小红书习惯理解为 #Keywords，JSON 里 tags 字段请只放去掉 # 的标签文本。",
+  "tags 给 3-6 个更稳妥、与标题和正文强相关、仍然贴近原内容风格的标签。"
+];
+
+const xhsRewriteSkillPatchRequirements = [
+  "修补后的成稿仍必须有一个有钩子的标题，但不要恢复高风险标题。",
+  "修补后的成稿仍至少使用 5 个不重复的 emoji，标题和正文都要有 emoji。",
+  "tags 保留或补齐到 3-6 个，并保持与标题和正文强相关；JSON 里 tags 字段只放去掉 # 的标签文本。"
+];
+
 export const rewriteGenerationConfig = {
   baseMaxTokens: Number(process.env.REWRITE_MAX_TOKENS || 4200),
   patchMaxTokens: Number(process.env.REWRITE_PATCH_MAX_TOKENS || 1400),
@@ -877,7 +891,7 @@ export function buildRewriteMessages({ input = {}, analysis = {}, semantic = nul
         "语气要自然、幽默风趣、说人话，有真实分享感，更像朋友之间顺手聊经验、讲感受、做观察，不要像上课、培训或公号文章。",
         "不要写成那种一上来就先说 1、2、3 点的清单腔，也少用“首先、其次、最后”这种讲课感很重的连接词。",
         ...humanizerStyleRules,
-        "tags 给 0-5 个更稳妥、但仍然贴近原内容风格的标签。",
+        ...xhsRewriteSkillOutputRequirements,
         "输出格式：",
         "{",
         '  "title": "改写后的标题",',
@@ -981,6 +995,7 @@ export function buildPatchMessages({ input = {}, analysis = {}, semantic = null,
         "3. 如果只需要改 1-3 处，就不要改更多地方。",
         "4. body 除非必须，不要整体改写，不要明显缩短信息量。",
         "5. 保留原本分享感、口语感和节奏，不要改成统一科普腔。",
+        ...xhsRewriteSkillPatchRequirements.map((item, index) => `${index + 6}. ${item}`),
         "",
         `当前标题：${String(input.title || "")}`,
         `当前正文：${String(input.body || "")}`,
@@ -1028,6 +1043,7 @@ export function buildHumanizerMessages({ input = {}, analysis = {}, semantic = n
         "要求：",
         ...userRequirements,
         ...humanizerStyleRules,
+        ...xhsRewriteSkillOutputRequirements,
         "输出格式：",
         "{",
         '  "title": "润色后的标题",',

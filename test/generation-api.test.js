@@ -105,6 +105,70 @@ test("generation endpoint returns candidates with recommendation metadata", asyn
   });
 });
 
+test("generation endpoint returns hot-article formula and passes it into generation prompt", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const result = await invokeRoute("POST", "/api/generate-note", {
+      mode: "from_scratch",
+      collectionType: "科普",
+      brief: { topic: "关系沟通", constraints: "温和" },
+      mockHotArticleFormula: {
+        status: "ok",
+        keyword: "关系沟通",
+        formula: "数字型标题 + 痛点开场 + 分点干货 + 互动收尾",
+        titlePatterns: ["数字型标题"],
+        openingPatterns: ["痛点共鸣开场"],
+        structurePatterns: ["分点干货结构"],
+        highFrequencyKeywords: ["边界感", "安全感"],
+        tagStrategies: ["1 个宽标签 + 2-4 个细分场景标签"],
+        interactionPrompts: ["评论区告诉我"],
+        references: [
+          {
+            title: "3个沟通技巧",
+            noteLink: "https://example.com/note",
+            authorNickname: "作者A",
+            authorLink: "https://example.com/author",
+            likedCount: 100,
+            collectedCount: 80,
+            commentsCount: 20,
+            sharedCount: 10
+          }
+        ]
+      },
+      mockCandidates: [
+        { variant: "safe", title: "沟通标题", body: "完整正文".repeat(40), coverText: "封面", tags: ["沟通", "关系"] }
+      ]
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.hotArticleFormula.status, "ok");
+    assert.equal(result.hotArticleFormula.formula, "数字型标题 + 痛点开场 + 分点干货 + 互动收尾");
+    assert.equal(result.generationPromptIncludesHotArticleFormula, true);
+  });
+});
+
+test("generation endpoint keeps candidates when hot-article formula is unavailable", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const result = await invokeRoute("POST", "/api/generate-note", {
+      mode: "from_scratch",
+      collectionType: "科普",
+      brief: {},
+      mockHotArticleFormula: {
+        status: "error",
+        keyword: "关系沟通",
+        message: "爆文数据获取失败：接口超时"
+      },
+      mockCandidates: [
+        { variant: "safe", title: "兜住正文", body: "完整正文".repeat(40), coverText: "封面", tags: ["沟通"] }
+      ]
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.equal(result.hotArticleFormula.status, "error");
+    assert.equal(result.candidates.length, 1);
+  });
+});
+
 test("generation endpoint always uses the current active style profile", async (t) => {
   await withTempGenerationData(t, async () => {
     const result = await invokeRoute("POST", "/api/generate-note", {
@@ -1403,6 +1467,62 @@ test("generation prompt context includes collection type", () => {
   assert.match(messages[1].content, /长文档/);
   assert.match(messages[1].content, /1100-1600 个中文字符/);
   assert.match(messages[1].content, /按中文字符数理解/);
+});
+
+test("generation prompt includes compact hot-article formula when available", () => {
+  const messages = buildGenerationMessages({
+    mode: "from_scratch",
+    brief: {
+      collectionType: "科普",
+      topic: "关系沟通"
+    },
+    hotArticleFormula: {
+      status: "ok",
+      keyword: "关系沟通",
+      formula: "数字型标题 + 痛点开场 + 分点干货 + 互动收尾",
+      titlePatterns: ["数字型标题"],
+      openingPatterns: ["痛点共鸣开场"],
+      structurePatterns: ["分点干货结构"],
+      highFrequencyKeywords: ["边界感", "安全感"],
+      tagStrategies: ["1 个宽标签 + 2-4 个细分场景标签"],
+      interactionPrompts: ["评论区告诉我"],
+      references: [
+        {
+          title: "3个沟通技巧",
+          noteLink: "https://example.com/note",
+          authorNickname: "作者A",
+          authorLink: "https://example.com/author",
+          likedCount: 100,
+          collectedCount: 80,
+          commentsCount: 20,
+          sharedCount: 10
+        }
+      ]
+    }
+  });
+
+  const userPrompt = String(messages[1].content || "");
+
+  assert.match(userPrompt, /爆款公式来源/);
+  assert.match(userPrompt, /数字型标题 \+ 痛点开场 \+ 分点干货 \+ 互动收尾/);
+  assert.match(userPrompt, /边界感、?安全感|边界感.*安全感/);
+  assert.match(userPrompt, /3个沟通技巧/);
+  assert.match(userPrompt, /借结构和规律，不要照抄参考笔记原文/);
+});
+
+test("generation prompt omits hot-article formula when skipped or unavailable", () => {
+  const messages = buildGenerationMessages({
+    mode: "from_scratch",
+    brief: {
+      topic: "关系沟通"
+    },
+    hotArticleFormula: {
+      status: "skipped",
+      reason: "no_keyword"
+    }
+  });
+
+  assert.doesNotMatch(String(messages[1].content || ""), /爆款公式来源/);
 });
 
 test("generation references only keep qualified manual reference samples", () => {

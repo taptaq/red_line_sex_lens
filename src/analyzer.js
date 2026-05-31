@@ -7,6 +7,7 @@ import {
 } from "./data-store.js";
 import { deriveFailureReasonTags } from "./feedback.js";
 import { isSameFeedbackNote } from "./feedback-identity.js";
+import { checkProhibitedWords } from "./prohibited-words.js";
 import { evaluateContextRules } from "./risk-rules.js";
 import { ensureArray, flattenPost, normalizeText } from "./normalizer.js";
 import { findReferenceSampleHints, referenceSampleSupportThreshold } from "./reference-samples.js";
@@ -164,7 +165,18 @@ function buildEmptyAnalysisMemoryContext() {
   };
 }
 
-export async function analyzePost(input = {}) {
+function verdictRank(value = "pass") {
+  if (value === "hard_block") return 3;
+  if (value === "manual_review") return 2;
+  if (value === "observe") return 1;
+  return 0;
+}
+
+function stricterVerdict(left = "pass", right = "pass") {
+  return verdictRank(right) > verdictRank(left) ? right : left;
+}
+
+export async function analyzePost(input = {}, { checkProhibitedWords: checkExternal = checkProhibitedWords } = {}) {
   const post = flattenPost(input);
   const tags = ensureArray(input.tags);
   const comments = ensureArray(input.comments);
@@ -226,6 +238,19 @@ export async function analyzePost(input = {}) {
     verdict = "observe";
   }
 
+  const localVerdict = verdict;
+  const externalSensitiveWords = await checkExternal({
+    title: post.title,
+    body: post.body,
+    coverText: post.coverText,
+    tags,
+    collectionType
+  });
+  const mergedVerdict =
+    externalSensitiveWords?.status === "ok" ? stricterVerdict(localVerdict, externalSensitiveWords.severity) : localVerdict;
+  const externalRaisedVerdict = verdictRank(mergedVerdict) > verdictRank(localVerdict);
+  verdict = mergedVerdict;
+
   const suggestions = buildSuggestions(verdict, categorySet);
 
   if (softenedByFalsePositive) {
@@ -238,6 +263,10 @@ export async function analyzePost(input = {}) {
 
   if (softenedByReferenceSamples) {
     suggestions.unshift("命中相似参考样本，当前表达更接近已验证的安全内容，可按观察项继续人工把关。");
+  }
+
+  if (externalSensitiveWords?.status === "ok" && Number(externalSensitiveWords.hitCount || 0) > 0) {
+    suggestions.unshift("命中外部违禁词库，建议优先按外部替换建议收紧表述。");
   }
 
   const failureReasonTags = deriveFailureReasonTags({
@@ -286,6 +315,15 @@ export async function analyzePost(input = {}) {
     categories: [...categorySet],
     suggestions,
     failureReasonTags,
-    memoryContext
+    memoryContext,
+    externalSensitiveWords: {
+      ...(externalSensitiveWords && typeof externalSensitiveWords === "object" ? externalSensitiveWords : {}),
+      raisedVerdict: externalRaisedVerdict
+    },
+    analysisCompleteness: {
+      localRules: "ok",
+      externalSensitiveWords: externalSensitiveWords?.status || "error",
+      isComplete: externalSensitiveWords?.status !== "error"
+    }
   };
 }
