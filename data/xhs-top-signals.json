@@ -1,29 +1,581 @@
 {
   "accountContext": {
-    "redId": "26112666886",
-    "nickname": "测试号",
-    "derivedTrack": "情感",
-    "derivedTags": [
-      "关系沟通"
-    ]
+    "redId": "",
+    "nickname": "",
+    "derivedTrack": "综合全部",
+    "derivedTags": []
   },
   "filters": {
-    "track": "情感",
-    "keyword": "边界",
-    "tags": [
-      "关系沟通"
-    ]
+    "track": "综合全部",
+    "keyword": "两性, 身体探索, 小玩具, 悦己",
+    "tags": []
   },
   "items": {
     "dailyTop": [
       {
-        "id": "daily-1",
-        "title": "今日样本"
+        "id": "https://www.xiaohongshu.com/explore/6a199261000000003603250f",
+        "sourceType": "daily_top",
+        "title": "情绪",
+        "body": "心慌，然后手抖个不停\n#画画 #無無無鱼子 #摸鱼 #情绪 #双相情感障碍 #躁郁症 #手书 #翻唱",
+        "author": "無無無鱼子",
+        "authorRedId": "https://www.xiaohongshu.com/user/profile/5d06242b0000000016018261",
+        "accountTier": "素人",
+        "track": "综合全部",
+        "tags": [],
+        "workUrl": "https://www.xiaohongshu.com/explore/6a199261000000003603250f",
+        "authorUrl": "https://www.xiaohongshu.com/user/profile/5d06242b0000000016018261",
+        "publish": {
+          "status": "positive_performance",
+          "publishedAt": "2026-05-29 21:19:29",
+          "metrics": {
+            "likes": 120000,
+            "favorites": 10000,
+            "comments": 577,
+            "shares": 1623,
+            "views": 0
+          }
+        },
+        "analysis": {
+          "whySelected": "同类账号可借鉴样本",
+          "hookPattern": "情绪",
+          "structurePattern": "心慌，然后手抖个不停\n#画画 #無無無鱼子 #摸鱼 #情绪 #双相情感障碍 #躁郁症 #手书 #翻唱",
+          "tonePattern": "",
+          "reuseHint": ""
+        }
+      },
+      {
+        "id": "https://www.xiaohongshu.com/explore/6a19708f000000003701ca27",
+        "sourceType": "daily_top",
+        "title": "ai你是要毁了这个家吗",
+        "body": "#ai视频 #抽象 #内容过于真实 #真实还原",
+        "author": "曾文招",
+        "authorRedId": "https://www.xiaohongshu.com/user/profile/62b57458000000001b028810",
+        "accountTier": "素人",
+        "track": "综合全部",
+        "tags": [],
+        "workUrl": "https://www.xiaohongshu.com/explore/6a19708f000000003701ca27",
+        "authorUrl": "https://www.xiaohongshu.com/user/profile/62b57458000000001b028810",
+        "publish": {
+          "status": "positive_performance",
+          "publishedAt": "2026-05-29 18:55:11",
+          "metrics": {
+            "likes": 210000,
+            "favorites": 20000,
+            "comments": 5640,
+            "shares": 50000,
+            "views": 0
+          }
+        },
+        "analysis": {
+          "whySelected": "同类账号可借鉴样本",
+          "hookPattern": "ai你是要毁了这个家吗",
+          "structurePattern": "#ai视频 #抽象 #内容过于真实 #真实还原",
+          "tonePattern": "",
+          "reuseHint": ""
+        }
+      },
+      {
+        "id": "https://www.xiaohongshu.com/explore/6a197f110000000008001700",
+        "sourceType": "daily_top",
+        "title": "女孩子之间的友谊是最棒的",
+        "body": "#艾玛罗伯茨 #野孩子#美剧#小妞电影#友谊",
+        "author": "Oath.",
+        "authorRedId": "https://www.xiaohongshu.com/user/profile/6905dc1200000000370308c5",
+        "accountTier": "素人",
+        "track": "综合全部",
+        "tags": [],
+        "workUrl": "https://www.xiaohongshu.com/explore/6a197f110000000008001700",
+        "authorUrl": "https://www.xiaohongshu.com/user/profile/6905dc1200000000370308c5",
+        "publish": {
+          "status": "positive_performance",
+          "publishedAt": "2026-05-29 19:57:05",
+          "metrics": {
+            "likes": 100000,
+            "favorites": 20000,
+            "comments": 307,
+            "shares": 1493,
+            "views": 0
+          }
+        },
+        "analysis": {
+          "whySelected": "同类账号可借鉴样本",
+          "hookPattern": "女孩子之间的友谊是最棒的",
+          "structurePattern": "#艾玛罗伯茨 #野孩子#美剧#小妞电影#友谊",
+          "tonePattern": "",
+          "reuseHint": ""
+        }
+      },
+      {
+        "id": "https://www.xiaohongshu.com/explore/6a195afd000000003502e3c5",
+        "sourceType": "daily_top",
+        "title": "来自最后一片薯片的视角",
+        "body": "#夜神月 #meme #抽象\nooc致歉◉‿◉有灵感来源！",
+        "author": "犬奇Oro",
+        "authorRedId": "https://www.xiaohongshu.com/user/profile/610125c50000000001008a5f",
+        "accountTier": "素人",
+        "track": "综合全部",
+        "tags": [],
+        "workUrl": "https://www.xiaohongshu.com/explore/6a195afd000000003502e3c5",
+        "authorUrl": "https://www.xiaohongshu.com/user/profile/610125c50000000001008a5f",
+        "publish": {
+          "status": "positive_performance",
+          "publishedAt": "2026-05-29 17:23:09",
+          "metrics": {
+            "likes": 200000,
+            "favorites": 20000,
+            "comments": 1888,
+            "shares": 10000,
+            "views": 0
+          }
+        },
+        "analysis": {
+          "whySelected": "同类账号可借鉴样本",
+          "hookPattern": "来自最后一片薯片的视角",
+          "structurePattern": "#夜神月 #meme #抽象\nooc致歉◉‿◉有灵感来源！",
+          "tonePattern": "",
+          "reuseHint": ""
+        }
+      },
+      {
+        "id": "https://www.xiaohongshu.com/explore/6a19594500000000350322c3",
+        "sourceType": "daily_top",
+        "title": "又到了期待考生喊话的时候，最强嘴替要来了",
+        "body": "#2026高考季 #2026高考加油 #我的高考记忆 @校园薯",
+        "author": "允大少（冯熙雅）",
+        "authorRedId": "https://www.xiaohongshu.com/user/profile/5af73220e8ac2b376e574a11",
+        "accountTier": "素人",
+        "track": "综合全部",
+        "tags": [],
+        "workUrl": "https://www.xiaohongshu.com/explore/6a19594500000000350322c3",
+        "authorUrl": "https://www.xiaohongshu.com/user/profile/5af73220e8ac2b376e574a11",
+        "publish": {
+          "status": "positive_performance",
+          "publishedAt": "2026-05-29 17:15:49",
+          "metrics": {
+            "likes": 240000,
+            "favorites": 20000,
+            "comments": 4644,
+            "shares": 1173,
+            "views": 0
+          }
+        },
+        "analysis": {
+          "whySelected": "同类账号可借鉴样本",
+          "hookPattern": "又到了期待考生喊话的时候，最强嘴替要来了",
+          "structurePattern": "#2026高考季 #2026高考加油 #我的高考记忆 @校园薯",
+          "tonePattern": "",
+          "reuseHint": ""
+        }
+      },
+      {
+        "id": "https://www.xiaohongshu.com/explore/6a18e0a2000000000702c61c",
+        "sourceType": "daily_top",
+        "title": "猫是好猫，水壶也是好水壶~",
+        "body": "#没有猫咪的世界是不会转的 #谁能拒绝这可爱的小猫啊 #全世界就是围着猫打转 #世间破破烂烂猫咪缝缝补补 #自由的小猫 #是一只聪明的猫 #小黑猫 #这么可爱的小猫咪谁不爱呢 #猫猫很喜欢 （视频来源：@新消息报 ）",
+        "author": "米糕糕",
+        "authorRedId": "https://www.xiaohongshu.com/user/profile/64859dd50000000011003d74",
+        "accountTier": "素人",
+        "track": "综合全部",
+        "tags": [],
+        "workUrl": "https://www.xiaohongshu.com/explore/6a18e0a2000000000702c61c",
+        "authorUrl": "https://www.xiaohongshu.com/user/profile/64859dd50000000011003d74",
+        "publish": {
+          "status": "positive_performance",
+          "publishedAt": "2026-05-29 08:41:07",
+          "metrics": {
+            "likes": 200000,
+            "favorites": 10000,
+            "comments": 843,
+            "shares": 3783,
+            "views": 0
+          }
+        },
+        "analysis": {
+          "whySelected": "同类账号可借鉴样本",
+          "hookPattern": "猫是好猫，水壶也是好水壶~",
+          "structurePattern": "#没有猫咪的世界是不会转的 #谁能拒绝这可爱的小猫啊 #全世界就是围着猫打转 #世间破破烂烂猫咪缝缝补补 #自由的小猫 #是一只聪明的猫 #小黑猫 #这么可爱的小猫咪谁不爱呢 #猫猫很喜欢 （视频来源：@新消息报 ）",
+          "tonePattern": "",
+          "reuseHint": ""
+        }
       }
     ],
-    "weeklyTop": [],
-    "lowTop": []
+    "weeklyTop": [
+      {
+        "id": "https://www.xiaohongshu.com/explore/6a12dbd70000000035026524",
+        "sourceType": "weekly_top",
+        "title": "小咪乖的得劲魔法🪄",
+        "body": "都快来听@杏艿姜 老师的得劲魔法！ #得劲魔法 #萌猫 #好视频扶持计划 #这么可爱不要命啦 #拿捏我的小猫咪",
+        "author": "酸奶豆糕",
+        "authorRedId": "https://www.xiaohongshu.com/user/profile/5f3c62f6000000000100bec4",
+        "accountTier": "素人",
+        "track": "综合全部",
+        "tags": [],
+        "workUrl": "https://www.xiaohongshu.com/explore/6a12dbd70000000035026524",
+        "authorUrl": "https://www.xiaohongshu.com/user/profile/5f3c62f6000000000100bec4",
+        "publish": {
+          "status": "positive_performance",
+          "publishedAt": "2026-05-24 19:07:03",
+          "metrics": {
+            "likes": 390000,
+            "favorites": 140000,
+            "comments": 7654,
+            "shares": 20000,
+            "views": 0
+          }
+        },
+        "analysis": {
+          "whySelected": "同类账号可借鉴样本",
+          "hookPattern": "小咪乖的得劲魔法🪄",
+          "structurePattern": "都快来听@杏艿姜 老师的得劲魔法！ #得劲魔法 #萌猫 #好视频扶持计划 #这么可爱不要命啦 #拿捏我的小猫咪",
+          "tonePattern": "",
+          "reuseHint": ""
+        }
+      },
+      {
+        "id": "https://www.xiaohongshu.com/explore/6a1287ae000000000603319e",
+        "sourceType": "weekly_top",
+        "title": "a妹：我真酷",
+        "body": "好萌的宝宝#爱莉安娜格兰德 #a妹 #审美积累",
+        "author": "琪琪琪有此理（上学回不及时）",
+        "authorRedId": "https://www.xiaohongshu.com/user/profile/63952e35000000002601146f",
+        "accountTier": "素人",
+        "track": "综合全部",
+        "tags": [],
+        "workUrl": "https://www.xiaohongshu.com/explore/6a1287ae000000000603319e",
+        "authorUrl": "https://www.xiaohongshu.com/user/profile/63952e35000000002601146f",
+        "publish": {
+          "status": "positive_performance",
+          "publishedAt": "2026-05-24 13:07:58",
+          "metrics": {
+            "likes": 590000,
+            "favorites": 20000,
+            "comments": 1616,
+            "shares": 6606,
+            "views": 0
+          }
+        },
+        "analysis": {
+          "whySelected": "同类账号可借鉴样本",
+          "hookPattern": "a妹：我真酷",
+          "structurePattern": "好萌的宝宝#爱莉安娜格兰德 #a妹 #审美积累",
+          "tonePattern": "",
+          "reuseHint": ""
+        }
+      },
+      {
+        "id": "https://www.xiaohongshu.com/explore/6a130a48000000000802684d",
+        "sourceType": "weekly_top",
+        "title": "妈，别催婚了，你看看你闺女",
+        "body": "#风筝冲浪 #风冲 #装到了无所谓 #户外 #girlspower",
+        "author": "小徐老师",
+        "authorRedId": "https://www.xiaohongshu.com/user/profile/5654bf6be58d135c8b2da26b",
+        "accountTier": "素人",
+        "track": "综合全部",
+        "tags": [],
+        "workUrl": "https://www.xiaohongshu.com/explore/6a130a48000000000802684d",
+        "authorUrl": "https://www.xiaohongshu.com/user/profile/5654bf6be58d135c8b2da26b",
+        "publish": {
+          "status": "positive_performance",
+          "publishedAt": "2026-05-24 22:25:12",
+          "metrics": {
+            "likes": 330000,
+            "favorites": 20000,
+            "comments": 3625,
+            "shares": 5897,
+            "views": 0
+          }
+        },
+        "analysis": {
+          "whySelected": "同类账号可借鉴样本",
+          "hookPattern": "妈，别催婚了，你看看你闺女",
+          "structurePattern": "#风筝冲浪 #风冲 #装到了无所谓 #户外 #girlspower",
+          "tonePattern": "",
+          "reuseHint": ""
+        }
+      },
+      {
+        "id": "https://www.xiaohongshu.com/explore/6a12e8150000000035026a61",
+        "sourceType": "weekly_top",
+        "title": "女大住宿极致帝王体验…导游速通版❗",
+        "body": "#帝王好物 #正义的折耳根大王",
+        "author": "正义的折耳根大王",
+        "authorRedId": "https://www.xiaohongshu.com/user/profile/674cf08e000000001d02f68f",
+        "accountTier": "素人",
+        "track": "综合全部",
+        "tags": [],
+        "workUrl": "https://www.xiaohongshu.com/explore/6a12e8150000000035026a61",
+        "authorUrl": "https://www.xiaohongshu.com/user/profile/674cf08e000000001d02f68f",
+        "publish": {
+          "status": "positive_performance",
+          "publishedAt": "2026-05-24 19:59:17",
+          "metrics": {
+            "likes": 310000,
+            "favorites": 140000,
+            "comments": 5377,
+            "shares": 10000,
+            "views": 0
+          }
+        },
+        "analysis": {
+          "whySelected": "同类账号可借鉴样本",
+          "hookPattern": "女大住宿极致帝王体验…导游速通版❗",
+          "structurePattern": "#帝王好物 #正义的折耳根大王",
+          "tonePattern": "",
+          "reuseHint": ""
+        }
+      },
+      {
+        "id": "https://www.xiaohongshu.com/explore/6a129c88000000000602278f",
+        "sourceType": "weekly_top",
+        "title": "5款最简单的冰淇淋…有手就会！不用冰淇淋机！",
+        "body": "从百年名店食谱到江湖土方复刻～\n5款在家无门槛制作的冰淇淋，不用冰淇淋机！\n特浓抹茶冰淇淋、经典麦旋风、西瓜牛奶、热带水果、蜜瓜青提\n你最喜欢哪一款？\n#美食兴趣班之有手就会 #在家实现奶茶自由 #美食教程 #自制冰淇淋 #甜品 #下午茶 #抹茶 #雪芭 #美食复刻 #冰激凌",
+        "author": "元气八眉菌",
+        "authorRedId": "https://www.xiaohongshu.com/user/profile/5835bacf82ec39582c960096",
+        "accountTier": "素人",
+        "track": "综合全部",
+        "tags": [],
+        "workUrl": "https://www.xiaohongshu.com/explore/6a129c88000000000602278f",
+        "authorUrl": "https://www.xiaohongshu.com/user/profile/5835bacf82ec39582c960096",
+        "publish": {
+          "status": "positive_performance",
+          "publishedAt": "2026-05-24 14:36:56",
+          "metrics": {
+            "likes": 260000,
+            "favorites": 210000,
+            "comments": 2859,
+            "shares": 20000,
+            "views": 0
+          }
+        },
+        "analysis": {
+          "whySelected": "同类账号可借鉴样本",
+          "hookPattern": "5款最简单的冰淇淋…有手就会！不用冰淇淋机！",
+          "structurePattern": "从百年名店食谱到江湖土方复刻～\n5款在家无门槛制作的冰淇淋，不用冰淇淋机！\n特浓抹茶冰淇淋、经典麦旋风、西瓜牛奶、热带水果、蜜瓜青提\n你最喜欢哪一款？\n#美食兴趣班之有手就会 #在家实现奶茶自由 #美食教程 #自制冰淇淋 #甜品 #下午茶 #抹茶 #雪芭 #美食复刻 #冰激凌",
+          "tonePattern": "",
+          "reuseHint": ""
+        }
+      },
+      {
+        "id": "https://www.xiaohongshu.com/explore/6a13002c00000000350388f8",
+        "sourceType": "weekly_top",
+        "title": "#生活 #邪修 #窍门 #焚决 #小妙招",
+        "body": "#生活 #邪修 #窍门 #焚决 #小妙招",
+        "author": "超哥超有料",
+        "authorRedId": "https://www.xiaohongshu.com/user/profile/61dad145000000001000c979",
+        "accountTier": "素人",
+        "track": "综合全部",
+        "tags": [],
+        "workUrl": "https://www.xiaohongshu.com/explore/6a13002c00000000350388f8",
+        "authorUrl": "https://www.xiaohongshu.com/user/profile/61dad145000000001000c979",
+        "publish": {
+          "status": "positive_performance",
+          "publishedAt": "2026-05-24 21:42:04",
+          "metrics": {
+            "likes": 210000,
+            "favorites": 120000,
+            "comments": 3654,
+            "shares": 20000,
+            "views": 0
+          }
+        },
+        "analysis": {
+          "whySelected": "同类账号可借鉴样本",
+          "hookPattern": "",
+          "structurePattern": "#生活 #邪修 #窍门 #焚决 #小妙招",
+          "tonePattern": "",
+          "reuseHint": ""
+        }
+      }
+    ],
+    "lowTop": [
+      {
+        "id": "https://www.xiaohongshu.com/explore/6a1a537900000000060308aa",
+        "sourceType": "low_top",
+        "title": "乐趣分享不分国界，或许这就是男人",
+        "body": "#男人的情怀 #有趣的外国人 #男性的快乐 #有趣的灵魂 #小风撩剧",
+        "author": "小风的初夏",
+        "authorRedId": "https://www.xiaohongshu.com/user/profile/63e3162e0000000026012358",
+        "accountTier": "素人",
+        "track": "综合全部",
+        "tags": [],
+        "workUrl": "https://www.xiaohongshu.com/explore/6a1a537900000000060308aa",
+        "authorUrl": "https://www.xiaohongshu.com/user/profile/63e3162e0000000026012358",
+        "publish": {
+          "status": "positive_performance",
+          "publishedAt": "2026-05-30 11:03:21",
+          "metrics": {
+            "likes": 110000,
+            "favorites": 30000,
+            "comments": 3284,
+            "shares": 2009,
+            "views": 0
+          }
+        },
+        "analysis": {
+          "whySelected": "同类账号可借鉴样本",
+          "hookPattern": "乐趣分享不分国界，或许这就是男人",
+          "structurePattern": "#男人的情怀 #有趣的外国人 #男性的快乐 #有趣的灵魂 #小风撩剧",
+          "tonePattern": "",
+          "reuseHint": ""
+        }
+      },
+      {
+        "id": "https://www.xiaohongshu.com/explore/6a1af3810000000037036043",
+        "sourceType": "low_top",
+        "title": "我的臀部翘到可以举起电视",
+        "body": "#狗狗 #萨摩耶 #微笑天使 #狗狗都是小天使 #狗狗是人类最好的朋友 #治愈",
+        "author": "xn",
+        "authorRedId": "https://www.xiaohongshu.com/user/profile/60f12f4b00000000010072a1",
+        "accountTier": "素人",
+        "track": "综合全部",
+        "tags": [],
+        "workUrl": "https://www.xiaohongshu.com/explore/6a1af3810000000037036043",
+        "authorUrl": "https://www.xiaohongshu.com/user/profile/60f12f4b00000000010072a1",
+        "publish": {
+          "status": "positive_performance",
+          "publishedAt": "2026-05-30 22:26:09",
+          "metrics": {
+            "likes": 250000,
+            "favorites": 8263,
+            "comments": 614,
+            "shares": 2955,
+            "views": 0
+          }
+        },
+        "analysis": {
+          "whySelected": "同类账号可借鉴样本",
+          "hookPattern": "我的臀部翘到可以举起电视",
+          "structurePattern": "#狗狗 #萨摩耶 #微笑天使 #狗狗都是小天使 #狗狗是人类最好的朋友 #治愈",
+          "tonePattern": "",
+          "reuseHint": ""
+        }
+      },
+      {
+        "id": "https://www.xiaohongshu.com/explore/6a1a9db00000000035030da9",
+        "sourceType": "low_top",
+        "title": "当高考分到的考场只有我一个人时#猫meme#抽象#高考#",
+        "body": "当高考分到的考场只有我一个人时#猫meme#抽象#高考#搞笑 #猫meme小剧场",
+        "author": "闹闹不闹",
+        "authorRedId": "https://www.xiaohongshu.com/user/profile/6a103e840000000002001800",
+        "accountTier": "素人",
+        "track": "综合全部",
+        "tags": [],
+        "workUrl": "https://www.xiaohongshu.com/explore/6a1a9db00000000035030da9",
+        "authorUrl": "https://www.xiaohongshu.com/user/profile/6a103e840000000002001800",
+        "publish": {
+          "status": "positive_performance",
+          "publishedAt": "2026-05-30 16:20:00",
+          "metrics": {
+            "likes": 200000,
+            "favorites": 40000,
+            "comments": 1465,
+            "shares": 6943,
+            "views": 0
+          }
+        },
+        "analysis": {
+          "whySelected": "同类账号可借鉴样本",
+          "hookPattern": "",
+          "structurePattern": "当高考分到的考场只有我一个人时#猫meme#抽象#高考#搞笑 #猫meme小剧场",
+          "tonePattern": "",
+          "reuseHint": ""
+        }
+      },
+      {
+        "id": "https://www.xiaohongshu.com/explore/6a1a7bbf0000000008026434",
+        "sourceType": "low_top",
+        "title": "意外切换到最爱歌曲的样子这也太可爱了吧！",
+        "body": "#牡丹鹦鹉 #鹦鹉日常 #萌宠 #可爱到膨胀 #小家伙嗨起来了 #心被萌化了 #有亿点点可爱 #这节奏感真带劲",
+        "author": "治愈动物园🦄",
+        "authorRedId": "https://www.xiaohongshu.com/user/profile/69e9d99b0000000001007800",
+        "accountTier": "素人",
+        "track": "综合全部",
+        "tags": [],
+        "workUrl": "https://www.xiaohongshu.com/explore/6a1a7bbf0000000008026434",
+        "authorUrl": "https://www.xiaohongshu.com/user/profile/69e9d99b0000000001007800",
+        "publish": {
+          "status": "positive_performance",
+          "publishedAt": "2026-05-30 13:55:11",
+          "metrics": {
+            "likes": 140000,
+            "favorites": 10000,
+            "comments": 5512,
+            "shares": 40000,
+            "views": 0
+          }
+        },
+        "analysis": {
+          "whySelected": "同类账号可借鉴样本",
+          "hookPattern": "意外切换到最爱歌曲的样子这也太可爱了吧！",
+          "structurePattern": "#牡丹鹦鹉 #鹦鹉日常 #萌宠 #可爱到膨胀 #小家伙嗨起来了 #心被萌化了 #有亿点点可爱 #这节奏感真带劲",
+          "tonePattern": "",
+          "reuseHint": ""
+        }
+      },
+      {
+        "id": "https://www.xiaohongshu.com/explore/6a1a42b4000000000603376f",
+        "sourceType": "low_top",
+        "title": "主人还没逃离原生家庭吗 #狗狗 #神操作 #搞笑 #反转",
+        "body": "主人还没逃离原生家庭吗 #狗狗  #神操作  #搞笑  #反转 #主人比狗更狗 #万万没想到 #娱乐评论大赏 #老铁娱乐观察站 #哈哈哈哈哈",
+        "author": "江南dios考",
+        "authorRedId": "https://www.xiaohongshu.com/user/profile/6a0d2e2e0000000002001401",
+        "accountTier": "素人",
+        "track": "综合全部",
+        "tags": [],
+        "workUrl": "https://www.xiaohongshu.com/explore/6a1a42b4000000000603376f",
+        "authorUrl": "https://www.xiaohongshu.com/user/profile/6a0d2e2e0000000002001401",
+        "publish": {
+          "status": "positive_performance",
+          "publishedAt": "2026-05-30 09:51:48",
+          "metrics": {
+            "likes": 140000,
+            "favorites": 6547,
+            "comments": 433,
+            "shares": 2556,
+            "views": 0
+          }
+        },
+        "analysis": {
+          "whySelected": "同类账号可借鉴样本",
+          "hookPattern": "",
+          "structurePattern": "主人还没逃离原生家庭吗 #狗狗  #神操作  #搞笑  #反转 #主人比狗更狗 #万万没想到 #娱乐评论大赏 #老铁娱乐观察站 #哈哈哈哈哈",
+          "tonePattern": "",
+          "reuseHint": ""
+        }
+      },
+      {
+        "id": "https://www.xiaohongshu.com/explore/6a1996c200000000360003d5",
+        "sourceType": "low_top",
+        "title": "⚠️胶水避坑，一个视频告诉你如何选对胶水‼️",
+        "body": "一个视频教会你装修中有哪些胶，如何选对胶水！#装修 #装修避坑 #装修胶 #玻璃胶 #结构胶#装修知识 #装修日记vlog #记录装修过程 #全屋美容胶收边收口打胶 #美容胶封边",
+        "author": "哩哩的复式宅(装修中)",
+        "authorRedId": "https://www.xiaohongshu.com/user/profile/596b7ad45e87e77b071bfc79",
+        "accountTier": "素人",
+        "track": "综合全部",
+        "tags": [],
+        "workUrl": "https://www.xiaohongshu.com/explore/6a1996c200000000360003d5",
+        "authorUrl": "https://www.xiaohongshu.com/user/profile/596b7ad45e87e77b071bfc79",
+        "publish": {
+          "status": "positive_performance",
+          "publishedAt": "2026-05-30 11:35:02",
+          "metrics": {
+            "likes": 70000,
+            "favorites": 60000,
+            "comments": 193,
+            "shares": 2975,
+            "views": 0
+          }
+        },
+        "analysis": {
+          "whySelected": "同类账号可借鉴样本",
+          "hookPattern": "⚠️胶水避坑，一个视频告诉你如何选对胶水‼️",
+          "structurePattern": "一个视频教会你装修中有哪些胶，如何选对胶水！#装修 #装修避坑 #装修胶 #玻璃胶 #结构胶#装修知识 #装修日记vlog #记录装修过程 #全屋美容胶收边收口打胶 #美容胶封边",
+          "tonePattern": "",
+          "reuseHint": ""
+        }
+      }
+    ]
   },
-  "generatedAt": "2026-05-30T10:00:00.000Z",
-  "resultCount": 1
+  "generatedAt": "2026-05-31T11:59:41.649Z",
+  "resultCount": 18
 }

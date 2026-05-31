@@ -729,6 +729,12 @@ function activateTab(groupName, targetId) {
   document.querySelectorAll(`.tab-panel[data-tab-group="${groupName}"]`).forEach((panel) => {
     panel.classList.toggle("is-active", panel.id === targetId);
   });
+
+  document.querySelectorAll(`[data-visible-with-tab]`).forEach((node) => {
+    const shouldShow = node.dataset.visibleWithTab === targetId;
+    node.hidden = !shouldShow;
+    node.classList.toggle("is-visible", shouldShow);
+  });
 }
 
 function initializeTabs() {
@@ -743,6 +749,11 @@ function initializeTabs() {
 function revealSampleLibraryPane() {
   activateTab("data-maintenance", "sample-library-pane");
   byId("sample-library-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function revealGenerationDraftInbox() {
+  activateTab("main-workbench", "generation-workbench-pane");
+  byId("generation-draft-inbox-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function revealSampleLibraryReflowPane() {
@@ -5840,12 +5851,96 @@ function getVisibleXhsTopSignalsItems(state = appState.xhsTopSignals) {
   return groupedItems.dailyTop;
 }
 
+function extractXhsAccountDiagnosisTopSignalDefaults(result = {}) {
+  const account = result && typeof result === "object" ? result.account || {} : {};
+  const raw = account && typeof account === "object" ? account._raw || {} : {};
+  const works = Array.isArray(account?.works) ? account.works : [];
+  const redId = String(account?.redId || raw?.redId || "").trim();
+  const rawTags = Array.isArray(raw?.tags) ? raw.tags : [];
+  const tagCandidates = uniqueStrings(
+    rawTags
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+      .slice(0, 4)
+  );
+  const textSignals = [
+    account?.desc,
+    ...works.slice(0, 6).map((item) => item?.title)
+  ]
+    .map((item) => String(item || ""))
+    .join(" ");
+  const trackRules = [
+    { track: "情感", pattern: /关系|情感|恋爱|亲密|伴侣|情侣|婚姻|边界|沟通|分手|暧昧|社交/ },
+    { track: "女性健康", pattern: /女性|经期|卵巢|生育|妇科|身体|健康|疼痛|姨妈|避孕/ },
+    { track: "成长", pattern: /成长|自洽|情绪|心理|自我|人生|边界感|内耗/ },
+    { track: "科普", pattern: /科普|知识|误区|指南|真相|为什么|怎么/ }
+  ];
+  const matchedTracks = trackRules.filter((rule) => rule.pattern.test(textSignals)).map((rule) => rule.track);
+  const track = matchedTracks[0] || tagCandidates[0] || "";
+  const keywordRules = [
+    { keyword: "关系沟通", pattern: /关系|沟通|伴侣|情侣|婚姻|亲密/ },
+    { keyword: "边界", pattern: /边界|拒绝|分寸|底线/ },
+    { keyword: "女性健康", pattern: /女性|经期|卵巢|妇科|身体|健康/ },
+    { keyword: "情绪", pattern: /情绪|内耗|焦虑|自洽|心理/ }
+  ];
+  const keyword = keywordRules.find((rule) => rule.pattern.test(textSignals))?.keyword || tagCandidates[0] || track;
+
+  return {
+    redId,
+    track,
+    keyword,
+    tags: tagCandidates
+  };
+}
+
+function applyXhsTopSignalsDefaultsFromAccountDiagnosis({ force = false } = {}) {
+  const defaults = extractXhsAccountDiagnosisTopSignalDefaults(appState.xhsAccountDiagnosis?.result);
+  const trackField = byId("xhs-top-signals-track");
+  const keywordField = byId("xhs-top-signals-keyword");
+  const tagsField = byId("xhs-top-signals-tags");
+  const currentState = appState.xhsTopSignals || {};
+  const next = {
+    redId: String(currentState.redId || "").trim(),
+    track: String(currentState.track || "").trim(),
+    keyword: String(currentState.keyword || "").trim(),
+    tags: String(currentState.tags || "").trim()
+  };
+  const maybeApply = (field, key, value) => {
+    const normalizedValue = Array.isArray(value) ? value.join(", ") : String(value || "").trim();
+
+    if (!normalizedValue) {
+      return;
+    }
+
+    const fieldValue = String(field?.value || "").trim();
+    const hasCurrentValue = Boolean(fieldValue || next[key]);
+    const userEdited = field?.dataset?.xhsTopSignalsUserEdited === "true";
+
+    if (force || (!hasCurrentValue && !userEdited)) {
+      next[key] = normalizedValue;
+
+      if (field) {
+        field.value = normalizedValue;
+      }
+    }
+  };
+
+  maybeApply(trackField, "track", defaults.track);
+  maybeApply(keywordField, "keyword", defaults.keyword);
+  maybeApply(tagsField, "tags", defaults.tags);
+
+  appState.xhsTopSignals = {
+    ...currentState,
+    ...next
+  };
+}
+
 function buildXhsTopSignalsRequestPayload() {
   return {
-    redId: String(byId("xhs-top-signals-red-id")?.value || appState.xhsTopSignals?.redId || "").trim(),
-    track: String(byId("xhs-top-signals-track")?.value || appState.xhsTopSignals?.track || "").trim(),
-    keyword: String(byId("xhs-top-signals-keyword")?.value || appState.xhsTopSignals?.keyword || "").trim(),
-    tags: splitCSV(byId("xhs-top-signals-tags")?.value || appState.xhsTopSignals?.tags || "")
+    redId: String(byId("xhs-top-signals-red-id")?.value || "").trim(),
+    track: String(byId("xhs-top-signals-track")?.value || "").trim(),
+    keyword: joinCSV(splitCSV(byId("xhs-top-signals-keyword")?.value || "")),
+    tags: splitCSV(byId("xhs-top-signals-tags")?.value || "")
   };
 }
 
@@ -5879,21 +5974,44 @@ function syncXhsTopSignalsInputs() {
   const keywordField = byId("xhs-top-signals-keyword");
   const tagsField = byId("xhs-top-signals-tags");
 
-  if (redIdField) {
+  if (redIdField && redIdField.dataset.xhsTopSignalsUserEdited === "true") {
     redIdField.value = String(state.redId || "");
   }
 
-  if (trackField) {
+  if (trackField && trackField.dataset.xhsTopSignalsUserEdited === "true") {
     trackField.value = String(state.track || "");
   }
 
-  if (keywordField) {
+  if (keywordField && keywordField.dataset.xhsTopSignalsUserEdited === "true") {
     keywordField.value = String(state.keyword || "");
   }
 
-  if (tagsField) {
+  if (tagsField && tagsField.dataset.xhsTopSignalsUserEdited === "true") {
     tagsField.value = String(state.tags || "");
   }
+}
+
+function bindXhsTopSignalsInputEditTracking() {
+  [
+    "xhs-top-signals-red-id",
+    "xhs-top-signals-track",
+    "xhs-top-signals-keyword",
+    "xhs-top-signals-tags"
+  ].forEach((id) => {
+    const field = byId(id);
+
+    if (!field || field.dataset.xhsTopSignalsEditTrackingBound === "true") {
+      return;
+    }
+
+    field.dataset.xhsTopSignalsEditTrackingBound = "true";
+    field.addEventListener("input", () => {
+      field.dataset.xhsTopSignalsUserEdited = "true";
+    });
+    field.addEventListener("change", () => {
+      field.dataset.xhsTopSignalsUserEdited = "true";
+    });
+  });
 }
 
 function setSampleLibraryExternalSamplesModalOpen(isOpen) {
@@ -5969,11 +6087,12 @@ async function refreshXhsTopSignalsState({ useCache = false } = {}) {
   );
 
   try {
+    const requestPayload = useCache ? null : buildXhsTopSignalsRequestPayload();
     const response = useCache
       ? await apiJson(xhsTopSignalsApi)
       : await apiJson(xhsTopSignalsApi, {
           method: "POST",
-          body: JSON.stringify(buildXhsTopSignalsRequestPayload())
+          body: JSON.stringify(requestPayload)
         });
     const nextItems = normalizeXhsTopSignalsItems(response?.items);
     const nextFilter = String(appState.xhsTopSignals?.activeFilter || "daily").trim() || "daily";
@@ -5992,10 +6111,11 @@ async function refreshXhsTopSignalsState({ useCache = false } = {}) {
         response?.generatedAt
           ? `已刷新 ${(Number(response?.resultCount) || visibleItems.length || 0)} 条 · ${formatUiDateTime(response.generatedAt)}`
           : "",
-      redId: String(response?.accountContext?.redId || appState.xhsTopSignals?.redId || "").trim(),
-      track: String(response?.filters?.track || "").trim(),
-      keyword: String(response?.filters?.keyword || "").trim(),
-      tags: Array.isArray(response?.filters?.tags) ? response.filters.tags.join(", ") : "",
+      redId: String(requestPayload?.redId || byId("xhs-top-signals-red-id")?.value || "").trim(),
+      track: String(requestPayload?.track || byId("xhs-top-signals-track")?.value || "").trim(),
+      keyword: String(byId("xhs-top-signals-keyword")?.value || "").trim(),
+      tags: String(byId("xhs-top-signals-tags")?.value || "").trim(),
+      accountContext: requestPayload?.redId ? response?.accountContext : {},
       items: nextItems,
       generatedAt: String(response?.generatedAt || "").trim(),
       selectedSignalId: nextSelectedSignalId
@@ -6069,6 +6189,8 @@ async function refreshXhsAccountDiagnosisState() {
       canSubscribe: false,
       report: payload?.report && typeof payload.report === "object" ? payload.report : null
     };
+    applyXhsTopSignalsDefaultsFromAccountDiagnosis();
+    syncXhsTopSignalsInputs();
   } catch {
     appState.xhsAccountDiagnosis = {
       ...appState.xhsAccountDiagnosis,
@@ -7169,6 +7291,8 @@ async function runXhsAccountDiagnosisAnalysis({ forcedRedId = "" } = {}) {
       canSubscribe: false,
       report: response?.report && typeof response.report === "object" ? response.report : null
     };
+    applyXhsTopSignalsDefaultsFromAccountDiagnosis({ force: true });
+    syncXhsTopSignalsInputs();
     syncXhsAccountDiagnosisPanel();
     openXhsAccountDiagnosisModal({ useLatestStoredResult: false });
   } catch (error) {
@@ -10838,6 +10962,14 @@ renderDraftIdeasList();
 syncXhsTopSignalsPanel();
 
 document.addEventListener("click", async (event) => {
+  const draftInboxNav = event.target instanceof Element ? event.target.closest('[data-action="reveal-generation-draft-inbox"]') : null;
+
+  if (draftInboxNav) {
+    event.preventDefault();
+    revealGenerationDraftInbox();
+    return;
+  }
+
   const summaryAction = event.target.closest("[data-summary-action]");
 
   if (summaryAction) {
@@ -11732,6 +11864,7 @@ document.addEventListener("change", (event) => {
 renderModelSelectionControls(defaultModelSelectionOptions);
 renderCollectionTypeSelectors();
 syncSampleLibraryCreateButtonExpanded(false);
+bindXhsTopSignalsInputEditTracking();
 
 refreshAll().catch((error) => {
   byId("analysis-result").innerHTML = `

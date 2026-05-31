@@ -16,6 +16,16 @@ test("top signals browser block sits below the content workbench as a standalone
 
   assert.match(indexHtml, /id="xhs-top-signals-panel"/);
   assert.match(indexHtml, /id="xhs-top-signals-refresh"/);
+  assert.match(indexHtml, /<select id="xhs-top-signals-track" name="xhsTopSignalsTrack">/);
+  assert.match(indexHtml, /<option value="">自动匹配 \/ 综合全部<\/option>/);
+  assert.match(indexHtml, /<option value="星座情感">星座情感<\/option>/);
+  assert.match(indexHtml, /<option value="科学探索">科学探索<\/option>/);
+  assert.match(indexHtml, /<option value="个人护理">个人护理<\/option>/);
+  assert.match(indexHtml, /<option value="综合杂项">综合杂项<\/option>/);
+  assert.match(indexHtml, /placeholder="例如 边界感，关系沟通"/);
+  assert.match(indexHtml, /多个标签用中文逗号、英文逗号或顿号分隔/);
+  assert.match(indexHtml, /小红书号（可选）/);
+  assert.match(indexHtml, /填了会辅助匹配账号画像/);
   assert.match(indexHtml, /<button[^>]*data-xhs-top-signals-filter="daily"[^>]*>/);
   assert.match(indexHtml, /<button[^>]*data-xhs-top-signals-filter="weekly"[^>]*>/);
   assert.match(indexHtml, /<button[^>]*data-xhs-top-signals-filter="low"[^>]*>/);
@@ -58,7 +68,9 @@ test("top signals browser exposes isolated standalone rendering helpers", async 
       title: "今日起量样本",
       author: "作者A",
       track: "情感",
-      sourceTypeLabel: "今日起量",
+      sourceType: "daily_top",
+      body: "这是一段正文预览，用来确认卡片不是只有标题。",
+      publish: { metrics: { likes: 120000, favorites: 10000, comments: 577, shares: 1623 } },
       analysis: { whySelected: "互动起量快" }
     }
   ]);
@@ -66,14 +78,26 @@ test("top signals browser exposes isolated standalone rendering helpers", async 
     id: "daily-1",
     title: "今日起量样本",
     body: "正文示例",
+    workUrl: "https://example.com/note/1",
+    publish: {
+      publishedAt: "2026-05-29 21:19:29",
+      metrics: { likes: 120000, favorites: 10000, comments: 577, shares: 1623 }
+    },
     analysis: { whySelected: "互动起量快", reuseHint: "可借切口" }
   });
 
   assert.match(cardsMarkup, /data-action="select-xhs-top-signal"/);
   assert.match(cardsMarkup, /加入外部参考样本/);
   assert.match(cardsMarkup, /生成灵感草稿/);
+  assert.match(cardsMarkup, /今日起量/);
+  assert.match(cardsMarkup, /点赞 12万/);
+  assert.match(cardsMarkup, /收藏 1万/);
+  assert.match(cardsMarkup, /这是一段正文预览/);
   assert.match(detailMarkup, /互动起量快/);
   assert.match(detailMarkup, /可借切口/);
+  assert.match(detailMarkup, /发布时间：2026-05-29 21:19:29/);
+  assert.match(detailMarkup, /评论 577/);
+  assert.match(detailMarkup, /查看原文/);
 });
 
 test("top signals browser shows account-based matching context when available", async () => {
@@ -170,7 +194,29 @@ test("top signals browser app wiring hydrates cache, refreshes explicitly, and s
   assert.match(appJs, /const xhsTopSignalsApi = "\/api\/xhs\/top-signals";/);
   assert.match(appJs, /xhsTopSignals:\s*\{[\s\S]*loading:\s*false,[\s\S]*activeFilter:\s*"daily",[\s\S]*selectedSignalId:\s*""/);
   assert.match(appJs, /function buildXhsTopSignalsRequestPayload\(\)/);
+  assert.match(appJs, /keyword:\s*joinCSV\(splitCSV\(byId\("xhs-top-signals-keyword"\)\?\.value \|\| ""\)\)/);
+  assert.match(appJs, /tags:\s*splitCSV\(byId\("xhs-top-signals-tags"\)\?\.value \|\| ""\)/);
+  assert.doesNotMatch(appJs, /xhs-top-signals-keyword"\)\?\.value \|\| appState\.xhsTopSignals\?\.keyword/);
+  assert.doesNotMatch(appJs, /xhs-top-signals-tags"\)\?\.value \|\| appState\.xhsTopSignals\?\.tags/);
   assert.match(appJs, /function syncXhsTopSignalsPanel\(\)/);
+  assert.match(appJs, /function extractXhsAccountDiagnosisTopSignalDefaults\(result = \{\}\)/);
+  assert.match(appJs, /function applyXhsTopSignalsDefaultsFromAccountDiagnosis\(\{\s*force\s*=\s*false\s*\} = \{\}\)/);
+  assert.match(appJs, /function bindXhsTopSignalsInputEditTracking\(\)/);
+  assert.match(appJs, /field\.dataset\.xhsTopSignalsUserEdited = "true";/);
+  assert.match(appJs, /field\.addEventListener\("change",\s*\(\) => \{[\s\S]*?field\.dataset\.xhsTopSignalsUserEdited = "true";[\s\S]*?\}\);/);
+  assert.match(appJs, /maybeApply\(trackField, "track", defaults\.track\);/);
+  assert.doesNotMatch(appJs, /maybeApply\(redIdField, "redId", defaults\.redId\);/);
+  assert.match(appJs, /redId:\s*String\(byId\("xhs-top-signals-red-id"\)\?\.value \|\| ""\)\.trim\(\)/);
+  assert.doesNotMatch(appJs, /redId:\s*String\(byId\("xhs-top-signals-red-id"\)\?\.value \|\| appState\.xhsTopSignals\?\.redId/);
+  assert.match(appJs, /track:\s*String\(byId\("xhs-top-signals-track"\)\?\.value \|\| ""\)\.trim\(\)/);
+  assert.match(appJs, /track:\s*String\(requestPayload\?\.track \|\| byId\("xhs-top-signals-track"\)\?\.value \|\| ""\)\.trim\(\)/);
+  assert.doesNotMatch(appJs, /track:\s*String\(response\?\.filters\?\.track \|\| ""\)\.trim\(\)/);
+  assert.match(appJs, /if \(redIdField && redIdField\.dataset\.xhsTopSignalsUserEdited === "true"\)/);
+  assert.match(appJs, /if \(trackField && trackField\.dataset\.xhsTopSignalsUserEdited === "true"\)/);
+  assert.match(appJs, /if \(keywordField && keywordField\.dataset\.xhsTopSignalsUserEdited === "true"\)/);
+  assert.match(appJs, /if \(tagsField && tagsField\.dataset\.xhsTopSignalsUserEdited === "true"\)/);
+  assert.match(appJs, /applyXhsTopSignalsDefaultsFromAccountDiagnosis\(\);[\s\S]*?syncXhsTopSignalsInputs\(\);/);
+  assert.match(appJs, /applyXhsTopSignalsDefaultsFromAccountDiagnosis\(\{\s*force:\s*true\s*\}\);[\s\S]*?syncXhsTopSignalsInputs\(\);/);
   assert.match(appJs, /async function refreshXhsTopSignalsState\(\{\s*useCache\s*=\s*false\s*\}\s*=\s*\{\}\)/);
   assert.match(appJs, /useCache\s*\?\s*await apiJson\(xhsTopSignalsApi\)\s*:\s*await apiJson\(xhsTopSignalsApi,\s*\{/);
   assert.match(appJs, /message:\s*error\?\.message\s*\|\|\s*"同类爆文刷新失败"/);

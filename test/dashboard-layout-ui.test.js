@@ -54,8 +54,17 @@ test("homepage uses a clearer dashboard grid hierarchy", async () => {
   ]);
   const workspaceSupportBlockMatch = styles.match(/\.workspace-support\s*\{[^}]*\}/);
   const dashboardMainCardBlockMatch = styles.match(/\.dashboard-main-card\s*\{[^}]*\}/);
+  const supportWorkspaceAssetsBlockMatch = styles.match(/\.support-workspace-panel\.dashboard-assets-card\s*\{[^}]*\}/);
 
   assert.match(indexHtml, /class="[^"]*\bdashboard-grid\b[^"]*\bworkspace-main\b/);
+  assert.match(indexHtml, /class="[^"]*\bapp-sidebar\b/);
+  assert.match(indexHtml, /href="#content-workbench"/);
+  assert.match(indexHtml, /href="#generation-draft-inbox-panel"/);
+  assert.match(indexHtml, /data-action="reveal-generation-draft-inbox"/);
+  assert.match(indexHtml, /href="#xhs-top-signals-panel"/);
+  assert.match(indexHtml, /href="#support-workspace-panel"/);
+  assert.match(indexHtml, /id="account-strategy-panel"/);
+  assert.match(indexHtml, /class="[^"]*\baccount-strategy-grid\b/);
   assert.match(indexHtml, /class="[^"]*\bdashboard-secondary-grid\b/);
   assert.match(indexHtml, /class="[^"]*\bdashboard-main-card\b/);
   assert.match(indexHtml, /class="[^"]*\bdashboard-side-card\b/);
@@ -63,8 +72,11 @@ test("homepage uses a clearer dashboard grid hierarchy", async () => {
   assert.match(indexHtml, /class="[^"]*\bdashboard-assets-card\b/);
 
   const sampleLibraryPaneHtml = extractElementInnerHtml(indexHtml, 'id="sample-library-pane"');
+  const contentWorkbenchHtml = extractElementInnerHtml(indexHtml, 'id="content-workbench"');
   assert.doesNotMatch(sampleLibraryPaneHtml, /id="sample-library-account-planner-panel"/);
   assert.doesNotMatch(sampleLibraryPaneHtml, /id="sample-library-reflow-panel"/);
+  assert.doesNotMatch(contentWorkbenchHtml, /id="sample-library-account-planner-panel"/);
+  assert.doesNotMatch(contentWorkbenchHtml, /id="xhs-account-diagnosis-panel"/);
   assert.match(indexHtml, /id="sample-library-account-planner-panel"/);
   assert.match(indexHtml, /class="[^"]*\bsupport-review-card\b/);
   assert.match(indexHtml, /class="[^"]*\bsupport-feedback-card\b/);
@@ -72,7 +84,17 @@ test("homepage uses a clearer dashboard grid hierarchy", async () => {
   assert.match(indexHtml, /id="sample-library-reflow-panel"/);
 
   assert.match(styles, /\.dashboard-grid\b/);
+  assert.match(styles, /\.app-shell\s*\{[\s\S]*grid-template-columns:\s*var\(--sidebar-width\) minmax\(0,\s*1fr\)/);
+  assert.match(styles, /\.app-sidebar\s*\{[\s\S]*position:\s*sticky;/);
+  assert.match(styles, /\.app-nav-link\s*\{/);
   assert.match(styles, /\.dashboard-secondary-grid\b/);
+  assert.match(styles, /\.account-strategy-grid\s*\{[\s\S]*grid-template-columns:/);
+  assert.match(styles, /\.workspace-main \+ \.account-strategy-grid,/);
+  assert.match(styles, /\.account-strategy-grid \+ \.xhs-top-signals-panel,/);
+  assert.match(styles, /\.xhs-top-signals-panel \+ \.support-workspace-panel/);
+  assert.ok(supportWorkspaceAssetsBlockMatch, "expected support workspace asset override to exist");
+  assert.doesNotMatch(supportWorkspaceAssetsBlockMatch[0], /margin:\s*0\s*;/);
+  assert.match(supportWorkspaceAssetsBlockMatch[0], /margin:\s*1\.8rem 0 0;/);
   assert.match(styles, /\.dashboard-main-card\b/);
   assert.match(styles, /\.dashboard-side-card\b/);
   assert.match(styles, /\.dashboard-assets-card\b/);
@@ -100,4 +122,7 @@ test("frontend startup guards optional DOM bindings so missing controls do not c
   assert.match(appJs, /byId\("rewrite-model-selection"\)\?\./);
   assert.match(appJs, /byId\("sample-library-filter"\)\?\./);
   assert.match(appJs, /byId\("sample-library-collection-filter"\)\?\./);
+  assert.match(appJs, /function revealGenerationDraftInbox\(\)/);
+  assert.match(appJs, /activateTab\("main-workbench", "generation-workbench-pane"\)/);
+  assert.match(appJs, /data-action="reveal-generation-draft-inbox"/);
 });

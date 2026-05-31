@@ -3751,6 +3751,7 @@ test("frontend exposes a draft inbox grid inside the main workbench footer area 
   const { indexHtml, appJs, styles } = await readFrontendFiles();
 
   assert.match(indexHtml, /id="generation-draft-inbox-panel"/);
+  assert.match(indexHtml, /id="generation-draft-inbox-panel"[^>]*data-visible-with-tab="generation-workbench-pane"[^>]*hidden/);
   assert.match(indexHtml, /id="draft-ideas-list"/);
   assert.match(indexHtml, /id="draft-ideas-toolbar"/);
   assert.match(indexHtml, /name="draftIdeasStatusView"/);
@@ -3759,6 +3760,7 @@ test("frontend exposes a draft inbox grid inside the main workbench footer area 
   assert.match(indexHtml, /待写/);
   assert.match(indexHtml, /已使用/);
   assert.match(styles, /\.generation-draft-inbox-panel\b/);
+  assert.match(styles, /\.generation-draft-inbox-panel\[hidden\]\s*\{[\s\S]*display:\s*none;/);
   assert.match(styles, /\.draft-ideas-list\b/);
   assert.match(styles, /\.draft-ideas-grid\b/);
   assert.match(styles, /\.draft-ideas-toolbar\b/);
@@ -3767,6 +3769,8 @@ test("frontend exposes a draft inbox grid inside the main workbench footer area 
   assert.match(appJs, /addDraftIdeaFromThemeInspirationCard/);
   assert.match(appJs, /addDraftIdeaFromGenerationCandidate/);
   assert.match(appJs, /loadDraftIdeaIntoGenerationForm/);
+  assert.match(appJs, /document\.querySelectorAll\(`\[data-visible-with-tab\]`\)/);
+  assert.match(appJs, /node\.hidden = !shouldShow;/);
   assert.match(appJs, /activateTab\("main-workbench",\s*"generation-workbench-pane"\)/);
   assert.match(appJs, /scrollIntoView\(\{\s*behavior:\s*"smooth"/);
   assert.match(appJs, /draftIdeasStatusView/);

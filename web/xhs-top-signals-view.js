@@ -44,6 +44,55 @@ function getVisibleItems(state = {}) {
   return groupedItems.dailyTop;
 }
 
+function formatCount(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number) || number <= 0) return "";
+  if (number >= 10000) return `${(number / 10000).toFixed(number >= 100000 ? 0 : 1).replace(/\.0$/, "")}万`;
+  return String(Math.round(number));
+}
+
+function getSourceLabel(item = {}) {
+  const sourceType = String(item?.sourceType || "").trim();
+  const labels = {
+    daily_top: "今日起量",
+    weekly_top: "7日爆文",
+    low_top: "低粉高表现"
+  };
+
+  return item?.sourceTypeLabel || labels[sourceType] || sourceType || "同类爆文";
+}
+
+function buildMetricsMarkup(item = {}, escapeHtml, { compact = false } = {}) {
+  const metrics = item?.publish?.metrics && typeof item.publish.metrics === "object" ? item.publish.metrics : {};
+  const parts = [
+    ["点赞", metrics.likes],
+    ["收藏", metrics.favorites],
+    ["评论", metrics.comments],
+    ["分享", metrics.shares],
+    ["浏览", metrics.views]
+  ]
+    .map(([label, value]) => [label, formatCount(value)])
+    .filter(([, value]) => value);
+
+  if (!parts.length) {
+    return "";
+  }
+
+  const visibleParts = compact ? parts.slice(0, 4) : parts;
+
+  return `
+    <div class="xhs-top-signals-metrics" aria-label="互动指标">
+      ${visibleParts.map(([label, value]) => `<span>${escapeHtml(label)} ${escapeHtml(value)}</span>`).join("")}
+    </div>
+  `;
+}
+
+function buildBodyPreview(value = "", escapeHtml) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  return `<p class="xhs-top-signals-body-preview">${escapeHtml(text.length > 96 ? `${text.slice(0, 96)}...` : text)}</p>`;
+}
+
 function buildQuickActionMarkup(item, escapeHtml) {
   const signalId = escapeHtml(item?.id || "");
 
@@ -73,9 +122,11 @@ export function buildXhsTopSignalsCardsMarkup(items = [], options = {}) {
       const author = escapeHtml(item?.author || "未知作者");
       const track = escapeHtml(item?.track || "");
       const summary = escapeHtml(item?.analysis?.whySelected || item?.analysis?.reuseHint || "可作为同类信号参考。");
-      const sourceLabel = escapeHtml(item?.sourceTypeLabel || item?.sourceType || "同类爆文");
+      const sourceLabel = escapeHtml(getSourceLabel(item));
       const signalId = escapeHtml(item?.id || "");
       const selectedClass = item?.selected ? " is-selected" : "";
+      const metricsMarkup = buildMetricsMarkup(item, escapeHtml, { compact: true });
+      const bodyPreview = buildBodyPreview(item?.body || "", escapeHtml);
 
       return `
         <article class="xhs-top-signals-card${selectedClass}">
@@ -83,7 +134,9 @@ export function buildXhsTopSignalsCardsMarkup(items = [], options = {}) {
             <span class="xhs-top-signals-source-pill">${sourceLabel}</span>
             <strong>${title}</strong>
             <p>${author}${track ? ` · ${track}` : ""}</p>
+            ${metricsMarkup}
             <p>${summary}</p>
+            ${bodyPreview}
           </button>
           ${buildQuickActionMarkup(item, escapeHtml)}
         </article>
@@ -103,15 +156,19 @@ export function buildXhsTopSignalsDetailMarkup(item, options = {}) {
   const body = escapeHtml(item?.body || "暂无正文预览");
   const whySelected = escapeHtml(item?.analysis?.whySelected || "暂无入选说明");
   const reuseHint = escapeHtml(item?.analysis?.reuseHint || "暂无复用提示");
+  const publishedAt = escapeHtml(item?.publish?.publishedAt || "");
+  const metricsMarkup = buildMetricsMarkup(item, escapeHtml);
   const workUrl = String(item?.workUrl || "").trim();
 
   return `
     <article class="xhs-top-signals-detail-card">
       <div class="xhs-top-signals-detail-copy">
         <strong>${title}</strong>
+        ${publishedAt ? `<p class="xhs-top-signals-meta">发布时间：${publishedAt}</p>` : ""}
+        ${metricsMarkup}
         <p>${whySelected}</p>
         <p>${reuseHint}</p>
-        <p>${body}</p>
+        <p class="xhs-top-signals-detail-body">${body}</p>
       </div>
       ${buildQuickActionMarkup(item, escapeHtml)}
       ${workUrl ? `<a class="xhs-top-signals-detail-link" href="${escapeHtml(workUrl)}" target="_blank" rel="noreferrer">查看原文</a>` : ""}

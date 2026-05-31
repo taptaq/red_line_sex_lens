@@ -4,15 +4,56 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>本地合规检测系统</title>
-    <link rel="stylesheet" href="/styles.css?v=20260520-calibration-evidence" />
+    <link rel="stylesheet" href="/styles.css?v=20260531-dashboard-refresh" />
   </head>
   <body>
     <div class="ambient ambient-a"></div>
     <div class="ambient ambient-b"></div>
-    <main class="shell">
+    <main class="app-shell">
+      <aside class="app-sidebar" aria-label="系统主导航">
+        <div class="app-sidebar-brand">
+          <span class="app-logo-mark" aria-hidden="true">审</span>
+          <div>
+            <strong>内容运营台</strong>
+            <span>检测 · 生成 · 回流</span>
+          </div>
+        </div>
+        <nav class="app-nav" aria-label="页面分区">
+          <a href="#today-workbench" class="app-nav-link">
+            <span>今日工作台</span>
+            <small>状态总览</small>
+          </a>
+          <a href="#content-workbench" class="app-nav-link">
+            <span>内容创作</span>
+            <small>检测 / 改写 / 生成</small>
+          </a>
+          <a href="#generation-draft-inbox-panel" class="app-nav-link" data-action="reveal-generation-draft-inbox">
+            <span>草稿区</span>
+            <small>待写选题</small>
+          </a>
+          <a href="#xhs-top-signals-panel" class="app-nav-link">
+            <span>爆文发现</span>
+            <small>今日 / 7日 / 低粉</small>
+          </a>
+          <a href="#sample-library-account-planner-panel" class="app-nav-link">
+            <span>账号策略</span>
+            <small>复盘 / 诊断</small>
+          </a>
+          <a href="#support-workspace-panel" class="app-nav-link">
+            <span>样本学习</span>
+            <small>反馈 / 样本</small>
+          </a>
+          <a href="#sample-library-advanced-panel" class="app-nav-link">
+            <span>系统校准</span>
+            <small>词库 / 回放</small>
+          </a>
+        </nav>
+        <p class="app-sidebar-note">按真实工作链路排布，低频维护默认后置。</p>
+      </aside>
+      <div class="shell app-content">
 
       <!-- ① 紧凑页头（原 hero 区缩减，直接露出工作区） -->
-      <header class="site-header panel">
+      <header class="site-header panel" id="today-workbench">
         <div class="header-brand">
           <p class="eyebrow">本地审核台</p>
           <h1>小红书合规检测改写系统</h1>
@@ -21,7 +62,7 @@
       </header>
 
       <!-- ② 主工作区：检测台 + 反馈回流 -->
-      <section class="workspace dashboard-grid workspace-main">
+      <section class="workspace dashboard-grid workspace-main" id="content-workbench">
         <article class="panel analyzer-panel dashboard-main-card">
           <div class="section-heading">
             <div>
@@ -358,7 +399,7 @@
                 <div id="generation-result" class="result-card-shell muted">等待生成</div>
               </section>
             </section>
-            <section class="generation-draft-inbox-panel" id="generation-draft-inbox-panel">
+            <section class="generation-draft-inbox-panel" id="generation-draft-inbox-panel" data-visible-with-tab="generation-workbench-pane" hidden>
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">草稿区</p>
@@ -465,7 +506,10 @@
             </form>
             <div id="feedback-result" class="result-card muted">等待回流</div>
           </article>
+        </aside>
+      </section>
 
+      <section id="account-strategy-panel" class="workspace dashboard-grid account-strategy-grid">
         <section id="sample-library-account-planner-panel" class="panel dashboard-planner-card sample-library-account-planner">
           <div class="section-heading">
             <div>
@@ -529,8 +573,6 @@
           </div>
           <p class="helper-text">分析完成后将直接弹窗展示；系统会保存最近一次成功分析结果。</p>
         </section>
-
-        </aside>
       </section>
 
       <section id="xhs-top-signals-panel" class="panel xhs-top-signals-panel" aria-labelledby="xhs-top-signals-title">
@@ -543,20 +585,42 @@
         </div>
         <div class="xhs-top-signals-toolbar">
           <label>
-            <span>小红书号</span>
-            <input id="xhs-top-signals-red-id" name="xhsTopSignalsRedId" placeholder="例如 26112666886" />
+            <span>小红书号（可选）</span>
+            <input id="xhs-top-signals-red-id" name="xhsTopSignalsRedId" placeholder="可选；填了会辅助匹配账号画像" />
           </label>
           <label>
             <span>赛道</span>
-            <input id="xhs-top-signals-track" name="xhsTopSignalsTrack" placeholder="例如 情感" />
+            <select id="xhs-top-signals-track" name="xhsTopSignalsTrack">
+              <option value="">自动匹配 / 综合全部</option>
+              <option value="综合全部">综合全部</option>
+              <option value="星座情感">星座情感</option>
+              <option value="科学探索">科学探索</option>
+              <option value="个人护理">个人护理</option>
+              <option value="日常生活">日常生活</option>
+              <option value="学习教育">学习教育</option>
+              <option value="时尚穿搭">时尚穿搭</option>
+              <option value="化妆美容">化妆美容</option>
+              <option value="居家装修">居家装修</option>
+              <option value="旅行度假">旅行度假</option>
+              <option value="亲子育儿">亲子育儿</option>
+              <option value="美味佳肴">美味佳肴</option>
+              <option value="职业发展">职业发展</option>
+              <option value="宠物天地">宠物天地</option>
+              <option value="潮流鞋包">潮流鞋包</option>
+              <option value="拍摄记录">拍摄记录</option>
+              <option value="婚庆婚礼">婚庆婚礼</option>
+              <option value="新闻资讯">新闻资讯</option>
+              <option value="体育锻炼">体育锻炼</option>
+              <option value="综合杂项">综合杂项</option>
+            </select>
           </label>
           <label>
             <span>关键词</span>
-            <input id="xhs-top-signals-keyword" name="xhsTopSignalsKeyword" placeholder="例如 边界感" />
+            <input id="xhs-top-signals-keyword" name="xhsTopSignalsKeyword" placeholder="例如 边界感，关系沟通" />
           </label>
           <label>
             <span>标签</span>
-            <input id="xhs-top-signals-tags" name="xhsTopSignalsTags" placeholder="多个标签用逗号分隔" />
+            <input id="xhs-top-signals-tags" name="xhsTopSignalsTags" placeholder="多个标签用中文逗号、英文逗号或顿号分隔" />
           </label>
           <div class="xhs-top-signals-toolbar-actions">
             <button type="button" class="button button-alt" id="xhs-top-signals-refresh">手动刷新</button>
@@ -843,8 +907,7 @@
           </section>
         </div>
       </section>
-        </aside>
-      </section>
+      </div>
     </main>
     <div id="sample-library-modal" class="sample-library-modal" hidden>
       <button

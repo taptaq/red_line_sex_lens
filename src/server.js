@@ -542,6 +542,17 @@ function pickLatestXhsAccountDiagnosisSubscription(store = {}) {
   );
 }
 
+function splitInlineList(value = "") {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+
+  return String(value || "")
+    .split(/[，,、]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function buildXhsAccountDiagnosisReportPayload(resultAvailable = false) {
   return {
     resultAvailable,
@@ -553,8 +564,8 @@ function buildXhsAccountDiagnosisReportPayload(resultAvailable = false) {
 async function fetchTopSignalsBrowserResult(payload = {}) {
   const redId = String(payload?.redId || "").trim();
   const track = String(payload?.track || "").trim();
-  const keyword = String(payload?.keyword || "").trim();
-  const tags = Array.isArray(payload?.tags) ? payload.tags.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  const keyword = splitInlineList(payload?.keyword).join(", ");
+  const tags = splitInlineList(payload?.tags);
   const result = await buildStandaloneTopSignalsContext({ redId, track, keyword, tags });
   const items = result.items || { dailyTop: [], weeklyTop: [], lowTop: [] };
   const resultCount = items.dailyTop.length + items.weeklyTop.length + items.lowTop.length;
@@ -1681,15 +1692,8 @@ async function handleRequest(request, response) {
     const payload = await readBody(request, { maxBytes: 256 * 1024 });
     const redId = String(payload?.redId || "").trim();
     const track = String(payload?.track || "").trim();
-    const keyword = String(payload?.keyword || "").trim();
-    const tags = Array.isArray(payload?.tags) ? payload.tags.map((item) => String(item || "").trim()).filter(Boolean) : [];
-
-    if (!redId && !track && !keyword && tags.length === 0) {
-      return sendJson(response, 400, {
-        ok: false,
-        error: "请先提供账号或至少一项筛选条件。"
-      });
-    }
+    const keyword = splitInlineList(payload?.keyword).join(", ");
+    const tags = splitInlineList(payload?.tags);
 
     const saved = await saveXhsTopSignalsBrowser(
       await fetchTopSignalsBrowserResult({

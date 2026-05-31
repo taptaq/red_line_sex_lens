@@ -51,8 +51,29 @@ test("xhs top-signals browser store saves and loads the latest standalone cache"
   assert.equal(loaded.resultCount, 1);
 });
 
-test("xhs top-signals browser POST rejects empty account and filters", async (t) => {
+test("xhs top-signals browser POST with empty filters defaults to all categories", async (t) => {
   await withTempTopSignalsApi(t, async ({ invokeRoute }) => {
+    const requestedCategories = [];
+
+    __setXhsTopSignalsTestOverrides({
+      fetchJson: async (_url, { params = {} } = {}) => {
+        requestedCategories.push(String(params.category || ""));
+        return {
+          code: 2000,
+          data: [
+            {
+              id: "sample-all",
+              title: "综合样本",
+              desc: "经验分享",
+              nickname: "作者",
+              userAttribute: "腰部KOL",
+              category: String(params.category || "")
+            }
+          ]
+        };
+      }
+    });
+
     const result = await invokeRoute("POST", "/api/xhs/top-signals", {
       redId: "",
       track: "",
@@ -60,9 +81,11 @@ test("xhs top-signals browser POST rejects empty account and filters", async (t)
       tags: []
     });
 
-    assert.equal(result.status, 400);
-    assert.equal(result.ok, false);
-    assert.match(result.error || "", /账号|筛选/);
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.equal(result.filters.track, "综合全部");
+    assert.equal(result.items.dailyTop[0].title, "综合样本");
+    assert.ok(requestedCategories.every((category) => category === "综合全部"));
   });
 });
 
@@ -104,8 +127,208 @@ test("xhs top-signals browser POST with only redId derives topic from account lo
     assert.equal(result.accountContext.nickname, "测试号");
     assert.equal(result.accountContext.derivedTrack, "星座情感");
     assert.deepEqual(result.accountContext.derivedTags, ["关系沟通"]);
-    assert.equal(result.filters.track, "");
+    assert.equal(result.filters.track, "星座情感");
+    assert.deepEqual(result.filters.tags, ["关系沟通"]);
     assert.equal(result.items.dailyTop[0].track, "星座情感");
+  });
+});
+
+test("xhs top-signals browser POST keeps keywords but defaults unselected track to all categories", async (t) => {
+  await withTempTopSignalsApi(t, async ({ invokeRoute }) => {
+    const requestedCategories = [];
+
+    __setXhsTopSignalsTestOverrides({
+      fetchJson: async (_url, { params = {} } = {}) => {
+        requestedCategories.push(String(params.category || ""));
+        return {
+          code: 2000,
+          data: [
+            {
+              id: `sample-${String(params.category || "")}`,
+              title: "女性健康样本",
+              desc: "健康内容",
+              nickname: "作者",
+              userAttribute: "腰部KOL",
+              category: String(params.category || "")
+            }
+          ]
+        };
+      }
+    });
+
+    const result = await invokeRoute("POST", "/api/xhs/top-signals", {
+      keyword: "随便看看，科普、边界感",
+      tags: []
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.equal(result.filters.track, "综合全部");
+    assert.equal(result.filters.keyword, "随便看看, 科普, 边界感");
+    assert.ok(requestedCategories.every((category) => category === "综合全部"));
+  });
+});
+
+test("xhs top-signals browser only uses the category map when track is explicitly selected", async (t) => {
+  await withTempTopSignalsApi(t, async ({ invokeRoute }) => {
+    const requestedCategories = [];
+
+    __setXhsTopSignalsTestOverrides({
+      fetchJson: async (_url, { params = {} } = {}) => {
+        requestedCategories.push(String(params.category || ""));
+        return {
+          code: 2000,
+          data: [
+            {
+              id: `sample-${String(params.category || "")}`,
+              title: "细分分类样本",
+              desc: "科学知识分享",
+              nickname: "作者",
+              userAttribute: "腰部KOL",
+              category: String(params.category || "")
+            }
+          ]
+        };
+      }
+    });
+
+    const result = await invokeRoute("POST", "/api/xhs/top-signals", {
+      track: "科学探索",
+      keyword: "身体探索，小玩具"
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.equal(result.filters.track, "科学探索");
+    assert.ok(requestedCategories.every((category) => category === "科学探索"));
+  });
+});
+
+test("xhs top-signals browser normalizes upstream article fields and removes blank duplicate cards", async (t) => {
+  await withTempTopSignalsApi(t, async ({ invokeRoute }) => {
+    __setXhsTopSignalsTestOverrides({
+      fetchJson: async (_url, { params = {} } = {}) => ({
+        code: 2000,
+        data: [
+          {
+            title: "",
+            desc: "面子是可再生资源#交流",
+            userName: "上游作者",
+            photoJumpUrl: "https://example.com/note/1",
+            userJumpUrl: "https://example.com/user/1",
+            anaAdd: { interactiveCount: "3500", useLikeCount: "1000", collectedCount: "300" },
+            category: String(params.category || "")
+          },
+          {
+            title: "",
+            desc: "面子是可再生资源#交流",
+            userName: "重复作者",
+            photoJumpUrl: "https://example.com/note/1",
+            anaAdd: { interactiveCount: "3500" },
+            category: String(params.category || "")
+          },
+          {
+            title: "",
+            desc: "",
+            userName: "空内容作者",
+            photoJumpUrl: "https://example.com/note/empty",
+            anaAdd: { interactiveCount: "3500" },
+            category: String(params.category || "")
+          }
+        ]
+      })
+    });
+
+    const result = await invokeRoute("POST", "/api/xhs/top-signals", {
+      track: "综合全部"
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.equal(result.items.dailyTop.length, 1);
+    assert.equal(result.items.dailyTop[0].title, "面子是可再生资源#交流");
+    assert.equal(result.items.dailyTop[0].author, "上游作者");
+    assert.equal(result.items.dailyTop[0].workUrl, "https://example.com/note/1");
+    assert.equal(result.items.dailyTop[0].publish.metrics.likes, 1000);
+  });
+});
+
+test("xhs top-signals browser sends concrete rankDate and upstream source names", async (t) => {
+  await withTempTopSignalsApi(t, async ({ invokeRoute }) => {
+    const requests = [];
+
+    __setXhsTopSignalsTestOverrides({
+      fetchJson: async (url, { params = {} } = {}) => {
+        requests.push({ url, params });
+        return {
+          code: 2000,
+          data: [
+            {
+              id: `sample-${String(params.source || "")}`,
+              title: "榜单样本",
+              desc: "经验分享",
+              nickname: "作者",
+              userAttribute: "腰部KOL",
+              category: String(params.category || "")
+            }
+          ]
+        };
+      }
+    });
+
+    const result = await invokeRoute("POST", "/api/xhs/top-signals", {
+      track: "综合全部"
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.equal(requests.length, 3);
+    assert.ok(requests.every((item) => /^\d{4}-\d{2}-\d{2}$/.test(String(item.params.rankDate || ""))));
+    assert.deepEqual(
+      requests.map((item) => item.params.source).sort(),
+      ["小红书七日数据爆款文章-GitHub", "小红书冷门账号爆款文章-GitHub", "小红书单日数据爆款文章-GitHub"].sort()
+    );
+  });
+});
+
+test("xhs top-signals browser falls back to broader category when inferred topic has no results", async (t) => {
+  await withTempTopSignalsApi(t, async ({ invokeRoute }) => {
+    const requestedCategories = [];
+
+    __setXhsTopSignalsTestOverrides({
+      fetchJson: async (_url, { params = {} } = {}) => {
+        const category = String(params.category || "");
+        requestedCategories.push(category);
+
+        return {
+          code: 2000,
+          data:
+            category === "综合全部"
+              ? [
+                  {
+                    id: "fallback-sample",
+                    title: "综合兜底样本",
+                    desc: "关系经验分享",
+                    nickname: "作者",
+                    userAttribute: "腰部KOL",
+                    category
+                  }
+                ]
+              : []
+        };
+      }
+    });
+
+    const result = await invokeRoute("POST", "/api/xhs/top-signals", {
+      keyword: "两性",
+      tags: ["情侣"]
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.equal(result.filters.track, "综合全部");
+    assert.equal(result.items.dailyTop[0].title, "综合兜底样本");
+    assert.ok(requestedCategories.every((category) => category === "综合全部"));
   });
 });
 
