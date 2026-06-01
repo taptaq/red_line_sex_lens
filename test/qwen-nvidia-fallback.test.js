@@ -249,6 +249,74 @@ test("callRoutedTextProviderJson uses DMXAPI GLM first when available", async ()
   );
 });
 
+test("callRoutedTextProviderJson uses 七牛云 first for targeted models and falls back to DMXAPI", async () => {
+  await withEnv(
+    {
+      QNAIGC_API_KEY: "qnaigc-test",
+      DMXAPI_API_KEY: "dmxapi-test",
+      QWEN_DMXAPI_MODEL: "qwen3.6-plus"
+    },
+    async () => {
+      const calls = [];
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async (url, options = {}) => {
+        const body = JSON.parse(String(options.body || "{}"));
+        calls.push({ url: String(url), model: body.model });
+
+        if (String(url) === "https://api.qnaigc.com/v1/chat/completions") {
+          return createJsonResponse(500, { error: { message: "qnaigc unavailable" } });
+        }
+
+        return createJsonResponse(200, {
+          model: "qwen3.6-plus",
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({ verdict: "pass", confidence: 0.9 })
+              }
+            }
+          ]
+        });
+      };
+
+      try {
+        const { callRoutedTextProviderJson } = await importFresh("../src/glm.js");
+        const result = await callRoutedTextProviderJson({
+          provider: "qwen",
+          model: "qwen3.6-plus",
+          messages: [{ role: "user", content: "hello" }],
+          timeoutMs: 1000
+        });
+
+        assert.equal(result.route, "dmxapi");
+        assert.equal(result.routeLabel, "DMXAPI");
+        assert.deepEqual(calls, [
+          { url: "https://api.qnaigc.com/v1/chat/completions", model: "qwen/qwen3.6-plus" },
+          { url: "https://www.dmxapi.cn/v1/chat/completions", model: "qwen3.6-plus" }
+        ]);
+        assert.deepEqual(result.attemptedRoutes, [
+          {
+            route: "qnaigc",
+            routeLabel: "七牛云",
+            model: "qwen/qwen3.6-plus",
+            status: "error",
+            message: "qnaigc unavailable"
+          },
+          {
+            route: "dmxapi",
+            routeLabel: "DMXAPI",
+            model: "qwen3.6-plus",
+            status: "ok",
+            message: ""
+          }
+        ]);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    }
+  );
+});
+
 test("callRoutedTextProviderJson supports standalone DMXAPI text models", async () => {
   await withEnv(
     {

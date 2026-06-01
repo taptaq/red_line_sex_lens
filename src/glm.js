@@ -15,6 +15,7 @@ import { buildXhsHumanizerSystemRules, buildXhsHumanizerUserRequirements } from 
 const glmEndpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
 const defaultKimiEndpoint = "https://api.moonshot.cn/v1/chat/completions";
 const defaultDmxapiEndpoint = "https://www.dmxapi.cn/v1/chat/completions";
+const defaultQnaigcEndpoint = "https://api.qnaigc.com/v1/chat/completions";
 const defaultVisionModel = process.env.GLM_VISION_MODEL || "glm-4.6v";
 const defaultTextModel = process.env.GLM_TEXT_MODEL || "glm-4.6v";
 const defaultKimiTextModel = "kimi-k2.6";
@@ -62,6 +63,20 @@ const feedbackProviderConfigs = [
     routeMode: "official_only"
   }
 ];
+const qnaigcRouteModelConfigs = {
+  glm: {
+    qnaigcModel: "z-ai/glm-5.1",
+    dmxapiModel: "glm-5.1"
+  },
+  qwen: {
+    qnaigcModel: "qwen/qwen3.6-plus",
+    dmxapiModel: "qwen3.6-plus"
+  },
+  minimax: {
+    qnaigcModel: "minimax/minimax-m3",
+    dmxapiModel: "minimax-m3"
+  }
+};
 
 const humanizerStyleRules = [
   "不要堆“赋能、闭环、生态、抓手、底层逻辑、路径、矩阵”这类 AI 常用词，能直接说人话就直接说。",
@@ -123,6 +138,26 @@ function getDefaultMiniMaxDmxapiModel() {
 
 function getDefaultGlmDmxapiModel() {
   return String(process.env.GLM_DMXAPI_MODEL || defaultGlmDmxapiModel || "glm-5.1").trim();
+}
+
+function getQnaigcRouteConfig(provider = "", model = "") {
+  const normalizedProvider = String(provider || "").trim().toLowerCase();
+  const normalizedModel = String(model || "").trim().toLowerCase();
+  const config = qnaigcRouteModelConfigs[normalizedProvider];
+
+  if (!config) {
+    return null;
+  }
+
+  if (normalizedModel !== String(config.dmxapiModel || "").trim().toLowerCase()) {
+    return null;
+  }
+
+  return config;
+}
+
+function shouldTryQnaigcFirst(provider = "", model = "") {
+  return Boolean(getQnaigcRouteConfig(provider, model));
 }
 
 function getRewriteProviderPreference() {
@@ -1437,6 +1472,8 @@ async function attemptRoutedProviderRoute({
   timeoutMs,
   allowRecoverableFallback,
   useDmxapi,
+  route,
+  routeLabel,
   scene = "unknown"
 }) {
   const effectiveTemperature = normalizeTemperatureForRoutedProvider({
@@ -1455,8 +1492,8 @@ async function attemptRoutedProviderRoute({
   let lastError = null;
   let shouldFallback = false;
   const startedAt = Date.now();
-  const route = useDmxapi ? "dmxapi" : "official";
-  const routeLabel = useDmxapi ? "DMXAPI" : "官方";
+  const effectiveRoute = String(route || (useDmxapi ? "dmxapi" : "official")).trim();
+  const effectiveRouteLabel = String(routeLabel || (useDmxapi ? "DMXAPI" : "官方")).trim();
 
   requestBodyLoop: for (const requestBody of requestBodies) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -1481,7 +1518,7 @@ async function attemptRoutedProviderRoute({
               : `${label} 请求失败`,
           error?.name === "AbortError" ? 504 : 502
           ),
-          { route, routeLabel, model }
+          { route: effectiveRoute, routeLabel: effectiveRouteLabel, model }
         );
         shouldFallback = allowRecoverableFallback && isRoutedProviderRecoverableFailure(0, lastError.message, error);
         break requestBodyLoop;
@@ -1502,8 +1539,8 @@ async function attemptRoutedProviderRoute({
         }
 
         lastError = attachRouteMetadata(createGlmError(message, isBusy ? 503 : response.status || 500), {
-          route,
-          routeLabel,
+          route: effectiveRoute,
+          routeLabel: effectiveRouteLabel,
           model
         });
 
@@ -1518,8 +1555,8 @@ async function attemptRoutedProviderRoute({
       try {
         const parsedResult = {
           ok: true,
-          route,
-          routeLabel,
+          route: effectiveRoute,
+          routeLabel: effectiveRouteLabel,
           ...parseJsonChatResult({
             data,
             candidate: model,
@@ -1529,11 +1566,7 @@ async function attemptRoutedProviderRoute({
         };
         return parsedResult;
       } catch (error) {
-        lastError = attachRouteMetadata(error, {
-          route,
-          routeLabel,
-          model
-        });
+        lastError = attachRouteMetadata(error, { route: effectiveRoute, routeLabel: effectiveRouteLabel, model });
 
         const shouldRetryWithoutResponseFormat =
           Boolean(requestBody.response_format) &&
@@ -1589,10 +1622,136 @@ export async function callRoutedTextProviderJson({
   }
 
   const officialModel = config.getOfficialModel(model);
+  const dmxapiModel = config.getDmxapiModel(model);
   const dmxapiApiKey = String(process.env.DMXAPI_API_KEY || "").trim();
+  const qnaigcApiKey = String(process.env.QNAIGC_API_KEY || "").trim();
   const attemptedRoutes = [];
   const shouldUseDmxapi = allowDmxapi !== false && config.supportsDmxapi !== false;
   const shouldUseOfficial = allowOfficial !== false && config.supportsOfficial !== false;
+  const qnaigcConfig = qnaigcApiKey && shouldTryQnaigcFirst(config.provider, dmxapiModel) ? getQnaigcRouteConfig(config.provider, dmxapiModel) : null;
+
+  if (qnaigcConfig) {
+    const qnaigcResult = await attemptRoutedProviderRoute({
+      provider: config.provider,
+      label: `${config.label} 七牛云`,
+      endpoint: defaultQnaigcEndpoint,
+      apiKey: qnaigcApiKey,
+      model: qnaigcConfig.qnaigcModel,
+      temperature,
+      maxTokens,
+      messages,
+      responseFormat,
+      fallbackParser,
+      timeoutMs,
+      allowRecoverableFallback: true,
+      useDmxapi: true,
+      route: "qnaigc",
+      routeLabel: "七牛云",
+      scene
+    });
+
+    if (qnaigcResult.ok) {
+      attemptedRoutes.push({
+        route: "qnaigc",
+        routeLabel: "七牛云",
+        model: qnaigcResult.model || qnaigcConfig.qnaigcModel,
+        status: "ok",
+        message: ""
+      });
+      return attachAttemptedRoutes(qnaigcResult, attemptedRoutes);
+    }
+
+    attemptedRoutes.push({
+      route: "qnaigc",
+      routeLabel: "七牛云",
+      model: String(qnaigcResult.error?.model || qnaigcConfig.qnaigcModel || "").trim(),
+      status: "error",
+      message: qnaigcResult.error?.message || ""
+    });
+
+    if (qnaigcResult.shouldFallback && shouldUseDmxapi && dmxapiApiKey) {
+      const dmxapiResult = await attemptRoutedProviderRoute({
+        provider: config.provider,
+        label: config.dmxapiLabel,
+        endpoint: defaultDmxapiEndpoint,
+        apiKey: dmxapiApiKey,
+        model: dmxapiModel,
+        temperature,
+        maxTokens,
+        messages,
+        responseFormat,
+        fallbackParser,
+        timeoutMs,
+        allowRecoverableFallback: true,
+        useDmxapi: true,
+        route: "dmxapi",
+        routeLabel: "DMXAPI",
+        scene
+      });
+
+      if (dmxapiResult.ok) {
+        attemptedRoutes.push({
+          route: "dmxapi",
+          routeLabel: "DMXAPI",
+          model: dmxapiResult.model || dmxapiModel,
+          status: "ok",
+          message: ""
+        });
+        return attachAttemptedRoutes(dmxapiResult, attemptedRoutes);
+      }
+
+      attemptedRoutes.push({
+        route: "dmxapi",
+        routeLabel: "DMXAPI",
+        model: String(dmxapiResult.error?.model || dmxapiModel || "").trim(),
+        status: "error",
+        message: dmxapiResult.error?.message || ""
+      });
+
+      const officialApiKey = shouldUseOfficial ? String(process.env[config.officialEnvKey] || "").trim() : "";
+
+      if (dmxapiResult.shouldFallback && officialApiKey) {
+        const officialResult = await attemptRoutedProviderRoute({
+          provider: config.provider,
+          label: config.label,
+          endpoint: config.officialEndpoint,
+          apiKey: officialApiKey,
+          model: officialModel,
+          temperature,
+          maxTokens,
+          messages,
+          responseFormat,
+          fallbackParser,
+          timeoutMs,
+          allowRecoverableFallback: false,
+          useDmxapi: false,
+          scene
+        });
+
+        if (officialResult.ok) {
+          attemptedRoutes.push({
+            route: "official",
+            routeLabel: "官方",
+            model: officialResult.model || officialModel,
+            status: "ok",
+            message: ""
+          });
+          return attachAttemptedRoutes(officialResult, attemptedRoutes);
+        }
+
+        attemptedRoutes.push({
+          route: "official",
+          routeLabel: "官方",
+          model: String(officialResult.error?.model || officialModel || "").trim(),
+          status: "error",
+          message: officialResult.error?.message || ""
+        });
+        throw attachAttemptedRoutes(officialResult.error, attemptedRoutes);
+      }
+
+      throw attachAttemptedRoutes(dmxapiResult.error, attemptedRoutes);
+    }
+  }
 
   if (shouldUseDmxapi && dmxapiApiKey) {
     const dmxapiModel = config.getDmxapiModel(model);
