@@ -5206,6 +5206,7 @@ function renderGenerationResult(result = {}) {
   const repair = displayItem?.repair || {};
   const blockerReasonsMarkup = buildGenerationBlockerReasonsMarkup(displayItem);
   const repairSummary = buildGenerationRepairSummary(repair);
+  const qualityAuditMarkup = buildGenerationQualityAuditMarkup(displayItem?.qualityAudit, repair);
   const hotArticleFormulaMarkup = buildGenerationHotArticleFormulaMarkup(
     displayItem?.hotArticleFormula || result.hotArticleFormula || {}
   );
@@ -5247,6 +5248,7 @@ function renderGenerationResult(result = {}) {
         <div class="rewrite-body-reader generation-body-reader">${escapeHtml(finalDraft.body || "未生成正文")}</div>
         <p class="helper-text">标签：${escapeHtml(joinCSV(finalDraft.tags) || "未生成")}</p>
         ${repairMarkup}
+        ${qualityAuditMarkup}
         ${referenceWarningsMarkup}
         ${hotArticleFormulaMarkup}
         ${blockerReasonsMarkup}
@@ -5308,6 +5310,15 @@ function buildGenerationRepairSummary(repair = {}) {
   const invalidDraftCount = Math.max(0, Number(repair?.invalidDraftCount) || 0);
   const invalidDraftLabel = invalidDraftCount > 0 ? `，跳过 ${invalidDraftCount} 次无效结果` : "";
 
+  if (repair?.qualityApplied) {
+    return {
+      title: "已做质量修稿",
+      description:
+        String(repair?.rewrite?.rewriteNotes || "").trim() ||
+        "已根据生成质量审计，局部修过标题、开头、封面区分、人味化或营销腔问题。"
+    };
+  }
+
   if (repair?.applied) {
     return {
       title: `已自动修复 ${Math.max(1, attempts)} 轮${invalidDraftLabel}`,
@@ -5325,6 +5336,53 @@ function buildGenerationRepairSummary(repair = {}) {
       String(repair?.reason || "").trim() ||
       "本稿已尝试自动修复，但仍需人工确认。"
   };
+}
+
+function buildGenerationQualityAuditMarkup(qualityAudit = null, repair = {}) {
+  if (!qualityAudit || typeof qualityAudit !== "object") {
+    return "";
+  }
+
+  const checks = ["title", "opening", "humanization", "marketingTone", "coverDistinctness"]
+    .map((key) => qualityAudit[key])
+    .filter(Boolean);
+
+  if (!checks.length) {
+    return "";
+  }
+
+  const statusText = qualityAudit.overall?.passed ? "已通过" : "待继续打磨";
+  const qualityRepairText = repair?.qualityApplied
+    ? '<span class="meta-pill">质量修稿已应用</span>'
+    : repair?.qualityAttempted
+      ? '<span class="meta-pill">质量修稿已尝试</span>'
+      : "";
+
+  return `
+    <div class="generation-quality-audit">
+      <div class="generation-quality-audit__head">
+        <span>生成质量审计</span>
+        <strong>${escapeHtml(statusText)}</strong>
+        ${qualityRepairText}
+      </div>
+      <div class="generation-quality-audit__grid">
+        ${checks
+          .map((item) => {
+            const passed = Boolean(item.passed);
+            const reasons = Array.isArray(item.reasons) ? item.reasons : [];
+
+            return `
+              <div class="generation-quality-audit__item${passed ? "" : " is-warning"}">
+                <span>${escapeHtml(item.label || item.id || "检查项")}</span>
+                <strong>${escapeHtml(passed ? "通过" : "待改")}</strong>
+                <p>${escapeHtml(reasons.slice(0, 2).join("；") || "暂无说明")}</p>
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    </div>
+  `;
 }
 
 function buildGenerationHotArticleFormulaMarkup(hotArticleFormula = {}) {

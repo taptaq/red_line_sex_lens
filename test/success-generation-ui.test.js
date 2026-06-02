@@ -1467,9 +1467,12 @@ test("frontend generation result now focuses on a single final draft card instea
   assert.match(appJs, /const displayItem = recommended \|\| \(result\.scoredCandidates \|\| \[\]\)\[0\] \|\| null/);
   assert.match(appJs, /function\s+buildGenerationBlockerReasonsMarkup\s*\(/);
   assert.match(appJs, /function\s+buildGenerationRepairSummary\s*\(/);
+  assert.match(appJs, /function\s+buildGenerationQualityAuditMarkup\s*\(/);
   assert.match(appJs, /<span>当前卡点<\/span>/);
   assert.match(appJs, /const blockerReasonsMarkup = buildGenerationBlockerReasonsMarkup\(displayItem\);/);
   assert.match(appJs, /const repairSummary = buildGenerationRepairSummary\(repair\);/);
+  assert.match(appJs, /const qualityAuditMarkup = buildGenerationQualityAuditMarkup\(displayItem\?\.qualityAudit, repair\);/);
+  assert.match(appJs, /\$\{qualityAuditMarkup\}/);
   assert.match(appJs, /<span class="model-scope-kicker">最终稿<\/span>/);
   assert.match(appJs, /function\s+generationVariantLabel\s*\(/);
   assert.match(appJs, /if \(variant === "final"\) return "最终稿";/);
@@ -1483,11 +1486,15 @@ test("frontend generation result now focuses on a single final draft card instea
   assert.match(generationSource, /generation-cover-image-prompt-copy-hint/);
   assert.match(generationSource, /repairSummary\.title/);
   assert.match(generationSource, /repairSummary\.description/);
+  assert.match(generationSource, /生成质量审计/);
+  assert.match(generationSource, /质量修稿/);
   assert.doesNotMatch(generationSource, /data-action="save-lifecycle-generation"/);
   assert.doesNotMatch(generationSource, /buildPlatformOutcomeActions\("generation"/);
   assert.match(generationSource, /class="[^"]*\bgeneration-body-reader\b[^"]*"/);
   assert.match(generationSource, /class="[^"]*\bgeneration-cover-image-prompt-reader\b[^"]*"/);
   assert.match(styles, /\.generation-blocker-box\s*\{/);
+  assert.match(styles, /\.generation-quality-audit\s*\{/);
+  assert.match(styles, /\.generation-quality-audit__item\s*\{/);
   assert.match(styles, /\.generation-blocker-box ul\s*\{/);
   assert.match(appJs, /if \(action === "copy-generation-cover-image-prompt"\)/);
   assert.match(styles, /\.generation-candidate-card\.is-recommended\s*\{[\s\S]*overflow:\s*visible;/);

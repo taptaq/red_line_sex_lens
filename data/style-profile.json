@@ -5,61 +5,33 @@
     "status": "active",
     "topic": "隐晦式愉悦生活分享",
     "name": "隐晦式愉悦生活分享通用风格画像",
-    "sourceSampleIds": [
-      "note-e5d632e9e403649f",
-      "note-671a8a3e55280196",
-      "note-ba16b81589dc26e3",
-      "note-884e55edf4a34ac9"
-    ],
-    "titleStyle": "采用场景化悬念或反问句式，结合 emoji 增强视觉冲击，避免直白词汇，常用“那个”、“新手蛋”、“伪装”等隐晦代称，如“光明正大放桌上”或“突然 die 了清理床头柜”类强钩子标题",
-    "bodyStructure": "开头以 relatable 焦虑或场景切入（如社死恐惧、挑选困难），中间采用清单体或隐喻式科普（如科幻代号、伪装话术），结尾升华至自我接纳与悦己价值观，并附带互动提问引导评论区讨论",
-    "tone": "幽默调侃中带共情，秘密分享般的亲密感，去羞耻化，强调成年人的快乐正当性，语气活泼且带有保护色",
-    "preferredTags": [
-      "愉悦",
-      "深夜话题",
-      "大人也要玩玩具",
-      "伪装",
-      "悦己",
-      "社死",
-      "女性",
-      "快乐的大人"
-    ],
+    "sourceSampleIds": [],
+    "titleStyle": "标题保持清晰、克制、真实，不使用夸张承诺。",
+    "bodyStructure": "正文使用短段落，先讲结论，再讲场景和建议。",
+    "tone": "温和、克制、像朋友提醒，避免强营销和夸张刺激。",
+    "preferredTags": [],
     "avoidExpressions": [
-      "直接解剖学术语",
-      "露骨色情描写",
-      "纯硬广推销话术",
-      "负面羞耻评价",
-      "违反平台合规的敏感词"
+      "绝对化承诺",
+      "强导流",
+      "低俗擦边",
+      "过度教程化"
     ],
     "generationGuidelines": [
-      "标题需制造场景冲突或好奇心缺口，同类结构可提权",
-      "正文长度根据内容类型调整，清单体需条理清晰，故事体需情感饱满",
-      "物品描述必须使用隐喻或代号（如艺术摆件、科技产品）",
-      "结尾必须包含价值观升华（自我爱护）及互动引导",
-      "合集类型优先匹配“伪装学大师”或“身体探索”",
-      "避免说教，保持“姐妹夜话”的平等分享视角"
+      "保留科普、沟通、经验分享语境",
+      "减少刺激性标题党表达",
+      "正文给出具体但不过度细节化的建议"
     ],
     "createdAt": "2026-05-04T10:01:28.165Z",
-    "updatedAt": "2026-05-30T14:07:31.371Z",
+    "updatedAt": "2026-06-02T04:56:26.886Z",
     "generationMeta": {
-      "method": "model_summary",
-      "provider": "qwen",
-      "providerLabel": "通义千问",
-      "model": "qwen3.5-plus-2026-02-15",
-      "route": "dmxapi",
-      "routeLabel": "DMXAPI",
-      "generatedAt": "2026-05-30T14:07:31.371Z",
-      "attemptedProviders": [
-        {
-          "provider": "qwen",
-          "label": "通义千问",
-          "model": "qwen3.5-plus-2026-02-15",
-          "route": "dmxapi",
-          "routeLabel": "DMXAPI",
-          "status": "ok",
-          "message": ""
-        }
-      ],
+      "method": "local_rule_fallback",
+      "provider": "",
+      "providerLabel": "本地规则",
+      "model": "",
+      "route": "",
+      "routeLabel": "",
+      "generatedAt": "2026-06-02T04:56:26.886Z",
+      "attemptedProviders": [],
       "retroHintsSummary": "ruleCandidates: 同类标题结构可提权、同类合集可提权、正文长度阈值需调整"
     },
     "autoBase": {
@@ -67,61 +39,33 @@
       "status": "active",
       "topic": "隐晦式愉悦生活分享",
       "name": "隐晦式愉悦生活分享通用风格画像",
-      "sourceSampleIds": [
-        "note-e5d632e9e403649f",
-        "note-671a8a3e55280196",
-        "note-ba16b81589dc26e3",
-        "note-884e55edf4a34ac9"
-      ],
-      "titleStyle": "采用场景化悬念或反问句式，结合 emoji 增强视觉冲击，避免直白词汇，常用“那个”、“新手蛋”、“伪装”等隐晦代称，如“光明正大放桌上”或“突然 die 了清理床头柜”类强钩子标题",
-      "bodyStructure": "开头以 relatable 焦虑或场景切入（如社死恐惧、挑选困难），中间采用清单体或隐喻式科普（如科幻代号、伪装话术），结尾升华至自我接纳与悦己价值观，并附带互动提问引导评论区讨论",
-      "tone": "幽默调侃中带共情，秘密分享般的亲密感，去羞耻化，强调成年人的快乐正当性，语气活泼且带有保护色",
-      "preferredTags": [
-        "愉悦",
-        "深夜话题",
-        "大人也要玩玩具",
-        "伪装",
-        "悦己",
-        "社死",
-        "女性",
-        "快乐的大人"
-      ],
+      "sourceSampleIds": [],
+      "titleStyle": "标题保持清晰、克制、真实，不使用夸张承诺。",
+      "bodyStructure": "正文使用短段落，先讲结论，再讲场景和建议。",
+      "tone": "温和、克制、像朋友提醒，避免强营销和夸张刺激。",
+      "preferredTags": [],
       "avoidExpressions": [
-        "直接解剖学术语",
-        "露骨色情描写",
-        "纯硬广推销话术",
-        "负面羞耻评价",
-        "违反平台合规的敏感词"
+        "绝对化承诺",
+        "强导流",
+        "低俗擦边",
+        "过度教程化"
       ],
       "generationGuidelines": [
-        "标题需制造场景冲突或好奇心缺口，同类结构可提权",
-        "正文长度根据内容类型调整，清单体需条理清晰，故事体需情感饱满",
-        "物品描述必须使用隐喻或代号（如艺术摆件、科技产品）",
-        "结尾必须包含价值观升华（自我爱护）及互动引导",
-        "合集类型优先匹配“伪装学大师”或“身体探索”",
-        "避免说教，保持“姐妹夜话”的平等分享视角"
+        "保留科普、沟通、经验分享语境",
+        "减少刺激性标题党表达",
+        "正文给出具体但不过度细节化的建议"
       ],
       "createdAt": "2026-05-04T10:01:28.165Z",
-      "updatedAt": "2026-05-30T14:07:31.371Z",
+      "updatedAt": "2026-06-02T04:56:26.886Z",
       "generationMeta": {
-        "method": "model_summary",
-        "provider": "qwen",
-        "providerLabel": "通义千问",
-        "model": "qwen3.5-plus-2026-02-15",
-        "route": "dmxapi",
-        "routeLabel": "DMXAPI",
-        "generatedAt": "2026-05-30T14:07:31.371Z",
-        "attemptedProviders": [
-          {
-            "provider": "qwen",
-            "label": "通义千问",
-            "model": "qwen3.5-plus-2026-02-15",
-            "route": "dmxapi",
-            "routeLabel": "DMXAPI",
-            "status": "ok",
-            "message": ""
-          }
-        ],
+        "method": "local_rule_fallback",
+        "provider": "",
+        "providerLabel": "本地规则",
+        "model": "",
+        "route": "",
+        "routeLabel": "",
+        "generatedAt": "2026-06-02T04:56:26.886Z",
+        "attemptedProviders": [],
         "retroHintsSummary": "ruleCandidates: 同类标题结构可提权、同类合集可提权、正文长度阈值需调整"
       }
     }

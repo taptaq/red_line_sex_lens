@@ -480,6 +480,35 @@ function resolveGenerationCoverImagePrompt({ brief = {}, candidate = {} } = {}) 
   return buildFallbackCoverImagePrompt({ brief, candidate });
 }
 
+function sanitizeGenerationTitleCandidates(candidate = {}) {
+  const providedCandidates = ensureArray(candidate.titleCandidates || candidate.title_candidates);
+
+  if (providedCandidates.length) {
+    return uniqueStrings([...providedCandidates, candidate.title]);
+  }
+
+  return uniqueStrings([candidate.title]);
+}
+
+function selectGenerationTitleFromCandidates(candidate = {}) {
+  const titleCandidates = sanitizeGenerationTitleCandidates(candidate);
+
+  if (titleCandidates.length <= 1) {
+    return String(candidate.title || titleCandidates[0] || "").trim();
+  }
+
+  return titleCandidates
+    .map((title) => ({
+      title,
+      audit: evaluateGenerationQualityAudit({
+        ...candidate,
+        title
+      })
+    }))
+    .sort((left, right) => right.audit.title.score - left.audit.title.score || right.audit.overall.score - left.audit.overall.score)[0]
+    .title;
+}
+
 function parseTagReferenceInput(value = "") {
   return uniqueStrings(
     String(value || "")
@@ -522,6 +551,18 @@ function buildGenerationTagGuidance({ brief = {}, styleProfile = null, reference
     profileTags,
     referenceTags
   };
+}
+
+function buildBorrowedPromptHeuristicsGuidance() {
+  return [
+    "可借鉴的外部 prompt 启发：只借结构和检查维度，不要照搬外部 prompt 的夸张营销腔。",
+    "标题自检：生成标题前后都检查吸引力、违规风险、差异化、搜索友好度；标题要有明确人群、场景或问题，但不要过度承诺。",
+    "开头钩子：正文第一段优先从悬念、痛点、场景、反常识、身份这几类里选一种，不要平铺直叙写成汇报开头。",
+    "钩子承接：开头抓人之后，第二三句要兑现主题，给出这篇会回答什么，避免只抛悬念不解决。",
+    "自然化反套路检查：段落长短不一，允许轻微思路跳转、口语化转场和视角自然切换，但不要故意写错、不要编假经历。",
+    "反营销腔约束：不要照搬“绝绝子”“yyds”“后悔没早买”“速来”“必看”“最强”“福利”等强营销或过时社区套话。",
+    "最终自检：如果标题、封面文案、正文开头像同一个模板里套出来的，就重写其中一处，让三者各自承担不同吸引点。"
+  ];
 }
 
 function stringifyReferenceSamples(samples = []) {
@@ -675,6 +716,13 @@ function stringifyHotArticleFormula(hotArticleFormula = null) {
     "爆款公式来源：",
     `检索关键词：${String(hotArticleFormula.keyword || "").trim()}`,
     `参考公式：${String(hotArticleFormula.formula || "").trim()}`,
+    "爆文拆解维度：",
+    `选题：${String(hotArticleFormula.formula || "").trim() || "从当前需求和同赛道高表现内容提炼一个具体问题"}`,
+    `标题技巧：${ensureArray(hotArticleFormula.titlePatterns).join("、")}`,
+    `开头方式：${ensureArray(hotArticleFormula.openingPatterns).join("、")}`,
+    `正文结构：${ensureArray(hotArticleFormula.structurePatterns).join("、")}`,
+    `情绪点：${ensureArray(hotArticleFormula.highFrequencyKeywords).join("、")}`,
+    `互动点：${ensureArray(hotArticleFormula.interactionPrompts).join("、")}`,
     `标题规律：${ensureArray(hotArticleFormula.titlePatterns).join("、")}`,
     `开头规律：${ensureArray(hotArticleFormula.openingPatterns).join("、")}`,
     `正文结构：${ensureArray(hotArticleFormula.structurePatterns).join("、")}`,
@@ -767,6 +815,7 @@ export function buildGenerationMessages({
         "写的时候尽量像在和人聊天、分享、吐槽、安慰，不要端着，也不要像写讲义。",
         "不要写成那种一上来就先说 1、2、3 点的清单腔，也少用“首先、其次、最后”这种讲课感很重的连接词。",
         ...humanizerStyleRules,
+        ...buildBorrowedPromptHeuristicsGuidance(),
         "标题还是要吸睛、带一点高反差，让人想点开，但别油、别夸张、别低俗。",
         "封面文案比标题更短一点，像顺手丢出来的钩子，和标题别只是重复复述。",
         "正文一定要分段，读起来顺，不要一整段铺到底；语气就像真人在说话，用大白话，有人味。",
@@ -794,7 +843,7 @@ export function buildGenerationMessages({
         "",
         "输出格式：",
         "{",
-        '  "candidate": {"variant":"final","title":"标题","body":"正文","coverText":"封面文案","coverImagePrompt":"封面图 prompt","tags":["标签"],"generationNotes":"生成说明","safetyNotes":"安全注意点","referencedSampleIds":["sample-id"]}',
+        '  "candidate": {"variant":"final","title":"最终采用标题","titleCandidates":["标题候选1","标题候选2","标题候选3"],"body":"正文","coverText":"封面文案","coverImagePrompt":"封面图 prompt","tags":["标签"],"generationNotes":"生成说明","safetyNotes":"安全注意点","referencedSampleIds":["sample-id"]}',
         "}",
         "要求：不要照抄参考样本；直接给出你判断最适合发布的一版最终稿；正文必须完整，不要只给摘要。"
       ].join("\n")
@@ -1259,11 +1308,17 @@ async function runTencentSearchFallback({ prompt, queries = [], fetchImpl = fetc
 export function normalizeGenerationCandidate(candidate = {}, index = 0, options = {}) {
   const normalizedVariant = String(candidate.variant || "").trim();
   const variant = finalCandidateVariants.has(normalizedVariant) ? normalizedVariant : variants[index] || "safe";
+  const titleCandidates = sanitizeGenerationTitleCandidates(candidate);
+  const selectedTitle = selectGenerationTitleFromCandidates({
+    ...candidate,
+    titleCandidates
+  });
 
   return {
     id: String(candidate.id || `candidate-${variant}-${index + 1}`).trim(),
     variant,
-    title: String(candidate.title || "").trim(),
+    title: selectedTitle,
+    titleCandidates,
     body: normalizeGenerationBody(candidate.body || candidate.content || "", options),
     coverText: String(candidate.coverText || "").trim(),
     coverImagePrompt: String(candidate.coverImagePrompt || candidate.cover_image_prompt || candidate.coverPrompt || "").trim(),
@@ -1807,6 +1862,143 @@ function scoreCompleteness(candidate = {}, brief = {}) {
   };
 }
 
+function buildGenerationQualityCheck({ id = "", label = "", passed = true, score = 100, reasons = [] } = {}) {
+  return {
+    id,
+    label,
+    passed: Boolean(passed),
+    score: Math.max(0, Math.min(100, Math.round(Number(score) || 0))),
+    reasons: uniqueStrings(reasons)
+  };
+}
+
+function getGenerationOpeningText(body = "") {
+  return String(body || "")
+    .split(/\n\s*\n/)
+    .map((item) => item.trim())
+    .filter(Boolean)[0] || "";
+}
+
+export function evaluateGenerationQualityAudit(candidate = {}) {
+  const title = String(candidate.title || "").trim();
+  const coverText = String(candidate.coverText || "").trim();
+  const body = String(candidate.body || "").trim();
+  const combinedText = [title, coverText, body, ...ensureArray(candidate.tags)].filter(Boolean).join("\n");
+  const opening = getGenerationOpeningText(body);
+  const humanizer = evaluateHumanizerSignals(candidate);
+  const titleReasons = [];
+  const openingReasons = [];
+  const marketingReasons = [];
+  const coverReasons = [];
+  const highRiskTitlePattern = /必看|速来|最强|最全|最优|福利|白嫖|0元|免费|后悔没早买/u;
+  const weakOpeningPattern = /^(?:今天给大家分享|今天想和大家聊聊|今天我们来聊|大家好|hello大家|本文主要|这篇笔记主要)/iu;
+  const hookSignalPattern = /我|最近|刚刚|昨天|前天|说实话|你有没有|有没有|为什么|别急|先别|原来|没想到|其实|？|\?|！|!/u;
+  const hypePatterns = [
+    "绝绝子",
+    "yyds",
+    "后悔没早买",
+    "速来",
+    "必看",
+    "最强",
+    "福利",
+    "白嫖",
+    "0元",
+    "免费"
+  ];
+  const matchedHypeTerms = hypePatterns.filter((term) => combinedText.includes(term));
+
+  if (!title) {
+    titleReasons.push("缺少标题");
+  }
+
+  if (highRiskTitlePattern.test(title)) {
+    titleReasons.push("高风险标题词或标题偏营销");
+  }
+
+  if (title.length > 28) {
+    titleReasons.push("标题偏长，第一眼抓取成本高");
+  }
+
+  if (!opening) {
+    openingReasons.push("缺少正文开头");
+  } else {
+    if (weakOpeningPattern.test(opening)) {
+      openingReasons.push("开头偏汇报，开头钩子弱");
+    }
+
+    if (!hookSignalPattern.test(opening)) {
+      openingReasons.push("开头缺少场景、情绪、提问或反差信号");
+    }
+  }
+
+  if (matchedHypeTerms.length) {
+    marketingReasons.push(`出现强营销腔：${matchedHypeTerms.join("、")}`);
+  }
+
+  if (isCoverTextTooSimilarToTitle({ title, coverText })) {
+    coverReasons.push("封面文案和标题太像，吸引点没有分开");
+  }
+
+  const titleScore = 100 - titleReasons.length * 34;
+  const openingScore = 100 - openingReasons.length * 40;
+  const marketingScore = 100 - matchedHypeTerms.length * 18;
+  const coverScore = coverReasons.length ? 35 : 100;
+  const humanizerScore = Math.min(100, humanizer.total * 2);
+  const checks = {
+    title: buildGenerationQualityCheck({
+      id: "title",
+      label: "标题自检",
+      passed: titleReasons.length === 0,
+      score: titleScore,
+      reasons: titleReasons.length ? titleReasons : ["标题没有明显营销腔或长度问题"]
+    }),
+    opening: buildGenerationQualityCheck({
+      id: "opening",
+      label: "开头钩子",
+      passed: openingReasons.length === 0,
+      score: openingScore,
+      reasons: openingReasons.length ? openingReasons : ["开头有基本钩子或真实分享信号"]
+    }),
+    humanization: buildGenerationQualityCheck({
+      id: "humanization",
+      label: "自然化反套路",
+      passed: humanizer.total >= humanizerAcceptanceThreshold,
+      score: humanizerScore,
+      reasons: humanizer.issues?.length ? humanizer.issues.slice(0, 5) : ["当前活人感信号稳定"]
+    }),
+    marketingTone: buildGenerationQualityCheck({
+      id: "marketing_tone",
+      label: "营销腔风险",
+      passed: matchedHypeTerms.length === 0,
+      score: marketingScore,
+      reasons: marketingReasons.length ? marketingReasons : ["未发现强营销或过时社区套话"]
+    }),
+    coverDistinctness: buildGenerationQualityCheck({
+      id: "cover_distinctness",
+      label: "标题封面区分",
+      passed: coverReasons.length === 0,
+      score: coverScore,
+      reasons: coverReasons.length ? coverReasons : ["封面文案和标题承担了不同吸引点"]
+    })
+  };
+  const checkValues = Object.values(checks);
+  const overallPassed = checkValues.every((item) => item.passed);
+  const overallScore = checkValues.reduce((total, item) => total + item.score, 0) / Math.max(1, checkValues.length);
+
+  return {
+    ...checks,
+    overall: buildGenerationQualityCheck({
+      id: "overall",
+      label: "生成质量审计",
+      passed: overallPassed,
+      score: overallScore,
+      reasons: overallPassed
+        ? ["生成稿通过当前质量审计"]
+        : checkValues.filter((item) => !item.passed).map((item) => `${item.label}待改`)
+    })
+  };
+}
+
 function rankScoredCandidate(item) {
   const verdict = normalizeVerdict(item.analysis?.finalVerdict || item.analysis?.verdict);
   const riskScore = Math.max(0, 100 - (verdictPenalty[verdict] || 0) - Math.min(50, Number(item.analysis?.score) || 0));
@@ -1850,6 +2042,36 @@ function collectGenerationBlockerReasons(analysis = {}, crossReview = null) {
     ...(analysis?.semanticReview?.status === "ok" ? analysis.semanticReview.review?.reasons || [] : []),
     ...(crossReview?.aggregate?.reasons || [])
   ]).slice(0, 6);
+}
+
+function collectQualityAuditRepairReasons(qualityAudit = null) {
+  if (!qualityAudit || typeof qualityAudit !== "object") {
+    return [];
+  }
+
+  return uniqueStrings(
+    ["title", "opening", "humanization", "marketingTone", "coverDistinctness"].flatMap((key) => {
+      const item = qualityAudit[key];
+
+      if (!item || item.passed) {
+        return [];
+      }
+
+      return [`${item.label || key}待修`, ...(item.reasons || [])];
+    })
+  ).slice(0, 8);
+}
+
+function buildQualityRepairAnalysis(analysis = {}, qualityAudit = null) {
+  return {
+    ...analysis,
+    suggestions: uniqueStrings([
+      "质量审计待修：只修标题、开头、封面区分、人味化或营销腔问题，不要整篇推倒重写。",
+      ...collectQualityAuditRepairReasons(qualityAudit)
+    ]),
+    qualityAudit,
+    qualityRepairOnly: true
+  };
 }
 
 function buildRepairReasonTags(analysis = {}, crossReview = null) {
@@ -1923,6 +2145,8 @@ export async function scoreGenerationCandidates({
       applied: false,
       humanizerAttempted: false,
       humanizerApplied: false,
+      qualityAttempted: false,
+      qualityApplied: false,
       reason: "",
       reasonTags: [],
       error: "",
@@ -2045,6 +2269,65 @@ export async function scoreGenerationCandidates({
       } catch {}
     }
 
+    let qualityAudit = evaluateGenerationQualityAudit(finalDraft);
+
+    if (
+      repairCandidate &&
+      isAcceptedVerdict(mergedAnalysis.finalVerdict || mergedAnalysis.verdict) &&
+      !qualityAudit.overall.passed
+    ) {
+      repair.qualityAttempted = true;
+
+      try {
+        const rewrite = await repairCandidate({
+          candidate: finalDraft,
+          analysis: buildQualityRepairAnalysis(mergedAnalysis, qualityAudit),
+          crossReview,
+          modelSelection: modelSelection.rewrite,
+          innerSpaceTerms
+        });
+        const nextDraft = {
+          ...normalizeGenerationCandidate(
+            mergeGenerationRepairDraft(finalDraft, rewrite, candidate),
+            variants.indexOf(candidate.variant),
+            { lengthMode: brief.lengthMode }
+          ),
+          repairedFromCandidateId: candidate.id
+        };
+
+        if (!looksLikeLeakedRepairPrompt(nextDraft)) {
+          const nextAnalysis = await analyzeCandidate(nextDraft);
+          const nextSemanticReview = await semanticReviewCandidate({
+            input: nextDraft,
+            analysis: nextAnalysis,
+            modelSelection: modelSelection.semantic
+          });
+          const nextMergedAnalysis = {
+            ...nextAnalysis,
+            semanticReview: nextSemanticReview
+          };
+          const nextCrossReview = await crossReviewCandidate({
+            input: nextDraft,
+            analysis: nextMergedAnalysis,
+            modelSelection: modelSelection.crossReview
+          });
+          const nextQualityAudit = evaluateGenerationQualityAudit(nextDraft);
+
+          if (
+            isAcceptedVerdict(nextMergedAnalysis.finalVerdict || nextMergedAnalysis.verdict) &&
+            nextQualityAudit.overall.score > qualityAudit.overall.score
+          ) {
+            finalDraft = nextDraft;
+            mergedAnalysis = nextMergedAnalysis;
+            crossReview = nextCrossReview;
+            qualityAudit = nextQualityAudit;
+            humanizer = evaluateHumanizerSignals(finalDraft);
+            repair.qualityApplied = true;
+          }
+        }
+      } catch {}
+    }
+
     const style = scoreContentAgainstStyleProfile(finalDraft, styleProfile);
     const completeness = scoreCompleteness(finalDraft, brief);
     const scores = rankScoredCandidate({ analysis: mergedAnalysis, style, completeness, humanizer });
@@ -2060,6 +2343,7 @@ export async function scoreGenerationCandidates({
       style,
       completeness,
       humanizer,
+      qualityAudit,
       scores
     });
   }

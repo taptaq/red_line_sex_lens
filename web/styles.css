@@ -4612,6 +4612,72 @@ body.modal-open {
   color: #ffe7ad;
 }
 
+.generation-quality-audit {
+  display: grid;
+  gap: 0.7rem;
+  margin: 0.85rem 0;
+  padding: 0.9rem;
+  border-radius: 20px;
+  border: 1px solid rgba(91, 119, 134, 0.2);
+  background: rgba(91, 119, 134, 0.08);
+}
+
+.generation-quality-audit__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.generation-quality-audit__head span {
+  font-weight: 800;
+}
+
+.generation-quality-audit__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.55rem;
+}
+
+.generation-quality-audit__item {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.68rem;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.54);
+  border: 1px solid rgba(54, 43, 31, 0.08);
+}
+
+.generation-quality-audit__item.is-warning {
+  background: rgba(173, 117, 76, 0.1);
+  border-color: rgba(173, 117, 76, 0.22);
+}
+
+.generation-quality-audit__item span,
+.generation-quality-audit__item strong {
+  line-height: 1.35;
+}
+
+.generation-quality-audit__item p {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+.generation-candidate-card.is-recommended .generation-quality-audit {
+  border-color: rgba(242, 208, 140, 0.24);
+  background: rgba(255, 245, 223, 0.08);
+}
+
+.generation-candidate-card.is-recommended .generation-quality-audit__head span,
+.generation-candidate-card.is-recommended .generation-quality-audit__head strong {
+  color: #ffe7ad;
+}
+
+.generation-candidate-card.is-recommended .generation-quality-audit__item {
+  background: rgba(255, 245, 223, 0.08);
+  border-color: rgba(255, 245, 223, 0.12);
+}
+
 .generation-blocker-box {
   display: grid;
   gap: 0.45rem;

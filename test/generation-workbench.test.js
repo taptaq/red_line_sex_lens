@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   buildGenerationBriefingMessages,
   buildGenerationMessages,
+  evaluateGenerationQualityAudit,
   improveGenerationBriefing,
   generateNoteCandidates,
   normalizeGenerationCandidate,
@@ -282,6 +283,59 @@ test("buildGenerationMessages omits temporary image guidance when no image summa
   assert.match(combined, /本次临时参考素材/);
   assert.match(combined, /notes\.md/);
   assert.doesNotMatch(combined, /临时参考图片/);
+});
+
+test("buildGenerationMessages includes borrowed prompt heuristics without importing hypey marketing tone", () => {
+  const messages = buildGenerationMessages({
+    mode: "from_scratch",
+    brief: {
+      topic: "亲密关系沟通",
+      collectionType: "科普"
+    }
+  });
+
+  const combined = messages.map((item) => item.content).join("\n");
+  assert.match(combined, /标题自检/);
+  assert.match(combined, /吸引力、违规风险、差异化、搜索友好度/);
+  assert.match(combined, /开头钩子/);
+  assert.match(combined, /悬念、痛点、场景、反常识、身份/);
+  assert.match(combined, /自然化反套路检查/);
+  assert.match(combined, /段落长短不一/);
+  assert.match(combined, /轻微思路跳转/);
+  assert.match(combined, /只借结构和检查维度/);
+  assert.match(combined, /不要照搬.*绝绝子.*yyds.*后悔没早买/s);
+});
+
+test("buildGenerationMessages structures hot article formula into reusable deconstruction dimensions", () => {
+  const messages = buildGenerationMessages({
+    mode: "from_scratch",
+    brief: {
+      topic: "亲密关系沟通",
+      collectionType: "科普"
+    },
+    hotArticleFormula: {
+      status: "ok",
+      keyword: "亲密关系沟通",
+      formula: "先抛冲突，再给安抚和边界建议",
+      titlePatterns: ["反问式标题"],
+      openingPatterns: ["真实困惑开头"],
+      structurePatterns: ["问题-原因-建议"],
+      highFrequencyKeywords: ["边界", "沟通"],
+      tagStrategies: ["宽标签 + 场景标签"],
+      interactionPrompts: ["评论区说说你的卡点"]
+    }
+  });
+
+  const combined = messages.map((item) => item.content).join("\n");
+  assert.match(combined, /爆文拆解维度/);
+  assert.match(combined, /选题/);
+  assert.match(combined, /标题技巧/);
+  assert.match(combined, /开头方式/);
+  assert.match(combined, /正文结构/);
+  assert.match(combined, /情绪点/);
+  assert.match(combined, /互动点/);
+  assert.match(combined, /反问式标题/);
+  assert.match(combined, /真实困惑开头/);
 });
 
 test("improveGenerationBriefing expands a one-line request into a richer generation brief", async () => {
@@ -628,6 +682,36 @@ test("generateNoteCandidates skips cover text rewrite when title and cover are a
   assert.equal(result.candidates[0].coverText, "先别急，三种情况先暂停");
 });
 
+test("generateNoteCandidates chooses the safest title from returned title candidates", async () => {
+  const result = await generateNoteCandidates({
+    mode: "from_scratch",
+    brief: { collectionType: "科普", topic: "亲密关系沟通" },
+    generateJson: async () => ({
+      candidate: {
+        variant: "final",
+        title: "必看！亲密关系最强攻略",
+        titleCandidates: [
+          "必看！亲密关系最强攻略",
+          "关系里这句话，先别急着说出口",
+          "福利来了，沟通模板直接拿走"
+        ],
+        body: "说实话，关系里有些话不是不能讲，而是需要换个更稳的时机。\n\n我更建议先把自己的感受捋清楚，再去开口。这样不是冷淡，是给彼此留一点缓冲🙂\n\n如果你也卡在这个点，可以先从一句很小的话开始：我想慢一点说清楚✨".repeat(8),
+        coverText: "先别急着委屈自己",
+        tags: ["亲密关系", "关系沟通"]
+      },
+      provider: "mock",
+      model: "mock-title-candidates"
+    })
+  });
+
+  assert.equal(result.candidates[0].title, "关系里这句话，先别急着说出口");
+  assert.deepEqual(result.candidates[0].titleCandidates, [
+    "必看！亲密关系最强攻略",
+    "关系里这句话，先别急着说出口",
+    "福利来了，沟通模板直接拿走"
+  ]);
+});
+
 test("generateNoteCandidates repairs lightly broken fenced JSON from DMXAPI text models", async () => {
   await withEnv(
     {
@@ -757,6 +841,112 @@ test("normalizeGenerationCandidate lightly cleans generated tags", () => {
   );
 
   assert.deepEqual(candidate.tags, ["亲密关系沟通", "关系沟通", "刚确认关系"]);
+});
+
+test("evaluateGenerationQualityAudit flags weak opening repeated cover marketing tone and AI-style writing", () => {
+  const audit = evaluateGenerationQualityAudit({
+    title: "必看！亲密关系最强攻略",
+    coverText: "必看！亲密关系最强攻略",
+    body: [
+      "今天给大家分享亲密关系沟通这个话题。",
+      "首先，我们要建立良好的沟通机制。其次，要形成正向闭环。最后，通过底层逻辑完成关系赋能。",
+      "后悔没早买这份福利感满满的清单，真的绝绝子 yyds。"
+    ].join("\n\n"),
+    tags: ["亲密关系", "关系沟通"]
+  });
+
+  assert.equal(audit.overall.passed, false);
+  assert.equal(audit.title.passed, false);
+  assert.equal(audit.opening.passed, false);
+  assert.equal(audit.humanization.passed, false);
+  assert.equal(audit.marketingTone.passed, false);
+  assert.equal(audit.coverDistinctness.passed, false);
+  assert.match(audit.title.reasons.join("；"), /高风险标题词|标题偏营销/);
+  assert.match(audit.opening.reasons.join("；"), /开头偏汇报|开头钩子弱/);
+  assert.match(audit.marketingTone.reasons.join("；"), /绝绝子|yyds|后悔没早买/);
+});
+
+test("scoreGenerationCandidates attaches quality audit to each scored candidate", async () => {
+  const candidate = normalizeGenerationCandidate(
+    {
+      id: "candidate-final-1",
+      variant: "final",
+      title: "必看！亲密关系最强攻略",
+      body: "今天给大家分享亲密关系沟通这个话题。首先，我们要建立良好的沟通机制。其次，要形成正向闭环。最后，通过底层逻辑完成关系赋能。",
+      coverText: "必看！亲密关系最强攻略",
+      tags: ["亲密关系", "关系沟通"]
+    },
+    0
+  );
+
+  const result = await scoreGenerationCandidates({
+    candidates: [candidate],
+    analyzeCandidate: async () => ({ finalVerdict: "pass", verdict: "pass", score: 88, suggestions: [] }),
+    semanticReviewCandidate: async ({ analysis }) => ({
+      status: "ok",
+      review: { reasons: [] },
+      verdict: analysis.finalVerdict || analysis.verdict
+    }),
+    crossReviewCandidate: async ({ analysis }) => ({
+      aggregate: {
+        recommendedVerdict: analysis.finalVerdict || analysis.verdict,
+        analysisVerdict: analysis.finalVerdict || analysis.verdict,
+        reasons: []
+      }
+    })
+  });
+
+  assert.equal(result.scoredCandidates[0].qualityAudit.overall.passed, false);
+  assert.equal(result.scoredCandidates[0].qualityAudit.coverDistinctness.passed, false);
+  assert.equal(result.scoredCandidates[0].qualityAudit.marketingTone.passed, false);
+});
+
+test("scoreGenerationCandidates runs one quality repair for accepted drafts that fail quality audit", async () => {
+  let repairCalls = 0;
+  const candidate = normalizeGenerationCandidate(
+    {
+      id: "candidate-final-1",
+      variant: "final",
+      title: "必看！亲密关系最强攻略",
+      body: "今天给大家分享亲密关系沟通这个话题。首先，我们要建立良好的沟通机制。其次，要形成正向闭环。",
+      coverText: "必看！亲密关系最强攻略",
+      tags: ["亲密关系", "关系沟通"]
+    },
+    0
+  );
+
+  const result = await scoreGenerationCandidates({
+    candidates: [candidate],
+    analyzeCandidate: async () => ({ finalVerdict: "pass", verdict: "pass", score: 88, suggestions: [] }),
+    semanticReviewCandidate: async ({ analysis }) => ({
+      status: "ok",
+      review: { reasons: [] },
+      verdict: analysis.finalVerdict || analysis.verdict
+    }),
+    crossReviewCandidate: async ({ analysis }) => ({
+      aggregate: {
+        recommendedVerdict: analysis.finalVerdict || analysis.verdict,
+        analysisVerdict: analysis.finalVerdict || analysis.verdict,
+        reasons: []
+      }
+    }),
+    repairCandidate: async ({ analysis }) => {
+      repairCalls += 1;
+      assert.match(analysis.suggestions.join("；"), /质量审计待修/);
+      return {
+        title: "关系里这句话，先别急着说出口",
+        body: "说实话，关系里有些话不是不能讲，而是需要换个更稳的时机。\n\n我更建议先把自己的感受捋清楚，再去开口。这样不是冷淡，是给彼此留一点缓冲🙂\n\n如果你也卡在这个点，可以先从一句很小的话开始：我想慢一点说清楚✨",
+        coverText: "先别急着委屈自己",
+        tags: ["亲密关系", "关系沟通"]
+      };
+    }
+  });
+
+  assert.equal(repairCalls, 1);
+  assert.equal(result.scoredCandidates[0].repair.qualityAttempted, true);
+  assert.equal(result.scoredCandidates[0].repair.qualityApplied, true);
+  assert.equal(result.scoredCandidates[0].finalDraft.title, "关系里这句话，先别急着说出口");
+  assert.equal(result.scoredCandidates[0].qualityAudit.overall.passed, true);
 });
 
 test("generateNoteCandidates fills a short-mode fallback cover image prompt when model omits it", async () => {
