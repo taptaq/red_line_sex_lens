@@ -18,7 +18,8 @@ async function withTempSampleLibraryApi(t, run) {
     noteLifecycle: paths.noteLifecycle,
     noteRecords: paths.noteRecords,
     styleProfile: paths.styleProfile,
-    draftIdeas: paths.draftIdeas
+    draftIdeas: paths.draftIdeas,
+    finishedContents: paths.finishedContents
   };
 
   paths.collectionTypes = path.join(tempDir, "collection-types.json");
@@ -27,6 +28,7 @@ async function withTempSampleLibraryApi(t, run) {
   paths.noteRecords = path.join(tempDir, "note-records.json");
   paths.styleProfile = path.join(tempDir, "style-profile.json");
   paths.draftIdeas = path.join(tempDir, "draft-ideas.json");
+  paths.finishedContents = path.join(tempDir, "finished-contents.json");
   process.env.SAMPLE_LIBRARY_AUTO_PLANNER_SUMMARY = "false";
 
   await Promise.all([
@@ -34,7 +36,8 @@ async function withTempSampleLibraryApi(t, run) {
     fs.writeFile(paths.successSamples, "[]\n", "utf8"),
     fs.writeFile(paths.noteLifecycle, "[]\n", "utf8"),
     fs.writeFile(paths.styleProfile, "{}\n", "utf8"),
-    fs.writeFile(paths.draftIdeas, `${JSON.stringify({ items: [] }, null, 2)}\n`, "utf8")
+    fs.writeFile(paths.draftIdeas, `${JSON.stringify({ items: [] }, null, 2)}\n`, "utf8"),
+    fs.writeFile(paths.finishedContents, `${JSON.stringify({ items: [] }, null, 2)}\n`, "utf8")
   ]);
 
   t.after(async () => {
@@ -85,6 +88,55 @@ test("draft ideas API supports list create patch delete", async (t) => {
     assert.equal(patched.item.status, "used");
 
     const deleted = await invokeRoute("DELETE", "/api/draft-ideas", {
+      id: created.item.id
+    });
+
+    assert.equal(deleted.status, 200);
+    assert.equal(deleted.ok, true);
+    assert.deepEqual(deleted.items, []);
+  });
+});
+
+test("finished contents API supports list create patch delete", async (t) => {
+  await withTempSampleLibraryApi(t, async () => {
+    const initial = await invokeRoute("GET", "/api/finished-contents");
+    assert.equal(initial.status, 200);
+    assert.equal(initial.ok, true);
+    assert.deepEqual(initial.items, []);
+
+    const created = await invokeRoute("POST", "/api/finished-contents", {
+      title: "成品标题",
+      body: "成品正文",
+      coverText: "成品封面",
+      collectionType: "科普",
+      tags: ["关系沟通", "边界表达"],
+      sourceType: "generation_candidate",
+      sourceLabel: "生成稿"
+    });
+
+    assert.equal(created.status, 200);
+    assert.equal(created.ok, true);
+    assert.equal(created.items.length, 1);
+    assert.equal(created.item.title, "成品标题");
+    assert.equal(created.item.body, "成品正文");
+    assert.equal(created.item.coverText, "成品封面");
+    assert.deepEqual(created.item.tags, ["关系沟通", "边界表达"]);
+
+    const patched = await invokeRoute("PATCH", "/api/finished-contents", {
+      id: created.item.id,
+      title: "修改后标题",
+      body: "修改后正文",
+      tags: ["修改"]
+    });
+
+    assert.equal(patched.status, 200);
+    assert.equal(patched.ok, true);
+    assert.equal(patched.item.id, created.item.id);
+    assert.equal(patched.item.title, "修改后标题");
+    assert.equal(patched.item.body, "修改后正文");
+    assert.deepEqual(patched.item.tags, ["修改"]);
+
+    const deleted = await invokeRoute("DELETE", "/api/finished-contents", {
       id: created.item.id
     });
 

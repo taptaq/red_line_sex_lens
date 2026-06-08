@@ -53,8 +53,8 @@
       <div class="shell app-content">
 
       <!-- ① 紧凑页头（原 hero 区缩减，直接露出工作区） -->
-      <header class="site-header panel" id="today-workbench">
-        <div class="header-brand">
+      <header class="site-header panel" id="today-workbench" data-collapsible-region data-collapsed-by-default="true">
+        <div class="header-brand collapsible-region-heading">
           <p class="eyebrow">本地审核台</p>
           <h1>小红书合规检测改写系统</h1>
         </div>
@@ -399,7 +399,7 @@
                 <div id="generation-result" class="result-card-shell muted">等待生成</div>
               </section>
             </section>
-            <section class="generation-draft-inbox-panel" id="generation-draft-inbox-panel" data-visible-with-tab="generation-workbench-pane" hidden>
+            <section class="generation-draft-inbox-panel" id="generation-draft-inbox-panel" data-collapsible-region data-collapsed-by-default="true" data-visible-with-tab="generation-workbench-pane" hidden>
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">草稿区</p>
@@ -422,6 +422,16 @@
                 <input type="hidden" name="draftIdeasStatusView" id="draft-ideas-status-view" value="draft" />
               </div>
               <div id="draft-ideas-list" class="draft-ideas-list draft-ideas-grid"></div>
+            </section>
+            <section class="generation-finished-content-panel" id="generation-finished-content-panel" data-collapsible-region data-collapsed-by-default="true" data-visible-with-tab="analyze-workbench-pane" hidden>
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">成品区</p>
+                  <h2>已完成内容</h2>
+                </div>
+                <p class="section-note">把已经生成好的内容收进来，发布前可继续微调标题、正文、封面和标签。</p>
+              </div>
+              <div id="finished-contents-list" class="finished-contents-list"></div>
             </section>
           </div>
         </article>
@@ -510,7 +520,7 @@
       </section>
 
       <section id="account-strategy-panel" class="workspace dashboard-grid account-strategy-grid">
-        <section id="sample-library-account-planner-panel" class="panel dashboard-planner-card sample-library-account-planner">
+        <section id="sample-library-account-planner-panel" data-collapsible-region data-collapsed-by-default="true" class="panel dashboard-planner-card sample-library-account-planner">
           <div class="section-heading">
             <div>
               <p class="eyebrow">下一篇方向</p>
@@ -545,7 +555,7 @@
           </div>
         </section>
 
-        <section id="xhs-account-diagnosis-panel" class="panel dashboard-planner-card xhs-account-diagnosis">
+        <section id="xhs-account-diagnosis-panel" data-collapsible-region data-collapsed-by-default="true" class="panel dashboard-planner-card xhs-account-diagnosis">
           <div class="section-heading">
             <div>
               <p class="eyebrow">账号诊断</p>
@@ -575,7 +585,7 @@
         </section>
       </section>
 
-      <section id="xhs-top-signals-panel" class="panel xhs-top-signals-panel" aria-labelledby="xhs-top-signals-title">
+      <section id="xhs-top-signals-panel" data-collapsible-region data-collapsed-by-default="true" class="panel xhs-top-signals-panel" aria-labelledby="xhs-top-signals-title">
         <div class="section-heading">
           <div>
             <p class="eyebrow">独立浏览区</p>
@@ -643,7 +653,7 @@
       </section>
 
       <!-- ③ 学习区：回流 / 样本 / 规则 -->
-      <section id="support-workspace-panel" class="panel support-workspace-panel dashboard-assets-card">
+      <section id="support-workspace-panel" data-collapsible-region data-collapsed-by-default="true" class="panel support-workspace-panel dashboard-assets-card">
           <div class="section-heading">
             <div>
               <p class="eyebrow">学习样本</p>

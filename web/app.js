@@ -769,17 +769,109 @@ function initializeTabs() {
   activateTab("data-maintenance", "sample-library-pane");
 }
 
+function getCollapsibleRegionTitle(region) {
+  const explicitTitle = String(region?.dataset?.collapsibleTitle || "").trim();
+
+  if (explicitTitle) {
+    return explicitTitle;
+  }
+
+  const titleNode = region?.querySelector(
+    ":scope > .section-heading h2, :scope > .section-heading strong, :scope > .header-brand h1, :scope > h2, :scope > h1"
+  );
+
+  return String(titleNode?.textContent || "区域").trim();
+}
+
+function ensureCollapsibleRegionHeading(region) {
+  const existingHeading = region.querySelector(":scope > .section-heading, :scope > .collapsible-region-heading");
+
+  if (existingHeading) {
+    return existingHeading;
+  }
+
+  const heading = document.createElement("div");
+  heading.className = "collapsible-region-heading";
+
+  const copy = document.createElement("div");
+  const eyebrowText = String(region.querySelector(":scope > .header-brand .eyebrow")?.textContent || "").trim();
+
+  if (eyebrowText) {
+    const eyebrow = document.createElement("p");
+    eyebrow.className = "eyebrow";
+    eyebrow.textContent = eyebrowText;
+    copy.append(eyebrow);
+  }
+
+  const title = document.createElement("h2");
+  title.textContent = getCollapsibleRegionTitle(region);
+  copy.append(title);
+  heading.append(copy);
+  region.prepend(heading);
+
+  return heading;
+}
+
+function setCollapsibleRegionOpen(region, isOpen) {
+  if (!region) {
+    return;
+  }
+
+  if (isOpen) {
+    region.dataset.collapsed = "false";
+  } else {
+    region.dataset.collapsed = "true";
+  }
+
+  const toggle = region.querySelector('[data-action="toggle-collapsible-region"]');
+
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    toggle.setAttribute("aria-label", `${isOpen ? "收起" : "展开"}${getCollapsibleRegionTitle(region)}`);
+    const label = toggle.querySelector("[data-collapsible-region-toggle-label]");
+    if (label) {
+      label.textContent = isOpen ? "收起" : "展开";
+    }
+  }
+}
+
+function initializeCollapsibleRegions() {
+  document.querySelectorAll("[data-collapsible-region]").forEach((region) => {
+    const heading = ensureCollapsibleRegionHeading(region);
+    let toggle = heading.querySelector('[data-action="toggle-collapsible-region"]');
+
+    if (!toggle) {
+      toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "collapsible-region-toggle";
+      toggle.dataset.action = "toggle-collapsible-region";
+      toggle.innerHTML = `
+        <span data-collapsible-region-toggle-label></span>
+        <span class="collapsible-region-toggle-icon" aria-hidden="true">▾</span>
+      `;
+      heading.append(toggle);
+    }
+
+    const startsCollapsed = region.dataset.collapsedByDefault === "true" && region.dataset.collapsed !== "false";
+    setCollapsibleRegionOpen(region, !startsCollapsed);
+  });
+}
+
 function revealSampleLibraryPane() {
+  ensureSupportWorkspaceOpen();
   activateTab("data-maintenance", "sample-library-pane");
   byId("sample-library-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function revealGenerationDraftInbox() {
   activateTab("main-workbench", "generation-workbench-pane");
-  byId("generation-draft-inbox-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const panel = byId("generation-draft-inbox-panel");
+  setCollapsibleRegionOpen(panel, true);
+  panel?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function revealSampleLibraryReflowPane() {
+  ensureSupportWorkspaceOpen();
   activateTab("data-maintenance", "sample-library-pane");
   byId("sample-library-reflow-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -806,6 +898,8 @@ function focusSampleLibraryRecordFromPools(recordId = "", step = "base") {
 
 function ensureSupportWorkspaceOpen() {
   const panel = byId("support-workspace-panel");
+
+  setCollapsibleRegionOpen(panel, true);
 
   if (panel && "open" in panel) {
     panel.open = true;
@@ -931,6 +1025,11 @@ const appState = {
     draftIdeasStatusView: "draft",
     draftIdeasSortOrder: "newest"
   },
+  finishedContents: {
+    loading: false,
+    message: "",
+    items: []
+  },
   generationReferenceAssets: {
     images: [],
     textFiles: [],
@@ -1012,6 +1111,7 @@ const sampleLibraryAccountPlannerAnalyzeApi = "/api/sample-library/account-plann
 const xhsAccountDiagnosisApi = "/api/xhs/account-diagnosis";
 const xhsTopSignalsApi = "/api/xhs/top-signals";
 const draftIdeasApi = "/api/draft-ideas";
+const finishedContentsApi = "/api/finished-contents";
 const innerSpaceTermsApi = "/api/admin/inner-space-terms";
 const styleProfileAdminApi = "/api/admin/style-profile";
 const generationThemeInspirationsApi = "/api/generate-theme-inspirations";
@@ -5361,6 +5461,15 @@ function renderGenerationResult(result = {}) {
           >
             加入草稿区
           </button>
+          <button
+            type="button"
+            class="button button-ghost button-small"
+            data-action="add-generation-candidate-to-finished"
+            data-candidate-id="${escapeHtml(String(displayItem.id || ""))}"
+            data-candidate-index="${escapeHtml(String(displayIndex))}"
+          >
+            加入成品区
+          </button>
         </div>
         <p class="helper-text">复制发布稿会带上正文、#科普 和标签，便于直接粘贴发布。</p>
         <p class="helper-text action-gate-hint" id="generation-publish-copy-hint" aria-live="polite"></p>
@@ -5588,6 +5697,8 @@ async function refreshAll() {
   const refreshXhsAccountDiagnosisSafely =
     typeof refreshXhsAccountDiagnosisState === "function" ? refreshXhsAccountDiagnosisState : async () => {};
   const refreshDraftIdeasSafely = typeof refreshDraftIdeas === "function" ? refreshDraftIdeas : async () => {};
+  const refreshFinishedContentsSafely =
+    typeof refreshFinishedContents === "function" ? refreshFinishedContents : async () => {};
 
   setSummaryLoadingState(summaryPhase);
 
@@ -5602,7 +5713,8 @@ async function refreshAll() {
     refreshSampleLibraryWorkspace(),
     refreshAccountPlannerSafely(),
     refreshXhsAccountDiagnosisSafely(),
-    refreshDraftIdeasSafely()
+    refreshDraftIdeasSafely(),
+    refreshFinishedContentsSafely()
   ]);
   appState.collectionTypeOptions = Array.isArray(collectionTypePayload.options) ? collectionTypePayload.options : [];
   appState.summaryData = summary && typeof summary === "object" ? summary : {};
@@ -5958,6 +6070,79 @@ function renderDraftIdeasList() {
   });
 }
 
+function renderFinishedContentsList() {
+  const listNode = byId("finished-contents-list");
+
+  if (!listNode) {
+    return;
+  }
+
+  const state = appState.finishedContents || {};
+  const items = Array.isArray(state.items) ? state.items : [];
+  const message = String(state.message || "").trim();
+
+  if (state.loading) {
+    listNode.innerHTML = '<div class="result-card muted">正在加载成品区...</div>';
+    return;
+  }
+
+  if (!items.length) {
+    listNode.innerHTML = `
+      <article class="result-card muted">
+        <strong>${escapeHtml(message || "还没有已完成内容")}</strong>
+        <p>生成结果可以一键加入这里，发布前继续微调标题、正文、封面和标签。</p>
+      </article>
+    `;
+    return;
+  }
+
+  listNode.innerHTML = items
+    .map((item) => {
+      const tags = Array.isArray(item.tags) ? item.tags.filter(Boolean) : [];
+
+      return `
+        <article class="finished-content-card" data-finished-content-id="${escapeHtml(item.id || "")}">
+          <div class="meta-row">
+            <span class="meta-pill">${escapeHtml(item.collectionType || "科普")}</span>
+            ${item.sourceLabel ? `<span class="meta-pill meta-pill-soft">${escapeHtml(item.sourceLabel)}</span>` : ""}
+          </div>
+          <strong>${escapeHtml(item.title || "未命名成品")}</strong>
+          <div class="finished-content-edit-grid">
+            <label>
+              <span>标题</span>
+              <input type="text" name="finishedTitle" value="${escapeHtml(item.title || "")}" />
+            </label>
+            <label>
+              <span>合集</span>
+              <input type="text" name="finishedCollectionType" value="${escapeHtml(item.collectionType || "科普")}" />
+            </label>
+            <label class="field-wide">
+              <span>封面文案</span>
+              <textarea name="finishedCoverText" rows="2">${escapeHtml(item.coverText || "")}</textarea>
+            </label>
+            <label class="field-wide">
+              <span>正文</span>
+              <textarea name="finishedBody" rows="7">${escapeHtml(item.body || "")}</textarea>
+            </label>
+            <label class="field-wide">
+              <span>标签</span>
+              <input type="text" name="finishedTags" value="${escapeHtml(tags.join("、"))}" />
+            </label>
+          </div>
+          <div class="item-actions">
+            <button type="button" class="button button-small" data-action="save-finished-content-edit" data-id="${escapeHtml(item.id || "")}">
+              保存修改
+            </button>
+            <button type="button" class="button button-ghost button-small" data-action="delete-finished-content" data-id="${escapeHtml(item.id || "")}">
+              删除
+            </button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
 function normalizeXhsTopSignalsItems(items = {}) {
   const groupedItems = items && typeof items === "object" ? items : {};
 
@@ -6283,6 +6468,25 @@ async function refreshDraftIdeas() {
   }
 
   renderDraftIdeasList();
+}
+
+async function refreshFinishedContents() {
+  try {
+    const payload = await apiJson(finishedContentsApi);
+    appState.finishedContents = {
+      loading: false,
+      message: "",
+      items: Array.isArray(payload?.items) ? payload.items : []
+    };
+  } catch (error) {
+    appState.finishedContents = {
+      ...appState.finishedContents,
+      loading: false,
+      message: error?.message || "成品区加载失败"
+    };
+  }
+
+  renderFinishedContentsList();
 }
 
 async function refreshSampleLibraryAccountPlannerState() {
@@ -6618,6 +6822,52 @@ async function saveDraftIdea(payload = {}) {
   return response?.item || null;
 }
 
+function buildFinishedContentPayload({
+  id = "",
+  title = "",
+  body = "",
+  coverText = "",
+  collectionType = "",
+  tags = [],
+  generationNotes = "",
+  safetyNotes = "",
+  coverImagePrompt = "",
+  lunaVideoScript = "",
+  sourceType = "manual",
+  sourceLabel = ""
+} = {}) {
+  return {
+    id: String(id || "").trim(),
+    title: String(title || "").trim(),
+    body: String(body || "").trim(),
+    coverText: String(coverText || "").trim(),
+    collectionType: String(collectionType || "").trim() || "科普",
+    tags: uniqueStrings(tags || []),
+    generationNotes: String(generationNotes || "").trim(),
+    safetyNotes: String(safetyNotes || "").trim(),
+    coverImagePrompt: String(coverImagePrompt || "").trim(),
+    lunaVideoScript: String(lunaVideoScript || "").trim(),
+    sourceType: String(sourceType || "").trim() || "manual",
+    sourceLabel: String(sourceLabel || "").trim()
+  };
+}
+
+async function saveFinishedContent(payload = {}) {
+  const response = await apiJson(finishedContentsApi, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+
+  appState.finishedContents = {
+    ...appState.finishedContents,
+    loading: false,
+    message: "",
+    items: Array.isArray(response?.items) ? response.items : []
+  };
+  renderFinishedContentsList();
+  return response?.item || null;
+}
+
 async function addDraftIdeaFromAccountPlannerCard() {
   const selectedCard = getSelectedSampleLibraryAccountPlannerCard();
 
@@ -6685,6 +6935,32 @@ async function addDraftIdeaFromGenerationCandidate(candidateId = "", candidateIn
     })
   );
   setActionGateHint("generation-action-hint", "已加入草稿区，可稍后继续写。");
+}
+
+async function addFinishedContentFromGenerationCandidate(candidateId = "", candidateIndex = "") {
+  const candidate = findGenerationResultCandidate(candidateId, candidateIndex);
+  const finalDraft = candidate?.finalDraft || candidate || {};
+
+  if (!String(finalDraft?.title || "").trim() && !String(finalDraft?.body || "").trim()) {
+    return;
+  }
+
+  await saveFinishedContent(
+    buildFinishedContentPayload({
+      title: finalDraft.title,
+      body: finalDraft.body,
+      coverText: finalDraft.coverText,
+      collectionType: appState.latestGeneration?.collectionType || "科普",
+      tags: finalDraft.tags,
+      generationNotes: finalDraft.generationNotes || candidate?.generationNotes,
+      safetyNotes: finalDraft.safetyNotes || candidate?.safetyNotes,
+      coverImagePrompt: finalDraft.coverImagePrompt,
+      lunaVideoScript: finalDraft.lunaVideoScript || candidate?.lunaVideoScript,
+      sourceType: "generation_candidate",
+      sourceLabel: "生成稿"
+    })
+  );
+  setActionGateHint("generation-action-hint", "已加入成品区，可继续修改。");
 }
 
 function findMatchedXhsSignalById(signalId = "") {
@@ -6948,6 +7224,63 @@ async function removeDraftIdea(id = "") {
     items: Array.isArray(response?.items) ? response.items : []
   };
   renderDraftIdeasList();
+}
+
+function readFinishedContentEditPayload(id = "") {
+  const card = [...document.querySelectorAll("[data-finished-content-id]")].find(
+    (node) => String(node.getAttribute("data-finished-content-id") || "") === String(id || "")
+  );
+
+  if (!card) {
+    return null;
+  }
+
+  return {
+    id,
+    title: String(card.querySelector('[name="finishedTitle"]')?.value || "").trim(),
+    body: String(card.querySelector('[name="finishedBody"]')?.value || "").trim(),
+    coverText: String(card.querySelector('[name="finishedCoverText"]')?.value || "").trim(),
+    collectionType: String(card.querySelector('[name="finishedCollectionType"]')?.value || "").trim() || "科普",
+    tags: splitCSV(card.querySelector('[name="finishedTags"]')?.value || "")
+  };
+}
+
+async function saveFinishedContentEdit(id = "") {
+  const payload = readFinishedContentEditPayload(id);
+
+  if (!payload) {
+    return;
+  }
+
+  const response = await apiJson(finishedContentsApi, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+
+  appState.finishedContents = {
+    ...appState.finishedContents,
+    loading: false,
+    message: "",
+    items: Array.isArray(response?.items) ? response.items : []
+  };
+  renderFinishedContentsList();
+  setActionGateHint("generation-action-hint", "成品内容已保存。");
+}
+
+async function removeFinishedContent(id = "") {
+  const response = await apiJson(finishedContentsApi, {
+    method: "DELETE",
+    body: JSON.stringify({ id })
+  });
+
+  appState.finishedContents = {
+    ...appState.finishedContents,
+    loading: false,
+    message: "",
+    items: Array.isArray(response?.items) ? response.items : []
+  };
+  renderFinishedContentsList();
+  setActionGateHint("generation-action-hint", "成品内容已删除。");
 }
 
 function appendGenerationMaterialText(nextText) {
@@ -11337,18 +11670,39 @@ byId("draft-ideas-sort-order")?.addEventListener("change", (event) => {
 });
 
 initializeTabs();
+initializeCollapsibleRegions();
 syncReferenceThresholdCopy();
 renderSampleLibraryWorkspace();
 renderDraftIdeasList();
+renderFinishedContentsList();
 syncXhsTopSignalsPanel();
 
 document.addEventListener("click", async (event) => {
-  const draftInboxNav = event.target instanceof Element ? event.target.closest('[data-action="reveal-generation-draft-inbox"]') : null;
+  const clickTarget = event.target instanceof Element ? event.target : null;
+  const collapsibleToggle = clickTarget?.closest('[data-action="toggle-collapsible-region"]');
+
+  if (collapsibleToggle) {
+    event.preventDefault();
+    const region = collapsibleToggle.closest("[data-collapsible-region]");
+    setCollapsibleRegionOpen(region, region?.dataset?.collapsed === "true");
+    return;
+  }
+
+  const draftInboxNav = clickTarget?.closest('[data-action="reveal-generation-draft-inbox"]');
 
   if (draftInboxNav) {
     event.preventDefault();
     revealGenerationDraftInbox();
     return;
+  }
+
+  const anchorNav = clickTarget?.closest('.app-nav-link[href^="#"]');
+
+  if (anchorNav) {
+    const targetId = decodeURIComponent(String(anchorNav.getAttribute("href") || "").slice(1));
+    const target = targetId ? byId(targetId) : null;
+    const region = target?.matches?.("[data-collapsible-region]") ? target : target?.closest?.("[data-collapsible-region]");
+    setCollapsibleRegionOpen(region, true);
   }
 
   const summaryAction = event.target.closest("[data-summary-action]");
@@ -11544,6 +11898,11 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action === "add-generation-candidate-to-finished") {
+    await addFinishedContentFromGenerationCandidate(button.dataset.candidateId || "", button.dataset.candidateIndex || "");
+    return;
+  }
+
   if (action === "generate-luna-video-script") {
     await generateLunaVideoScriptForCandidate(button, button.dataset.candidateId || "", button.dataset.candidateIndex || "");
     return;
@@ -11561,6 +11920,16 @@ document.addEventListener("click", async (event) => {
 
   if (action === "delete-draft-idea") {
     await removeDraftIdea(button.dataset.id || "");
+    return;
+  }
+
+  if (action === "save-finished-content-edit") {
+    await saveFinishedContentEdit(button.dataset.id || "");
+    return;
+  }
+
+  if (action === "delete-finished-content") {
+    await removeFinishedContent(button.dataset.id || "");
     return;
   }
 

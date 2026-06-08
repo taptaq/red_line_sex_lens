@@ -26,6 +26,7 @@ import {
   loadDraftIdeas,
   loadExternalReferenceSamples,
   loadFalsePositiveLog,
+  loadFinishedContents,
   getMemoryRetrievalService,
   loadInnerSpaceTerms,
   loadNoteLifecycle,
@@ -51,6 +52,9 @@ import {
   upsertDraftIdea,
   patchDraftIdea,
   deleteDraftIdea,
+  upsertFinishedContent,
+  patchFinishedContent,
+  deleteFinishedContent,
   upsertFeedbackEntries
 } from "./data-store.js";
 import { buildScopedContextBundle } from "./context-bundle.js";
@@ -1961,6 +1965,43 @@ async function handleRequest(request, response) {
   if (request.method === "DELETE" && url.pathname === "/api/draft-ideas") {
     const payload = await readBody(request);
     const saved = await deleteDraftIdea(payload?.id || "");
+    return sendJson(response, 200, {
+      ok: true,
+      items: saved.items
+    });
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/finished-contents") {
+    const current = await loadFinishedContents();
+    return sendJson(response, 200, {
+      ok: true,
+      items: current.items
+    });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/finished-contents") {
+    const payload = await readBody(request);
+    const result = await upsertFinishedContent(payload || {});
+    return sendJson(response, 200, {
+      ok: true,
+      items: result.items,
+      item: result.item
+    });
+  }
+
+  if (request.method === "PATCH" && url.pathname === "/api/finished-contents") {
+    const payload = await readBody(request);
+    const result = await patchFinishedContent(payload || {});
+    return sendJson(response, 200, {
+      ok: true,
+      items: result.items,
+      item: result.item
+    });
+  }
+
+  if (request.method === "DELETE" && url.pathname === "/api/finished-contents") {
+    const payload = await readBody(request);
+    const saved = await deleteFinishedContent(payload?.id || "");
     return sendJson(response, 200, {
       ok: true,
       items: saved.items

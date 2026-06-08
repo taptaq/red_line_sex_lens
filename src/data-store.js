@@ -16,6 +16,7 @@ import { sanitizeInnerSpaceTerms } from "./inner-space-terms.js";
 import { sanitizeStyleProfileState } from "./style-profile.js";
 import { withSampleWeight } from "./sample-weight.js";
 import { normalizeDraftIdea, normalizeDraftIdeaStore } from "./draft-ideas.js";
+import { normalizeFinishedContent, normalizeFinishedContentStore } from "./finished-contents.js";
 
 let memoryRetrievalServicePromise = null;
 let memoryRetrievalServiceRoot = "";
@@ -50,6 +51,11 @@ let xhsAccountDiagnosisSubscriptionsCache = {
   value: null
 };
 let draftIdeasCache = {
+  path: "",
+  mtimeMs: null,
+  value: null
+};
+let finishedContentsCache = {
   path: "",
   mtimeMs: null,
   value: null
@@ -945,6 +951,126 @@ export async function deleteDraftIdea(id = "") {
   }
 
   return saveDraftIdeas({ items: nextItems });
+}
+
+export async function loadFinishedContents() {
+  const configuredPath = paths.finishedContents;
+
+  if (await fileExists(configuredPath)) {
+    const stat = await fs.stat(configuredPath);
+
+    if (
+      finishedContentsCache.path === configuredPath &&
+      finishedContentsCache.mtimeMs === stat.mtimeMs &&
+      finishedContentsCache.value &&
+      typeof finishedContentsCache.value === "object"
+    ) {
+      return finishedContentsCache.value;
+    }
+
+    const value = normalizeFinishedContentStore(await readJson(configuredPath, { items: [] }));
+    finishedContentsCache = {
+      path: configuredPath,
+      mtimeMs: stat.mtimeMs,
+      value
+    };
+    return value;
+  }
+
+  if (
+    finishedContentsCache.path === configuredPath &&
+    finishedContentsCache.mtimeMs === null &&
+    finishedContentsCache.value &&
+    typeof finishedContentsCache.value === "object"
+  ) {
+    return finishedContentsCache.value;
+  }
+
+  const fallback = { items: [] };
+  finishedContentsCache = {
+    path: configuredPath,
+    mtimeMs: null,
+    value: fallback
+  };
+  return fallback;
+}
+
+export async function saveFinishedContents(value) {
+  const normalized = normalizeFinishedContentStore(value);
+  await writeJson(paths.finishedContents, normalized);
+  const stat = await fs.stat(paths.finishedContents);
+  finishedContentsCache = {
+    path: paths.finishedContents,
+    mtimeMs: stat.mtimeMs,
+    value: normalized
+  };
+  return normalized;
+}
+
+export async function upsertFinishedContent(item = {}) {
+  const current = await loadFinishedContents();
+  const nextItem = normalizeFinishedContent(item);
+  const nextItems = [...current.items];
+  const index = nextItems.findIndex((entry) => entry.id === nextItem.id);
+
+  if (index === -1) {
+    nextItems.unshift(nextItem);
+  } else {
+    nextItems[index] = {
+      ...nextItems[index],
+      ...nextItem,
+      createdAt: nextItems[index].createdAt || nextItem.createdAt,
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  const saved = await saveFinishedContents({ items: nextItems });
+  return {
+    items: saved.items,
+    item: saved.items.find((entry) => entry.id === nextItem.id) || null
+  };
+}
+
+export async function patchFinishedContent(item = {}) {
+  const current = await loadFinishedContents();
+  const targetId = normalizeString(item?.id);
+  const index = current.items.findIndex((entry) => entry.id === targetId);
+
+  if (index === -1) {
+    const error = new Error("未找到要更新的成品。");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const merged = normalizeFinishedContent({
+    ...current.items[index],
+    ...item,
+    id: current.items[index].id,
+    createdAt: current.items[index].createdAt,
+    updatedAt: new Date().toISOString()
+  });
+  const nextItems = [...current.items];
+  nextItems[index] = merged;
+  const saved = await saveFinishedContents({ items: nextItems });
+
+  return {
+    items: saved.items,
+    item: saved.items[index] || null
+  };
+}
+
+export async function deleteFinishedContent(id = "") {
+  const current = await loadFinishedContents();
+  const targetId = normalizeString(id);
+  const nextItems = current.items.filter((entry) => entry.id !== targetId);
+
+  if (nextItems.length === current.items.length) {
+    const error = new Error("未找到要删除的成品。");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return saveFinishedContents({ items: nextItems });
 }
 
 export async function loadNoteRecords() {

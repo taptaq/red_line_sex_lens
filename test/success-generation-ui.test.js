@@ -3802,6 +3802,56 @@ test("frontend exposes a draft inbox grid inside the main workbench footer area 
   assert.match(appJs, /draftIdeasSortOrder/);
 });
 
+test("frontend exposes a finished content panel below the draft inbox and can add generated drafts into it", async () => {
+  const { indexHtml, appJs, styles } = await readFrontendFiles();
+  const draftPanelIndex = indexHtml.indexOf('id="generation-draft-inbox-panel"');
+  const finishedPanelIndex = indexHtml.indexOf('id="generation-finished-content-panel"');
+
+  assert.ok(draftPanelIndex >= 0, "expected draft inbox panel");
+  assert.ok(finishedPanelIndex > draftPanelIndex, "expected finished content panel below draft inbox");
+  assert.match(indexHtml, /id="generation-finished-content-panel"[^>]*data-visible-with-tab="analyze-workbench-pane"[^>]*hidden/);
+  assert.match(indexHtml, /id="finished-contents-list"/);
+  assert.match(indexHtml, /成品区/);
+  assert.match(indexHtml, /已完成内容/);
+  assert.match(styles, /\.generation-finished-content-panel\b/);
+  assert.match(styles, /\.finished-content-card\b/);
+  assert.match(styles, /\.finished-content-edit-grid\b/);
+  assert.match(appJs, /finishedContentsApi/);
+  assert.match(appJs, /renderFinishedContentsList/);
+  assert.match(appJs, /addFinishedContentFromGenerationCandidate/);
+  assert.match(appJs, /saveFinishedContentEdit/);
+  assert.match(appJs, /removeFinishedContent/);
+  assert.match(appJs, /data-action="add-generation-candidate-to-finished"/);
+  assert.match(appJs, /加入成品区/);
+  assert.match(appJs, /data-action="save-finished-content-edit"/);
+  assert.match(appJs, /data-action="delete-finished-content"/);
+});
+
+test("frontend defaults every major non-content-workbench area to collapsible closed panels", async () => {
+  const { indexHtml, appJs, styles } = await readFrontendFiles();
+
+  assert.doesNotMatch(indexHtml, /id="content-workbench"[^>]*data-collapsible-region/);
+  [
+    "today-workbench",
+    "generation-draft-inbox-panel",
+    "generation-finished-content-panel",
+    "sample-library-account-planner-panel",
+    "xhs-account-diagnosis-panel",
+    "xhs-top-signals-panel",
+    "support-workspace-panel"
+  ].forEach((id) => {
+    assert.match(indexHtml, new RegExp(`id="${id}"[^>]*data-collapsible-region`));
+    assert.match(indexHtml, new RegExp(`id="${id}"[^>]*data-collapsed-by-default="true"`));
+  });
+
+  assert.match(appJs, /initializeCollapsibleRegions/);
+  assert.match(appJs, /data-action="toggle-collapsible-region"/);
+  assert.match(appJs, /region\.dataset\.collapsed = "true"/);
+  assert.match(appJs, /setCollapsibleRegionOpen/);
+  assert.match(styles, /\[data-collapsible-region\]\[data-collapsed="true"\]\s*>\s*:not\(\.section-heading\):not\(\.collapsible-region-heading\)/);
+  assert.match(styles, /\.collapsible-region-toggle\b/);
+});
+
 test("planner and theme inspiration detail actions expose local success and failure hints beside the buttons", async () => {
   const { appJs, indexHtml } = await readFrontendFiles();
 
