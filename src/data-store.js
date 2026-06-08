@@ -1191,6 +1191,163 @@ export async function saveExternalReferenceSamples(items) {
   return normalized;
 }
 
+function normalizeExternalReferenceTitle(value = "") {
+  return normalizeString(value).replace(/\s+/g, " ").toLowerCase();
+}
+
+function extractExternalReferenceSourceUrl(item = {}) {
+  const directUrl = normalizeString(item.sourceUrl || item.url || item.link || item.originalUrl);
+
+  if (directUrl) {
+    return directUrl;
+  }
+
+  const notes = normalizeString(item.notes);
+  const match = notes.match(/^链接[:：]\s*(.+)$/m);
+
+  return normalizeString(match?.[1] || "");
+}
+
+function normalizeExternalReferenceUrl(value = "") {
+  try {
+    const url = new URL(normalizeString(value));
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return normalizeString(value);
+  }
+}
+
+function findDuplicateExternalReferenceSample(incoming = {}, existingItems = []) {
+  const incomingUrl = normalizeExternalReferenceUrl(extractExternalReferenceSourceUrl(incoming));
+  const incomingTitle = normalizeExternalReferenceTitle(incoming.title);
+
+  if (incomingUrl) {
+    const existing = existingItems.find((item) => normalizeExternalReferenceUrl(extractExternalReferenceSourceUrl(item)) === incomingUrl);
+
+    if (existing) {
+      return {
+        existing,
+        incoming,
+        matchReason: "source_url"
+      };
+    }
+  }
+
+  if (incomingTitle) {
+    const existing = existingItems.find((item) => normalizeExternalReferenceTitle(item.title) === incomingTitle);
+
+    if (existing) {
+      return {
+        existing,
+        incoming,
+        matchReason: "title"
+      };
+    }
+  }
+
+  return null;
+}
+
+export async function patchExternalReferenceSample(id, patch = {}) {
+  const normalizedId = normalizeString(id);
+
+  if (!normalizedId) {
+    const error = new Error("缺少要编辑的外部参考样本 ID。");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const current = await loadExternalReferenceSamples();
+  const index = current.findIndex((item) => normalizeString(item?.id) === normalizedId);
+
+  if (index === -1) {
+    const error = new Error("未找到要编辑的外部参考样本。");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const existing = current[index];
+  const nextItem = normalizeExternalReferenceSample({
+    ...existing,
+    title: Object.prototype.hasOwnProperty.call(patch, "title") ? patch.title : existing.title,
+    body: Object.prototype.hasOwnProperty.call(patch, "body") ? patch.body : existing.body,
+    tags: Object.prototype.hasOwnProperty.call(patch, "tags") ? patch.tags : existing.tags,
+    collectionType: Object.prototype.hasOwnProperty.call(patch, "collectionType") ? patch.collectionType : existing.collectionType,
+    notes: Object.prototype.hasOwnProperty.call(patch, "notes") ? patch.notes : existing.notes,
+    publish: existing.publish
+  });
+  const nextItems = current.map((item, itemIndex) => (itemIndex === index ? nextItem : item));
+  const items = await saveExternalReferenceSamples(nextItems);
+
+  return {
+    item: items[index],
+    items
+  };
+}
+
+/**
+ * 从链接保存外部参考样本
+ */
+export async function saveExternalReferenceSampleFromLink(url, options = {}) {
+  const { saveLinkAsReferenceSample } = await import("./link-note-saver-adapter.js");
+
+  const sample = await saveLinkAsReferenceSample(url, options);
+  const current = await loadExternalReferenceSamples();
+  const duplicate = options.allowDuplicate === true ? null : findDuplicateExternalReferenceSample(sample, current);
+
+  if (duplicate) {
+    return {
+      items: current,
+      saved: [],
+      pendingDuplicates: [duplicate]
+    };
+  }
+
+  const nextItems = [...current, sample];
+  const items = await saveExternalReferenceSamples(nextItems);
+
+  return {
+    items,
+    saved: [sample],
+    pendingDuplicates: []
+  };
+}
+
+/**
+ * 批量从链接保存外部参考样本
+ */
+export async function saveExternalReferenceSamplesFromLinks(urls, options = {}) {
+  const { saveLinkBatch } = await import("./link-note-saver-adapter.js");
+
+  const { results, errors } = await saveLinkBatch(urls, options);
+  const current = await loadExternalReferenceSamples();
+  const saved = [];
+  const pendingDuplicates = [];
+
+  for (const sample of results) {
+    const duplicate =
+      options.allowDuplicate === true ? null : findDuplicateExternalReferenceSample(sample, [...current, ...saved]);
+
+    if (duplicate) {
+      pendingDuplicates.push(duplicate);
+    } else {
+      saved.push(sample);
+    }
+  }
+
+  const nextItems = [...current, ...saved];
+
+  await saveExternalReferenceSamples(nextItems);
+
+  return {
+    saved,
+    errors,
+    pendingDuplicates,
+    items: nextItems
+  };
+}
+
 export async function saveCollectionTypes(value = {}) {
   await writeJson(paths.collectionTypes, {
     custom: uniqueStrings(value.custom || [])

@@ -63,6 +63,8 @@ export function buildSampleLibraryRecordInlineEditorDraft(record = {}, helpers =
       title: String(note.title || ""),
       body: String(note.body || ""),
       coverText: String(note.coverText || ""),
+      contentType: String(note.contentType || "image_text") === "video" ? "video" : "image_text",
+      videoScript: String(note.videoScript || ""),
       collectionType: String(getSampleRecordCollectionType(record) || ""),
       tags: Array.isArray(note.tags) ? [...note.tags] : []
     },
@@ -116,6 +118,8 @@ export function buildSampleLibraryRecordInlineEditorPatchPayload(recordId = "", 
       title: String(draft?.note?.title || ""),
       body: String(draft?.note?.body || ""),
       coverText: String(draft?.note?.coverText || ""),
+      contentType: String(draft?.note?.contentType || "image_text") === "video" ? "video" : "image_text",
+      videoScript: String(draft?.note?.videoScript || ""),
       collectionType: String(draft?.note?.collectionType || ""),
       tags: Array.isArray(draft?.note?.tags) ? [...draft.note.tags] : []
     },
@@ -275,6 +279,11 @@ export function readSampleLibraryRecordInlineEditorDraftFromModal(contentNode = 
       title: contentNode?.querySelector('[name="title"]')?.value || "",
       body: contentNode?.querySelector('[name="body"]')?.value || "",
       coverText: contentNode?.querySelector('[name="coverText"]')?.value || "",
+      contentType: contentNode?.querySelector('[name="contentType"]')?.value || "image_text",
+      videoScript:
+        (contentNode?.querySelector('[name="contentType"]')?.value || "image_text") === "video"
+          ? contentNode?.querySelector('[name="videoScript"]')?.value || ""
+          : "",
       collectionType: contentNode?.querySelector('[name="collectionType"]')?.value || "",
       tags: noteTags
     },
@@ -382,6 +391,8 @@ export function buildSampleLibraryRecordInlineEditorModalMarkup({ sidebarItems =
                   title: draft.note.title,
                   body: draft.note.body,
                   coverText: draft.note.coverText,
+                  contentType: draft.note.contentType,
+                  videoScript: draft.note.videoScript,
                   collectionType: draft.note.collectionType,
                   tags: draft.note.tags
                 })}
@@ -468,6 +479,8 @@ export function buildSampleLibraryBaseModalMarkup(record = {}, helpers = {}) {
       title: note.title || "",
       body: note.body || "",
       coverText: note.coverText || "",
+      contentType: note.contentType || "image_text",
+      videoScript: note.videoScript || "",
       collectionType: getSampleRecordCollectionType(record),
       tags: note.tags || []
     },

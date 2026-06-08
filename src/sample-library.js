@@ -142,6 +142,12 @@ export function patchSampleLibraryRecord(current = {}, payload = {}) {
     if (hasOwn(payload.note, "coverText")) {
       next.note.coverText = payload.note.coverText;
     }
+    if (hasOwn(payload.note, "contentType")) {
+      next.note.contentType = payload.note.contentType;
+    }
+    if (hasOwn(payload.note, "videoScript")) {
+      next.note.videoScript = payload.note.videoScript;
+    }
     if (hasOwn(payload.note, "collectionType")) {
       next.note.collectionType = payload.note.collectionType;
     }

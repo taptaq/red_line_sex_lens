@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la ~/.local/bin/redskill 2>&1)",
+      "Read(//Users/taptaq/.local/bin/**)",
+      "Bash(chmod +w ~/.local/bin/redskill)",
+      "Bash(mkdir -p ~/.local/bin)",
+      "Bash(chmod 755 ~/.local/bin)",
+      "Bash(sudo chown -R taptaq:staff ~/.local/bin/)",
+      "Bash(ls -la ~/.redskill/)",
+      "Read(//Users/taptaq/.redskill/**)",
+      "Bash(python3 ~/.redskill/src/redskill.py --help)",
+      "Bash(npm list *)",
+      "Bash(node -e ' *)",
+      "Bash(node --test test/link-note-saver-adapter.test.js)",
+      "Bash(chmod +x \"/Users/taptaq/Documents/Original Heart Road/project/red_line_sex_lens/scripts/test-link-note-saver.js\")",
+      "Bash(node scripts/test-link-note-saver.js)"
+    ]
+  }
+}

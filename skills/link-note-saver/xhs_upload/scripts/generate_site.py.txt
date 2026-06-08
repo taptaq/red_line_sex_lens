@@ -1,0 +1,350 @@
+#!/usr/bin/env python3
+"""Generate and optionally upload the link-note-saver static site.
+
+This script intentionally uses only Python's standard library. In the XHS skill
+beta release it can be shipped as `generate_site.py.txt` and executed with:
+
+    python3 scripts/generate_site.py.txt --upload
+"""
+from __future__ import annotations
+
+import argparse
+from datetime import datetime
+import html
+import json
+import math
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+SKILL_DIR = SCRIPT_DIR.parent
+
+
+def find_workspace() -> Path:
+    for key in ("OPENCLAW_WORKSPACE", "CODEX_WORKSPACE", "WORKSPACE"):
+        value = os.getenv(key)
+        if value:
+            return Path(value).expanduser().resolve()
+
+    parts = list(SKILL_DIR.resolve().parts)
+    if "skills" in parts:
+        index = parts.index("skills")
+        if index > 0:
+            return Path(*parts[:index])
+
+    for candidate in (Path("/root/.openclaw/workspace"), Path.home() / ".openclaw/workspace"):
+        if candidate.exists():
+            return candidate
+    return Path.cwd().resolve()
+
+
+WORKSPACE = find_workspace()
+DEFAULT_NOTES_DIR = Path(os.getenv("LINK_NOTE_NOTES_DIR", str(WORKSPACE / "notes" / "link-library")))
+
+
+def find_cos_uploader() -> Path:
+    for name in ("cos_upload.py", "cos_upload.py.txt"):
+        candidate = SCRIPT_DIR / name
+        if candidate.exists():
+            return candidate
+    return SCRIPT_DIR / "cos_upload.py.txt"
+
+
+COS_UPLOAD = find_cos_uploader()
+
+
+def load_dotenv(path: Path) -> dict[str, str]:
+    env: dict[str, str] = {}
+    if not path.exists():
+        return env
+    for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        env[key.strip()] = value.strip().strip('"').strip("'")
+    return env
+
+
+def load_skill_env() -> dict[str, str]:
+    env = dict(os.environ)
+    for name in (".env", "env.txt", "env.local.txt"):
+        env.update(load_dotenv(SKILL_DIR / name))
+    return env
+
+
+SKILL_ENV = load_skill_env()
+DEFAULT_REMOTE_PREFIX = SKILL_ENV.get("LINK_NOTE_REMOTE_PREFIX", "openclaw/link-library")
+DEFAULT_PUBLIC_BASE_URL = SKILL_ENV.get("LINK_NOTE_PUBLIC_BASE_URL") or (
+    f"https://{SKILL_ENV.get('TENCENT_COS_CUSTOM_DOMAIN')}" if SKILL_ENV.get("TENCENT_COS_CUSTOM_DOMAIN") else ""
+)
+DEFAULT_PAGE_SIZE = int(SKILL_ENV.get("LINK_NOTE_PAGE_SIZE", "20"))
+
+STYLE = r"""
+<style>
+:root{--ink:#201a17;--muted:#746861;--paper:#fff8ef;--card:#fffef9;--line:#ded2c4;--accent:#d94c43;--accent2:#107a67;--accent3:#315f9f;--soft:#f5e3d6;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Arial,sans-serif}
+a{color:inherit}
+.wrap{width:min(1100px,calc(100% - 32px));margin:auto;padding:30px 0 56px}
+.top{display:grid;grid-template-columns:1fr auto;gap:18px;align-items:end;border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:22px}
+.eyebrow{color:var(--accent);font-size:13px;font-weight:800;margin:0 0 8px}
+.brand{font-size:42px;line-height:1.08;margin:0;font-weight:900}
+.sub{color:var(--muted);line-height:1.7;margin:10px 0 0;font-size:14px}
+.nav{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.btn,.page-link{display:inline-flex;align-items:center;justify-content:center;min-height:38px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font-weight:750;text-decoration:none;padding:8px 12px}
+.btn.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.card,.article{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:20px;min-width:0}
+.card h2{font-size:22px;line-height:1.28;margin:10px 0 10px}
+.meta{color:var(--muted);font-size:12px;line-height:1.7;overflow-wrap:anywhere}
+.tags{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0}
+.tag{border:1px solid #ecd2c8;background:#fff4ee;color:#9f2f28;border-radius:999px;padding:4px 8px;font-size:12px;font-weight:750}
+.summary{font-size:14px;line-height:1.78;color:#332c28}
+.hook{border-left:4px solid var(--accent);background:#fff4ee;border-radius:6px;padding:11px 12px;margin-top:12px;font-size:13px;line-height:1.7}
+.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}
+.article{max-width:860px;margin:auto}
+.article h1{font-size:38px;line-height:1.18;margin:0 0 18px}
+.article h2{font-size:24px;margin:32px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.article p,.article li{font-size:16px;line-height:1.9;overflow-wrap:anywhere;word-break:break-word}
+.article ul{padding-left:22px}
+.article code{background:#f2e6dc;border:1px solid #e3c9ba;border-radius:4px;padding:1px 5px;overflow-wrap:anywhere}
+.download-bar{position:sticky;top:0;z-index:10;background:rgba(255,248,239,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.download-bar .wrap{padding:10px 0}
+.pagination{display:flex;gap:9px;flex-wrap:wrap;align-items:center;justify-content:center;margin:28px 0 0}
+.page-link.current{background:var(--accent);border-color:var(--accent);color:#fff}
+.page-link.disabled{opacity:.4;pointer-events:none}
+.footer{margin-top:30px;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+@media(max-width:760px){.top{display:block}.nav{justify-content:flex-start;margin-top:14px}.grid{grid-template-columns:1fr}.brand{font-size:34px}.article h1{font-size:30px}.wrap{width:min(100% - 24px,1100px);padding-top:22px}}
+</style>"""
+
+
+def field(md: str, name: str) -> str:
+    match = re.search(rf"^-\s*{re.escape(name)}：(.+)$", md, re.M)
+    return match.group(1).strip() if match else ""
+
+
+def first_existing_field(md: str, names: tuple[str, ...]) -> str:
+    for name in names:
+        value = field(md, name)
+        if value:
+            return value
+    return ""
+
+
+def section(md: str, title: str) -> str:
+    match = re.search(rf"##\s+{re.escape(title)}\n\n(.+?)(?=\n\n##\s+|\Z)", md, re.S)
+    return match.group(1).strip() if match else ""
+
+
+def first_bullet(text: str) -> str:
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("- "):
+            return line[2:].strip()
+        if line:
+            return line
+    return ""
+
+
+def saved_sort_key(saved: str, path: Path) -> tuple[datetime, float]:
+    match = re.match(r"(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})", saved or "")
+    if match:
+        return (datetime.strptime(" ".join(match.groups()), "%Y-%m-%d %H:%M"), path.stat().st_mtime)
+    return (datetime.fromtimestamp(path.stat().st_mtime), path.stat().st_mtime)
+
+
+def parse_note(path: Path) -> dict[str, object]:
+    md = path.read_text(encoding="utf-8", errors="replace")
+    title_match = re.search(r"^#\s+(.+)$", md, re.M)
+    title = title_match.group(1).strip() if title_match else path.stem
+    tags_text = first_existing_field(md, ("标签", "内容标签", "小红书标签"))
+    tags = [t.strip().lstrip("#") for t in re.split(r"[,，\s]+", tags_text) if t.strip()]
+    xhs = section(md, "小红书传播拆解") or section(md, "小红书改写建议")
+    reusable = section(md, "可复用角度")
+    return {
+        "path": path,
+        "slug": path.stem,
+        "md": md,
+        "title": title,
+        "tags": tags,
+        "source": first_existing_field(md, ("来源", "来源平台")),
+        "source_url": first_existing_field(md, ("原文链接", "链接")),
+        "saved": first_existing_field(md, ("保存时间", "归档时间")),
+        "sort_key": saved_sort_key(first_existing_field(md, ("保存时间", "归档时间")), path),
+        "summary": section(md, "摘要"),
+        "xhs": xhs,
+        "hook": first_bullet(xhs) or first_bullet(reusable),
+    }
+
+
+def md_inline(text: str) -> str:
+    text = html.escape(text)
+    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+    text = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", text)
+    return text
+
+
+def linkify_urls(text: str) -> str:
+    return re.sub(
+        r"(https?://[^\s<]+)",
+        lambda m: f'<a href="{m.group(1)}" target="_blank" rel="noopener noreferrer">{m.group(1)}</a>',
+        text,
+    )
+
+
+def md_to_html(md: str) -> str:
+    out: list[str] = []
+    in_ul = False
+    for raw in md.splitlines():
+        line = raw.rstrip()
+        if line.startswith("# "):
+            if in_ul:
+                out.append("</ul>")
+                in_ul = False
+            out.append(f"<h1>{linkify_urls(md_inline(line[2:].strip()))}</h1>")
+        elif line.startswith("## "):
+            if in_ul:
+                out.append("</ul>")
+                in_ul = False
+            out.append(f"<h2>{linkify_urls(md_inline(line[3:].strip()))}</h2>")
+        elif line.startswith("- "):
+            if not in_ul:
+                out.append("<ul>")
+                in_ul = True
+            out.append(f"<li>{linkify_urls(md_inline(line[2:].strip()))}</li>")
+        elif not line.strip():
+            if in_ul:
+                out.append("</ul>")
+                in_ul = False
+        else:
+            if in_ul:
+                out.append("</ul>")
+                in_ul = False
+            out.append(f"<p>{linkify_urls(md_inline(line.strip()))}</p>")
+    if in_ul:
+        out.append("</ul>")
+    return "\n".join(out)
+
+
+def page_name(page: int) -> str:
+    return "index.html" if page == 1 else f"index-{page}.html"
+
+
+def pagination_html(current: int, total: int) -> str:
+    if total <= 1:
+        return ""
+    parts = ['<nav class="pagination" aria-label="分页">']
+    prev_class = "page-link disabled" if current == 1 else "page-link"
+    next_class = "page-link disabled" if current == total else "page-link"
+    parts.append(f'<a class="{prev_class}" href="./{page_name(max(1, current - 1))}">上一页</a>')
+    for i in range(1, total + 1):
+        cls = "page-link current" if i == current else "page-link"
+        parts.append(f'<a class="{cls}" href="./{page_name(i)}">{i}</a>')
+    parts.append(f'<a class="{next_class}" href="./{page_name(min(total, current + 1))}">下一页</a>')
+    parts.append("</nav>")
+    return "".join(parts)
+
+
+def render_article(note: dict[str, object], notes_dir: Path) -> Path:
+    out = notes_dir / f"{note['slug']}.html"
+    doc = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(str(note['title']))}</title>{STYLE}</head><body><div class="download-bar"><div class="wrap"><nav class="nav"><a class="btn primary" href="./index.html">返回素材库</a><a class="btn" href="./{note['path'].name}" download>下载 Markdown</a></nav></div></div><main class="wrap"><article class="article">{md_to_html(str(note['md']))}<div class="footer">Source file: {html.escape(note['path'].name)}</div></article></main></body></html>"""
+    out.write_text(doc, encoding="utf-8")
+    return out
+
+
+def render_index_markdown(notes: list[dict[str, object]], notes_dir: Path) -> Path:
+    out = notes_dir / "INDEX.md"
+    lines = [
+        "# 链接素材库索引",
+        "",
+        "> 自动生成的链接笔记索引，按保存时间倒序排列。",
+        "",
+        "| 日期 | 标题 | 标签 | 来源 | 小红书角度 |",
+        "|---|---|---|---|---|",
+    ]
+    for note in notes:
+        saved = str(note["saved"])[:10] or "-"
+        tags = "、".join(note["tags"][:5]) if note["tags"] else "-"
+        hook = str(note["hook"]).replace("|", "｜")[:60] or "-"
+        title = str(note["title"]).replace("|", "｜")
+        source = str(note["source"]).replace("|", "｜") or "-"
+        lines.append(f"| {saved} | [{title}](./{note['path'].name}) | {tags} | {source} | {hook} |")
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return out
+
+
+def render_index(notes: list[dict[str, object]], notes_dir: Path, page_size: int) -> list[Path]:
+    total_pages = max(1, math.ceil(len(notes) / page_size))
+    written: list[Path] = []
+    for page in range(1, total_pages + 1):
+        start, end = (page - 1) * page_size, page * page_size
+        cards = []
+        for note in notes[start:end]:
+            tags = "".join(f'<span class="tag">#{html.escape(str(t))}</span>' for t in note["tags"][:5])
+            summary = str(note["summary"]).strip()
+            summary = summary[:190] + ("..." if len(summary) > 190 else "")
+            hook = str(note["hook"]).strip() or "等待补充传播角度。"
+            cards.append(
+                f"""<section class="card"><div class="meta">{html.escape(str(note['saved']))} · {html.escape(str(note['source']))}</div><h2>{html.escape(str(note['title']))}</h2><div class="tags">{tags}</div><p class="summary">{html.escape(summary or '这条笔记还没有摘要。')}</p><div class="hook"><strong>传播切口：</strong>{html.escape(hook)}</div><div class="actions"><a class="btn primary" href="./{note['slug']}.html">在线预览</a><a class="btn" href="./{note['path'].name}" download>下载 MD</a></div></section>"""
+            )
+        doc = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>链接素材库</title>{STYLE}</head><body><main class="wrap"><header class="top"><div><p class="eyebrow">Link Note Saver · 小红书素材工作台</p><h1 class="brand">链接素材库</h1><p class="sub">把链接沉淀成摘要、关键要点、传播切口和可复用内容资产。第 {page} / {total_pages} 页，共 {len(notes)} 篇。</p></div><nav class="nav"><a class="btn" href="./INDEX.md" download>下载索引</a></nav></header><section class="grid">{''.join(cards)}</section>{pagination_html(page, total_pages)}</main></body></html>"""
+        out = notes_dir / page_name(page)
+        out.write_text(doc, encoding="utf-8")
+        written.append(out)
+    return written
+
+
+def upload(path: Path, remote_prefix: str) -> str:
+    if not COS_UPLOAD.exists():
+        raise SystemExit(f"缺少上传脚本：{COS_UPLOAD}")
+    key = f"{remote_prefix.rstrip('/')}/{path.name}"
+    result = subprocess.run(
+        [sys.executable, str(COS_UPLOAD), str(path), key, "--print-url"],
+        cwd=str(SKILL_DIR),
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        raise SystemExit(f"上传失败：{path.name}\n{detail}")
+    try:
+        data = json.loads(result.stdout)
+        return data.get("url") or f"{DEFAULT_PUBLIC_BASE_URL.rstrip('/')}/{key}"
+    except Exception:
+        return f"{DEFAULT_PUBLIC_BASE_URL.rstrip('/')}/{key}"
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="生成链接素材库静态站点。")
+    parser.add_argument("--notes-dir", default=str(DEFAULT_NOTES_DIR), help="Markdown 笔记目录")
+    parser.add_argument("--page-size", type=int, default=DEFAULT_PAGE_SIZE, help="每页卡片数")
+    parser.add_argument("--upload", action="store_true", help="生成后上传到腾讯云 COS")
+    parser.add_argument("--remote-prefix", default=DEFAULT_REMOTE_PREFIX, help="COS 上传前缀")
+    args = parser.parse_args()
+
+    notes_dir = Path(args.notes_dir).expanduser().resolve()
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    notes = [parse_note(p) for p in notes_dir.glob("20*.md") if p.name != "INDEX.md"]
+    notes.sort(key=lambda n: n["sort_key"], reverse=True)
+
+    written: list[Path] = []
+    for note in notes:
+        written.append(render_article(note, notes_dir))
+    written.append(render_index_markdown(notes, notes_dir))
+    written.extend(render_index(notes, notes_dir, max(1, args.page_size)))
+    written.extend([note["path"] for note in notes])
+
+    if args.upload:
+        uploaded_urls = [upload(path, args.remote_prefix) for path in written]
+        entry = f"{DEFAULT_PUBLIC_BASE_URL.rstrip('/')}/{args.remote_prefix.rstrip('/')}/index.html"
+        print(entry if DEFAULT_PUBLIC_BASE_URL else uploaded_urls[0])
+    else:
+        print(f"generated {len(notes)} notes, {len(written)} files in {notes_dir}")
+
+
+if __name__ == "__main__":
+    main()

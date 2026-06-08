@@ -105,6 +105,57 @@ test("generation endpoint returns candidates with recommendation metadata", asyn
   });
 });
 
+test("luna video script endpoint generates a script from the current draft and keeps the spec in prompt", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const result = await invokeRoute("POST", "/api/generate-luna-video-script", {
+      collectionType: "内太空探索",
+      draft: {
+        title: "小飞船第一次出发",
+        body: "把身体探索讲成一次轻松的内太空旅行。",
+        tags: ["治愈科普", "女性友好"]
+      },
+      mockLunaVideoScript: {
+        script: [
+          "Video Meta",
+          "片名：小飞船第一次出发",
+          "",
+          "Scene 01 小飞船启动",
+          "标题：小飞船启动",
+          "时长：8s",
+          "场景目标：建立治愈系内太空探索世界观",
+          "景别：中景",
+          "镜头运动：缓慢推进",
+          "画面描述：Pixar 级 3D 柔和星云",
+          "人物动作：Luna 检查小飞船",
+          "人物表情：放松、好奇",
+          "旁白：别急，我们只是先认识地图。",
+          "字幕：先认识地图",
+          "环境音：柔和舱内声",
+          "动作音效：按钮轻响",
+          "转场音效：星尘划过",
+          "BGM：温暖轻快",
+          "图片 Prompt：Pixar 级 3D，治愈科普，女性友好",
+          "视频 Prompt：轻柔推进，非真人写实"
+        ].join("\n")
+      }
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.ok, true);
+    assert.match(result.script, /Video Meta/);
+    assert.match(result.script, /Scene 01/);
+    assert.equal(result.lunaPromptIncludesSpec, true);
+    assert.equal(result.lunaPromptIncludesDraft, true);
+    assert.deepEqual(result.modelTrace, {
+      provider: "mock",
+      model: "mock-luna-video-script",
+      route: "mock",
+      routeLabel: "Mock Luna Video Script",
+      attemptedRoutes: ["mock-luna-video-script"]
+    });
+  });
+});
+
 test("generation endpoint returns hot-article formula and passes it into generation prompt", async (t) => {
   await withTempGenerationData(t, async () => {
     const result = await invokeRoute("POST", "/api/generate-note", {
@@ -535,6 +586,97 @@ test("external reference sample delete endpoint removes a single stored sample",
     assert.equal(deleted.status, 200);
     assert.equal(deleted.ok, true);
     assert.deepEqual(deleted.items, []);
+  });
+});
+
+test("external reference sample patch endpoint updates a stored sample", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const imported = await invokeRoute("POST", "/api/sample-library/external-reference-samples", {
+      items: [
+        {
+          id: "external-edit-1",
+          title: "原标题",
+          body: "原正文",
+          tags: ["旧标签"],
+          collectionType: "科普",
+          notes: "原备注",
+          publish: {
+            metrics: {
+              likes: 3,
+              views: 9
+            }
+          }
+        }
+      ]
+    });
+
+    const patched = await invokeRoute("PATCH", "/api/sample-library/external-reference-samples", {
+      id: imported.items[0].id,
+      title: "编辑后的标题",
+      body: "编辑后的正文",
+      tags: ["新标签", "视频"],
+      collectionType: "案例",
+      notes: "编辑后的备注"
+    });
+
+    assert.equal(patched.status, 200);
+    assert.equal(patched.ok, true);
+    assert.equal(patched.item.title, "编辑后的标题");
+    assert.equal(patched.item.body, "编辑后的正文");
+    assert.deepEqual(patched.item.tags, ["新标签", "视频"]);
+    assert.equal(patched.item.collectionType, "案例");
+    assert.equal(patched.item.notes, "编辑后的备注");
+    assert.equal(patched.item.publish.metrics.likes, 3);
+    assert.equal(patched.items.length, 1);
+  });
+});
+
+test("external reference link import returns duplicate review instead of auto-saving same source", async (t) => {
+  await withTempGenerationData(t, async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      ok: true,
+      headers: new Map([["content-type", "text/html"]]),
+      text: async () => `
+        <html>
+          <head><title>重复素材标题</title><meta name="description" content="新解析摘要"></head>
+          <body>新解析正文，可以和旧素材手动比较。</body>
+        </html>
+      `
+    });
+
+    try {
+      await invokeRoute("POST", "/api/sample-library/external-reference-samples", {
+        items: [
+          {
+            id: "existing-duplicate",
+            title: "重复素材标题",
+            body: "旧素材正文",
+            tags: ["旧标签"],
+            collectionType: "科普",
+            notes: "来源: example.com\n链接: https://example.com/article\n小红书传播拆解:"
+          }
+        ]
+      });
+
+      const result = await invokeRoute("POST", "/api/sample-library/external-reference-samples/from-link", {
+        url: "https://example.com/article",
+        collectionType: "科普",
+        tags: ["新标签"]
+      });
+
+      assert.equal(result.status, 200);
+      assert.equal(result.ok, true);
+      assert.equal(result.items.length, 1);
+      assert.equal(result.diagnostics.importedCount, 0);
+      assert.equal(result.diagnostics.duplicateCount, 1);
+      assert.equal(result.pendingDuplicates.length, 1);
+      assert.equal(result.pendingDuplicates[0].existing.id, "existing-duplicate");
+      assert.equal(result.pendingDuplicates[0].incoming.title, "重复素材标题");
+      assert.equal(result.pendingDuplicates[0].matchReason, "source_url");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 

@@ -41,6 +41,9 @@ import {
   saveXhsTopSignalsBrowser,
   saveDraftIdeas,
   saveExternalReferenceSamples,
+  saveExternalReferenceSampleFromLink,
+  saveExternalReferenceSamplesFromLinks,
+  patchExternalReferenceSample,
   saveFalsePositiveLog,
   saveNoteRecords,
   saveStyleProfile,
@@ -74,6 +77,7 @@ import {
 } from "./model-selection.js";
 import { runCrossModelReview } from "./cross-review.js";
 import {
+  generateLunaVideoScript,
   generateNoteCandidates,
   generateReferenceMaterials,
   improveGenerationBriefing,
@@ -89,7 +93,7 @@ import {
   summarizeThemeInspirationClusters
 } from "./theme-inspirations.js";
 import { parseAccountPlannerImportFiles } from "./account-planner-import.js";
-import { summarizeAccountPlanner } from "./account-planner.js";
+import { summarizeAccountPlanner, summarizePlannerRecord } from "./account-planner.js";
 import { summarizeXhsAccountDiagnosis, summarizeXhsAccountDiagnosisWithSimilarFollowups } from "./xhs-account-diagnosis.js";
 import { saveXhsAccountDiagnosisReportArtifacts, saveXhsMultiAccountDiagnosisReportArtifacts } from "./xhs-account-diagnosis-report.js";
 import { createXhsAccountDiagnosisSubscriptionScheduler } from "./xhs-account-diagnosis-subscriptions.js";
@@ -176,7 +180,7 @@ async function deleteItemsById(request, response, { loader, saver, notFoundMessa
 
 async function persistSampleLibraryRecord(payload = {}) {
   const normalizedPayload = await normalizeSampleLibraryPayloadCollectionType(payload);
-  const nextRecord = createSampleLibraryRecord(normalizedPayload);
+  const nextRecord = await buildSampleLibraryRecordWithPlannerSummary(normalizedPayload);
   const items = await saveNoteRecords([...(await loadNoteRecords()), nextRecord]);
   const item = findSampleLibraryRecord(items, nextRecord) || items[items.length - 1] || null;
   const shouldRefreshStyleProfile = item?.reference?.enabled === true;
@@ -185,6 +189,43 @@ async function persistSampleLibraryRecord(payload = {}) {
   }
 
   return { item, items };
+}
+
+function hasPlannerSummary(record = {}) {
+  return Boolean(String(record?.calibration?.plannerSummary?.summary || "").trim());
+}
+
+export async function buildSampleLibraryRecordWithPlannerSummary(
+  payload = {},
+  {
+    enabled = process.env.SAMPLE_LIBRARY_AUTO_PLANNER_SUMMARY !== "false",
+    summarizeRecord = summarizePlannerRecord
+  } = {}
+) {
+  const nextRecord = createSampleLibraryRecord(payload);
+
+  if (!enabled || hasPlannerSummary(nextRecord) || !String(nextRecord?.note?.body || "").trim()) {
+    return nextRecord;
+  }
+
+  try {
+    const plannerSummary = await summarizeRecord(nextRecord);
+
+    if (!String(plannerSummary?.summary || "").trim()) {
+      return nextRecord;
+    }
+
+    return createSampleLibraryRecord({
+      ...nextRecord,
+      calibration: {
+        ...(nextRecord.calibration || {}),
+        plannerSummary
+      }
+    });
+  } catch (error) {
+    console.warn("[sample-library] 自动生成样本摘要失败，已保存原始样本：", error?.message || error);
+    return nextRecord;
+  }
 }
 
 async function patchSampleLibraryRecordAndReturn(payload = {}) {
@@ -1220,6 +1261,57 @@ async function handleRequest(request, response) {
     });
   }
 
+  if (request.method === "POST" && url.pathname === "/api/generate-luna-video-script") {
+    const payload = await readBody(request, { maxBytes: 256 * 1024 });
+    const modelSelection = normalizeModelSelectionState(payload?.modelSelection);
+    const generationModelSelection = modelSelection.generation || modelSelection.rewrite;
+    const draft = payload?.draft && typeof payload?.draft === "object" ? payload.draft : {};
+    const collectionType = String(payload?.collectionType || draft?.collectionType || "").trim();
+
+    if (!String(draft?.title || "").trim() && !String(draft?.body || draft?.content || "").trim()) {
+      const error = new Error("请先生成或提供当前内容，再生成对应脚本。");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    let lunaPromptIncludesSpec = false;
+    let lunaPromptIncludesDraft = false;
+    const result = await generateLunaVideoScript({
+      draft,
+      collectionType,
+      modelSelection: generationModelSelection,
+      generateJson: payload?.mockLunaVideoScript
+        ? async ({ messages = [] } = {}) => {
+            const promptText = messages.map((message) => String(message?.content || "")).join("\n");
+            lunaPromptIncludesSpec =
+              promptText.includes("Luna 内太空探索视频脚本规范") &&
+              promptText.includes("Video Meta") &&
+              promptText.includes("Scene 01") &&
+              promptText.includes("图片 Prompt") &&
+              promptText.includes("视频 Prompt");
+            lunaPromptIncludesDraft =
+              promptText.includes(String(draft.title || "").trim()) &&
+              promptText.includes(String(draft.body || draft.content || "").trim());
+            return {
+              ...(payload.mockLunaVideoScript || {}),
+              provider: "mock",
+              model: "mock-luna-video-script",
+              route: "mock",
+              routeLabel: "Mock Luna Video Script",
+              attemptedRoutes: ["mock-luna-video-script"]
+            };
+          }
+        : undefined
+    });
+
+    return sendJson(response, 200, {
+      ok: true,
+      ...result,
+      lunaPromptIncludesSpec,
+      lunaPromptIncludesDraft
+    });
+  }
+
   if (request.method === "POST" && url.pathname === "/api/generate-note-briefing") {
     const payload = await readBody(request);
     const modelSelection = normalizeModelSelectionState(payload?.modelSelection);
@@ -1559,6 +1651,89 @@ async function handleRequest(request, response) {
     });
   }
 
+  if (request.method === "POST" && url.pathname === "/api/sample-library/external-reference-samples/from-link") {
+    const payload = await readBody(request);
+    const url = String(payload?.url || "").trim();
+    const options = {
+      notes: String(payload?.notes || "").trim(),
+      collectionType: String(payload?.collectionType || "科普").trim(),
+      additionalTags: Array.isArray(payload?.tags) ? payload.tags : []
+    };
+
+    if (!url) {
+      return sendJson(response, 400, {
+        ok: false,
+        error: "缺少必需参数: url"
+      });
+    }
+
+    try {
+      const result = await saveExternalReferenceSampleFromLink(url, {
+        ...options,
+        allowDuplicate: payload?.allowDuplicate === true
+      });
+      return sendJson(response, 200, {
+        ok: true,
+        items: result.items,
+        saved: result.saved,
+        pendingDuplicates: result.pendingDuplicates,
+        diagnostics: {
+          importedCount: result.saved.length,
+          duplicateCount: result.pendingDuplicates.length,
+          url
+        }
+      });
+    } catch (error) {
+      console.error("[link-note-saver] 保存链接失败:", error);
+      return sendJson(response, 500, {
+        ok: false,
+        error: error.message || "保存链接失败"
+      });
+    }
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/sample-library/external-reference-samples/from-links") {
+    const payload = await readBody(request);
+    const urls = Array.isArray(payload?.urls) ? payload.urls.filter((u) => String(u || "").trim()) : [];
+    const options = {
+      notes: String(payload?.notes || "").trim(),
+      collectionType: String(payload?.collectionType || "科普").trim(),
+      additionalTags: Array.isArray(payload?.tags) ? payload.tags : []
+    };
+
+    if (urls.length === 0) {
+      return sendJson(response, 400, {
+        ok: false,
+        error: "缺少必需参数: urls"
+      });
+    }
+
+    try {
+      const { saved, errors, pendingDuplicates, items } = await saveExternalReferenceSamplesFromLinks(urls, {
+        ...options,
+        allowDuplicate: payload?.allowDuplicate === true
+      });
+      return sendJson(response, 200, {
+        ok: true,
+        items,
+        saved,
+        pendingDuplicates,
+        diagnostics: {
+          importedCount: saved.length,
+          duplicateCount: pendingDuplicates.length,
+          errorCount: errors.length,
+          errors: errors.slice(0, 10)
+        }
+      });
+    } catch (error) {
+      console.error("[link-note-saver] 批量保存链接失败:", error);
+      return sendJson(response, 500, {
+        ok: false,
+        error: error.message || "批量保存链接失败"
+      });
+    }
+  }
+
   if (request.method === "POST" && url.pathname === "/api/sample-library/account-planner/analyze") {
     const payload = await readBody(request, { maxBytes: 5 * 1024 * 1024 });
     const localRecords = Array.isArray(payload?.records) ? payload.records : await loadNoteRecords();
@@ -1812,6 +1987,23 @@ async function handleRequest(request, response) {
 
     const items = await saveExternalReferenceSamples(next);
     return sendJson(response, 200, { ok: true, items });
+  }
+
+  if (request.method === "PATCH" && url.pathname === "/api/sample-library/external-reference-samples") {
+    const payload = await readBody(request);
+    const result = await patchExternalReferenceSample(payload?.id || "", {
+      title: payload?.title,
+      body: payload?.body,
+      tags: Array.isArray(payload?.tags) ? payload.tags : [],
+      collectionType: payload?.collectionType,
+      notes: payload?.notes
+    });
+
+    return sendJson(response, 200, {
+      ok: true,
+      item: result.item,
+      items: result.items
+    });
   }
 
   if (request.method === "POST" && url.pathname === "/api/analyze-tag-options") {

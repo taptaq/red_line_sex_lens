@@ -1,10 +1,13 @@
 export function readSampleLibraryCreateModalPayload(contentNode, helpers = {}) {
   const splitCSV = helpers.splitCSV || ((value = "") => String(value || "").split(",").map((item) => item.trim()).filter(Boolean));
+  const contentType = contentNode?.querySelector('[name="contentType"]')?.value || "image_text";
 
   return {
     title: contentNode?.querySelector('[name="title"]')?.value || "",
     body: contentNode?.querySelector('[name="body"]')?.value || "",
     coverText: contentNode?.querySelector('[name="coverText"]')?.value || "",
+    contentType,
+    videoScript: contentType === "video" ? contentNode?.querySelector('[name="videoScript"]')?.value || "" : "",
     collectionType: contentNode?.querySelector('[name="collectionType"]')?.value || "",
     tags: splitCSV(contentNode?.querySelector('[name="tags"]')?.value || ""),
     views: contentNode?.querySelector('[name="views"]')?.value || 0,
@@ -14,11 +17,14 @@ export function readSampleLibraryCreateModalPayload(contentNode, helpers = {}) {
 
 export function readSampleLibraryModalBasePayload(contentNode, helpers = {}) {
   const splitCSV = helpers.splitCSV || ((value = "") => String(value || "").split(",").map((item) => item.trim()).filter(Boolean));
+  const contentType = contentNode?.querySelector('[name="contentType"]')?.value || "image_text";
 
   return {
     title: contentNode?.querySelector('[name="title"]')?.value || "",
     body: contentNode?.querySelector('[name="body"]')?.value || "",
     coverText: contentNode?.querySelector('[name="coverText"]')?.value || "",
+    contentType,
+    videoScript: contentType === "video" ? contentNode?.querySelector('[name="videoScript"]')?.value || "" : "",
     collectionType: contentNode?.querySelector('[name="collectionType"]')?.value || "",
     tags: splitCSV(contentNode?.querySelector('[name="tags"]')?.value || "")
   };

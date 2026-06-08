@@ -1602,6 +1602,31 @@ async function improveBriefingJsonWithModel({ messages, modelSelection = "auto" 
   };
 }
 
+async function generateLunaVideoScriptJsonWithModel({ messages, modelSelection = "auto" }) {
+  const provider = getRewriteProviderSelection(modelSelection);
+  const model = getRewriteSelectionModel(modelSelection);
+  const result = await callRoutedTextProviderJson({
+    provider,
+    model,
+    selection: modelSelection,
+    temperature: 0.68,
+    maxTokens: Number(process.env.LUNA_VIDEO_SCRIPT_MAX_TOKENS || 6200),
+    messages,
+    missingKeyMessage: `生成 Luna 视频脚本缺少 ${provider} 可用密钥。`,
+    scene: "generation",
+    fallbackParser: extractJsonBlock
+  });
+
+  return {
+    ...result.parsed,
+    provider,
+    model: result.model || model,
+    route: result.route,
+    routeLabel: result.routeLabel,
+    attemptedRoutes: result.attemptedRoutes || []
+  };
+}
+
 async function generateReferenceMaterialsJsonWithModel({
   prompt,
   queries = [],
@@ -1720,6 +1745,106 @@ export async function generateReferenceMaterials({
       route: payload?.route || "",
       routeLabel: payload?.routeLabel || "",
       attemptedRoutes: payload?.attemptedRoutes || []
+    }
+  };
+}
+
+export function buildLunaVideoScriptMessages({ draft = {}, collectionType = "" } = {}) {
+  const title = String(draft?.title || "").trim();
+  const body = String(draft?.body || draft?.content || "").trim();
+  const coverText = String(draft?.coverText || "").trim();
+  const tags = uniqueStrings(draft?.tags || []);
+  const collection = String(collectionType || draft?.collectionType || "").trim();
+  const draftBlock = [
+    `标题：${title || "未提供"}`,
+    `合集：${collection || "未提供"}`,
+    `标签：${tags.length ? tags.join("、") : "未提供"}`,
+    coverText ? `封面文案：${coverText}` : "",
+    "正文：",
+    body || "未提供"
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return [
+    {
+      role: "system",
+      content:
+        "你是 Luna 内太空探索系列的视频编剧与分镜导演。你擅长把女性友好的身体探索/关系科普内容改写成治愈、轻松、幽默、有故事感的 Pixar 级 3D 动画短视频脚本。"
+    },
+    {
+      role: "user",
+      content: `
+请基于当前生成内容，生成一份“Luna 内太空探索视频脚本规范”的完整视频脚本。
+
+【当前生成内容】
+${draftBlock}
+
+【世界观与风格】
+- 主角/叙事视角：Luna，像温柔可靠的内太空向导。
+- 世界观：把身体探索、情绪感受、亲密沟通转译为“内太空探索”，用地图、星云、舱内广播、小飞船、补给站、导航仪等意象承接科普。
+- 视觉：Pixar 级 3D 动画质感，柔和、明亮、治愈，女性友好，避免真人写实。
+- 叙事：强故事感，像一次轻松的小冒险，不要生硬说教。
+- 语气：治愈系科普、幽默轻松、温柔但不幼稚。
+
+【必须输出的结构】
+1. Video Meta
+2. Scene 01 ... Scene N
+3. 每个 Scene 必须包含以下字段，字段名保持中文：
+标题、时长、场景目标、景别、镜头运动、画面描述、人物动作、人物表情、旁白、字幕、环境音、动作音效、转场音效、BGM、图片 Prompt、视频 Prompt
+
+【禁止】
+- 不要医学论文式表达。
+- 不要生硬科普、课堂讲义或平台营销腔。
+- 不要真人写实。
+- 不要低俗、恐怖、阴暗风格。
+- 不要增加露骨性描写，不要把内容导向刺激承诺。
+
+【输出格式】
+只返回 JSON：
+{
+  "script": "完整脚本文本，包含 Video Meta 与所有 Scene 字段",
+  "notes": ["可选，1-3条生成说明"]
+}
+`.trim()
+    }
+  ];
+}
+
+function normalizeLunaVideoScriptPayload(payload = {}) {
+  const script = String(payload?.script || payload?.videoScript || payload?.content || payload?.output || "").trim();
+  const notes = uniqueStrings(payload?.notes || payload?.generationNotes || []);
+
+  return {
+    script,
+    notes
+  };
+}
+
+export async function generateLunaVideoScript({
+  draft = {},
+  collectionType = "",
+  modelSelection = "auto",
+  generateJson = generateLunaVideoScriptJsonWithModel
+} = {}) {
+  const messages = buildLunaVideoScriptMessages({ draft, collectionType });
+  const payload = await generateJson({ messages, modelSelection });
+  const normalized = normalizeLunaVideoScriptPayload(payload);
+
+  if (!normalized.script) {
+    const error = new Error("Luna 视频脚本生成结果为空。");
+    error.statusCode = 502;
+    throw error;
+  }
+
+  return {
+    ...normalized,
+    modelTrace: {
+      provider: payload.provider || "",
+      model: payload.model || "",
+      route: payload.route || "",
+      routeLabel: payload.routeLabel || "",
+      attemptedRoutes: payload.attemptedRoutes || []
     }
   };
 }

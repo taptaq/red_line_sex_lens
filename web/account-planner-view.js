@@ -235,6 +235,104 @@ export function renderSampleLibraryExternalSamplesModal(state = {}, helpers = {}
 
   const items = Array.isArray(state.items) ? state.items : [];
   const message = String(state.message || "").trim();
+  const editingSampleId = String(state.editingSampleId || "").trim();
+  const pendingDuplicates = Array.isArray(state.pendingDuplicates) ? state.pendingDuplicates : [];
+  const duplicateReviewMarkup = pendingDuplicates.length
+    ? `
+      <section class="sample-library-external-duplicate-review">
+        <div class="tab-panel-head">
+          <strong>发现同名素材</strong>
+          <span>请比较已有素材和新解析内容，再决定是否覆盖。</span>
+        </div>
+        ${pendingDuplicates
+          .map((entry, index) => {
+            const existing = entry?.existing || {};
+            const incoming = entry?.incoming || {};
+            const reason = entry?.matchReason === "source_url" ? "链接相同" : "标题相同";
+            return `
+              <article class="sample-library-external-duplicate-card">
+                <div class="meta-row">
+                  <span class="meta-pill">${escapeHtml(reason)}</span>
+                  <span class="meta-pill meta-pill-soft">待确认</span>
+                </div>
+                <div class="sample-library-external-duplicate-grid">
+                  <section>
+                    <strong>已有素材</strong>
+                    <p>${escapeHtml(existing.title || "未命名外部样本")}</p>
+                    <pre>${escapeHtml(String(existing.body || "").slice(0, 600) || "暂无正文")}</pre>
+                  </section>
+                  <section>
+                    <strong>新解析素材</strong>
+                    <p>${escapeHtml(incoming.title || "未命名外部样本")}</p>
+                    <pre>${escapeHtml(String(incoming.body || "").slice(0, 600) || "暂无正文")}</pre>
+                  </section>
+                </div>
+                <div class="inline-actions inline-actions-row">
+                  <button
+                    type="button"
+                    class="button button-primary button-small"
+                    data-action="resolve-sample-library-external-duplicate"
+                    data-resolution="overwrite"
+                    data-duplicate-index="${escapeHtml(String(index))}"
+                  >
+                    覆盖已有
+                  </button>
+                  <button
+                    type="button"
+                    class="button button-ghost button-small"
+                    data-action="resolve-sample-library-external-duplicate"
+                    data-resolution="keep"
+                    data-duplicate-index="${escapeHtml(String(index))}"
+                  >
+                    保留原有
+                  </button>
+                  <button
+                    type="button"
+                    class="button button-ghost button-small"
+                    data-action="resolve-sample-library-external-duplicate"
+                    data-resolution="create"
+                    data-duplicate-index="${escapeHtml(String(index))}"
+                  >
+                    另存为新素材
+                  </button>
+                </div>
+              </article>
+            `;
+          })
+          .join("")}
+      </section>
+    `
+    : "";
+  const linkImportMarkup = `
+    <form class="sample-library-external-link-import" data-sample-library-external-link-import>
+      <label>
+        <span>解析外部样本链接</span>
+        <textarea
+          name="urls"
+          rows="3"
+          data-sample-library-external-link-urls
+          placeholder="粘贴小红书笔记、xhslink 短链、网页或视频链接；多条可换行"
+        ></textarea>
+      </label>
+      <div class="sample-library-external-link-import-grid">
+        <label>
+          <span>合集类型</span>
+          <input name="collectionType" value="科普" />
+        </label>
+        <label>
+          <span>标签</span>
+          <input name="tags" placeholder="多个标签用逗号分隔" />
+        </label>
+      </div>
+      <label>
+        <span>备注</span>
+        <input name="notes" placeholder="例如：外部标杆 / 同类爆文 / 账号复盘参考" />
+      </label>
+      <div class="inline-actions inline-actions-row">
+        <button type="submit" class="button button-primary">解析链接</button>
+      </div>
+    </form>
+  `;
 
   if (state.loading) {
     contentNode.innerHTML = '<div class="result-card muted">正在加载外部参考样本...</div>';
@@ -244,9 +342,16 @@ export function renderSampleLibraryExternalSamplesModal(state = {}, helpers = {}
 
   if (!items.length) {
     contentNode.innerHTML = `
+      ${linkImportMarkup}
+      ${duplicateReviewMarkup}
       <div class="result-card muted">
         <strong>${escapeHtml(message || "还没有外部参考样本")}</strong>
-        <p>导入 Markdown / CSV 后，这里会作为账号级复盘的辅助证据层长期保留。</p>
+        <p>解析链接或导入 Markdown / CSV 后，这里会作为账号级复盘的辅助证据层长期保留。</p>
+        <div class="inline-actions inline-actions-row">
+          <button type="button" class="button button-ghost button-small" data-action="open-sample-library-external-link-import">
+            解析链接
+          </button>
+        </div>
       </div>
     `;
     setSampleLibraryExternalSamplesModalOpen?.(true);
@@ -255,11 +360,16 @@ export function renderSampleLibraryExternalSamplesModal(state = {}, helpers = {}
 
   contentNode.innerHTML = `
     ${message ? `<p class="helper-text">${escapeHtml(message)}</p>` : ""}
+    ${linkImportMarkup}
+    ${duplicateReviewMarkup}
     <div class="sample-library-external-samples-list">
       ${items
         .map((item) => {
           const tags = Array.isArray(item.tags) ? item.tags.filter(Boolean) : [];
           const metrics = item?.publish?.metrics || {};
+          const fullBody = String(item.body || "").trim();
+          const notes = String(item.notes || "").trim();
+          const isEditing = String(item.id || "").trim() === editingSampleId;
           return `
             <article class="sample-library-external-sample-card">
               <div class="sample-library-section-head">
@@ -267,14 +377,24 @@ export function renderSampleLibraryExternalSamplesModal(state = {}, helpers = {}
                   <strong>${escapeHtml(item.title || "未命名外部样本")}</strong>
                   <p>${escapeHtml(String(item.body || "").slice(0, 120) || "暂无正文摘要")}</p>
                 </div>
-                <button
-                  type="button"
-                  class="button button-ghost button-small"
-                  data-action="delete-sample-library-external-sample"
-                  data-id="${escapeHtml(String(item.id || ""))}"
-                >
-                  删除
-                </button>
+                <div class="inline-actions inline-actions-row">
+                  <button
+                    type="button"
+                    class="button button-ghost button-small"
+                    data-action="edit-sample-library-external-sample"
+                    data-id="${escapeHtml(String(item.id || ""))}"
+                  >
+                    编辑
+                  </button>
+                  <button
+                    type="button"
+                    class="button button-ghost button-small"
+                    data-action="delete-sample-library-external-sample"
+                    data-id="${escapeHtml(String(item.id || ""))}"
+                  >
+                    删除
+                  </button>
+                </div>
               </div>
               <div class="meta-row">
                 <span class="meta-pill">${escapeHtml(item.collectionType || "科普")}</span>
@@ -282,6 +402,62 @@ export function renderSampleLibraryExternalSamplesModal(state = {}, helpers = {}
                 <span class="meta-pill">赞 ${escapeHtml(String(metrics.likes || 0))}</span>
                 <span class="meta-pill">浏览 ${escapeHtml(String(metrics.views || 0))}</span>
               </div>
+              ${
+                isEditing
+                  ? `
+                    <form class="sample-library-external-sample-edit" data-sample-library-external-sample-edit data-id="${escapeHtml(
+                      String(item.id || "")
+                    )}">
+                      <div class="sample-library-external-link-import-grid">
+                        <label>
+                          <span>标题</span>
+                          <input name="title" value="${escapeHtml(item.title || "")}" />
+                        </label>
+                        <label>
+                          <span>合集类型</span>
+                          <input name="collectionType" value="${escapeHtml(item.collectionType || "科普")}" />
+                        </label>
+                      </div>
+                      <label>
+                        <span>标签</span>
+                        <input name="tags" value="${escapeHtml(tags.join(", "))}" placeholder="多个标签用逗号分隔" />
+                      </label>
+                      <label>
+                        <span>正文 / 转写</span>
+                        <textarea name="body" rows="8">${escapeHtml(fullBody)}</textarea>
+                      </label>
+                      <label>
+                        <span>备注 / 传播拆解</span>
+                        <textarea name="notes" rows="6">${escapeHtml(notes)}</textarea>
+                      </label>
+                      <div class="inline-actions inline-actions-row">
+                        <button type="submit" class="button button-primary button-small">保存修改</button>
+                        <button
+                          type="button"
+                          class="button button-ghost button-small"
+                          data-action="cancel-edit-sample-library-external-sample"
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </form>
+                  `
+                  : `
+                    <details class="sample-library-external-sample-details">
+                      <summary>查看文本详情</summary>
+                      <div class="sample-library-external-sample-detail-grid">
+                        <section>
+                          <strong>正文</strong>
+                          <pre>${escapeHtml(fullBody || "暂无正文")}</pre>
+                        </section>
+                        <section>
+                          <strong>备注 / 传播拆解</strong>
+                          <pre>${escapeHtml(notes || "暂无备注")}</pre>
+                        </section>
+                      </div>
+                    </details>
+                  `
+              }
             </article>
           `;
         })

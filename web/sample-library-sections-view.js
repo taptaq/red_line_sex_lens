@@ -65,6 +65,8 @@ export function buildSampleLibraryBaseEditorSectionMarkup(
     body = "",
     coverText = "",
     collectionType = "",
+    contentType = "image_text",
+    videoScript = "",
     tags = [],
     views = 0,
     shares = 0,
@@ -105,6 +107,17 @@ export function buildSampleLibraryBaseEditorSectionMarkup(
         </label>
         <div class="sample-library-create-metrics">
           ${buildSampleLibraryModalTagPickerMarkup(tags)}
+          <label>
+            <span>类型</span>
+            <select name="contentType">
+              <option value="image_text"${contentType !== "video" ? " selected" : ""}>图文</option>
+              <option value="video"${contentType === "video" ? " selected" : ""}>视频</option>
+            </select>
+          </label>
+          <label class="field-wide" data-role="sample-library-video-script-field"${contentType === "video" ? "" : " hidden"}>
+            <span>视频脚本</span>
+            <textarea name="videoScript" rows="4" placeholder="填写分镜、口播或字幕脚本">${escapeHtml(videoScript)}</textarea>
+          </label>
           ${
             includeViews
               ? `

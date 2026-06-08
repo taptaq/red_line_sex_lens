@@ -7,10 +7,11 @@ import path from "node:path";
 
 import { paths } from "../src/config.js";
 import { loadNoteRecords } from "../src/data-store.js";
-import { safeHandleRequest } from "../src/server.js";
+import { buildSampleLibraryRecordWithPlannerSummary, safeHandleRequest } from "../src/server.js";
 
 async function withTempSampleLibraryApi(t, run) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "sample-library-api-"));
+  const autoPlannerSummary = process.env.SAMPLE_LIBRARY_AUTO_PLANNER_SUMMARY;
   const originals = {
     collectionTypes: paths.collectionTypes,
     successSamples: paths.successSamples,
@@ -26,6 +27,7 @@ async function withTempSampleLibraryApi(t, run) {
   paths.noteRecords = path.join(tempDir, "note-records.json");
   paths.styleProfile = path.join(tempDir, "style-profile.json");
   paths.draftIdeas = path.join(tempDir, "draft-ideas.json");
+  process.env.SAMPLE_LIBRARY_AUTO_PLANNER_SUMMARY = "false";
 
   await Promise.all([
     fs.writeFile(paths.collectionTypes, `${JSON.stringify({ custom: [] }, null, 2)}\n`, "utf8"),
@@ -37,6 +39,11 @@ async function withTempSampleLibraryApi(t, run) {
 
   t.after(async () => {
     Object.assign(paths, originals);
+    if (autoPlannerSummary === undefined) {
+      delete process.env.SAMPLE_LIBRARY_AUTO_PLANNER_SUMMARY;
+    } else {
+      process.env.SAMPLE_LIBRARY_AUTO_PLANNER_SUMMARY = autoPlannerSummary;
+    }
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -208,6 +215,80 @@ test("sample library API preserves learning sample types on canonical note recor
     assert.equal(listed.items[0].sampleType, "false_positive");
     assert.equal(records[0].sampleType, "false_positive");
     assert.equal(records[0].publish.status, "false_positive");
+  });
+});
+
+test("sample library API persists learning sample content type", async (t) => {
+  await withTempSampleLibraryApi(t, async () => {
+    const created = await invokeRoute("POST", "/api/sample-library", {
+      source: "manual",
+      stage: "draft",
+      note: {
+        title: "视频样本标题",
+        body: "视频样本正文",
+        contentType: "video",
+        collectionType: "科普"
+      }
+    });
+
+    assert.equal(created.status, 200);
+    assert.equal(created.item.note.contentType, "video");
+
+    const patched = await invokeRoute("PATCH", "/api/sample-library", {
+      id: created.item.id,
+      note: {
+        contentType: "image_text"
+      }
+    });
+    const records = await loadNoteRecords();
+
+    assert.equal(patched.status, 200);
+    assert.equal(patched.item.note.contentType, "image_text");
+    assert.equal(records[0].note.contentType, "image_text");
+  });
+});
+
+test("sample library API persists scripts for video learning samples", async (t) => {
+  await withTempSampleLibraryApi(t, async () => {
+    const created = await invokeRoute("POST", "/api/sample-library", {
+      source: "manual",
+      stage: "draft",
+      note: {
+        title: "视频脚本样本",
+        body: "视频正文概要",
+        contentType: "video",
+        videoScript: "开场：提出问题\n中段：给出三点\n结尾：评论区互动",
+        collectionType: "科普"
+      }
+    });
+
+    assert.equal(created.status, 200);
+    assert.equal(created.item.note.contentType, "video");
+    assert.match(created.item.note.videoScript, /开场：提出问题/);
+
+    const patched = await invokeRoute("PATCH", "/api/sample-library", {
+      id: created.item.id,
+      note: {
+        videoScript: "新版脚本：先讲结论，再补细节。"
+      }
+    });
+
+    assert.equal(patched.status, 200);
+    assert.equal(patched.item.note.videoScript, "新版脚本：先讲结论，再补细节。");
+
+    const converted = await invokeRoute("PATCH", "/api/sample-library", {
+      id: created.item.id,
+      note: {
+        contentType: "image_text",
+        videoScript: "不应保留"
+      }
+    });
+    const records = await loadNoteRecords();
+
+    assert.equal(converted.status, 200);
+    assert.equal(converted.item.note.contentType, "image_text");
+    assert.equal(converted.item.note.videoScript, "");
+    assert.equal(records[0].note.videoScript, "");
   });
 });
 
@@ -651,6 +732,73 @@ test("sample library POST can create a canonical note record from plain content 
     assert.equal(created.item.note.collectionType, "科普");
     assert.deepEqual(created.item.note.tags, ["关系", "沟通"]);
   });
+});
+
+test("sample library records auto attach planner summaries when created without one", async () => {
+  let summarizeCalls = 0;
+  const record = await buildSampleLibraryRecordWithPlannerSummary(
+    {
+      note: {
+        title: "新增摘要样本",
+        body: "这是一条需要在保存时生成账号复盘摘要的正文。",
+        collectionType: "科普",
+        tags: ["边界表达"]
+      }
+    },
+    {
+      summarizeRecord: async (incoming) => {
+        summarizeCalls += 1;
+        assert.equal(incoming.note.title, "新增摘要样本");
+        return {
+          summary: "这篇主要解释边界表达如何降低关系误读。",
+          keyPoints: ["边界表达", "误读降低"],
+          riskBoundary: ["避免绝对化承诺"],
+          suggestedTopic: "怎么把边界说清楚？",
+          provider: "deepseek",
+          model: "deepseek-v4-flash",
+          createdAt: "2026-06-07T10:00:00.000Z"
+        };
+      }
+    }
+  );
+
+  assert.equal(summarizeCalls, 1);
+  assert.equal(record.calibration.plannerSummary.summary, "这篇主要解释边界表达如何降低关系误读。");
+  assert.deepEqual(record.calibration.plannerSummary.keyPoints, ["边界表达", "误读降低"]);
+  assert.equal(record.calibration.plannerSummary.provider, "deepseek");
+});
+
+test("sample library records keep existing planner summaries and skip auto summary calls", async () => {
+  let summarizeCalls = 0;
+  const record = await buildSampleLibraryRecordWithPlannerSummary(
+    {
+      note: {
+        title: "已有摘要样本",
+        body: "正文"
+      },
+      calibration: {
+        plannerSummary: {
+          summary: "已有摘要",
+          keyPoints: ["旧要点"],
+          riskBoundary: [],
+          suggestedTopic: "已有选题",
+          provider: "deepseek",
+          model: "deepseek-v4-flash",
+          createdAt: "2026-06-07T09:00:00.000Z"
+        }
+      }
+    },
+    {
+      summarizeRecord: async () => {
+        summarizeCalls += 1;
+        return { summary: "不应覆盖" };
+      }
+    }
+  );
+
+  assert.equal(summarizeCalls, 0);
+  assert.equal(record.calibration.plannerSummary.summary, "已有摘要");
+  assert.deepEqual(record.calibration.plannerSummary.keyPoints, ["旧要点"]);
 });
 
 test("sample library create and patch routes return the canonical merged record even when note fingerprints collapse", async (t) => {

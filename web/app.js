@@ -432,6 +432,10 @@ function buildGenerationCoverImagePromptCopyText(finalDraft = {}) {
   return String(finalDraft?.coverImagePrompt || "").trim();
 }
 
+function buildGenerationLunaVideoScriptCopyText(finalDraft = {}) {
+  return String(finalDraft?.lunaVideoScript || "").trim();
+}
+
 async function writeTextToClipboard(text = "") {
   if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
     await navigator.clipboard.writeText(text);
@@ -463,6 +467,25 @@ function findGenerationResultCandidate(candidateId = "", candidateIndex = "") {
 
   const index = Number(candidateIndex);
   return Number.isInteger(index) && index >= 0 ? items[index] || null : null;
+}
+
+function attachLunaVideoScriptToGenerationCandidate(candidateId = "", candidateIndex = "", script = "", notes = []) {
+  const resultItem = findGenerationResultCandidate(candidateId, candidateIndex);
+
+  if (!resultItem) {
+    return false;
+  }
+
+  const normalizedScript = String(script || "").trim();
+  const normalizedNotes = Array.isArray(notes) ? notes : [];
+  const finalDraft = resultItem.finalDraft && typeof resultItem.finalDraft === "object" ? resultItem.finalDraft : resultItem;
+
+  resultItem.lunaVideoScript = normalizedScript;
+  resultItem.lunaVideoScriptNotes = normalizedNotes;
+  finalDraft.lunaVideoScript = normalizedScript;
+  finalDraft.lunaVideoScriptNotes = normalizedNotes;
+
+  return true;
 }
 
 function predictionMatchedLabel(value) {
@@ -863,7 +886,9 @@ const appState = {
   externalReferenceSamplesModal: {
     open: false,
     loading: false,
-    message: ""
+    message: "",
+    editingSampleId: "",
+    pendingDuplicates: []
   },
   sampleLibraryAccountPlanner: {
     loading: false,
@@ -4600,6 +4625,8 @@ function buildSampleLibraryBaseEditorSectionMarkup({
   body = "",
   coverText = "",
   collectionType = "",
+  contentType = "image_text",
+  videoScript = "",
   tags = [],
   views = 0,
   shares = 0,
@@ -4612,6 +4639,8 @@ function buildSampleLibraryBaseEditorSectionMarkup({
       body,
       coverText,
       collectionType,
+      contentType,
+      videoScript,
       tags,
       views,
       shares,
@@ -4626,6 +4655,15 @@ function buildSampleLibraryBaseEditorSectionMarkup({
       buildSampleLibraryModalSectionMarkup
     }
   );
+}
+
+function syncSampleLibraryVideoScriptField(root = byId("sample-library-modal-content")) {
+  const contentType = root?.querySelector('[name="contentType"]')?.value || "image_text";
+  const field = root?.querySelector('[data-role="sample-library-video-script-field"]');
+
+  if (field instanceof HTMLElement) {
+    field.hidden = contentType !== "video";
+  }
 }
 
 function buildSampleLibraryReferenceEditorSectionMarkup(reference = {}, { notesFieldName = "notes" } = {}) {
@@ -4833,6 +4871,8 @@ async function saveSampleLibraryCreateModal() {
         title: payload.title,
         body: payload.body,
         coverText: payload.coverText,
+        contentType: payload.contentType || "image_text",
+        videoScript: payload.videoScript || "",
         collectionType: payload.collectionType,
         tags: payload.tags
       },
@@ -5204,6 +5244,7 @@ function renderGenerationResult(result = {}) {
   const finalDraft = displayItem?.finalDraft || displayItem || {};
   const variantLabel = generationVariantLabel(finalDraft.variant || displayItem?.variant || "final");
   const repair = displayItem?.repair || {};
+  const lunaVideoScript = String(finalDraft.lunaVideoScript || displayItem?.lunaVideoScript || "").trim();
   const blockerReasonsMarkup = buildGenerationBlockerReasonsMarkup(displayItem);
   const repairSummary = buildGenerationRepairSummary(repair);
   const qualityAuditMarkup = buildGenerationQualityAuditMarkup(displayItem?.qualityAudit, repair);
@@ -5232,6 +5273,14 @@ function renderGenerationResult(result = {}) {
       </div>
     `
     : "";
+  const lunaVideoScriptMarkup = lunaVideoScript
+    ? `
+      <div class="generation-luna-video-script-result" id="generation-luna-video-script-result">
+        <p class="helper-text">Luna 视频脚本</p>
+        <div class="rewrite-body-reader generation-luna-video-script-reader">${escapeHtml(lunaVideoScript)}</div>
+      </div>
+    `
+    : '<div class="generation-luna-video-script-result" id="generation-luna-video-script-result"></div>';
   const cardMarkup = displayItem
     ? `
       <article class="generation-candidate-card is-recommended">
@@ -5259,6 +5308,7 @@ function renderGenerationResult(result = {}) {
           <p class="helper-text">封面图 Prompt</p>
           <div class="rewrite-body-reader generation-cover-image-prompt-reader">${escapeHtml(finalDraft.coverImagePrompt || "未生成")}</div>
         </div>
+        ${lunaVideoScriptMarkup}
         <div class="item-actions">
           <button
             type="button"
@@ -5280,6 +5330,30 @@ function renderGenerationResult(result = {}) {
           </button>
           <button
             type="button"
+            class="button button-small button-secondary"
+            data-action="generate-luna-video-script"
+            data-candidate-id="${escapeHtml(String(displayItem.id || ""))}"
+            data-candidate-index="${escapeHtml(String(displayIndex))}"
+          >
+            生成对应脚本
+          </button>
+          ${
+            lunaVideoScript
+              ? `
+                <button
+                  type="button"
+                  class="button button-small button-secondary"
+                  data-action="copy-generation-luna-video-script"
+                  data-candidate-id="${escapeHtml(String(displayItem.id || ""))}"
+                  data-candidate-index="${escapeHtml(String(displayIndex))}"
+                >
+                  复制脚本
+                </button>
+              `
+              : ""
+          }
+          <button
+            type="button"
             class="button button-ghost button-small"
             data-action="add-generation-candidate-to-draft"
             data-candidate-id="${escapeHtml(String(displayItem.id || ""))}"
@@ -5291,6 +5365,7 @@ function renderGenerationResult(result = {}) {
         <p class="helper-text">复制发布稿会带上正文、#科普 和标签，便于直接粘贴发布。</p>
         <p class="helper-text action-gate-hint" id="generation-publish-copy-hint" aria-live="polite"></p>
         <p class="helper-text action-gate-hint" id="generation-cover-image-prompt-copy-hint" aria-live="polite"></p>
+        <p class="helper-text action-gate-hint" id="generation-luna-video-script-hint" aria-live="polite"></p>
       </article>
     `
     : '<div class="muted">没有生成结果</div>';
@@ -6276,7 +6351,8 @@ async function refreshExternalReferenceSamples({ openModal = false, message = ""
       ...appState.externalReferenceSamplesModal,
       open: openModal ? true : appState.externalReferenceSamplesModal.open,
       loading: false,
-      message: ""
+      message: "",
+      pendingDuplicates: []
     };
   } catch (error) {
     appState.externalReferenceSamplesModal = {
@@ -6296,7 +6372,8 @@ function closeSampleLibraryExternalSamplesModal() {
     ...appState.externalReferenceSamplesModal,
     open: false,
     loading: false,
-    message: ""
+    message: "",
+    pendingDuplicates: []
   };
   setSampleLibraryExternalSamplesModalOpen(false);
 }
@@ -6312,6 +6389,44 @@ async function importExternalReferenceSamples(files = []) {
   };
 
   return apiJson(`${sampleLibraryExternalSamplesApi}/import`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+async function saveExternalReferenceSamplesFromLinks({
+  urls = [],
+  notes = "",
+  collectionType = "科普",
+  tags = [],
+  allowDuplicate = false
+} = {}) {
+  const normalizedUrls = uniqueStrings((Array.isArray(urls) ? urls : []).map((url) => String(url || "").trim()).filter(Boolean));
+
+  if (!normalizedUrls.length) {
+    throw new Error("请先粘贴要解析的链接。");
+  }
+
+  const endpoint =
+    normalizedUrls.length === 1 ? `${sampleLibraryExternalSamplesApi}/from-link` : `${sampleLibraryExternalSamplesApi}/from-links`;
+  const payload =
+    normalizedUrls.length === 1
+      ? {
+          url: normalizedUrls[0],
+          notes,
+          collectionType,
+          tags,
+          allowDuplicate
+        }
+      : {
+          urls: normalizedUrls,
+          notes,
+          collectionType,
+          tags,
+          allowDuplicate
+        };
+
+  return apiJson(endpoint, {
     method: "POST",
     body: JSON.stringify(payload)
   });
@@ -6412,6 +6527,57 @@ function applySampleLibraryAccountPlannerCard() {
   setActionGateHint("sample-library-account-planner-detail-action-hint", appState.sampleLibraryAccountPlanner.message);
   setActionGateHint("generation-action-hint", appState.sampleLibraryAccountPlanner.message);
   syncGenerationActions();
+}
+
+async function generateLunaVideoScriptForCandidate(button, candidateId = "", candidateIndex = "") {
+  const resultItem = findGenerationResultCandidate(candidateId, candidateIndex);
+  const finalDraft = resultItem?.finalDraft || resultItem || {};
+  const hintNode = byId("generation-luna-video-script-hint");
+
+  if (!String(finalDraft.title || "").trim() && !String(finalDraft.body || "").trim()) {
+    if (hintNode) {
+      hintNode.textContent = "当前还没有可生成脚本的内容。";
+    }
+    return;
+  }
+
+  setButtonBusy(button, true, "生成中...");
+
+  if (hintNode) {
+    hintNode.textContent = "正在把当前内容改写成 Luna 视频脚本...";
+  }
+
+  try {
+    const response = await apiJson("/api/generate-luna-video-script", {
+      method: "POST",
+      body: JSON.stringify({
+        collectionType: appState.latestGeneration?.collectionType || "",
+        draft: {
+          title: String(finalDraft.title || "").trim(),
+          body: String(finalDraft.body || "").trim(),
+          coverText: String(finalDraft.coverText || "").trim(),
+          tags: Array.isArray(finalDraft.tags) ? finalDraft.tags : []
+        },
+        modelSelection: getSelectedModelSelections()
+      })
+    });
+
+    attachLunaVideoScriptToGenerationCandidate(candidateId, candidateIndex, response.script || "", response.notes || []);
+    renderGenerationResult(appState.latestGeneration || {});
+    const nextHintNode = byId("generation-luna-video-script-hint");
+
+    if (nextHintNode) {
+      nextHintNode.textContent = "已生成对应脚本，可继续复制或调整。";
+    }
+  } catch (error) {
+    const nextHintNode = byId("generation-luna-video-script-hint");
+
+    if (nextHintNode) {
+      nextHintNode.textContent = error.message || "Luna 视频脚本生成失败";
+    }
+  } finally {
+    setButtonBusy(button, false);
+  }
 }
 
 function buildDraftIdeaPayload({
@@ -6613,6 +6779,45 @@ async function addXhsTopSignalToExternalSamples(signalId = "") {
     return;
   }
 
+  const workUrl = String(signal.workUrl || "").trim();
+  const hasValidUrl = workUrl && (workUrl.startsWith("http://") || workUrl.startsWith("https://"));
+
+  // 如果有原文链接，优先使用 link-note-saver 从链接抓取完整内容
+  if (hasValidUrl) {
+    setSampleLibraryModalMessage("正在从链接抓取内容...");
+
+    try {
+      const linkPayload = {
+        url: workUrl,
+        notes: [
+          signal.analysis?.whySelected || "",
+          signal.analysis?.reuseHint || "",
+          `作者: ${signal.author || "未知"}`,
+          `来源: 同类爆文信号`
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        collectionType: signal.track || "科普",
+        tags: signal.tags || []
+      };
+
+      const response = await apiJson("/api/sample-library/external-reference-samples/from-link", {
+        method: "POST",
+        body: JSON.stringify(linkPayload)
+      });
+
+      appState.externalReferenceSamples = Array.isArray(response?.items) ? response.items : appState.externalReferenceSamples;
+      syncSampleLibraryAccountPlannerPanel();
+      renderSampleLibraryExternalSamplesModal();
+      setSampleLibraryModalMessage("已从原文链接保存完整内容到外部参考样本。");
+      return;
+    } catch (error) {
+      console.warn("[link-note-saver] 从链接抓取失败，回退到直接保存:", error);
+      setSampleLibraryModalMessage("链接抓取失败，使用当前数据保存...");
+    }
+  }
+
+  // 回退方案：直接保存信号数据
   const payload = {
     items: [
       {
@@ -9326,6 +9531,8 @@ async function saveSampleLibraryDetailBaseModal(recordId) {
         title: payload.title,
         body: payload.body,
         coverText: payload.coverText,
+        contentType: payload.contentType || "image_text",
+        videoScript: payload.videoScript || "",
         collectionType: payload.collectionType,
         tags: payload.tags
       }
@@ -10072,6 +10279,118 @@ byId("feedback-recognize").addEventListener("click", async () => {
 });
 
 document.addEventListener("submit", async (event) => {
+  const externalSampleEditForm = event.target.closest("[data-sample-library-external-sample-edit]");
+
+  if (externalSampleEditForm) {
+    event.preventDefault();
+
+    const formData = new FormData(externalSampleEditForm);
+    const submitButton = externalSampleEditForm.querySelector('button[type="submit"]');
+    const id = String(externalSampleEditForm.dataset.id || "").trim();
+
+    setButtonBusy(submitButton, true, "保存中...");
+
+    try {
+      const response = await apiJson(sampleLibraryExternalSamplesApi, {
+        method: "PATCH",
+        body: JSON.stringify({
+          id,
+          title: String(formData.get("title") || "").trim(),
+          body: String(formData.get("body") || "").trim(),
+          tags: splitCSV(formData.get("tags") || ""),
+          collectionType: String(formData.get("collectionType") || "科普").trim() || "科普",
+          notes: String(formData.get("notes") || "").trim()
+        })
+      });
+
+      appState.externalReferenceSamples = Array.isArray(response?.items) ? response.items : appState.externalReferenceSamples;
+      appState.externalReferenceSamplesModal = {
+        ...appState.externalReferenceSamplesModal,
+        open: true,
+        loading: false,
+        editingSampleId: "",
+        message: "外部素材已更新。"
+      };
+      syncSampleLibraryAccountPlannerPanel();
+      renderSampleLibraryExternalSamplesModal();
+    } catch (error) {
+      appState.externalReferenceSamplesModal = {
+        ...appState.externalReferenceSamplesModal,
+        open: true,
+        loading: false,
+        message: error?.message || "外部素材保存失败"
+      };
+      renderSampleLibraryExternalSamplesModal();
+    } finally {
+      setButtonBusy(submitButton, false);
+    }
+    return;
+  }
+
+  const externalLinkForm = event.target.closest("[data-sample-library-external-link-import]");
+
+  if (externalLinkForm) {
+    event.preventDefault();
+
+    const formData = new FormData(externalLinkForm);
+    const submitButton = externalLinkForm.querySelector('button[type="submit"]');
+    const urls = splitLineList(formData.get("urls") || "");
+    const notes = String(formData.get("notes") || "").trim();
+    const collectionType = String(formData.get("collectionType") || "科普").trim() || "科普";
+    const tags = splitCSV(formData.get("tags") || "");
+
+    setButtonBusy(submitButton, true, "解析中...");
+    appState.externalReferenceSamplesModal = {
+      ...appState.externalReferenceSamplesModal,
+      open: true,
+      loading: false,
+      message: "正在解析链接并保存为外部参考样本..."
+    };
+    renderSampleLibraryExternalSamplesModal();
+
+    try {
+      const response = await saveExternalReferenceSamplesFromLinks({
+        urls,
+        notes,
+        collectionType,
+        tags
+      });
+      const importedCount = Number(response?.diagnostics?.importedCount || 0);
+      const errorCount = Number(response?.diagnostics?.errorCount || 0);
+      const duplicateCount = Number(response?.diagnostics?.duplicateCount || 0);
+      const errors = Array.isArray(response?.diagnostics?.errors) ? response.diagnostics.errors : [];
+      const pendingDuplicates = Array.isArray(response?.pendingDuplicates) ? response.pendingDuplicates : [];
+      appState.externalReferenceSamples = Array.isArray(response?.items) ? response.items : appState.externalReferenceSamples;
+      appState.externalReferenceSamplesModal = {
+        ...appState.externalReferenceSamplesModal,
+        open: true,
+        loading: false,
+        pendingDuplicates,
+        message:
+          errorCount > 0
+            ? `已保存 ${importedCount} 条，${errorCount} 条解析失败：${errors
+                .map((item) => `${item.url}: ${item.error}`)
+                .join("；")}`
+            : duplicateCount > 0
+              ? `发现 ${duplicateCount} 条同名或同链接素材，请比较后选择处理方式。`
+            : `已从链接保存 ${importedCount || urls.length} 条外部参考样本。`
+      };
+      syncSampleLibraryAccountPlannerPanel();
+      renderSampleLibraryExternalSamplesModal();
+    } catch (error) {
+      appState.externalReferenceSamplesModal = {
+        ...appState.externalReferenceSamplesModal,
+        open: true,
+        loading: false,
+        message: error?.message || "链接解析失败"
+      };
+      renderSampleLibraryExternalSamplesModal();
+    } finally {
+      setButtonBusy(submitButton, false);
+    }
+    return;
+  }
+
   const form = event.target.closest(".false-positive-capture-form");
 
   if (!form) {
@@ -10693,6 +11012,10 @@ byId("sample-library-modal-content")?.addEventListener("change", (event) => {
     });
   }
 
+  if (fieldName === "contentType") {
+    syncSampleLibraryVideoScriptField();
+  }
+
   if (modalState?.kind === "record-list-inline-editor") {
     appState.sampleLibraryModal = {
       ...modalState,
@@ -11221,6 +11544,11 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action === "generate-luna-video-script") {
+    await generateLunaVideoScriptForCandidate(button, button.dataset.candidateId || "", button.dataset.candidateIndex || "");
+    return;
+  }
+
   if (action === "load-draft-idea") {
     loadDraftIdeaIntoGenerationForm(button.dataset.id || "");
     return;
@@ -11238,6 +11566,113 @@ document.addEventListener("click", async (event) => {
 
   if (action === "close-sample-library-external-samples-modal") {
     closeSampleLibraryExternalSamplesModal();
+    return;
+  }
+
+  if (action === "open-sample-library-external-link-import") {
+    const input = byId("sample-library-external-samples-modal-content")?.querySelector(
+      "[data-sample-library-external-link-urls]"
+    );
+    input?.focus();
+    return;
+  }
+
+  if (action === "edit-sample-library-external-sample") {
+    appState.externalReferenceSamplesModal = {
+      ...appState.externalReferenceSamplesModal,
+      open: true,
+      loading: false,
+      editingSampleId: button.dataset.id || "",
+      message: ""
+    };
+    renderSampleLibraryExternalSamplesModal();
+    return;
+  }
+
+  if (action === "cancel-edit-sample-library-external-sample") {
+    appState.externalReferenceSamplesModal = {
+      ...appState.externalReferenceSamplesModal,
+      open: true,
+      loading: false,
+      editingSampleId: "",
+      message: ""
+    };
+    renderSampleLibraryExternalSamplesModal();
+    return;
+  }
+
+  if (action === "resolve-sample-library-external-duplicate") {
+    const duplicateIndex = Number(button.dataset.duplicateIndex || 0);
+    const resolution = String(button.dataset.resolution || "").trim();
+    const pendingDuplicates = Array.isArray(appState.externalReferenceSamplesModal.pendingDuplicates)
+      ? appState.externalReferenceSamplesModal.pendingDuplicates
+      : [];
+    const duplicate = pendingDuplicates[duplicateIndex];
+
+    if (!duplicate) {
+      appState.externalReferenceSamplesModal = {
+        ...appState.externalReferenceSamplesModal,
+        open: true,
+        loading: false,
+        message: "未找到要处理的重复素材。"
+      };
+      renderSampleLibraryExternalSamplesModal();
+      return;
+    }
+
+    const nextPendingDuplicates = pendingDuplicates.filter((_, index) => index !== duplicateIndex);
+
+    try {
+      setButtonBusy(button, true, "处理中...");
+
+      if (resolution === "overwrite") {
+        const incoming = duplicate.incoming || {};
+        const response = await apiJson(sampleLibraryExternalSamplesApi, {
+          method: "PATCH",
+          body: JSON.stringify({
+            id: duplicate.existing?.id || "",
+            title: incoming.title || "",
+            body: incoming.body || "",
+            tags: Array.isArray(incoming.tags) ? incoming.tags : [],
+            collectionType: incoming.collectionType || "科普",
+            notes: incoming.notes || ""
+          })
+        });
+        appState.externalReferenceSamples = Array.isArray(response?.items) ? response.items : appState.externalReferenceSamples;
+      } else if (resolution === "create") {
+        const incoming = duplicate.incoming || {};
+        const response = await apiJson(sampleLibraryExternalSamplesApi, {
+          method: "POST",
+          body: JSON.stringify({
+            items: [incoming]
+          })
+        });
+        appState.externalReferenceSamples = Array.isArray(response?.items) ? response.items : appState.externalReferenceSamples;
+      } else if (resolution !== "keep") {
+        throw new Error("未知的重复素材处理方式。");
+      }
+
+      appState.externalReferenceSamplesModal = {
+        ...appState.externalReferenceSamplesModal,
+        open: true,
+        loading: false,
+        pendingDuplicates: nextPendingDuplicates,
+        message: nextPendingDuplicates.length ? `还有 ${nextPendingDuplicates.length} 条重复素材待确认。` : "重复素材已处理。"
+      };
+      syncSampleLibraryAccountPlannerPanel();
+      renderSampleLibraryExternalSamplesModal();
+    } catch (error) {
+      appState.externalReferenceSamplesModal = {
+        ...appState.externalReferenceSamplesModal,
+        open: true,
+        loading: false,
+        pendingDuplicates,
+        message: error?.message || "重复素材处理失败"
+      };
+      renderSampleLibraryExternalSamplesModal();
+    } finally {
+      setButtonBusy(button, false);
+    }
     return;
   }
 
@@ -11882,6 +12317,27 @@ document.addEventListener("click", async (event) => {
 
       if (hintNode) {
         hintNode.textContent = "已复制封面图 Prompt，可直接去出图。";
+      }
+      return;
+    }
+
+    if (action === "copy-generation-luna-video-script") {
+      const resultItem = findGenerationResultCandidate(button.dataset.candidateId, button.dataset.candidateIndex);
+      const finalDraft = resultItem?.finalDraft || resultItem || {};
+      const copyText = buildGenerationLunaVideoScriptCopyText(finalDraft);
+      const hintNode = byId("generation-luna-video-script-hint");
+
+      if (!copyText) {
+        if (hintNode) {
+          hintNode.textContent = "当前还没有可复制的 Luna 视频脚本。";
+        }
+        return;
+      }
+
+      await writeTextToClipboard(copyText);
+
+      if (hintNode) {
+        hintNode.textContent = "已复制 Luna 视频脚本。";
       }
       return;
     }

@@ -2923,6 +2923,69 @@ body.modal-open {
   gap: 0.9rem;
 }
 
+.sample-library-external-link-import {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(54, 43, 31, 0.1);
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.sample-library-external-link-import-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.sample-library-external-duplicate-review {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(145, 88, 24, 0.22);
+  background: rgba(255, 247, 235, 0.82);
+}
+
+.sample-library-external-duplicate-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border-radius: 14px;
+  border: 1px solid rgba(94, 75, 48, 0.12);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.sample-library-external-duplicate-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.sample-library-external-duplicate-grid section {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.sample-library-external-duplicate-grid p,
+.sample-library-external-duplicate-grid pre {
+  margin: 0;
+}
+
+.sample-library-external-duplicate-grid pre {
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 0.75rem;
+  border-radius: 12px;
+  border: 1px solid rgba(54, 43, 31, 0.09);
+  background: rgba(255, 251, 244, 0.72);
+  font: inherit;
+  line-height: 1.65;
+}
+
 .sample-library-external-sample-card {
   display: grid;
   gap: 0.7rem;
@@ -2930,6 +2993,63 @@ body.modal-open {
   border-radius: 22px;
   border: 1px solid rgba(54, 43, 31, 0.1);
   background: rgba(255, 255, 255, 0.56);
+}
+
+.sample-library-external-sample-edit {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border-radius: 16px;
+  border: 1px solid rgba(94, 75, 48, 0.16);
+  background: rgba(255, 251, 244, 0.72);
+}
+
+.sample-library-external-sample-edit textarea {
+  min-height: 9rem;
+  resize: vertical;
+}
+
+.sample-library-external-sample-details {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.sample-library-external-sample-details summary {
+  cursor: pointer;
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.sample-library-external-sample-detail-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.sample-library-external-sample-detail-grid section {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.sample-library-external-sample-detail-grid pre {
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  padding: 0.8rem;
+  border-radius: 14px;
+  background: rgba(255, 251, 244, 0.78);
+  border: 1px solid rgba(54, 43, 31, 0.09);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.7;
+}
+
+@media (max-width: 720px) {
+  .sample-library-external-link-import-grid,
+  .sample-library-external-duplicate-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .lexicon-workspace-modal {
@@ -4576,6 +4696,18 @@ body.modal-open {
 
 .generation-cover-image-prompt-reader {
   max-height: 16rem;
+  overflow: auto;
+}
+
+.generation-luna-video-script-result {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.generation-luna-video-script-reader {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 24rem;
   overflow: auto;
 }
 

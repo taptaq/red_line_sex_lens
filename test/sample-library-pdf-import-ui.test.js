@@ -109,3 +109,36 @@ test("sample library frontend wires parse and commit flows for Markdown imports"
   assert.match(appJs, /sample-library-import-card-hint/);
   assert.doesNotMatch(appJs, /<details class="sample-library-import-advanced admin-accordion">/);
 });
+
+test("sample library create and edit forms expose content type beside metrics", async () => {
+  const appJs = await fs.readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const sectionsJs = await fs.readFile(new URL("../web/sample-library-sections-view.js", import.meta.url), "utf8");
+  const formHelpersJs = await fs.readFile(new URL("../web/sample-library-form-helpers.js", import.meta.url), "utf8");
+  const modalViewJs = await fs.readFile(new URL("../web/sample-library-modal-view.js", import.meta.url), "utf8");
+
+  assert.match(sectionsJs, /name="contentType"/);
+  assert.match(sectionsJs, />图文</);
+  assert.match(sectionsJs, />视频</);
+  assert.match(formHelpersJs, /const contentType = contentNode\?\.querySelector\('\[name="contentType"\]'\)\?\.value \|\| "image_text"/);
+  assert.match(formHelpersJs, /contentType,/);
+  assert.match(appJs, /contentType: payload\.contentType \|\| "image_text"/);
+  assert.match(modalViewJs, /contentType: contentNode\?\.querySelector\('\[name="contentType"\]'\)\?\.value \|\| "image_text"/);
+  assert.match(modalViewJs, /contentType: draft\.note\.contentType/);
+});
+
+test("sample library video samples expose and save a video script field", async () => {
+  const appJs = await fs.readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const sectionsJs = await fs.readFile(new URL("../web/sample-library-sections-view.js", import.meta.url), "utf8");
+  const formHelpersJs = await fs.readFile(new URL("../web/sample-library-form-helpers.js", import.meta.url), "utf8");
+  const modalViewJs = await fs.readFile(new URL("../web/sample-library-modal-view.js", import.meta.url), "utf8");
+
+  assert.match(sectionsJs, /name="videoScript"/);
+  assert.match(sectionsJs, /data-role="sample-library-video-script-field"/);
+  assert.match(sectionsJs, />视频脚本</);
+  assert.match(formHelpersJs, /videoScript: contentType === "video" \? contentNode\?\.querySelector\('\[name="videoScript"\]'\)\?\.value \|\| "" : ""/);
+  assert.match(appJs, /function\s+syncSampleLibraryVideoScriptField\s*\(/);
+  assert.match(appJs, /fieldName === "contentType"[\s\S]*syncSampleLibraryVideoScriptField\(\)/);
+  assert.match(appJs, /videoScript: payload\.videoScript \|\| ""/);
+  assert.match(modalViewJs, /videoScript: draft\.note\.videoScript/);
+  assert.match(modalViewJs, /videoScript: String\(draft\?\.note\?\.videoScript \|\| ""\)/);
+});

@@ -1482,8 +1482,13 @@ test("frontend generation result now focuses on a single final draft card instea
   assert.match(generationSource, /data-action="copy-generation-publish"/);
   assert.match(generationSource, /封面图 Prompt/);
   assert.match(generationSource, /data-action="copy-generation-cover-image-prompt"/);
+  assert.match(generationSource, /data-action="generate-luna-video-script"/);
+  assert.match(generationSource, /生成对应脚本/);
+  assert.match(generationSource, /generation-luna-video-script-result/);
+  assert.match(generationSource, /generation-luna-video-script-reader/);
   assert.match(generationSource, /generation-publish-copy-hint/);
   assert.match(generationSource, /generation-cover-image-prompt-copy-hint/);
+  assert.match(generationSource, /generation-luna-video-script-hint/);
   assert.match(generationSource, /repairSummary\.title/);
   assert.match(generationSource, /repairSummary\.description/);
   assert.match(generationSource, /生成质量审计/);
@@ -1500,10 +1505,23 @@ test("frontend generation result now focuses on a single final draft card instea
   assert.match(styles, /\.generation-candidate-card\.is-recommended\s*\{[\s\S]*overflow:\s*visible;/);
   assert.match(styles, /\.generation-body-reader\s*\{[\s\S]*max-height:\s*none;[\s\S]*overflow:\s*visible;/);
   assert.match(styles, /\.generation-cover-image-prompt-reader\s*\{[\s\S]*max-height:\s*16rem;[\s\S]*overflow:\s*auto;/);
+  assert.match(styles, /\.generation-luna-video-script-reader\s*\{[\s\S]*max-height:\s*24rem;[\s\S]*overflow:\s*auto;/);
   assert.match(
     styles,
     /\.generation-body-reader\s*\{[\s\S]*white-space:\s*pre-wrap;[\s\S]*overflow-wrap:\s*anywhere;/
   );
+});
+
+test("frontend can request and copy a Luna video script for the current generation result", async () => {
+  const { appJs } = await readFrontendFiles();
+
+  assert.match(appJs, /async function\s+generateLunaVideoScriptForCandidate\s*\(/);
+  assert.match(appJs, /function\s+attachLunaVideoScriptToGenerationCandidate\s*\(/);
+  assert.match(appJs, /\/api\/generate-luna-video-script/);
+  assert.match(appJs, /if \(action === "generate-luna-video-script"\)/);
+  assert.match(appJs, /if \(action === "copy-generation-luna-video-script"\)/);
+  assert.match(appJs, /buildGenerationLunaVideoScriptCopyText\(finalDraft\)/);
+  assert.match(appJs, /collectionType:\s*appState\.latestGeneration\?\.collectionType/);
 });
 
 test("frontend localizes generation and lifecycle fallback labels instead of exposing raw enums", async () => {

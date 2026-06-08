@@ -6,7 +6,8 @@ import path from "node:path";
 import {
   applySampleLibraryAccountPlannerPrefill,
   getSelectedSampleLibraryAccountPlannerCard,
-  renderSampleLibraryAccountPlannerResult
+  renderSampleLibraryAccountPlannerResult,
+  renderSampleLibraryExternalSamplesModal
 } from "../web/account-planner-view.js";
 import { backfillPlannerSummaries, summarizeAccountPlanner } from "../src/account-planner.js";
 import { buildXhsAccountDiagnosisModalMarkup } from "../web/xhs-account-diagnosis-view.js";
@@ -55,10 +56,15 @@ test("sample library exposes account planner panel and app wiring", async () => 
   assert.match(appJs, /openXhsAccountDiagnosisModal/);
   assert.match(appJs, /followSimilarXhsAccountDiagnosis/);
   assert.match(appJs, /sampleLibraryExternalSamplesApi/);
+  assert.match(appJs, /data-sample-library-external-sample-edit/);
+  assert.match(appJs, /method:\s*"PATCH"/);
+  assert.match(appJs, /edit-sample-library-external-sample/);
   assert.match(appJs, /from "\.\/xhs-account-diagnosis-view\.js"/);
   assert.match(appJs, /from "\.\/account-planner-view\.js"/);
   assert.match(styles, /\.sample-library-account-planner\b/);
   assert.match(styles, /\.sample-library-external-samples-modal\b/);
+  assert.match(styles, /\.sample-library-external-link-import\b/);
+  assert.match(styles, /\.sample-library-external-sample-details\b/);
   assert.match(styles, /\.sample-library-account-planner-card\b/);
   assert.match(styles, /\.xhs-account-diagnosis\b/);
   assert.match(styles, /\.xhs-account-diagnosis-modal-stack\b/);
@@ -71,6 +77,203 @@ test("sample library exposes account planner panel and app wiring", async () => 
   assert.match(dataStoreSource, /export async function saveXhsAccountDiagnosis\(/);
   assert.match(dataStoreSource, /export async function loadAccountPlannerSummary\(/);
   assert.match(dataStoreSource, /export async function saveAccountPlannerSummary\(/);
+});
+
+test("external reference samples modal exposes link parsing entry in empty state", () => {
+  const modal = { hidden: true };
+  const contentNode = { innerHTML: "" };
+  const nodes = {
+    "sample-library-external-samples-modal": modal,
+    "sample-library-external-samples-modal-content": contentNode
+  };
+
+  renderSampleLibraryExternalSamplesModal(
+    {
+      open: true,
+      loading: false,
+      message: "",
+      items: []
+    },
+    {
+      byId: (id) => nodes[id],
+      setSampleLibraryExternalSamplesModalOpen: (isOpen) => {
+        modal.hidden = !isOpen;
+      },
+      syncBodyModalState: () => {},
+      escapeHtml: (value = "") => String(value)
+    }
+  );
+
+  assert.equal(modal.hidden, false);
+  assert.match(contentNode.innerHTML, /解析链接/);
+  assert.match(contentNode.innerHTML, /data-action="open-sample-library-external-link-import"/);
+});
+
+test("external reference sample cards expose full text details", () => {
+  const modal = { hidden: true };
+  const contentNode = { innerHTML: "" };
+  const nodes = {
+    "sample-library-external-samples-modal": modal,
+    "sample-library-external-samples-modal-content": contentNode
+  };
+
+  renderSampleLibraryExternalSamplesModal(
+    {
+      open: true,
+      loading: false,
+      message: "",
+      items: [
+        {
+          id: "external-1",
+          title: "外部样本标题",
+          body: "这是一段解析后保存下来的完整正文详情。",
+          notes: "来源: 小红书\n链接: https://www.xiaohongshu.com/explore/abc123\n\n小红书传播拆解:\n- 3秒钩子: 示例钩子",
+          tags: ["科普"],
+          collectionType: "科普",
+          publish: {
+            metrics: {
+              likes: 1,
+              views: 2
+            }
+          }
+        }
+      ]
+    },
+    {
+      byId: (id) => nodes[id],
+      setSampleLibraryExternalSamplesModalOpen: (isOpen) => {
+        modal.hidden = !isOpen;
+      },
+      syncBodyModalState: () => {},
+      escapeHtml: (value = "") =>
+        String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+    }
+  );
+
+  assert.match(contentNode.innerHTML, /查看文本详情/);
+  assert.match(contentNode.innerHTML, /这是一段解析后保存下来的完整正文详情。/);
+  assert.match(contentNode.innerHTML, /小红书传播拆解/);
+  assert.match(contentNode.innerHTML, /https:\/\/www\.xiaohongshu\.com\/explore\/abc123/);
+});
+
+test("external reference sample cards expose inline edit form for selected sample", () => {
+  const modal = { hidden: true };
+  const contentNode = { innerHTML: "" };
+  const nodes = {
+    "sample-library-external-samples-modal": modal,
+    "sample-library-external-samples-modal-content": contentNode
+  };
+
+  renderSampleLibraryExternalSamplesModal(
+    {
+      open: true,
+      loading: false,
+      message: "",
+      editingSampleId: "external-1",
+      items: [
+        {
+          id: "external-1",
+          title: "视频素材",
+          body: "视频转写正文",
+          notes: "来源: 视频链接\n小红书传播拆解:\n- 3秒钩子: 示例",
+          tags: ["视频", "身体探索"],
+          collectionType: "科普",
+          publish: {
+            metrics: {
+              likes: 1,
+              views: 2
+            }
+          }
+        }
+      ]
+    },
+    {
+      byId: (id) => nodes[id],
+      setSampleLibraryExternalSamplesModalOpen: (isOpen) => {
+        modal.hidden = !isOpen;
+      },
+      syncBodyModalState: () => {},
+      escapeHtml: (value = "") =>
+        String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+    }
+  );
+
+  assert.match(contentNode.innerHTML, /data-sample-library-external-sample-edit/);
+  assert.match(contentNode.innerHTML, /name="title"/);
+  assert.match(contentNode.innerHTML, /name="body"/);
+  assert.match(contentNode.innerHTML, /name="tags"/);
+  assert.match(contentNode.innerHTML, /name="collectionType"/);
+  assert.match(contentNode.innerHTML, /name="notes"/);
+  assert.match(contentNode.innerHTML, /保存修改/);
+  assert.match(contentNode.innerHTML, /取消/);
+});
+
+test("external reference samples modal shows duplicate review actions", () => {
+  const modal = { hidden: true };
+  const contentNode = { innerHTML: "" };
+  const nodes = {
+    "sample-library-external-samples-modal": modal,
+    "sample-library-external-samples-modal-content": contentNode
+  };
+
+  renderSampleLibraryExternalSamplesModal(
+    {
+      open: true,
+      loading: false,
+      message: "发现 1 条同名素材",
+      pendingDuplicates: [
+        {
+          matchReason: "title",
+          existing: {
+            id: "existing-1",
+            title: "同名素材",
+            body: "已有素材正文"
+          },
+          incoming: {
+            id: "incoming-1",
+            title: "同名素材",
+            body: "新解析正文"
+          }
+        }
+      ],
+      items: [
+        {
+          id: "existing-1",
+          title: "同名素材",
+          body: "已有素材正文",
+          tags: [],
+          collectionType: "科普",
+          publish: { metrics: {} }
+        }
+      ]
+    },
+    {
+      byId: (id) => nodes[id],
+      setSampleLibraryExternalSamplesModalOpen: (isOpen) => {
+        modal.hidden = !isOpen;
+      },
+      syncBodyModalState: () => {},
+      escapeHtml: (value = "") =>
+        String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+    }
+  );
+
+  assert.match(contentNode.innerHTML, /发现同名素材/);
+  assert.match(contentNode.innerHTML, /已有素材/);
+  assert.match(contentNode.innerHTML, /新解析素材/);
+  assert.match(contentNode.innerHTML, /覆盖已有/);
+  assert.match(contentNode.innerHTML, /保留原有/);
+  assert.match(contentNode.innerHTML, /另存为新素材/);
+  assert.match(contentNode.innerHTML, /data-action="resolve-sample-library-external-duplicate"/);
 });
 
 test("summarizeAccountPlanner throws when summarize handler is missing", async () => {

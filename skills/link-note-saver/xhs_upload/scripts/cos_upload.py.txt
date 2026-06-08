@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+"""Upload one file to Tencent COS with only Python's standard library.
+
+The XHS skill beta only accepts Markdown/Text files in the package, so the
+release build can ship this script as `cos_upload.py.txt` and still execute it
+with `python3 scripts/cos_upload.py.txt`.
+"""
+from __future__ import annotations
+
+import argparse
+from email.utils import formatdate
+import hashlib
+import hmac
+import json
+import mimetypes
+import os
+from pathlib import Path
+import sys
+import time
+from urllib.parse import quote
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+SKILL_DIR = SCRIPT_DIR.parent
+OPENCLAW_CONFIG_PATH = Path("/root/.openclaw/openclaw.json")
+
+
+def load_dotenv(path: Path) -> dict[str, str]:
+    env: dict[str, str] = {}
+    if not path.exists():
+        return env
+    for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            env[key] = value
+    return env
+
+
+def load_openclaw_cos_env() -> dict[str, str]:
+    if not OPENCLAW_CONFIG_PATH.exists():
+        return {}
+    try:
+        data = json.loads(OPENCLAW_CONFIG_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return (((data.get("skills") or {}).get("entries") or {}).get("tencent-cos") or {}).get("env") or {}
+
+
+def load_cos_env() -> dict[str, str]:
+    merged = dict(os.environ)
+    merged.update(load_openclaw_cos_env())
+
+    # `.env` is convenient in normal installs. `env.txt` keeps the package
+    # compatible with platforms that only accept .md/.txt files.
+    for name in (".env", "env.txt", "env.local.txt"):
+        merged.update(load_dotenv(SKILL_DIR / name))
+
+    required = [
+        "TENCENT_COS_SECRET_ID",
+        "TENCENT_COS_SECRET_KEY",
+        "TENCENT_COS_REGION",
+        "TENCENT_COS_BUCKET",
+    ]
+    missing = [k for k in required if not merged.get(k)]
+    if missing:
+        raise SystemExit(
+            "缺少 COS 配置："
+            + ", ".join(missing)
+            + f"\n请把 {SKILL_DIR / 'env.example.txt'} 复制为 {SKILL_DIR / 'env.local.txt'} 后填写，"
+            "或在运行环境变量中提供这些值。"
+        )
+    return merged
+
+
+def percent_encode(value: str) -> str:
+    return quote(value, safe="-_.~")
+
+
+def cos_path(remote_key: str) -> str:
+    return "/" + quote(remote_key.lstrip("/"), safe="/-_.~")
+
+
+def make_authorization(
+    *,
+    secret_id: str,
+    secret_key: str,
+    method: str,
+    path: str,
+    headers_to_sign: dict[str, str],
+    expires: int,
+) -> str:
+    now = int(time.time())
+    sign_time = f"{now};{now + expires}"
+    key_time = sign_time
+
+    signed_headers = {k.lower(): " ".join(str(v).strip().split()) for k, v in headers_to_sign.items()}
+    header_list = ";".join(sorted(signed_headers))
+    header_string = "&".join(
+        f"{percent_encode(k)}={percent_encode(signed_headers[k])}" for k in sorted(signed_headers)
+    )
+
+    http_string = f"{method.lower()}\n{path}\n\n{header_string}\n"
+    string_to_sign = "sha1\n{}\n{}\n".format(
+        sign_time,
+        hashlib.sha1(http_string.encode("utf-8")).hexdigest(),
+    )
+    sign_key = hmac.new(secret_key.encode("utf-8"), key_time.encode("utf-8"), hashlib.sha1).hexdigest()
+    signature = hmac.new(sign_key.encode("utf-8"), string_to_sign.encode("utf-8"), hashlib.sha1).hexdigest()
+    return (
+        "q-sign-algorithm=sha1"
+        f"&q-ak={secret_id}"
+        f"&q-sign-time={sign_time}"
+        f"&q-key-time={key_time}"
+        f"&q-header-list={header_list}"
+        "&q-url-param-list="
+        f"&q-signature={signature}"
+    )
+
+
+def upload_file(local_file: Path, remote_key: str, expires: int) -> dict[str, object]:
+    env = load_cos_env()
+    bucket = env["TENCENT_COS_BUCKET"]
+    region = env["TENCENT_COS_REGION"]
+    host = f"{bucket}.cos.{region}.myqcloud.com"
+    path = cos_path(remote_key)
+    endpoint = f"https://{host}{path}"
+    body = local_file.read_bytes()
+    content_type = mimetypes.guess_type(str(local_file))[0] or "application/octet-stream"
+
+    signed_headers = {"host": host}
+    headers = {
+        "Host": host,
+        "Date": formatdate(usegmt=True),
+        "Content-Type": content_type,
+        "Content-Length": str(len(body)),
+    }
+    if env.get("TENCENT_COS_SECURITY_TOKEN"):
+        signed_headers["x-cos-security-token"] = env["TENCENT_COS_SECURITY_TOKEN"]
+        headers["x-cos-security-token"] = env["TENCENT_COS_SECURITY_TOKEN"]
+
+    headers["Authorization"] = make_authorization(
+        secret_id=env["TENCENT_COS_SECRET_ID"],
+        secret_key=env["TENCENT_COS_SECRET_KEY"],
+        method="PUT",
+        path=path,
+        headers_to_sign=signed_headers,
+        expires=expires,
+    )
+
+    request = Request(endpoint, data=body, headers=headers, method="PUT")
+    try:
+        with urlopen(request, timeout=60) as response:
+            response.read()
+            etag = response.headers.get("ETag", "")
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise SystemExit(f"COS 上传失败：HTTP {exc.code}\n{detail}") from exc
+    except URLError as exc:
+        raise SystemExit(f"COS 上传失败：{exc}") from exc
+
+    custom_domain = env.get("TENCENT_COS_CUSTOM_DOMAIN", "").strip().strip("/")
+    public_base = env.get("LINK_NOTE_PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if public_base:
+        url = f"{public_base}/{remote_key.lstrip('/')}"
+    elif custom_domain:
+        url = f"https://{custom_domain}/{remote_key.lstrip('/')}"
+    else:
+        url = endpoint
+
+    return {
+        "ok": True,
+        "key": remote_key.lstrip("/"),
+        "url": url,
+        "etag": etag,
+        "content_type": content_type,
+        "bytes": len(body),
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="上传单个文件到腾讯云 COS。")
+    parser.add_argument("local_file", help="本地文件路径")
+    parser.add_argument("remote_key", help="COS 对象 key，例如 openclaw/link-library/index.html")
+    parser.add_argument("--expires", type=int, default=7200, help="签名有效期，默认 7200 秒")
+    parser.add_argument("--print-url", action="store_true", help="兼容旧调用；仍输出 JSON")
+    args = parser.parse_args()
+
+    local_file = Path(args.local_file).expanduser().resolve()
+    if not local_file.is_file():
+        raise SystemExit(f"本地文件不存在：{local_file}")
+
+    result = upload_file(local_file, args.remote_key.lstrip("/"), args.expires)
+    json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
+    sys.stdout.write("\n")
+
+
+if __name__ == "__main__":
+    main()

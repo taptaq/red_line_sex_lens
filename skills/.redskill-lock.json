@@ -8,6 +8,14 @@
       "install_dir": "/Users/taptaq/Documents/Original Heart Road/project/red_line_sex_lens/skills/humanizer-zh",
       "installed_at": "1779968273623",
       "sha256": "29f4696ca37ac28adf4f6c20e440c81ec91b836a1420bc0e3d196e04398efb8d"
+    },
+    "link-note-saver": {
+      "name": "link-note-saver",
+      "version": "1.0.0",
+      "source": "redskill",
+      "install_dir": "/Users/taptaq/Documents/Original Heart Road/project/red_line_sex_lens/skills/link-note-saver",
+      "installed_at": "1780399869421",
+      "sha256": "70f639e82a95ae4da67dfecab4c89532e66bc8445c1eae0b53479fe5ee82aac4"
     }
   }
 }

@@ -131,6 +131,16 @@ export function normalizeLearningSampleType(value = "") {
   return "";
 }
 
+function normalizeContentType(value = "") {
+  const normalized = normalizeString(value).toLowerCase();
+
+  if (normalized === "video" || normalized === "视频") {
+    return "video";
+  }
+
+  return "image_text";
+}
+
 function normalizeTier(value = "") {
   const normalized = normalizeString(value);
   return ["passed", "performed", "featured"].includes(normalized) ? normalized : "";
@@ -188,11 +198,18 @@ function mergeMetrics(left = {}, right = {}) {
 function mergeNote(left = {}, right = {}) {
   const normalizedLeft = normalizeNote(left);
   const normalizedRight = normalizeNote(right);
+  const contentType =
+    normalizedRight.contentType !== "image_text" || normalizedLeft.contentType === "image_text"
+      ? normalizedRight.contentType
+      : normalizedLeft.contentType;
 
   return {
     title: preferLongerString(normalizedLeft.title, normalizedRight.title),
     body: preferLongerString(normalizedLeft.body, normalizedRight.body),
     coverText: preferLongerString(normalizedLeft.coverText, normalizedRight.coverText),
+    contentType,
+    videoScript:
+      contentType === "video" ? preferLongerString(normalizedLeft.videoScript, normalizedRight.videoScript) : "",
     collectionType: normalizedRight.collectionType || normalizedLeft.collectionType,
     tags: [...new Set([...normalizedLeft.tags, ...normalizedRight.tags])].sort((a, b) => a.localeCompare(b, "zh-Hans-CN"))
   };
@@ -391,10 +408,14 @@ function chooseCanonicalId(left = {}, right = {}) {
 }
 
 function normalizeNote(note = {}) {
+  const contentType = normalizeContentType(note.contentType);
+
   return {
     title: normalizeString(note.title),
     body: normalizeString(note.body || note.noteContent),
     coverText: normalizeString(note.coverText),
+    contentType,
+    videoScript: contentType === "video" ? normalizeString(note.videoScript) : "",
     collectionType: normalizeString(note.collectionType),
     tags: uniqueStrings(note.tags)
   };
