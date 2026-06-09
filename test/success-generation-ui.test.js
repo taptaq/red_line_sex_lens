@@ -3777,6 +3777,7 @@ test("frontend exposes a draft inbox grid inside the main workbench footer area 
 
   assert.match(indexHtml, /id="generation-draft-inbox-panel"/);
   assert.match(indexHtml, /id="generation-draft-inbox-panel"[^>]*data-visible-with-tab="generation-workbench-pane"[^>]*hidden/);
+  assert.match(indexHtml, /id="generation-draft-inbox-panel"[^>]*data-visible-with-tab-group="main-workbench"/);
   assert.match(indexHtml, /id="draft-ideas-list"/);
   assert.match(indexHtml, /id="draft-ideas-toolbar"/);
   assert.match(indexHtml, /name="draftIdeasStatusView"/);
@@ -3795,6 +3796,7 @@ test("frontend exposes a draft inbox grid inside the main workbench footer area 
   assert.match(appJs, /addDraftIdeaFromGenerationCandidate/);
   assert.match(appJs, /loadDraftIdeaIntoGenerationForm/);
   assert.match(appJs, /document\.querySelectorAll\(`\[data-visible-with-tab\]`\)/);
+  assert.match(appJs, /visibleGroup && visibleGroup !== groupName/);
   assert.match(appJs, /node\.hidden = !shouldShow;/);
   assert.match(appJs, /activateTab\("main-workbench",\s*"generation-workbench-pane"\)/);
   assert.match(appJs, /scrollIntoView\(\{\s*behavior:\s*"smooth"/);
@@ -3810,6 +3812,7 @@ test("frontend exposes a finished content panel below the draft inbox and can ad
   assert.ok(draftPanelIndex >= 0, "expected draft inbox panel");
   assert.ok(finishedPanelIndex > draftPanelIndex, "expected finished content panel below draft inbox");
   assert.match(indexHtml, /id="generation-finished-content-panel"[^>]*data-visible-with-tab="analyze-workbench-pane"[^>]*hidden/);
+  assert.match(indexHtml, /id="generation-finished-content-panel"[^>]*data-visible-with-tab-group="main-workbench"/);
   assert.match(indexHtml, /id="finished-contents-list"/);
   assert.match(indexHtml, /成品区/);
   assert.match(indexHtml, /已完成内容/);
@@ -3827,12 +3830,14 @@ test("frontend exposes a finished content panel below the draft inbox and can ad
   assert.match(appJs, /data-action="delete-finished-content"/);
 });
 
-test("frontend defaults every major non-content-workbench area to collapsible closed panels", async () => {
+test("frontend keeps the top review console expanded while lower support areas default to collapsible closed panels", async () => {
   const { indexHtml, appJs, styles } = await readFrontendFiles();
 
   assert.doesNotMatch(indexHtml, /id="content-workbench"[^>]*data-collapsible-region/);
+  assert.doesNotMatch(indexHtml, /id="today-workbench"[^>]*data-collapsible-region/);
+  assert.doesNotMatch(indexHtml, /id="today-workbench"[^>]*data-collapsed-by-default="true"/);
   [
-    "today-workbench",
+    "feedback-panel",
     "generation-draft-inbox-panel",
     "generation-finished-content-panel",
     "sample-library-account-planner-panel",
@@ -3850,6 +3855,7 @@ test("frontend defaults every major non-content-workbench area to collapsible cl
   assert.match(appJs, /setCollapsibleRegionOpen/);
   assert.match(styles, /\[data-collapsible-region\]\[data-collapsed="true"\]\s*>\s*:not\(\.section-heading\):not\(\.collapsible-region-heading\)/);
   assert.match(styles, /\.collapsible-region-toggle\b/);
+  assert.doesNotMatch(styles, /\.support-workspace-panel\s*>\s*\.section-heading\s*\{[^}]*padding-right:/);
 });
 
 test("planner and theme inspiration detail actions expose local success and failure hints beside the buttons", async () => {

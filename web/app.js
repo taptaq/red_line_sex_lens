@@ -754,6 +754,11 @@ function activateTab(groupName, targetId) {
   });
 
   document.querySelectorAll(`[data-visible-with-tab]`).forEach((node) => {
+    const visibleGroup = String(node.dataset.visibleWithTabGroup || "").trim();
+    if (visibleGroup && visibleGroup !== groupName) {
+      return;
+    }
+
     const shouldShow = node.dataset.visibleWithTab === targetId;
     node.hidden = !shouldShow;
     node.classList.toggle("is-visible", shouldShow);

@@ -53,8 +53,8 @@
       <div class="shell app-content">
 
       <!-- ① 紧凑页头（原 hero 区缩减，直接露出工作区） -->
-      <header class="site-header panel" id="today-workbench" data-collapsible-region data-collapsed-by-default="true">
-        <div class="header-brand collapsible-region-heading">
+      <header class="site-header panel" id="today-workbench">
+        <div class="header-brand">
           <p class="eyebrow">本地审核台</p>
           <h1>小红书合规检测改写系统</h1>
         </div>
@@ -399,7 +399,7 @@
                 <div id="generation-result" class="result-card-shell muted">等待生成</div>
               </section>
             </section>
-            <section class="generation-draft-inbox-panel" id="generation-draft-inbox-panel" data-collapsible-region data-collapsed-by-default="true" data-visible-with-tab="generation-workbench-pane" hidden>
+            <section class="generation-draft-inbox-panel" id="generation-draft-inbox-panel" data-collapsible-region data-collapsed-by-default="true" data-visible-with-tab="generation-workbench-pane" data-visible-with-tab-group="main-workbench" hidden>
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">草稿区</p>
@@ -423,7 +423,7 @@
               </div>
               <div id="draft-ideas-list" class="draft-ideas-list draft-ideas-grid"></div>
             </section>
-            <section class="generation-finished-content-panel" id="generation-finished-content-panel" data-collapsible-region data-collapsed-by-default="true" data-visible-with-tab="analyze-workbench-pane" hidden>
+            <section class="generation-finished-content-panel" id="generation-finished-content-panel" data-collapsible-region data-collapsed-by-default="true" data-visible-with-tab="analyze-workbench-pane" data-visible-with-tab-group="main-workbench" hidden>
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">成品区</p>
@@ -436,7 +436,7 @@
           </div>
         </article>
         <aside class="dashboard-sidebar dashboard-secondary-grid">
-          <article class="panel feedback-panel dashboard-side-card">
+          <article class="panel feedback-panel dashboard-side-card" id="feedback-panel" data-collapsible-region data-collapsed-by-default="true">
             <div class="section-heading">
               <div>
                 <p class="eyebrow">反馈回流</p>
@@ -654,13 +654,13 @@
 
       <!-- ③ 学习区：回流 / 样本 / 规则 -->
       <section id="support-workspace-panel" data-collapsible-region data-collapsed-by-default="true" class="panel support-workspace-panel dashboard-assets-card">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">学习样本</p>
-              <h2>误判与好样本回流</h2>
-            </div>
-            <p class="section-note">把平台反馈、误判样本和好样本收进同一处，让检测和生成持续变准。</p>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">学习样本</p>
+            <h2>误判与好样本回流</h2>
           </div>
+          <p class="section-note">把平台反馈、误判样本和好样本收进同一处，让检测和生成持续变准。</p>
+        </div>
         <div class="admin-accordion-body">
           <section class="workspace workspace-support">
             <article class="panel queue-panel support-review-card">
